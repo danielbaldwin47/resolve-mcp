@@ -79,6 +79,16 @@ class Config:
         return self.cache_dir / "audio"
 
     @property
+    def frame_dir(self) -> Path:
+        """Grabbed JPEGs. The agent opens these by path, so they outlive the call that made them."""
+        return self.cache_dir / "frames"
+
+    @property
+    def analysis_dir(self) -> Path:
+        """Analysis catalogs — scene cuts today — written whole and returned as a gist."""
+        return self.cache_dir / "analysis"
+
+    @property
     def interchange_dir(self) -> Path:
         """Where exported timelines (OTIO, FCPXML, DRT) land when no path is given.
 

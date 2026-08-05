@@ -42,6 +42,7 @@ from resolve_mcp.tools.timeline import (
     list_markers,
     list_timelines,
 )
+from resolve_mcp.tools.video import grab_frames
 
 from . import otio
 from .text_plus_probe import TEMPLATE_ENV, probe_template_append
@@ -508,6 +509,37 @@ def test_the_render_queue_exports_the_real_timeline_mix() -> None:
 
     again = acquire_timeline_audio(get_connection())
     assert again["cached"] is True, "an unchanged timeline must be a cache hit"
+
+
+def test_a_real_frame_grab_lands_on_the_moment_resolve_numbers_it_at() -> None:
+    """The AC no seam can check: that Start really is the offset between the two clocks.
+
+    The fakes prove the command shape, the cap and the caching against a clip whose Start
+    this test wrote itself. Whether real footage — an hour-based start timecode, a codec
+    ffmpeg has to seek inside — is numbered the way the wrapper assumes only shows up here.
+    """
+    listing = list_media()
+    if not listing["ok"]:
+        pytest.skip("No project open in Resolve")
+    footage = next(
+        (one for one in listing["clips"] if one["fps"] and not one["offline"] and one["frames"]),
+        None,
+    )
+    if footage is None:
+        pytest.skip("No online clip with a frame rate in the media pool")
+    bounds = inspect_clip(footage["name"], bin=footage["bin"] or None)["bounds"]["media"]
+    middle = bounds["in"]["frames"] + bounds["duration"]["frames"] // 2
+
+    result = grab_frames(footage["name"], [middle], bin=footage["bin"] or None)
+
+    assert result["ok"] is True, result.get("error")
+    grabbed = result["frames"][0]
+    assert Path(grabbed["path"]).exists()
+    assert grabbed["time"]["frames"] == middle
+    assert max(grabbed["width"], grabbed["height"]) <= 1568
+
+    again = grab_frames(footage["name"], [middle], bin=footage["bin"] or None)
+    assert again["cached"] is True, "unchanged media must be a cache hit"
 
 
 def test_snapshot_writes_a_real_drp(tmp_path: Path) -> None:

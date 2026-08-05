@@ -38,6 +38,8 @@ def test_registers_the_p1_session_media_timeline_cut_and_job_tools() -> None:
         "get_cut_schema",
         "validate_cut",
         "build_timeline",
+        "grab_frames",
+        "detect_scene_cuts",
         "get_job",
         "list_jobs",
         "run_python",

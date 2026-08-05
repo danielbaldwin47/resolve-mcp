@@ -11,7 +11,7 @@ from fastmcp import FastMCP
 from . import __version__
 from .config import get_config
 from .logging_config import configure_logging, get_logger
-from .tools import cut, escape_hatch, jobs, media, project, timeline
+from .tools import cut, escape_hatch, jobs, media, project, timeline, video
 
 log = get_logger("server")
 
@@ -31,6 +31,9 @@ snap it to a frame ({"seconds": 2.52, "snap": "floor"}).
 Editing is declarative: you author a cut file, the server builds it. Call get_cut_schema
 before writing one and validate_cut after every edit — do not guess the format.
 
+When the audio evidence is ambiguous, look: grab_frames writes JPEGs you can read at any
+moment on any angle, and detect_scene_cuts catalogs where a piece of b-roll changes shot.
+
 Heavy work (renders, analysis) hands back a job_id straight away — carry on working and
 poll it with get_job; list_jobs finds what you started before a restart. Results are cached
 against the media and the parameters, so an unchanged rerun comes back instantly.
@@ -49,6 +52,7 @@ def build_server() -> FastMCP:
         *media.TOOLS,
         *timeline.TOOLS,
         *cut.TOOLS,
+        *video.TOOLS,
         *jobs.TOOLS,
         *escape_hatch.TOOLS,
     ):

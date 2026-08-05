@@ -21,9 +21,9 @@ from resolve_mcp.audio.acquire import (
     acquire_timeline_audio,
     mapping_conflict,
 )
-from resolve_mcp.audio.ffmpeg import Completed, Runner
 from resolve_mcp.config import get_config
 from resolve_mcp.errors import AudioExtractionError, AudioMappingError, RenderQueueError
+from resolve_mcp.ffmpeg import Completed, Runner
 from resolve_mcp.jobs.runner import wait_for
 from resolve_mcp.resolve.connection import get_connection
 

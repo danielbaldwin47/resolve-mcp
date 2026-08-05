@@ -333,6 +333,26 @@ class AudioMappingError(ResolveMcpError):
     )
 
 
+class FrameGrabError(ResolveMcpError):
+    """ffmpeg would not give up a frame of this clip."""
+
+    code = "frame_grab_failed"
+    default_fix = (
+        "Check the clip is online and holds video — inspect_clip reports both — and that the "
+        "time asked for is inside its bounds. ffmpeg's own message is in detail.stderr."
+    )
+
+
+class SceneDetectionError(ResolveMcpError):
+    """ffmpeg would not decode this clip looking for scene cuts."""
+
+    code = "scene_detection_failed"
+    default_fix = (
+        "Check the clip is online and holds video — inspect_clip reports both. "
+        "ffmpeg's own message is in detail.stderr."
+    )
+
+
 class InternalError(ResolveMcpError):
     code = "internal_error"
     default_fix = (
