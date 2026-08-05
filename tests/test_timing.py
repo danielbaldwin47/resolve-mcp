@@ -24,6 +24,17 @@ def test_timecode_counts_frames_at_the_nearest_whole_rate(
     assert timecode(frames, fps) == expected
 
 
+def test_a_backwards_distance_is_signed_not_wrapped() -> None:
+    """A sync offset points backwards as often as forwards, and is not a position."""
+    assert timecode(-1000, 59.94) == "-00:00:16:40"
+    assert dual_time(-1000, 59.94) == {
+        "frames": -1000,
+        "seconds": -16.683,
+        "timecode": "-00:00:16:40",
+        "fps": 59.94,
+    }
+
+
 def test_dual_carries_frames_seconds_timecode_and_fps() -> None:
     assert dual_time(90, 59.94) == {
         "frames": 90,

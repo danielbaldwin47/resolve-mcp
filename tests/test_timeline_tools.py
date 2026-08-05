@@ -14,7 +14,6 @@ from resolve_mcp.tools.timeline import inspect_timeline, list_timelines
 from .conftest import Attach
 from .fakes import (
     FakeMediaPoolItem,
-    FakeResolve,
     FakeTimeline,
     FakeTimelineItem,
     FakeTrack,
@@ -92,9 +91,7 @@ def test_list_names_the_newest_version_of_each_cut(attach: Attach) -> None:
     assert result["latest_versions"] == {"sunset-set": "sunset-set v12", "encore": "encore_v2"}
 
 
-def test_list_spills_past_the_cap_rather_than_flooding_the_reply(
-    attach: Attach, tmp_path: Path
-) -> None:
+def test_list_spills_past_the_cap_rather_than_flooding_the_reply(attach: Attach) -> None:
     attach(studio(timelines=[a_cut(f"sunset-set v{index}") for index in range(1, 6)]))
 
     result = list_timelines(limit=2)
@@ -130,7 +127,8 @@ def test_timeline_tools_need_a_project(attach: Attach) -> None:
 
 
 def test_inspect_defaults_to_the_open_timeline(attach: Attach) -> None:
-    attach(studio(timelines=[sync_reference(), a_cut()], timeline=a_cut()))
+    cut = a_cut()
+    attach(studio(timelines=[sync_reference(), cut], timeline=cut))
 
     result = inspect_timeline()
 
@@ -242,10 +240,11 @@ def test_each_angle_carries_the_offset_that_maps_its_source_onto_the_timeline(
 
     result = inspect_timeline(detail="clips")
 
-    offsets = {
-        track["name"]: track["items"][0]["sync_offset"]["frames"] for track in result["tracks"]
-    }
-    assert offsets == {"Cam A": -1000, "Cam B": -2880}
+    offsets = {track["name"]: track["items"][0]["sync_offset"] for track in result["tracks"]}
+    assert offsets["Cam A"]["frames"] == -1000
+    assert offsets["Cam B"]["frames"] == -2880
+    assert offsets["Cam A"]["timecode"] == "-00:00:16:40"
+    assert offsets["Cam A"]["seconds"] == -16.683
 
 
 def test_an_angle_on_a_resolve_without_source_frames_still_reports_its_offset(
@@ -353,9 +352,7 @@ def test_a_backwards_range_is_rejected(attach: Attach) -> None:
 # --- pagination --------------------------------------------------------------------------
 
 
-def test_a_long_timeline_caps_the_shots_it_returns_and_spills_the_rest(
-    attach: Attach, tmp_path: Path
-) -> None:
+def test_a_long_timeline_caps_the_shots_it_returns_and_spills_the_rest(attach: Attach) -> None:
     shots = [FakeTimelineItem(f"C{index:04d}.mp4", index * 10, 10) for index in range(20)]
     attach(studio(timeline=FakeTimeline("cut v1", video=[FakeTrack("Video 1", shots)])))
 
@@ -382,6 +379,43 @@ def test_the_cap_counts_shots_across_every_track(attach: Attach) -> None:
     assert returned == 2
     assert result["item_count"] == 4
     assert result["truncated"] is True
+
+
+def test_the_default_cap_keeps_a_reply_inside_the_client_token_budget(attach: Attach) -> None:
+    """The 25k-token cap is the reason the cap exists, so the default has to fit under it.
+
+    Four characters to a token is the rough conversion; a shot carries six dual-time
+    readings, which is what makes a default anyone picked by feel land wrong.
+    """
+    shots = [
+        FakeTimelineItem(f"C{index:04d}.mp4", index * 10, 10, source_start=index)
+        for index in range(500)
+    ]
+    attach(studio(timeline=FakeTimeline("cut v1", video=[FakeTrack("Video 1", shots)])))
+
+    result = inspect_timeline(detail="clips")
+
+    assert result["truncated"] is True
+    assert len(json.dumps(result)) < 4 * 25_000
+
+
+def test_the_timeline_duration_is_the_end_resolve_reports(attach: Attach) -> None:
+    """A timeline has no duration getter, so this one reading rests on GetEndFrame."""
+    attach(
+        studio(
+            timeline=FakeTimeline(
+                "cut v1",
+                start_frame=100,
+                end_frame=400,
+                video=[FakeTrack("Video 1", [FakeTimelineItem("C0012.mp4", 100, 60)])],
+            )
+        )
+    )
+
+    result = inspect_timeline(detail="summary")
+
+    assert result["timeline"]["end"]["frames"] == 400
+    assert result["timeline"]["duration"]["frames"] == 300
 
 
 def test_a_summary_never_spills(attach: Attach) -> None:
@@ -424,6 +458,31 @@ def test_resolve_quitting_mid_call_is_a_connection_failure_not_a_bug(attach: Att
     assert result["error"]["code"] == "resolve_unavailable"
 
 
+@pytest.mark.parametrize("survives", range(1, 16))
+def test_a_death_part_way_through_a_read_never_returns_half_a_timeline(
+    attach: Attach, survives: int
+) -> None:
+    """Wherever the handle dies, the answer is a complete reading or a stated failure.
+
+    The field-level readers fall back rather than raise, which is right for a getter an
+    older Resolve does not have and wrong for a handle that has gone away — this pins the
+    difference at every point in the walk, so no fallback can quietly stand in for a
+    dropped connection.
+    """
+    dying = studio(timeline=a_cut())
+    dying.die_after(survives)
+    attach(dying, studio(timeline=a_cut()))
+
+    result = inspect_timeline(detail="clips")
+
+    assert result["ok"] is True
+    shots = result["tracks"][0]["items"]
+    assert [shot["name"] for shot in shots] == ["C0012.mp4", "C0031.mp4", "C0012.mp4"]
+    assert all(shot["record"]["duration"]["frames"] for shot in shots)
+    assert all(shot["sync_offset"] is not None for shot in shots)
+    assert result["timeline"]["duration"]["frames"] == 200
+
+
 def test_a_bug_in_the_wrapper_is_reported_once_as_a_bug(
     attach: Attach, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -447,11 +506,7 @@ def test_a_timeline_that_cannot_be_read_is_skipped_rather_than_sinking_the_list(
     attach: Attach,
 ) -> None:
     """Resolve hands out timeline proxies that occasionally answer nothing at all."""
-    resolve: FakeResolve = studio(timelines=[a_cut("sunset-set v1"), a_cut("sunset-set v2")])
-    project = resolve.projects["sunset-set"]
-    project._timelines.insert(1, None)  # type: ignore[arg-type]
-
-    attach(resolve)
+    attach(studio(timelines=[a_cut("sunset-set v1"), None, a_cut("sunset-set v2")]))
 
     result = list_timelines()
 

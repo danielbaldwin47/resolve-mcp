@@ -38,7 +38,7 @@ from ..errors import (
     RelinkFailedError,
 )
 from ..logging_config import get_logger
-from ..naming import timestamped_name
+from ..spill import spill
 from ..timing import dual_time
 from .connection import ResolveConnection
 
@@ -441,20 +441,13 @@ def list_media(
         "spilled_to": None,
     }
     if truncated:
-        result["spilled_to"] = _spill(result["bin"], clips, config or get_config())
+        result["spilled_to"] = spill(
+            result["bin"],
+            {"bin": result["bin"], "count": len(clips), "clips": clips},
+            config or get_config(),
+            fallback="media-pool",
+        )
     return result
-
-
-def _spill(bin_path: str, clips: list[dict[str, Any]], config: Config) -> str:
-    """Write the whole listing where the agent can grep it, and return the path."""
-    target = config.listing_dir / timestamped_name(bin_path, ".json", "media-pool")
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(
-        json.dumps({"bin": bin_path, "count": len(clips), "clips": clips}, indent=2),
-        encoding="utf-8",
-    )
-    log.info("Spilled %d clip summaries to %s", len(clips), target)
-    return str(target)
 
 
 # --- inspect ----------------------------------------------------------------------------

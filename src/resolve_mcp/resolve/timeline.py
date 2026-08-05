@@ -8,9 +8,12 @@ rather than API calls, and are the reason this file exists at all:
   of its own — so the number is parsed off the name, and a timeline that does not follow
   the convention has no version rather than a guessed one.
 * **Out points are half-open ``[in, out)``, computed from start + duration.** The scripting
-  docs do not settle whether ``GetEnd()`` is the last frame or one past it, and a one-frame
-  error in a cut point is invisible until it is expensive — so ``GetEnd()`` is never
-  trusted; ``GetDuration()`` is, and the out point follows from it.
+  docs do not settle whether a timeline item's ``GetEnd()`` is the last frame or one past
+  it, and a one-frame error in a cut point is invisible until it is expensive — so
+  ``GetEnd()`` is never read; ``GetDuration()`` is, and the out point follows from it. A
+  timeline itself has no duration getter, so its own end has to be taken from
+  ``GetEndFrame()`` as exclusive; that is the one place the reading rests on the
+  convention rather than side-stepping it, and it is what the live smoke tier checks.
 * **The sync offset is the mapping, not a measurement.** For a hand-synced stacked
   reference, ``timeline_frame = source_frame + sync_offset`` per angle, so the offset is
   the record start minus the source start. The server computes it and stops there: what it
@@ -23,9 +26,8 @@ rather than API calls, and are the reason this file exists at all:
 
 from __future__ import annotations
 
-import json
 import re
-from typing import Any
+from typing import Any, NamedTuple
 
 from ..config import Config, get_config
 from ..errors import (
@@ -35,7 +37,7 @@ from ..errors import (
     TimelineNotFoundError,
 )
 from ..logging_config import get_logger
-from ..naming import timestamped_name
+from ..spill import spill
 from ..timing import dual_time, to_frames
 from .connection import ResolveConnection
 from .session import frame_rate
@@ -43,7 +45,11 @@ from .session import frame_rate
 log = get_logger("timeline")
 
 DEFAULT_LIST_LIMIT = 100
-DEFAULT_ITEM_LIMIT = 200
+# A shot with its record, source and offset positions in dual time runs to roughly 700
+# characters of JSON, so a hundred of them sits inside the client's 25k-token reply cap
+# with the heading and track stack alongside. Raising this spends the agent's whole reply
+# on one read; narrowing the range is the cheaper move.
+DEFAULT_ITEM_LIMIT = 100
 DETAIL_LEVELS = ("summary", "tracks", "clips")
 TRACK_TYPES = ("video", "audio", "subtitle")
 
@@ -52,6 +58,25 @@ VERSION = re.compile(r"^(?P<base>.*?)[\s_-]*v(?P<number>\d+)$", re.IGNORECASE)
 Project = Any
 Timeline = Any
 TimelineItem = Any
+
+
+class Placement(NamedTuple):
+    """Where a shot sits on the timeline, read once and passed along.
+
+    Range filtering and the shot's own reading both need these two numbers, and every read
+    of them is a round trip into Resolve — so they travel together rather than being asked
+    for twice.
+    """
+
+    start: int | None
+    duration: int | None
+
+    @property
+    def end(self) -> int | None:
+        """One past the last frame, the half-open convention the cut file uses."""
+        if self.start is None or self.duration is None:
+            return None
+        return self.start + self.duration
 
 
 # --- reaching a timeline ------------------------------------------------------------------
@@ -119,8 +144,8 @@ def version_of(name: str) -> tuple[str, int | None]:
 
 
 def _bounds(timeline: Timeline, fps: float | None) -> dict[str, Any]:
-    start = _frames(timeline.GetStartFrame)
-    end = _frames(timeline.GetEndFrame)
+    start = _frames(timeline.GetStartFrame())
+    end = _frames(timeline.GetEndFrame())
     duration = end - start if start is not None and end is not None else None
     return {
         "start": dual_time(start, fps),
@@ -129,25 +154,41 @@ def _bounds(timeline: Timeline, fps: float | None) -> dict[str, Any]:
     }
 
 
-def _frames(getter: Any) -> int | None:
-    try:
-        value = getter()
-    except Exception:  # noqa: BLE001 - one unreadable number is not a lost timeline
-        log.debug("Could not read %s", getattr(getter, "__name__", getter), exc_info=True)
-        return None
+def _frames(value: Any) -> int | None:
+    """A frame number as Resolve reports it — sometimes a string, sometimes nothing.
+
+    Only the parsing is forgiving. A getter that *raises* is left to raise: that is what a
+    handle dying mid-read looks like, and swallowing it here would turn a lost connection
+    into a half-empty reading the agent has no reason to distrust.
+    """
     try:
         return int(float(value))
     except (TypeError, ValueError):
         return None
 
 
+def _optional(getter: Any, default: Any, *args: Any) -> Any:
+    """Read something this Resolve build may not offer; the default is not a failure.
+
+    Getters come and go between versions and a few refuse on particular clip kinds, so a
+    reading that cannot be taken falls back rather than sinking the whole inspection.
+    """
+    if getter is None:
+        return default
+    try:
+        return getter(*args)
+    except Exception:  # noqa: BLE001 - one unreadable field is not a lost timeline
+        log.debug("Could not read %s%s", getattr(getter, "__name__", getter), args, exc_info=True)
+        return default
+
+
 def _track_counts(timeline: Timeline) -> dict[str, int]:
     counts = {}
     for track_type in TRACK_TYPES:
         try:
-            counts[track_type] = int(timeline.GetTrackCount(track_type) or 0)
-        except Exception:  # noqa: BLE001 - a track type this build does not know is zero
-            log.debug("Could not count %s tracks", track_type, exc_info=True)
+            counts[track_type] = int(_optional(timeline.GetTrackCount, 0, track_type) or 0)
+        except (TypeError, ValueError):
+            log.debug("Unreadable %s track count", track_type, exc_info=True)
             counts[track_type] = 0
     return counts
 
@@ -195,7 +236,7 @@ def list_timelines(
     }
     if truncated:
         full = {**result, "timelines": timelines, "truncated": False, "spilled_to": None}
-        result["spilled_to"] = _spill("timelines", full, config or get_config())
+        result["spilled_to"] = spill("timelines", full, config or get_config(), "timeline")
     return result
 
 
@@ -209,15 +250,6 @@ def _latest_versions(timelines: list[dict[str, Any]]) -> dict[str, str]:
         if best is None or entry["version"] > best["version"]:
             latest[entry["base_name"]] = entry
     return {base: entry["name"] for base, entry in latest.items()}
-
-
-def _spill(label: str, payload: dict[str, Any], config: Config) -> str:
-    """Write the whole reading where the agent can grep it, and return the path."""
-    target = config.listing_dir / timestamped_name(label, ".json", "timeline")
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    log.info("Spilled the full %s reading to %s", label, target)
-    return str(target)
 
 
 # --- inspect ----------------------------------------------------------------------------------
@@ -250,8 +282,9 @@ def inspect_timeline(
     fps = heading["fps"]
 
     window = _window(timeline, start, end, fps)
+    with_items = detail == "clips"
     tracks = [
-        _read_track(timeline, track_type, index, window, fps, detail == "clips")
+        _read_track(timeline, track_type, index, window, fps, with_items)
         for track_type in TRACK_TYPES
         for index in range(1, heading["tracks"][track_type] + 1)
     ]
@@ -266,7 +299,7 @@ def inspect_timeline(
         "truncated": False,
         "spilled_to": None,
     }
-    if detail != "clips":
+    if not with_items:
         return result
 
     cap = max(int(limit), 0)
@@ -274,7 +307,7 @@ def inspect_timeline(
     if item_count > cap:
         result["truncated"] = True
         full = {**result, "tracks": tracks, "truncated": False, "spilled_to": None}
-        result["spilled_to"] = _spill(heading["name"], full, config or get_config())
+        result["spilled_to"] = spill(heading["name"], full, config or get_config(), "timeline")
     return result
 
 
@@ -282,8 +315,8 @@ def _window(timeline: Timeline, start: Any, end: Any, fps: float | None) -> tupl
     """The range to read, half-open ``[in, out)``, defaulting to the whole timeline."""
     asked_start = to_frames(start, fps, field="start")
     asked_end = to_frames(end, fps, field="end")
-    first = asked_start if asked_start is not None else (_frames(timeline.GetStartFrame) or 0)
-    last = asked_end if asked_end is not None else _frames(timeline.GetEndFrame)
+    first = asked_start if asked_start is not None else (_frames(timeline.GetStartFrame()) or 0)
+    last = asked_end if asked_end is not None else _frames(timeline.GetEndFrame())
     if last is None:
         last = first
     if last < first:
@@ -303,19 +336,31 @@ def _read_track(
     fps: float | None,
     with_items: bool,
 ) -> dict[str, Any]:
-    items = [
-        read_item(item, track_type, index, fps)
-        for item in _items_in_track(timeline, track_type, index)
+    """One track, and the shots on it that touch the range.
+
+    The range is applied to raw frame numbers before anything is shaped: a concert track
+    holds thousands of shots, and building the dual-time reading of each one only to throw
+    it away is the difference between a quick read and a slow one.
+    """
+    in_range = [
+        (item, placement)
+        for item, placement in (
+            (item, _placement(item)) for item in _items_in_track(timeline, track_type, index)
+        )
+        if _touches(placement, window)
     ]
-    in_range = [item for item in items if _touches(item, window)]
     return {
         "type": track_type,
         "index": index,
-        "name": _track_name(timeline, track_type, index),
-        "enabled": _flag(timeline.GetIsTrackEnabled, track_type, index, default=True),
-        "locked": _flag(timeline.GetIsTrackLocked, track_type, index, default=False),
+        "name": str(_optional(timeline.GetTrackName, "", track_type, index) or ""),
+        "enabled": bool(_optional(timeline.GetIsTrackEnabled, True, track_type, index)),
+        "locked": bool(_optional(timeline.GetIsTrackLocked, False, track_type, index)),
         "item_count": len(in_range),
-        "items": in_range if with_items else [],
+        "items": (
+            [read_item(item, track_type, index, fps, placement) for item, placement in in_range]
+            if with_items
+            else []
+        ),
     }
 
 
@@ -334,48 +379,31 @@ def _capped(tracks: list[dict[str, Any]], cap: int) -> list[dict[str, Any]]:
     return capped
 
 
-def _touches(item: dict[str, Any], window: tuple[int, int]) -> bool:
-    """Whether a shot overlaps the range at all — an edge that only meets it does not."""
+def _touches(placement: Placement, window: tuple[int, int]) -> bool:
+    """Whether a shot overlaps the range at all — an edge that only meets it does not.
+
+    A shot whose position cannot be read is kept: dropping it would quietly shorten the
+    reading of a cut, which is worse than one entry the agent has to look at twice.
+    """
     first, last = window
-    record = item["record"]
-    starts = (record["in"] or {}).get("frames")
-    ends = (record["out"] or {}).get("frames")
-    if starts is None or ends is None:
+    if placement.start is None or placement.end is None:
         return True
-    return bool(starts < last and ends > first)
+    return bool(placement.start < last and placement.end > first)
 
 
 def _items_in_track(timeline: Timeline, track_type: str, index: int) -> list[TimelineItem]:
-    try:
-        return list(timeline.GetItemListInTrack(track_type, index) or [])
-    except Exception:  # noqa: BLE001 - an unreadable track is empty, not a failed inspection
-        log.warning("Could not read %s track %d", track_type, index, exc_info=True)
-        return []
-
-
-def _track_name(timeline: Timeline, track_type: str, index: int) -> str:
-    try:
-        return str(timeline.GetTrackName(track_type, index) or "")
-    except Exception:  # noqa: BLE001
-        log.debug("Could not read the name of %s track %d", track_type, index, exc_info=True)
-        return ""
-
-
-def _flag(getter: Any, track_type: str, index: int, default: bool) -> bool:
-    try:
-        return bool(getter(track_type, index))
-    except Exception:  # noqa: BLE001 - an older build without the getter reports the default
-        log.debug("Could not read a track flag on %s %d", track_type, index, exc_info=True)
-        return default
+    """The shots on one track. An empty track answers ``None`` rather than an empty list."""
+    return list(timeline.GetItemListInTrack(track_type, index) or [])
 
 
 def _marker_count(timeline: Timeline) -> int:
-    try:
-        markers = timeline.GetMarkers()
-    except Exception:  # noqa: BLE001
-        log.debug("Could not read the timeline markers", exc_info=True)
-        return 0
+    markers = _optional(timeline.GetMarkers, None)
     return len(markers) if isinstance(markers, dict) else 0
+
+
+def _placement(item: TimelineItem) -> Placement:
+    """Where a shot sits, in the two numbers everything else is derived from."""
+    return Placement(_frames(item.GetStart()), _frames(item.GetDuration()))
 
 
 def read_item(
@@ -383,11 +411,11 @@ def read_item(
     track_type: str,
     index: int,
     fps: float | None,
+    placement: Placement,
 ) -> dict[str, Any]:
     """One shot: where it sits, where it came from, and the offset between the two."""
-    record_in = _frames(item.GetStart)
-    duration = _frames(item.GetDuration)
-    record_out = record_in + duration if record_in is not None and duration is not None else None
+    record_in, duration = placement.start, placement.duration
+    record_out = placement.end
     source_in = _source_start(item)
     source_out = source_in + duration if source_in is not None and duration is not None else None
     offset = record_in - source_in if record_in is not None and source_in is not None else None
@@ -402,8 +430,8 @@ def read_item(
         "source": {"in": dual_time(source_in, fps), "out": dual_time(source_out, fps)},
         "sync_offset": dual_time(offset, fps),
         "clip": _clip_name(item),
-        "enabled": _read(item, "GetClipEnabled", True),
-        "takes": _read(item, "GetTakeCount", 0),
+        "enabled": bool(_optional(getattr(item, "GetClipEnabled", None), True)),
+        "takes": int(_optional(getattr(item, "GetTakeCount", None), 0) or 0),
     }
 
 
@@ -415,36 +443,16 @@ def _source_start(item: TimelineItem) -> int | None:
     is what an offset against a common clock needs either way.
     """
     for getter in ("GetSourceStartFrame", "GetLeftOffset"):
-        found = getattr(item, getter, None)
-        if found is None:
-            continue
-        frames = _frames(found)
+        frames = _frames(_optional(getattr(item, getter, None), None))
         if frames is not None:
             return frames
     return None
 
 
 def _clip_name(item: TimelineItem) -> str | None:
-    try:
-        clip = item.GetMediaPoolItem()
-    except Exception:  # noqa: BLE001 - a generator or title has no media pool item
-        log.debug("Could not reach the media pool item behind a shot", exc_info=True)
-        return None
+    """The media pool clip a shot came from — a generator or title has none."""
+    clip = _optional(item.GetMediaPoolItem, None)
     if clip is None:
         return None
-    try:
-        return str(clip.GetName() or "")
-    except Exception:  # noqa: BLE001
-        log.debug("Could not read the name of the clip behind a shot", exc_info=True)
-        return None
-
-
-def _read(item: TimelineItem, getter: str, default: Any) -> Any:
-    found = getattr(item, getter, None)
-    if found is None:
-        return default
-    try:
-        return found()
-    except Exception:  # noqa: BLE001 - a build without this getter reports the default
-        log.debug("Could not read %s", getter, exc_info=True)
-        return default
+    name = _optional(clip.GetName, None)
+    return None if name is None else str(name)

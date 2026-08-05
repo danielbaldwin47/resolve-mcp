@@ -26,6 +26,10 @@ class FakeTimelineItem:
     ``GetEnd`` is deliberately configurable: the scripting docs do not say whether it is
     the last frame or one past it, so a fake that only ever agreed with
     ``GetStart() + GetDuration()`` would hide a wrapper that trusted the wrong one.
+
+    ``supports_source_frames=False`` models a Resolve older than 18.5, where the source
+    getters are *absent* rather than failing — so ``getattr`` misses them, which is the
+    branch the wrapper actually takes.
     """
 
     def __init__(
@@ -51,6 +55,16 @@ class FakeTimelineItem:
         self._supports_source_frames = supports_source_frames
         self._end_is_inclusive = end_is_inclusive
         self._owner = owner
+
+    SOURCE_GETTERS = ("GetSourceStartFrame", "GetSourceEndFrame")
+
+    def __getattribute__(self, name: str) -> Any:
+        """Hide the source getters entirely on a build that predates them."""
+        if name in FakeTimelineItem.SOURCE_GETTERS and not object.__getattribute__(
+            self, "_supports_source_frames"
+        ):
+            raise AttributeError(name)
+        return object.__getattribute__(self, name)
 
     def adopt(self, owner: FakeResolve) -> None:
         self._owner = owner
@@ -82,16 +96,10 @@ class FakeTimelineItem:
 
     def GetSourceStartFrame(self) -> int:  # noqa: N802
         self._check()
-        if not self._supports_source_frames:
-            raise AttributeError("GetSourceStartFrame")
-        if self._source_start is None:
-            return 0
-        return self._source_start
+        return self._source_start or 0
 
     def GetSourceEndFrame(self) -> int:  # noqa: N802
         self._check()
-        if not self._supports_source_frames:
-            raise AttributeError("GetSourceEndFrame")
         return (self._source_start or 0) + self._duration - 1
 
     def GetMediaPoolItem(self) -> FakeMediaPoolItem | None:  # noqa: N802
@@ -144,11 +152,13 @@ class FakeTimeline:
         video: TrackSpec | None = None,
         audio: TrackSpec | None = None,
         markers: dict[float, dict[str, Any]] | None = None,
+        end_frame: int | None = None,
         owner: FakeResolve | None = None,
     ) -> None:
         self._name = name
         self._fps = fps
         self._start_frame = start_frame
+        self._end_frame = end_frame
         self._tracks: dict[str, list[FakeTrack]] = {
             "video": _as_tracks(video, "Video"),
             "audio": _as_tracks(audio, "Audio"),
@@ -185,7 +195,15 @@ class FakeTimeline:
         return self._start_frame
 
     def GetEndFrame(self) -> int:  # noqa: N802
+        """Where the timeline ends.
+
+        ``end_frame`` is settable and independent of the items, so a test can say what
+        Resolve reports rather than have the fake derive a number the wrapper is bound to
+        agree with — the timeline's own duration is the one reading taken on trust.
+        """
         self._check()
+        if self._end_frame is not None:
+            return self._end_frame
         ends = [
             item.GetStart() + item.GetDuration()
             for tracks in self._tracks.values()
@@ -496,8 +514,9 @@ class FakeProject:
         timeline: FakeTimeline | None = None,
         fps: str = "24",
         media_pool: FakeMediaPool | None = None,
-        timelines: list[FakeTimeline] | None = None,
+        timelines: list[FakeTimeline | None] | None = None,
     ) -> None:
+        """``timelines`` may hold a ``None``: Resolve sometimes answers an index with one."""
         self._name = name
         self._timeline = timeline
         self._fps = fps
@@ -693,7 +712,7 @@ def studio(
     fps: str = "59.94",
     extra_projects: tuple[str, ...] = ("holiday-gig",),
     pool: FakeMediaPool | None = None,
-    timelines: list[FakeTimeline] | None = None,
+    timelines: list[FakeTimeline | None] | None = None,
 ) -> FakeResolve:
     """A conventional fake: Studio running, one project open, one timeline current.
 
@@ -722,7 +741,7 @@ def studio(
     resolve = FakeResolve(projects, current=project)
     if pool is not None:
         pool.adopt(resolve)
-    owned = list(timelines or [])
+    owned = [one for one in (timelines or []) if one is not None]
     if current is not None and current not in owned:
         owned.append(current)
     for one in owned:

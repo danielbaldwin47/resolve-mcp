@@ -104,6 +104,14 @@ def test_the_frame_math_holds_on_a_real_timeline() -> None:
 
     assert result["ok"] is True
     ends_at = result["timeline"]["end"]["frames"]
+    outs = [
+        item["record"]["out"]["frames"] for track in result["tracks"] for item in track["items"]
+    ]
+    if outs and not result["truncated"]:
+        # The timeline's own duration is the one number taken from GetEndFrame on trust
+        # (a timeline has no duration getter). A Resolve that reported the last frame
+        # rather than one past it would show up here as an off-by-one, and nowhere else.
+        assert ends_at == max(outs)
     for track in result["tracks"]:
         for item in track["items"]:
             record = item["record"]

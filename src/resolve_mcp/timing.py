@@ -25,8 +25,14 @@ SNAPS = ("floor", "ceil")
 
 
 def timecode(frames: int, fps: float) -> str:
-    """``HH:MM:SS:FF`` at the nearest whole frame rate, non-drop."""
+    """``HH:MM:SS:FF`` at the nearest whole frame rate, non-drop.
+
+    A negative count is signed rather than wrapped: not every number here is a position on
+    a timeline — a sync offset is a distance, and it routinely points backwards.
+    """
     rate = max(round(fps), 1)
+    if frames < 0:
+        return f"-{timecode(-int(frames), fps)}"
     whole_seconds, frame = divmod(int(frames), rate)
     minutes, seconds = divmod(whole_seconds, 60)
     hours, minutes = divmod(minutes, 60)
