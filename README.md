@@ -8,7 +8,7 @@ Build contract: [issue #22](https://github.com/danielbaldwin47/resolve-mcp/issue
 ## Status
 
 P1 in progress. Shipped so far: the server skeleton, the session/project tools, the media
-pool tools, and the `run_python` escape hatch.
+pool tools, the timeline read and interchange tools, and the `run_python` escape hatch.
 
 | Tool | What it does |
 | --- | --- |
@@ -22,11 +22,21 @@ pool tools, and the `run_python` escape hatch.
 | `set_clip_metadata` | Batch metadata writes, each field routed by what the clip reports |
 | `organize_media` | Batch bin operations: create nested bins, move clips |
 | `relink_media` | Points offline clips at media that moved (folder relink or file replace) |
+| `list_timelines` | Timelines with version, duration, fps and track stack; names the newest cut |
+| `inspect_timeline` | One timeline at a chosen detail and range, in dual time |
+| `export_timeline` | Writes a timeline out as OTIO, FCPXML or DRT |
+| `import_timeline` | Materialises a **new** timeline from such a file — never overwrites one |
 | `run_python` | Escape hatch: runs scripting-API Python in the server process |
 
 Bin paths are slash-separated from the media pool root (`Concert/Angles`) and
 case-sensitive. A clip counts as **offline** when it has a file path that is not on
 disk — Resolve's scripting API exposes no offline flag.
+
+Interchange is the **structural escape hatch**. The scripting API cannot cut a transition,
+so a dissolve is made by exporting the cut to OTIO, editing the transition into that
+document, and importing it back. An import is always given a name no timeline in the
+project answers to — colliding names walk the `<base> v<N>` convention — so the cut that is
+already there is never the thing that gets written over.
 
 ## Requirements
 

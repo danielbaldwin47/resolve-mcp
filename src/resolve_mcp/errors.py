@@ -96,6 +96,27 @@ class TimelineNotFoundError(ResolveMcpError):
         )
 
 
+class TimelineExportFailedError(ResolveMcpError):
+    """Resolve would not write the interchange file, or wrote nothing."""
+
+    code = "timeline_export_failed"
+    default_fix = (
+        "Check the target directory is writable from the machine Resolve runs on, then "
+        "retry. Another format may be supported where this one is not: otio, fcpxml, drt."
+    )
+
+
+class TimelineImportFailedError(ResolveMcpError):
+    """Resolve would not materialise a timeline from the file."""
+
+    code = "timeline_import_failed"
+    default_fix = (
+        "Check the file is a timeline Resolve can read (.otio, .fcpxml, .drt) and is "
+        "readable from the machine Resolve runs on. If it was hand-edited, an invalid "
+        "document imports as nothing — validate the edit and retry."
+    )
+
+
 class SnapshotFailedError(ResolveMcpError):
     code = "snapshot_failed"
     default_fix = (

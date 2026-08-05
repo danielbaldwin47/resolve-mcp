@@ -179,6 +179,9 @@ class FakeTimeline:
         }
         self._markers = markers or {}
         self._owner = owner
+        self.exports: list[tuple[str, Any, tuple[Any, ...]]] = []
+        self.export_result = True
+        self.export_writes_the_file = True
 
     def adopt(self, owner: FakeResolve) -> None:
         self._owner = owner
@@ -256,6 +259,22 @@ class FakeTimeline:
     def GetMarkers(self) -> dict[float, dict[str, Any]]:  # noqa: N802
         self._check()
         return dict(self._markers)
+
+    def Export(self, file_name: str, export_type: Any, *subtype: Any) -> bool:  # noqa: N802
+        """Write an interchange file. The subtype is variadic because Resolve's is optional.
+
+        ``export_writes_the_file=False`` models the failure the return value hides: Resolve
+        answers True and nothing lands on disk.
+        """
+        self._check()
+        self.exports.append((file_name, export_type, subtype))
+        if not self.export_result:
+            return False
+        if self.export_writes_the_file:
+            target = Path(file_name)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(f"fake-export of {self._name}", encoding="utf-8")
+        return True
 
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".exr", ".dpx", ".tga"}
@@ -384,6 +403,9 @@ class FakeMediaPool:
         self.relink_result: bool | None = None
         self.move_result = True
         self.calls: list[str] = []
+        self.timeline_imports: list[tuple[str, dict[str, Any]]] = []
+        self.imported_timeline: FakeTimeline | None = None
+        self.refuses_timeline_import = False
 
     def _check(self, method: str) -> None:
         self.calls.append(method)
@@ -451,6 +473,37 @@ class FakeMediaPool:
             self._current.clips.append(clip)
             imported.append(clip)
         return imported
+
+    def ImportTimelineFromFile(  # noqa: N802
+        self,
+        file_path: str,
+        options: dict[str, Any] | None = None,
+    ) -> FakeTimeline | None:
+        """Materialise a timeline from an interchange file, as the real pool does.
+
+        The filesystem is consulted for the same reason ``ImportMedia`` consults it: a path
+        Resolve cannot read imports nothing and says so only by returning ``None``.
+        ``imported_timeline`` overrides the result — set it to a timeline the project
+        already holds to model the one outcome this must never be mistaken for, an import
+        that landed on an existing cut.
+        """
+        self._check("ImportTimelineFromFile")
+        asked = dict(options or {})
+        self.timeline_imports.append((file_path, asked))
+        if self.refuses_timeline_import or not Path(file_path).exists():
+            return None
+        if self.imported_timeline is not None:
+            return self.imported_timeline
+        timeline = FakeTimeline(
+            str(asked.get("timelineName") or Path(file_path).stem),
+            video=[[FakeTimelineItem("C0012.mp4", 0, 60, source_start=1000)]],
+        )
+        if self._owner is not None:
+            timeline.adopt(self._owner)
+            project = self._owner.current_project
+            if project is not None:
+                project.add_timeline(timeline)
+        return timeline
 
     def RelinkClips(  # noqa: N802
         self,
@@ -560,6 +613,10 @@ class FakeProject:
     def GetMediaPool(self) -> FakeMediaPool | None:  # noqa: N802
         return self._media_pool
 
+    def add_timeline(self, timeline: FakeTimeline) -> None:
+        """What an import does to a project: one more timeline, nothing else touched."""
+        self._timelines.append(timeline)
+
 
 class FakeProjectManager:
     def __init__(self, owner: FakeResolve) -> None:
@@ -605,6 +662,25 @@ class FakeProjectManager:
         return self.export_result
 
 
+EXPORT_TYPES: tuple[str, ...] = (
+    # First in the tuple, so its value is 0 — the export constants are plain numbers and
+    # one of them is falsy, which is the trap a "constant or default" lookup falls into.
+    "EXPORT_AAF",
+    "EXPORT_DRT",
+    "EXPORT_EDL",
+    "EXPORT_FCP_7_XML",
+    "EXPORT_FCPXML_1_3",
+    "EXPORT_FCPXML_1_4",
+    "EXPORT_FCPXML_1_5",
+    "EXPORT_FCPXML_1_6",
+    "EXPORT_FCPXML_1_7",
+    "EXPORT_FCPXML_1_8",
+    "EXPORT_FCPXML_1_9",
+    "EXPORT_FCPXML_1_10",
+    "EXPORT_OTIO",
+)
+
+
 class FakeResolve:
     """A stand-in for the object ``scriptapp("Resolve")`` returns."""
 
@@ -613,10 +689,16 @@ class FakeResolve:
         projects: dict[str, FakeProject] | None = None,
         current: str | None = None,
         version: list[Any] | None = None,
+        export_types: Sequence[str] | None = None,
     ) -> None:
         self.projects: dict[str, FakeProject] = projects or {}
         self.current_project: FakeProject | None = self.projects.get(current or "")
         self.version = version or [21, 0, 3, 15, ""]
+        # Export types are attributes on the app object itself, and an older build simply
+        # does not have the newer ones — so a narrowed tuple models that build exactly.
+        self.export_types = tuple(EXPORT_TYPES if export_types is None else export_types)
+        for value, export_type in enumerate(self.export_types):
+            setattr(self, export_type, value)
         self.alive = True
         self.probe_count = 0
         self.fail_version_string = False
@@ -726,6 +808,7 @@ def studio(
     extra_projects: tuple[str, ...] = ("holiday-gig",),
     pool: FakeMediaPool | None = None,
     timelines: list[FakeTimeline | None] | None = None,
+    export_types: Sequence[str] | None = None,
 ) -> FakeResolve:
     """A conventional fake: Studio running, one project open, one timeline current.
 
@@ -751,7 +834,7 @@ def studio(
             media_pool=pool,
             timelines=timelines,
         )
-    resolve = FakeResolve(projects, current=project)
+    resolve = FakeResolve(projects, current=project, export_types=export_types)
     if pool is not None:
         pool.adopt(resolve)
     owned = [one for one in (timelines or []) if one is not None]

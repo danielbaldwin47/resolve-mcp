@@ -82,7 +82,7 @@ class Placement(NamedTuple):
 # --- reaching a timeline ------------------------------------------------------------------
 
 
-def _project(connection: ResolveConnection) -> Project:
+def project_of(connection: ResolveConnection) -> Project:
     manager = connection.handle().GetProjectManager()
     project = manager.GetCurrentProject() if manager is not None else None
     if project is None:
@@ -112,7 +112,7 @@ def _timelines(project: Project) -> list[Timeline]:
     return found
 
 
-def _name(timeline: Timeline) -> str:
+def name_of(timeline: Timeline) -> str:
     return str(timeline.GetName() or "")
 
 
@@ -127,9 +127,20 @@ def find_timeline(project: Project, name: str | None) -> Timeline:
         return current
     held = _timelines(project)
     for timeline in held:
-        if _name(timeline) == name:
+        if name_of(timeline) == name:
             return timeline
-    raise TimelineNotFoundError(name, [_name(timeline) for timeline in held])
+    raise TimelineNotFoundError(name, [name_of(timeline) for timeline in held])
+
+
+def timeline_names(project: Project) -> list[str]:
+    """Every timeline name the project holds — what a new name must not collide with."""
+    return [name_of(timeline) for timeline in _timelines(project)]
+
+
+def current_name(project: Project) -> str | None:
+    """The open timeline's name, or ``None`` when the project has nothing open."""
+    current = project.GetCurrentTimeline()
+    return name_of(current) if current is not None else None
 
 
 def version_of(name: str) -> tuple[str, int | None]:
@@ -214,7 +225,7 @@ def summarise(
     current: str | None,
 ) -> dict[str, Any]:
     """The one-line view of a timeline that list and inspect both open with."""
-    name = _name(timeline)
+    name = name_of(timeline)
     base, version = version_of(name)
     fps = frame_rate(project, timeline)
     return {
@@ -237,20 +248,17 @@ def list_timelines(
     config: Config | None = None,
 ) -> dict[str, Any]:
     """Every timeline in the project with its version, duration and track stack."""
-    project = _project(connection)
+    project = project_of(connection)
     reader = Reader(connection)
-    current = project.GetCurrentTimeline()
-    current_name = _name(current) if current is not None else None
+    current = current_name(project)
 
-    timelines = [
-        summarise(reader, timeline, project, current_name) for timeline in _timelines(project)
-    ]
+    timelines = [summarise(reader, timeline, project, current) for timeline in _timelines(project)]
 
     cap = max(int(limit), 0)
     truncated = len(timelines) > cap
     result: dict[str, Any] = {
         "count": len(timelines),
-        "current": current_name,
+        "current": current,
         "timelines": timelines[:cap] if truncated else timelines,
         "latest_versions": _latest_versions(timelines),
         "truncated": truncated,
@@ -297,11 +305,11 @@ def inspect_timeline(
             detail={"requested": detail, "available": list(DETAIL_LEVELS)},
         )
 
-    project = _project(connection)
+    project = project_of(connection)
     reader = Reader(connection)
     timeline = find_timeline(project, name)
-    current = project.GetCurrentTimeline()
-    heading = summarise(reader, timeline, project, _name(current) if current is not None else None)
+    current = current_name(project)
+    heading = summarise(reader, timeline, project, current)
     fps = heading["fps"]
 
     window = _window(heading, start, end, fps)

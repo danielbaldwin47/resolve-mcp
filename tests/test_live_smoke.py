@@ -11,14 +11,24 @@ place the direct-attach path itself is exercised.
 
 from __future__ import annotations
 
+import json
+from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from resolve_mcp.tools.escape_hatch import run_python
 from resolve_mcp.tools.media import inspect_clip, list_media
 from resolve_mcp.tools.project import get_status, list_projects, snapshot_project
-from resolve_mcp.tools.timeline import inspect_timeline, list_timelines
+from resolve_mcp.tools.timeline import (
+    export_timeline,
+    import_timeline,
+    inspect_timeline,
+    list_timelines,
+)
+
+from . import otio
 
 pytestmark = pytest.mark.live
 
@@ -130,6 +140,102 @@ def test_the_frame_math_holds_on_a_real_timeline() -> None:
                     item["sync_offset"]["frames"]
                     == record["in"]["frames"] - item["source"]["in"]["frames"]
                 )
+
+
+# --- interchange ---------------------------------------------------------------------------
+#
+# These two import timelines into the open project, so they leave "resolve-mcp smoke …"
+# timelines behind — delete them after the run. Take a snapshot_project first if the open
+# project is one you care about.
+
+
+def _shape(name: str | None = None) -> dict[str, Any]:
+    """The structure a round trip has to preserve: tracks, and the shots on each."""
+    reading = inspect_timeline(timeline=name, detail="clips")
+    assert reading["ok"] is True, reading.get("error")
+    assert reading["truncated"] is False, "the timeline is too long to compare in one read"
+    return {
+        "duration": reading["timeline"]["duration"]["frames"],
+        "tracks": {
+            f"{track['type']}{track['index']}": [
+                (item["record"]["in"]["frames"], item["record"]["duration"]["frames"])
+                for item in track["items"]
+            ]
+            for track in reading["tracks"]
+        },
+    }
+
+
+def _smoke_name(what: str) -> str:
+    return f"resolve-mcp smoke {what} {datetime.now().strftime('%H%M%S')}"
+
+
+def test_an_otio_round_trip_preserves_the_timeline_structure(tmp_path: Path) -> None:
+    """AC: export to OTIO, import it back, and the cut is the same cut.
+
+    The fakes prove the naming and the error shaping; only Resolve proves that what it
+    wrote is what it reads back, which is the whole basis of the transition route.
+    """
+    if get_status()["context"]["timeline"] is None:
+        pytest.skip("No timeline open in Resolve")
+    before = _shape()
+
+    exported = export_timeline(path=str(tmp_path / "round-trip.otio"))
+    assert exported["ok"] is True, exported.get("error")
+    assert exported["export_type"] == "EXPORT_OTIO"
+
+    imported = import_timeline(exported["path"], name=_smoke_name("round-trip"))
+    assert imported["ok"] is True, imported.get("error")
+
+    after = _shape(imported["timeline"]["name"])
+    assert after["duration"] == before["duration"]
+    for track, shots in before["tracks"].items():
+        assert after["tracks"].get(track) == shots, f"{track} came back differently"
+
+
+def test_a_hand_injected_dissolve_imports_as_a_transition(tmp_path: Path) -> None:
+    """AC: a dissolve edited into an exported OTIO comes back as a real transition.
+
+    Transitions are the wall this route exists to get around, and the scripting API has no
+    getter for them — so what is asserted here is that Resolve accepted the edited document
+    and rebuilt the cut from it. **The dissolve and the fade to black themselves are
+    confirmed by eye in the Resolve GUI on the imported timeline**, and the result goes on
+    the ticket; a run that stops at green here has verified half the AC.
+    """
+    if get_status()["context"]["timeline"] is None:
+        pytest.skip("No timeline open in Resolve")
+
+    exported = export_timeline(path=str(tmp_path / "injected.otio"))
+    assert exported["ok"] is True, exported.get("error")
+    document = json.loads(Path(exported["path"]).read_text(encoding="utf-8"))
+
+    tracks = otio.video_tracks(document)
+    if not tracks:
+        pytest.skip("The open timeline has no video track to inject into")
+    dissolved = any(otio.inject_dissolve(track, frames=6) for track in tracks)
+    faded = otio.inject_fade_to_black(tracks[0], frames=6)
+    if not dissolved:
+        pytest.skip("No cut between two clips long enough to carry a dissolve")
+    Path(exported["path"]).write_text(json.dumps(document, indent=2), encoding="utf-8")
+
+    imported = import_timeline(exported["path"], name=_smoke_name("dissolve"))
+
+    assert imported["ok"] is True, imported.get("error")
+    assert faded, "the fade-to-black half of the AC was not injected — check by eye anyway"
+    landed = _shape(imported["timeline"]["name"])
+    assert landed["tracks"], "the injected document imported as an empty timeline"
+
+
+def test_the_interchange_formats_all_write_a_file(tmp_path: Path) -> None:
+    """AC: export to OTIO, FCPXML and DRT. Read-only — nothing is imported back."""
+    if get_status()["context"]["timeline"] is None:
+        pytest.skip("No timeline open in Resolve")
+
+    for export_format in ("otio", "fcpxml", "drt"):
+        result = export_timeline(format=export_format, path=str(tmp_path / "export"))
+
+        assert result["ok"] is True, result.get("error")
+        assert Path(result["path"]).stat().st_size == result["bytes"] > 0
 
 
 def test_snapshot_writes_a_real_drp(tmp_path: Path) -> None:

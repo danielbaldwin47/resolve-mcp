@@ -31,6 +31,8 @@ def test_registers_the_p1_session_media_and_timeline_tools() -> None:
         "relink_media",
         "list_timelines",
         "inspect_timeline",
+        "export_timeline",
+        "import_timeline",
         "run_python",
     }
 
