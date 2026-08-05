@@ -95,3 +95,11 @@ def test_an_unreadable_entry_misses_rather_than_raising() -> None:
     (get_config().result_dir / "key1.json").write_text("{ truncated", encoding="utf-8")
 
     assert cache.lookup("key1") is None
+
+
+def test_a_cache_directory_that_is_not_a_directory_is_a_miss_not_a_crash() -> None:
+    """The cache root is the user's own; they can leave anything in it, including this."""
+    get_config().result_dir.parent.mkdir(parents=True, exist_ok=True)
+    get_config().result_dir.write_text("someone put a file here", encoding="utf-8")
+
+    assert cache.lookup("key1") is None

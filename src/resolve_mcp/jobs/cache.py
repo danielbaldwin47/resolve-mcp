@@ -82,15 +82,28 @@ def lookup(key: str, config: Config | None = None) -> dict[str, Any] | None:
         return None
     except (OSError, ValueError):
         log.warning("Discarding an unreadable cache entry: %s", path)
-        path.unlink(missing_ok=True)
+        _discard(path)
         return None
     missing = [one for one in entry.get("artifacts", []) if not Path(one).exists()]
     if missing:
         log.info("Cache entry %s lost its artifacts (%s); rerunning", key[:12], missing[0])
-        path.unlink(missing_ok=True)
+        _discard(path)
         return None
     result = entry.get("result")
     return result if isinstance(result, dict) else None
+
+
+def _discard(path: Path) -> None:
+    """Drop a cache entry that cannot be trusted. A miss must never raise on the way out.
+
+    The delete can fail for the same reason the read did — the cache directory is the
+    user's own, and they can leave anything in it. A cache that cannot clean up is still a
+    cache that missed, and the job it was asked about must go ahead and run.
+    """
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        log.warning("Could not remove the stale cache entry %s", path, exc_info=True)
 
 
 def remember(

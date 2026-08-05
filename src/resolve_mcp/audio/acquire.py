@@ -25,9 +25,8 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
-import os
 from collections.abc import Iterator
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 from ..config import Config, get_config
@@ -327,8 +326,13 @@ def mapping_conflict(mapping: dict[str, Any] | None, file_path: str) -> str | No
 
 
 def _normal(path: str) -> str:
-    """One spelling for a path, so D:\\media\\a.wav and D:/media/a.wav are the same file."""
-    return os.path.normcase(os.path.normpath(path))
+    """One spelling for a path, so D:\\media\\a.wav and D:/media/a.wav are the same file.
+
+    Windows rules regardless of the host: Resolve runs on Windows, but the fake tier runs
+    on ubuntu in CI, where ``os.path`` would leave the two spellings above unequal and this
+    comparison would mean something different there than in production.
+    """
+    return str(PureWindowsPath(path)).lower()
 
 
 def _walk(value: Any, path: tuple[str, ...] = ()) -> Iterator[tuple[tuple[str, ...], Any]]:
@@ -343,7 +347,7 @@ def _walk(value: Any, path: tuple[str, ...] = ()) -> Iterator[tuple[tuple[str, .
 
 
 def _looks_like_a_path(value: str) -> bool:
-    return ("/" in value or "\\" in value) and Path(value).suffix != ""
+    return ("/" in value or "\\" in value) and PureWindowsPath(value).suffix != ""
 
 
 # --- shared ------------------------------------------------------------------------------
