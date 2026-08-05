@@ -9,16 +9,13 @@ because the call itself was wrong and there is nothing to report findings about.
 
 from __future__ import annotations
 
-from ..document import HASH_DIGEST_BYTES, LoadedDocument, content_hash, read_document
+from ..document import LoadedDocument, read_document
 from .validate import parse_failure_finding
 
-LoadedCut = LoadedDocument
-"""A cut file as read. The shape is shared; the name is what the build reports on."""
 
-
-def read_cut_file(cut_file: str) -> LoadedCut:
+def read_cut_file(cut_file: str) -> LoadedDocument:
     """Read and parse ``cut_file``, reporting an unparseable one as E1."""
     return read_document(cut_file, what="cut file", parse_failure=parse_failure_finding)
 
 
-__all__ = ["HASH_DIGEST_BYTES", "LoadedCut", "content_hash", "read_cut_file"]
+__all__ = ["read_cut_file"]

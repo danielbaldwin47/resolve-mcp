@@ -291,6 +291,62 @@ def test_the_clear_is_never_a_ripple_delete(attach: Attach, tmp_path: Path) -> N
     assert [ripple for _, ripple in timeline.deleted_clips] == [False]
 
 
+def test_the_same_file_lands_on_a_rebuilt_version_at_its_own_markers(
+    attach: Attach,
+    tmp_path: Path,
+) -> None:
+    """AC3, and the reason offsets are counted from markers rather than timeline frames.
+
+    A rebuild produces a new version whose songs sit at different absolute frames — a
+    tightened segment moves everything after it. The titles file is applied unchanged to
+    both, and lands correctly on both, because it never mentions a timeline frame.
+    """
+    v3 = a_timeline("sunset-set v3")
+    v4 = a_timeline(
+        "sunset-set v4",
+        markers={0: a_marker("sunset-boulevard"), 4200: a_marker("night-ferry")},
+    )
+    a_session(attach, timeline=v3, timelines=[v3, v4])
+    file = a_titles_file(tmp_path, valid_doc())
+
+    apply_titles(file)
+    rebuilt = apply_titles(a_titles_file(tmp_path, valid_doc(timeline="sunset-set v4")))
+
+    assert rebuilt["ok"] is True
+    assert [item.GetStart() for item in titles_on(v3)] == [
+        SONG_ONE + 240,
+        SONG_ONE + 960,
+        SONG_TWO + 120,
+    ]
+    # night-ferry is 800 frames earlier on v4, and its title moved with it.
+    assert [item.GetStart() for item in titles_on(v4)] == [
+        SONG_ONE + 240,
+        SONG_ONE + 960,
+        SONG_ONE + 4200 + 120,
+    ]
+    assert [text_of(item) for item in titles_on(v4)] == [
+        "Sunset Boulevard",
+        "Bass — Ana Ruiz",
+        "Night Ferry",
+    ]
+
+
+def test_a_rebuilt_version_gets_its_own_titles_track_and_leaves_the_old_one_alone(
+    attach: Attach,
+    tmp_path: Path,
+) -> None:
+    v3 = a_timeline("sunset-set v3")
+    v4 = a_timeline("sunset-set v4")
+    a_session(attach, timeline=v3, timelines=[v3, v4])
+
+    apply_titles(a_titles_file(tmp_path, valid_doc()))
+    second = apply_titles(a_titles_file(tmp_path, valid_doc(timeline="sunset-set v4")))
+
+    assert second["track"]["created"] is True
+    assert second["cleared"] == 0, "a fresh version has no titles of its own to clear"
+    assert len(titles_on(v3)) == 3
+
+
 def test_an_existing_titles_track_is_adopted_rather_than_added(
     attach: Attach,
     tmp_path: Path,
@@ -317,14 +373,6 @@ def test_the_topmost_titles_track_wins_when_the_project_has_two(
 
     assert result["track"]["index"] == 3
     assert len(titles_on(timeline, 3)) == 3
-
-
-def test_the_track_name_can_be_chosen_in_the_file(attach: Attach, tmp_path: Path) -> None:
-    timeline = a_session(attach)
-    result = apply_titles(a_titles_file(tmp_path, valid_doc(track="Lower Thirds")))
-
-    assert result["track"]["name"] == "Lower Thirds"
-    assert timeline.GetTrackName("video", TITLES_TRACK) == "Lower Thirds"
 
 
 # --- fades ------------------------------------------------------------------------------
@@ -361,11 +409,26 @@ def test_an_event_with_no_fade_block_gets_no_spline_at_all(
                                  "detail": "no fade asked for"}
 
 
-def test_a_fade_in_only_leaves_the_title_up_at_the_end(attach: Attach, tmp_path: Path) -> None:
+def test_a_fade_in_only_holds_full_opacity_to_the_last_frame(
+    attach: Attach,
+    tmp_path: Path,
+) -> None:
+    """The end is keyframed even though it is not fading: what a spline does past its
+    last keyframe is an extrapolation setting nobody here has set."""
     timeline = a_session(attach)
     apply_titles(a_titles_file(tmp_path, one_event(fade={"in": 24})))
 
-    assert keyframes_of(titles_on(timeline)[0]) == {0.0: 0.0, 24.0: 1.0}
+    assert keyframes_of(titles_on(timeline)[0]) == {0.0: 0.0, 24.0: 1.0, 479.0: 1.0}
+
+
+def test_a_fade_out_only_holds_full_opacity_from_the_first_frame(
+    attach: Attach,
+    tmp_path: Path,
+) -> None:
+    timeline = a_session(attach)
+    apply_titles(a_titles_file(tmp_path, one_event(fade={"out": 36})))
+
+    assert keyframes_of(titles_on(timeline)[0]) == {0.0: 1.0, 443.0: 1.0, 479.0: 0.0}
 
 
 def test_a_build_that_cannot_animate_still_places_the_title(

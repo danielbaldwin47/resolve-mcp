@@ -40,7 +40,6 @@ ANNOTATED_EXAMPLE: Final = """\
 {
   "schema": 1,                       // supported-version check
   "timeline": "sunset-set v4",       // optional; default = the current timeline
-  "track": "Titles",                 // optional; default "Titles" (§1)
 
   // GUI-authored Text+ templates, already in the media pool. Identity = clip name
   // + optional bin, resolved to exactly one media-pool clip at apply.
@@ -73,11 +72,13 @@ _TRACK: Final = """\
 ## 1. One track, owned outright
 
 `apply_titles` owns the topmost video track named `Titles`, and creates it if the
-timeline has none. Every re-run clears that track completely and re-places from
-the file, so the track always holds exactly what the file says and nothing else.
-Put nothing there by hand that you want to keep. No other track is read or
-written — the cut on V1 is never touched, which is what makes "rebuild the cut,
-re-apply the titles" safe in either order."""
+timeline has none. The name is not configurable: one track is owned outright, and
+a tool that could be pointed at any track could clear one it does not own. Every
+re-run clears that track completely and re-places from the file, so it always
+holds exactly what the file says and nothing else. Put nothing there by hand that
+you want to keep. No other track is read or written — the cut on V1 is never
+touched, which is what makes "rebuild the cut, re-apply the titles" safe in
+either order."""
 
 _ANCHORS: Final = """\
 ## 2. Songs are anchored to blue markers, not to frames
@@ -119,8 +120,8 @@ _RERUN: Final = """\
 `apply_titles` is declarative and idempotent: same file, same timeline, same
 result. Nothing is validated against the previous run, and no state is kept
 between runs — the timeline *is* the state. Edit the file and re-apply to move,
-retime or re-word titles; a one-word typo fix has a cheaper route in
-`set_title_text`, which edits a placed instance without clearing the track."""
+retime or re-word titles, including a one-word typo fix: re-applying costs one
+clear and one append, and it is the only route this server offers today."""
 
 _RULES: Final = """\
 ## 5. Validation

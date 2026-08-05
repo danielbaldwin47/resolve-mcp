@@ -26,7 +26,7 @@ from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from typing import Any, Final, TypeGuard
 
-from ..findings import Finding, ordered, severity_of
+from ..findings import Finding, ordered
 from ..logging_config import get_logger
 from ..timing import duration_frames, ranges_overlap
 from .schema import SCHEMA_VERSION
@@ -92,10 +92,6 @@ class ClipFacts:
 
 def _finding(rule: str, id: str | None, message: str, fix_hint: str | None = None) -> Finding:
     return Finding(rule=rule, id=id, message=message, fix_hint=fix_hint or _FIX_HINTS[rule])
-
-
-_order = ordered
-"""The shared ordering: errors before warnings, rule number ascending, document order."""
 
 
 def parse_failure_finding(detail: str) -> Finding:
@@ -303,7 +299,7 @@ def validate_structure(
     """
     shape = list(_shape_errors(doc))
     if shape:
-        return _order(shape)
+        return ordered(shape)
 
     findings: list[Finding] = []
     findings += _id_errors(doc)
@@ -313,7 +309,7 @@ def validate_structure(
     findings += _overlay_errors(doc)
     findings += _segment_length_warnings(doc, min_segment_frames)
     findings += _audio_span_warnings(doc)
-    return _order(findings)
+    return ordered(findings)
 
 
 def _segments(doc: dict[str, Any]) -> list[dict[str, Any]]:
@@ -574,7 +570,7 @@ def validate_project(doc: Any, clips: Sequence[ClipFacts]) -> list[Finding]:
     findings += _bounds_errors(doc, resolved)
     findings += _rate_errors(doc, resolved)
     findings += _audio_errors(doc, resolved)
-    return _order(findings)
+    return ordered(findings)
 
 
 def _shape_is_unreadable(doc: Any) -> bool:
@@ -724,12 +720,10 @@ __all__ = [
     "DEFAULT_MIN_SEGMENT_FRAMES",
     "RULE_DESCRIPTIONS",
     "ClipFacts",
-    "Finding",
     "locked_track_finding",
     "parse_failure_finding",
     "positions",
     "resolve_aliases",
-    "severity_of",
     "total_frames",
     "validate_project",
     "validate_structure",

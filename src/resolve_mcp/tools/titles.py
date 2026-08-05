@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..resolve import titles
+from ..resolve import apply, titles
 from ..resolve.connection import get_connection
 from .envelope import tool
 
@@ -60,7 +60,7 @@ def apply_titles(titles_file: str) -> dict[str, Any]:
     is current. The report says per title whether its fade read back — a fade that did
     not is the one thing here worth checking by eye in the GUI.
     """
-    return titles.apply_titles(get_connection(), titles_file)
+    return apply.apply_titles(get_connection(), titles_file)
 
 
 TOOLS: tuple[Any, ...] = (

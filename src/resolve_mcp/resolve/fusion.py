@@ -133,6 +133,13 @@ def title_node(item: Item, where: str) -> TitleNode:
         raise TitleTemplateError(
             cause=f"The comp placed for {where} holds no {TEXT_PLUS} node; it holds "
             f"{_names(held) or '<nothing>'}.",
+            # A Fusion *macro* is the other thing a title template can be, and its editable
+            # text is an exported input on the macro rather than a Text+ node — reachable
+            # by a different route than this one, so it is named rather than guessed at.
+            fix=f"This route titles a plain {TEXT_PLUS} template. If the clip is a Fusion "
+            f"macro, its text is an exported input rather than a {TEXT_PLUS} node and this "
+            f"tool cannot reach it — author a plain {TEXT_PLUS} title in the GUI and export "
+            f"its bin as a .drb instead.",
             detail={"where": where, "tools": sorted(_names_of(held))},
         )
     first = tools[min(tools)]
@@ -222,20 +229,25 @@ def _as_frame(value: Any) -> int | None:
 def _keyframes(start: int, end: int, fade_in: int, fade_out: int) -> tuple[tuple[int, float], ...]:
     """Up from nothing over ``fade_in``, held, down to nothing over ``fade_out``.
 
-    ``end`` is the comp's last frame, so the ramps are inclusive of both ends. When the
-    two ramps meet — the file asked for a fade the whole length of the title — the held
-    section collapses to a single frame at full rather than inverting the keyframe order.
+    ``end`` is the comp's last frame, so the ramps are inclusive of both ends. Both ends
+    always carry a keyframe, even the end that is not fading: what a spline does *outside*
+    its keyframes is an extrapolation setting nobody here has set, so a title asked to
+    fade out only would otherwise rely on Fusion holding full opacity backwards from the
+    first keyframe. Anchoring both ends says it instead of assuming it.
+
+    When the two ramps meet — the file asked for a fade the whole length of the title —
+    the held section collapses to one frame at full rather than inverting the keyframes.
     """
-    keys: list[tuple[int, float]] = []
     up_at = start + fade_in
     down_at = max(end - fade_out, up_at)
+    # Keyed by frame, because the ramps can collapse onto one another and a repeated
+    # frame written twice is a keyframe whose value depends on write order.
+    keys = {start: CLEAR if fade_in else FULL, end: CLEAR if fade_out else FULL}
     if fade_in:
-        keys.append((start, CLEAR))
-        keys.append((up_at, FULL))
+        keys[up_at] = FULL
     if fade_out:
-        keys.append((down_at, FULL))
-        keys.append((end, CLEAR))
-    return tuple(keys)
+        keys[down_at] = FULL
+    return tuple(sorted(keys.items()))
 
 
 def _read_back(tool: Tool, keyframes: tuple[tuple[int, float], ...]) -> tuple[bool, str]:

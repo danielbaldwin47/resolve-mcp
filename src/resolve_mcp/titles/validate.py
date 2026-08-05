@@ -26,7 +26,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Final, TypeGuard
 
-from ..findings import Finding, ordered, severity_of
+from ..findings import Finding, ordered
 from ..logging_config import get_logger
 from ..timing import ranges_overlap
 from .schema import KINDS, ROUTES, SCHEMA_VERSION, SUPPORTED_ROUTES
@@ -157,9 +157,8 @@ def _schema_version_errors(doc: dict[str, Any]) -> Iterator[Finding]:
 
 
 def _target_errors(doc: dict[str, Any]) -> Iterator[Finding]:
-    for field in ("timeline", "track"):
-        if field in doc and not (isinstance(doc[field], str) and doc[field].strip()):
-            yield _finding("T1", None, f"'{field}' must be a non-empty string when present.")
+    if "timeline" in doc and not (isinstance(doc["timeline"], str) and doc["timeline"].strip()):
+        yield _finding("T1", None, "'timeline' must be a non-empty timeline name when present.")
 
 
 def _templates_errors(doc: dict[str, Any]) -> Iterator[Finding]:
@@ -543,13 +542,11 @@ __all__ = [
     "ANCHOR_COLOR",
     "RULE_DESCRIPTIONS",
     "Event",
-    "Finding",
     "TemplateFacts",
     "fades",
     "parse_failure_finding",
     "plan",
     "route_of",
-    "severity_of",
     "template_of",
     "validate_project",
     "validate_structure",

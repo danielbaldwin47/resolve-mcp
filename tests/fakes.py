@@ -23,6 +23,24 @@ class DroppedHandleError(RuntimeError):
     """What a stale Resolve handle raises when the app has gone away."""
 
 
+class AnswersNone:
+    """A Resolve object whose ``missing`` methods answer ``None`` instead of raising.
+
+    That is how the real API expresses "this build does not have that method": fusionscript
+    answers *every* attribute name, so ``hasattr`` passes and the call then dies with
+    ``NoneType is not callable``. Verified live on Studio 21.0.3.7 (#41). A wrapper that
+    guarded with ``hasattr`` would pass against a fake that raised ``AttributeError``, so
+    no fake here does.
+    """
+
+    _missing: set[str]
+
+    def __getattribute__(self, name: str) -> Any:
+        if not name.startswith("_") and name in object.__getattribute__(self, "_missing"):
+            return None
+        return object.__getattribute__(self, name)
+
+
 class FakeSpline:
     """An animation modifier on one input: keyframes written by index assignment.
 
@@ -66,10 +84,6 @@ class FakeFusionTool:
     an animated value cannot be read back at a keyframe.
     """
 
-    _OWN = frozenset(
-        {"tool_id", "name", "inputs", "animated", "animatable", "reads_at_a_time"}
-    )
-
     def __init__(
         self,
         tool_id: str = "TextPlus",
@@ -79,6 +93,10 @@ class FakeFusionTool:
         animatable: bool = True,
         reads_at_a_time: bool = True,
     ) -> None:
+        # Every field is set while the node is still being built, so nothing here can be
+        # mistaken for an input connection — and no list of field names has to be kept in
+        # step with this signature for that to hold.
+        object.__setattr__(self, "_built", False)
         self.tool_id = tool_id
         self.name = name
         self.inputs: dict[str, Any] = dict(inputs or {"StyledText": "TEMPLATE"})
@@ -86,9 +104,10 @@ class FakeFusionTool:
         self.animatable = animatable
         self.reads_at_a_time = reads_at_a_time
         self._owner = owner
+        object.__setattr__(self, "_built", True)
 
     def __setattr__(self, key: str, value: Any) -> None:
-        if key.startswith("_") or key in FakeFusionTool._OWN:
+        if key.startswith("_") or not self._built:
             object.__setattr__(self, key, value)
             return
         self._check()
@@ -104,7 +123,8 @@ class FakeFusionTool:
         return self.__dict__.get("animated", {}).get(key)
 
     def copy(self) -> FakeFusionTool:
-        twin = FakeFusionTool(
+        """A fresh instance's node: the template's inputs, none of its animation."""
+        return FakeFusionTool(
             self.tool_id,
             self.name,
             dict(self.inputs),
@@ -112,7 +132,6 @@ class FakeFusionTool:
             self.animatable,
             self.reads_at_a_time,
         )
-        return twin
 
     def adopt(self, owner: FakeResolve) -> None:
         self._owner = owner
@@ -142,7 +161,7 @@ class FakeFusionTool:
         return spline.at(time) if spline is not None else self.inputs.get(key)
 
 
-class FakeFusionComp:
+class FakeFusionComp(AnswersNone):
     """A timeline item's Fusion composition.
 
     ``GetToolList`` is filtered by node type in the real API and returns a *one-based dict*
@@ -167,11 +186,6 @@ class FakeFusionComp:
         self.takes_keyframes = takes_keyframes
         self._missing = set(missing or ())
         self._owner = owner
-
-    def __getattribute__(self, name: str) -> Any:
-        if not name.startswith("_") and name in object.__getattribute__(self, "_missing"):
-            return None
-        return object.__getattribute__(self, name)
 
     def copy(self) -> FakeFusionComp:
         """What placing a template instance does: the new instance gets its own comp."""
@@ -216,7 +230,7 @@ class FakeFusionComp:
         return {index: tool for index, tool in enumerate(matching, start=1)}
 
 
-class FakeTimelineItem:
+class FakeTimelineItem(AnswersNone):
     """A clip on a track.
 
     ``GetEnd`` is deliberately configurable: the scripting docs do not say whether it is
@@ -271,14 +285,17 @@ class FakeTimelineItem:
     SOURCE_GETTERS = ("GetSourceStartFrame", "GetSourceEndFrame")
 
     def __getattribute__(self, name: str) -> Any:
-        """Hide the source getters entirely on a build that predates them."""
+        """Hide the source getters entirely on a build that predates them.
+
+        Absent is not the same as ``missing``: a Resolve older than 18.5 does not have
+        these at all, so ``getattr`` misses them — which is the branch the wrapper takes.
+        Everything else answers ``None`` the way :class:`AnswersNone` describes.
+        """
         if name in FakeTimelineItem.SOURCE_GETTERS and not object.__getattribute__(
             self, "_supports_source_frames"
         ):
             raise AttributeError(name)
-        if not name.startswith("_") and name in object.__getattribute__(self, "_missing"):
-            return None
-        return object.__getattribute__(self, name)
+        return super().__getattribute__(name)
 
     def adopt(self, owner: FakeResolve) -> None:
         self._owner = owner
@@ -378,7 +395,7 @@ def _as_tracks(spec: TrackSpec | None, label: str) -> list[FakeTrack]:
     return tracks
 
 
-class FakeTimeline:
+class FakeTimeline(AnswersNone):
     def __init__(
         self,
         name: str,
@@ -420,12 +437,6 @@ class FakeTimeline:
         # can only find by re-reading the track — the same shape as a locked-track append.
         self.delete_clips_leaves_them = False
         self.deleted_clips: list[tuple[list[FakeTimelineItem], bool]] = []
-
-    def __getattribute__(self, name: str) -> Any:
-        """A method this build does not have answers ``None``, as fusionscript does."""
-        if not name.startswith("_") and name in object.__getattribute__(self, "_missing"):
-            return None
-        return object.__getattribute__(self, name)
 
     def adopt(self, owner: FakeResolve) -> None:
         self._owner = owner

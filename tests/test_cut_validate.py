@@ -14,11 +14,11 @@ import pytest
 
 from resolve_mcp.cut.validate import (
     ClipFacts,
-    Finding,
     locked_track_finding,
     validate_project,
     validate_structure,
 )
+from resolve_mcp.findings import Finding
 
 
 def valid_doc() -> dict[str, Any]:
