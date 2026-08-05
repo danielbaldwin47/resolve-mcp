@@ -31,6 +31,10 @@ class ResolveConnection:
     def __init__(self, connect: Callable[[], Any | None] | None = None) -> None:
         self._connect = connect or load_resolve
         self._handle: Any | None = None
+        # Distinguishes "attached" from "reconnected" in the log even when the retry
+        # arrives via invalidate() (the envelope's mid-call-death path), where no
+        # stale handle is left to observe.
+        self._ever_attached = False
         self._lock = threading.RLock()
 
     @property
@@ -41,6 +45,8 @@ class ResolveConnection:
     def invalidate(self) -> None:
         """Drop the handle; the next call reconnects."""
         with self._lock:
+            if self._handle is not None:
+                log.info("Resolve handle invalidated; next call reconnects")
             self._handle = None
 
     def dropped(self) -> bool:
@@ -64,10 +70,15 @@ class ResolveConnection:
             handle, failure = self._connect_once()
             if handle is not None and self._probe(handle):
                 self._handle = handle
+                log.info("Resolve %s", "reconnected" if self._ever_attached else "attached")
+                self._ever_attached = True
                 return handle
 
             self._handle = None
-            raise failure or ResolveUnavailableError(cause=NOT_RUNNING)
+            if failure is None:
+                failure = ResolveUnavailableError(cause=NOT_RUNNING)
+                log.warning("Connecting to Resolve failed: %s", failure.cause)
+            raise failure
 
     def _connect_once(self) -> tuple[Any | None, ResolveMcpError | None]:
         try:
@@ -79,6 +90,7 @@ class ResolveConnection:
             log.exception("Connecting to Resolve raised")
             return None, ResolveUnavailableError(cause=f"{type(exc).__name__}: {exc}")
         if handle is None:
+            log.warning("Connecting to Resolve failed: %s", NOT_RUNNING)
             return None, ResolveUnavailableError(cause=NOT_RUNNING)
         return handle, None
 
