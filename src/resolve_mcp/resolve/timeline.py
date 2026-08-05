@@ -82,7 +82,8 @@ class Placement(NamedTuple):
 # --- reaching a timeline ------------------------------------------------------------------
 
 
-def project_of(connection: ResolveConnection) -> Project:
+def open_project(connection: ResolveConnection) -> Project:
+    """The open project, or a structured refusal — never a ``None`` to trip over later."""
     manager = connection.handle().GetProjectManager()
     project = manager.GetCurrentProject() if manager is not None else None
     if project is None:
@@ -265,7 +266,7 @@ def list_timelines(
     config: Config | None = None,
 ) -> dict[str, Any]:
     """Every timeline in the project with its version, duration and track stack."""
-    project = project_of(connection)
+    project = open_project(connection)
     reader = Reader(connection)
     current = current_name(project)
 
@@ -322,7 +323,7 @@ def inspect_timeline(
             detail={"requested": detail, "available": list(DETAIL_LEVELS)},
         )
 
-    project = project_of(connection)
+    project = open_project(connection)
     reader = Reader(connection)
     timeline = find_timeline(project, name)
     current = current_name(project)

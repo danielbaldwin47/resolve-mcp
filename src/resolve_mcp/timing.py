@@ -11,17 +11,32 @@ Reading a time *in* is the mirror of that rule: ``to_frames`` takes frames as gi
 turns seconds into frames only when the caller says which way to snap. Seconds rarely land
 on a frame boundary, and a server that picked floor or ceil on the caller's behalf would
 move a cut point by a frame without anyone deciding to — so it refuses instead.
+
+Ranges are half-open ``[in, out)`` everywhere: duration is ``out - in``, and adjacent
+takes share a boundary frame without either owning it twice.
 """
 
 from __future__ import annotations
 
 import math
-from typing import Any
+from typing import Any, Literal
 
 from .errors import InvalidRequestError
 
 SECONDS_PRECISION = 3
 SNAPS = ("floor", "ceil")
+
+Snap = Literal["floor", "ceil"]
+"""Which way a seconds value that lands between frames is resolved."""
+
+IN_POINT: Snap = "floor"
+"""In points snap back: the frame the moment falls on is included."""
+
+OUT_POINT: Snap = "ceil"
+"""Out points snap forward: half-open, so the moment stays inside the range."""
+
+_BOUNDARY_TOLERANCE = 9
+"""Decimal places kept before snapping — enough to kill float noise, not a real fraction."""
 
 
 def timecode(frames: int, fps: float) -> str:
@@ -37,6 +52,32 @@ def timecode(frames: int, fps: float) -> str:
     minutes, seconds = divmod(whole_seconds, 60)
     hours, minutes = divmod(minutes, 60)
     return f"{hours:02d}:{minutes:02d}:{seconds:02d}:{frame:02d}"
+
+
+def frames_from_seconds(seconds: float, fps: float, snap: Snap) -> int:
+    """Seconds to frames, snapped the way the caller asked — never silently rounded.
+
+    A seconds value the director typed almost never lands on a frame boundary, and which
+    way it moves changes the cut: an in point that rounded up would drop the frame the
+    moment happens on. So the direction is a required argument, not a default.
+
+    A value already on a boundary stays put in both directions; the tolerance below only
+    absorbs binary representation error, never a real fraction of a frame.
+    """
+    if fps <= 0:
+        raise ValueError(f"fps must be positive to convert seconds to frames, got {fps!r}")
+    exact = round(seconds * fps, _BOUNDARY_TOLERANCE)
+    return int(math.floor(exact) if snap == "floor" else math.ceil(exact))
+
+
+def duration_frames(in_frame: int, out_frame: int) -> int:
+    """Frames covered by the half-open range ``[in, out)``."""
+    return int(out_frame) - int(in_frame)
+
+
+def ranges_overlap(a_in: int, a_out: int, b_in: int, b_out: int) -> bool:
+    """Whether two half-open ranges share a frame. Touching at a boundary does not."""
+    return a_in < b_out and b_in < a_out
 
 
 def dual_time(frames: int | None, fps: float | None) -> dict[str, Any] | None:

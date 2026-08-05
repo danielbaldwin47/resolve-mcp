@@ -207,6 +207,40 @@ class InvalidRequestError(ResolveMcpError):
     code = "invalid_request"
 
 
+class CutInvalidError(ResolveMcpError):
+    """The cut file did not pass the rules, so nothing was built. ``detail`` holds them all."""
+
+    code = "cut_invalid"
+    default_fix = (
+        "Fix every error in detail.errors and build again — validate_cut runs the identical "
+        "checks without touching Resolve."
+    )
+
+
+class UnsupportedCutFeatureError(ResolveMcpError):
+    """The cut is valid but describes something this build cannot place yet.
+
+    Refused rather than partially built: a timeline missing a part of the cut that made it
+    is the half-built outcome the pre-flight exists to prevent.
+    """
+
+    code = "unsupported_cut_feature"
+
+
+class BuildFailedError(ResolveMcpError):
+    """Resolve would not build the cut — creation refused, a locked track, a clip astray.
+
+    ``detail`` names the timeline it was building when it stopped, because that timeline
+    may exist and be incomplete: the earlier versions are untouched, this one is scrap.
+    """
+
+    code = "build_failed"
+    default_fix = (
+        "Fix what detail names in the Resolve GUI (unlock the track, clear the timeline), "
+        "delete the incomplete version if one was made, and build again."
+    )
+
+
 class PythonExecutionError(ResolveMcpError):
     """The escape-hatch code raised. The traceback is logged, not returned."""
 

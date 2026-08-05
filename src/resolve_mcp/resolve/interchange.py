@@ -51,7 +51,7 @@ from .timeline import (
     find_timeline,
     name_of,
     next_free_name,
-    project_of,
+    open_project,
     summarise,
     timeline_names,
 )
@@ -108,7 +108,7 @@ def export_timeline(
     """Write one timeline (the open one by default) out as an interchange file."""
     spec = _format(export_format)
     resolve = connection.handle()
-    project = project_of(connection)
+    project = open_project(connection)
     timeline = find_timeline(project, name)
     timeline_name = name_of(timeline)
 
@@ -213,7 +213,7 @@ def import_timeline(
             detail={"requested": str(source)},
         )
 
-    project = project_of(connection)
+    project = open_project(connection)
     pool = pool_of(project)
     existing = set(timeline_names(project))
     native = source.suffix.lower() == NATIVE_SUFFIX
