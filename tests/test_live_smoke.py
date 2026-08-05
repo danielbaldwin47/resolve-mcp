@@ -515,8 +515,7 @@ def test_the_render_queue_exports_the_real_timeline_mix() -> None:
     assert again["cached"] is True, "an unchanged timeline must be a cache hit"
 
 
-@pytest.mark.skipif(shutil.which("audio-separator") is None, reason="audio-separator not on PATH")
-def test_the_real_separator_produces_the_stems_the_two_passes_expect() -> None:
+def test_the_real_separator_produces_the_stems_the_two_passes_expect(tmp_path: Path) -> None:
     """The AC no seam can check: that these models exist and label their output that way.
 
     The fakes prove the two commands, the progress mapping, the caching and every refusal.
@@ -524,8 +523,15 @@ def test_the_real_separator_produces_the_stems_the_two_passes_expect() -> None:
     names audio-separator resolves, that the drum model yields kick/snare/toms at all, or
     that the real CLI writes ``<input>_(Label)_<model>.wav`` — the naming the stem mapping
     reads back. Slow: the first run downloads both models.
+
+    The skip asks the *configured* executable, not the default name: a director who pointed
+    ``RESOLVE_MCP_AUDIO_SEPARATOR`` at an install off PATH would otherwise silently skip the
+    one check no fake can stand in for.
     """
-    fixture = write_wav(Path(get_config().cache_dir) / "live" / "separator-probe.wav", seconds=4.0)
+    if shutil.which(get_config().audio_separator) is None:
+        pytest.skip(f"No audio-separator at {get_config().audio_separator!r}")
+
+    fixture = write_wav(tmp_path / "separator-probe.wav", seconds=4.0)
     audio = {
         "path": str(fixture),
         "content_sha256": cache.content_hash(fixture),

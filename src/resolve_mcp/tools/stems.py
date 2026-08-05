@@ -9,14 +9,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..audio import stems
+from ..audio import acquire, stems
 from ..resolve.connection import get_connection
 from .envelope import tool
 
 
 @tool
 def separate_stems(
-    scope: str = "timeline",
+    scope: str = acquire.TIMELINE_SCOPE,
     timeline: str | None = None,
     clip: str | None = None,
     bin: str | None = None,  # noqa: A002 - "bin" is the Resolve term the agent uses

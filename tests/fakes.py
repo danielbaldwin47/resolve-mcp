@@ -1330,7 +1330,9 @@ class FakeSeparator:
     It writes real WAVs under the naming convention the real thing uses —
     ``<input>_(Label)_<model>.wav`` — because the stems are matched by reading that label
     back, so a fake that wrote arbitrary names would prove nothing about the mapping. Each
-    positional argument is one pass's labels; the last one repeats if it is called again.
+    positional argument is one pass's labels, and the sequence starts over on the call
+    after the last: a second separation of the same audio is another first pass, not a
+    seventh one.
     """
 
     def __init__(
@@ -1344,21 +1346,19 @@ class FakeSeparator:
         self.output = tuple(output)
         self.calls: list[list[str]] = []
 
-    def __call__(self, argv: Sequence[str], on_line: Callable[[str], None]) -> Any:
-        from resolve_mcp.audio.separator import Completed
-
+    def __call__(self, argv: Sequence[str], on_line: Callable[[str], None]) -> int:
         self.calls.append(list(argv))
         for line in self.output:
             on_line(line)
         if self.returncode == 0:
             for label in self._labels():
                 write_wav(self._target(argv, label), seconds=0.2)
-        return Completed(self.returncode, "\n".join(self.output))
+        return self.returncode
 
     def _labels(self) -> tuple[str, ...]:
         if not self.passes:
             return ()
-        return self.passes[min(len(self.calls) - 1, len(self.passes) - 1)]
+        return self.passes[(len(self.calls) - 1) % len(self.passes)]
 
     def _target(self, argv: Sequence[str], label: str) -> Path:
         out_dir = Path(argv[list(argv).index("--output_dir") + 1])

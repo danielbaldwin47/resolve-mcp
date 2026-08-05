@@ -10,10 +10,11 @@ Three decisions worth knowing:
 * **The job's key and the stems' key are not the same key, on purpose.** The job is keyed
   the way its acquisition is keyed — a timeline fingerprint, a clip's path/size/mtime —
   because that is all that can be known in the starter, before any audio exists. The stems
-  on disk are keyed by the *content hash* of the audio that produced them plus the params
-  (#22: "workers key off content hash of cached audio + params hash"), so audio that comes
-  back byte-identical under a moved fingerprint costs nothing: the directory is already
-  there and both passes are skipped. ``refresh`` overrides both.
+  on disk are keyed by the *content hash* of the audio that produced them plus the models
+  run on it (#22: "workers key off content hash of cached audio + params hash"), and by
+  nothing about where that audio came from — so a renamed timeline, or the same file
+  reached as a clip rather than through the mix, finds its stems already there and skips
+  both passes. ``refresh`` overrides both.
 
 * **Acquisition runs inside this job.** #12 puts the export inside the starter rather than
   making the agent sequence one, so the stems job starts the acquisition job and follows
@@ -34,10 +35,11 @@ from pathlib import Path
 from typing import Any
 
 from ..config import Config, get_config
-from ..errors import ChainedJobError, InternalError
-from ..jobs import cache, store
+from ..errors import InternalError
+from ..jobs import cache
 from ..jobs import runner as job_runner
 from ..jobs.runner import JobOutput, Progress, start_job
+from ..jobs.store import JobRecord
 from ..logging_config import get_logger
 from ..naming import slug
 from ..resolve.connection import ResolveConnection
@@ -52,6 +54,9 @@ DRUM_STEMS = ("kick", "snare", "toms")
 DRUM_SOURCE = "drums"
 """Which of the four stems the second pass decomposes."""
 
+SEPARATION = ("model", "drum_model", "stems", "drum_stems")
+"""The params that change what the stems *are*, as opposed to where the audio came from."""
+
 MIX_PASS = "mix"
 DRUM_PASS = "drums"
 
@@ -60,7 +65,6 @@ ACQUIRE_CEILING = 0.25
 PASS_ONE_CEILING = 0.6
 PASS_TWO_CEILING = 0.9
 COLLECTING = 0.95
-POLL_SECONDS = 0.1
 
 PERCENT = 100
 
@@ -113,7 +117,7 @@ def acquired(
     source: acquire.Source,
     progress: Progress,
     config: Config | None = None,
-    poll: float = POLL_SECONDS,
+    poll: float = job_runner.FOLLOW_POLL,
     sleep: Callable[[float], None] = time.sleep,
 ) -> dict[str, Any]:
     """Run the acquisition this separation needs, and report it as this job's first quarter.
@@ -124,28 +128,35 @@ def acquired(
     """
     config = config or get_config()
     progress(ACQUIRE_FLOOR, "acquiring the audio")
-    record = source.start()
+    started = source.start()
     span = ACQUIRE_CEILING - ACQUIRE_FLOOR
 
-    while record["state"] == store.RUNNING:
-        fraction = float(record.get("progress") or 0.0)
-        progress(ACQUIRE_FLOOR + span * fraction, str(record.get("step") or "acquiring the audio"))
-        sleep(poll)
-        job_id = str(record["job_id"])
-        record = store.load(job_id, config).payload()
-        if record["state"] == store.RUNNING and not job_runner.alive(job_id):
-            raise InternalError(
-                cause=f"The acquisition {job_id} stopped without finishing its record.",
-                detail={"job_id": job_id, "step": record.get("step")},
-            )
+    def watch(record: JobRecord) -> None:
+        progress(ACQUIRE_FLOOR + span * record.progress, record.step or "acquiring the audio")
 
-    if record["state"] == store.FAILED:
-        raise ChainedJobError(record.get("error") or {}, str(record["job_id"]))
+    finished = job_runner.follow(
+        str(started["job_id"]),
+        watch,
+        poll=poll,
+        sleep=sleep,
+        config=config,
+    )
+    if finished.result is None:
+        raise InternalError(cause=f"The acquisition {finished.job_id} finished with no audio.")
+    return finished.result
 
-    result = record.get("result")
-    if not isinstance(result, dict):
-        raise InternalError(cause=f"The acquisition {record['job_id']} finished with no audio.")
-    return result
+
+def stem_key(audio: dict[str, Any], params: dict[str, Any]) -> str:
+    """What the stems on disk are keyed by: the audio's own bytes and the models run on it.
+
+    Deliberately not the whole job params. Scope, timeline name and bin say where the audio
+    came from, not what it is — a renamed timeline, or the same file reached as a clip
+    rather than through the mix, is the same audio, and separating it twice would pay the
+    GPU twice for a byte-identical answer (#22 story 26: analysis is paid for once per
+    media state). Sample rate and bit depth are in the bytes already.
+    """
+    settings = {name: params[name] for name in SEPARATION if name in params}
+    return cache.cache_key(KIND, [{"content_sha256": audio["content_sha256"]}], settings)
 
 
 def two_pass(
@@ -158,7 +169,7 @@ def two_pass(
 ) -> JobOutput:
     """The worker: four stems, then the drum stem decomposed into kick, snare and toms."""
     config = config or get_config()
-    key = cache.cache_key(KIND, [{"content_sha256": audio["content_sha256"]}], params)
+    key = stem_key(audio, params)
     directory = config.stems_dir / f"{slug(Path(str(audio['path'])).stem, 'stems')}-{key[:12]}"
     mix_dir = directory / MIX_PASS
     drums_dir = directory / DRUM_PASS
@@ -212,10 +223,19 @@ def _already_separated(mix_dir: Path, drums_dir: Path) -> bool:
 
 
 def _pass(progress: Progress, floor: float, ceiling: float, step: str) -> separator.Fraction:
-    """Map one pass's own 0-1 onto the slice of the job that pass is."""
+    """Map one pass's own 0-1 onto the slice of the job that pass is, and never go back.
+
+    A first run downloads its model and prints a progress bar for *that* before the one for
+    the separation, so the percentages restart mid-pass. Reporting the restart would have
+    the agent watch a job apparently lose ground; the highest reading so far is the honest
+    summary of a pass made of several bars.
+    """
     span = ceiling - floor
+    highest = 0.0
 
     def report(fraction: float) -> None:
-        progress(floor + span * fraction, f"{step} ({int(fraction * PERCENT)}%)")
+        nonlocal highest
+        highest = max(highest, fraction)
+        progress(floor + span * highest, f"{step} ({int(highest * PERCENT)}%)")
 
     return report

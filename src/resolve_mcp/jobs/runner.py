@@ -28,12 +28,13 @@ Four decisions:
 from __future__ import annotations
 
 import threading
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, NamedTuple
 
 from ..config import Config, get_config
-from ..errors import InternalError, ResolveMcpError
+from ..errors import ChainedJobError, InternalError, ResolveMcpError
 from ..logging_config import get_logger
 from . import cache, store
 from .store import JobRecord
@@ -41,6 +42,7 @@ from .store import JobRecord
 log = get_logger("jobs")
 
 WAIT_TIMEOUT = 30.0
+FOLLOW_POLL = 0.1
 WAITING = "waiting for Resolve"
 
 RESOLVE_LOCK = threading.Lock()
@@ -63,6 +65,7 @@ class JobOutput(NamedTuple):
 
 Progress = Callable[[float, str], None]
 Work = Callable[[Progress], JobOutput]
+Watch = Callable[[JobRecord], None]
 
 
 def start_job(
@@ -161,6 +164,42 @@ def alive(job_id: str) -> bool:
     with _threads_lock:
         thread = _threads.get(job_id)
     return thread is not None and thread.is_alive()
+
+
+def follow(
+    job_id: str,
+    watch: Watch | None = None,
+    poll: float = FOLLOW_POLL,
+    sleep: Callable[[float], None] = time.sleep,
+    config: Config | None = None,
+) -> JobRecord:
+    """Wait for a job this job started, reporting it as it goes, and raise what it raised.
+
+    ``wait_for`` joins a thread and hands back whatever the record says; this is the other
+    half of "for chained work" — the caller sees each record as it lands, so a render that
+    is minutes of the parent job is minutes the parent job can report, and a failure comes
+    back as an exception carrying the child's own cause and fix rather than as a result the
+    caller has to inspect. A cache hit is already finished and is never waited on at all.
+    """
+    record = store.load(job_id, config)
+    while record.state == store.RUNNING:
+        if watch is not None:
+            watch(record)
+        sleep(poll)
+        record = store.load(job_id, config)
+        if record.state == store.RUNNING and not alive(job_id):
+            # The thread may have closed the record between that read and this check, so
+            # the answer is the record read *after* the thread is known to be gone.
+            record = store.load(job_id, config)
+            if record.state == store.RUNNING:
+                raise InternalError(
+                    cause=f"The {record.kind} job {job_id} stopped without finishing.",
+                    detail={"job_id": job_id, "step": record.step, "progress": record.progress},
+                )
+
+    if record.state == store.FAILED:
+        raise ChainedJobError(record.error or {}, job_id)
+    return record
 
 
 def wait_for(job_id: str, timeout: float = WAIT_TIMEOUT, config: Config | None = None) -> JobRecord:

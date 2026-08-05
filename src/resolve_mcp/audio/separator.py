@@ -31,7 +31,6 @@ import subprocess
 from collections import deque
 from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
-from typing import NamedTuple
 
 from ..config import Config, get_config
 from ..errors import SeparatorUnavailableError, StemSeparationError
@@ -48,15 +47,15 @@ PERCENT = re.compile(r"(\d{1,3})\s*%")
 FULL = 100.0
 
 
-class Completed(NamedTuple):
-    """What the runner reports back once the separator has exited."""
-
-    returncode: int
-    output: str
-
-
 Lines = Callable[[str], None]
-Runner = Callable[[Sequence[str], Lines], Completed]
+Runner = Callable[[Sequence[str], Lines], int]
+"""Run the argv, hand every output line to the sink, and return the exit code.
+
+Unlike ffmpeg's runner there is nothing else to report: everything the separator says
+arrives through the sink as it says it, so the caller already holds the output by the time
+the process exits.
+"""
+
 Fraction = Callable[[float], None]
 
 
@@ -117,21 +116,20 @@ def separate(
 
     log.info("Separating %s with %s", Path(source).name, model)
     try:
-        finished = (runner or _run)(argv, on_line)
+        returncode = (runner or _run)(argv, on_line)
     except FileNotFoundError as exc:
         raise SeparatorUnavailableError(
             cause=f"No audio-separator at {config.audio_separator!r}.",
             detail={"executable": config.audio_separator, "model": model},
         ) from exc
 
-    output = "\n".join(tail) or finished.output
-    if finished.returncode != 0:
+    output = "\n".join(tail)
+    if returncode != 0:
         raise StemSeparationError(
             cause=(
-                f"audio-separator refused {Path(source).name} with {model} "
-                f"(exit {finished.returncode})."
+                f"audio-separator refused {Path(source).name} with {model} (exit {returncode})."
             ),
-            detail={"model": model, "exit_code": finished.returncode, "output": output},
+            detail={"model": model, "exit_code": returncode, "output": output},
         )
 
     produced = collect(destination)
@@ -164,7 +162,7 @@ def _percent(line: str) -> float | None:
     return min(int(found.group(1)) / FULL, 1.0)
 
 
-def _run(argv: Sequence[str], on_line: Lines) -> Completed:
+def _run(argv: Sequence[str], on_line: Lines) -> int:
     """The real call: stderr folded into stdout, read as it arrives.
 
     Universal newlines makes the progress bar's carriage returns line breaks, which is the
@@ -180,5 +178,4 @@ def _run(argv: Sequence[str], on_line: Lines) -> Completed:
         if process.stdout is not None:
             for line in process.stdout:
                 on_line(line)
-        returncode = process.wait()
-    return Completed(returncode, "")
+        return process.wait()

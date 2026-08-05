@@ -25,6 +25,7 @@ from resolve_mcp.audio.stems import (
     DRUM_STEMS,
     FOUR_STEMS,
     KIND,
+    SEPARATION,
     acquired,
     separate_stems,
     two_pass,
@@ -81,7 +82,7 @@ def test_four_stems_land_on_disk_keyed_by_content_hash_and_params(
     expected = cache.cache_key(
         KIND,
         [{"content_sha256": record.result["audio"]["content_sha256"]}],
-        record.params,
+        {name: record.params[name] for name in SEPARATION},
     )
     assert record.result["key"] == expected
     assert Path(record.result["directory"]).name.endswith(expected[:12])
@@ -152,6 +153,18 @@ def test_progress_climbs_through_both_passes(tmp_path: Path) -> None:
     assert steps[-1][0] == pytest.approx(0.95, abs=0.05)
 
 
+def test_a_percentage_that_restarts_mid_pass_never_reports_lost_ground(tmp_path: Path) -> None:
+    """A first run prints a bar for the model download before the bar for the separation."""
+    steps: list[tuple[float, str]] = []
+    restarting = FakeSeparator(FOUR_STEMS, SIX_DRUM_STEMS, output=(" 80%|", "  5%|", " 40%|"))
+
+    two_pass(_acquired(tmp_path), _params(), _recording(steps), runner=restarting)
+
+    fractions = [fraction for fraction, _ in steps]
+    assert fractions == sorted(fractions)
+    assert max(fraction for fraction, step in steps if "four stems" in step) == pytest.approx(0.53)
+
+
 def test_the_acquisition_is_reported_as_the_first_quarter_of_the_job(attach: Attach) -> None:
     """The export runs inside this job, so its own progress has to be visible from here."""
     attach(studio(timeline=FakeTimeline("sunset-set v3", "59.94")))
@@ -209,6 +222,35 @@ def test_the_same_audio_under_a_new_fingerprint_reuses_the_stems_on_disk(
     assert all(Path(one).exists() for one in output.result["stems"].values())
 
 
+def test_where_the_audio_came_from_is_not_part_of_the_stems_key(
+    tmp_path: Path,
+    separating: FakeSeparator,
+) -> None:
+    """A renamed timeline is the same audio; separating it again would pay the GPU twice."""
+    audio = _acquired(tmp_path)
+    first = two_pass(audio, _params(timeline="sunset-set v3"), _ignored, runner=separating)
+
+    renamed = two_pass(audio, _params(timeline="sunset-set v4"), _ignored, runner=separating)
+
+    assert renamed.result["directory"] == first.result["directory"]
+    assert renamed.result["reused"] is True
+    assert len(separating.calls) == 2
+
+
+def test_a_different_model_is_a_different_stems_key(
+    tmp_path: Path,
+    separating: FakeSeparator,
+) -> None:
+    """The other half of that: what the stems *are* must still move the key."""
+    audio = _acquired(tmp_path)
+    first = two_pass(audio, _params(), _ignored, runner=separating)
+
+    other = two_pass(audio, _params(model="htdemucs_6s.yaml"), _ignored, runner=separating)
+
+    assert other.result["directory"] != first.result["directory"]
+    assert len(separating.calls) == 4
+
+
 def test_the_stems_a_job_owns_are_what_its_cache_entry_verifies(
     attach: Attach,
     separating: FakeSeparator,
@@ -223,7 +265,8 @@ def test_the_stems_a_job_owns_are_what_its_cache_entry_verifies(
 
     assert again.cached is False
     assert again.state == "completed", again.error
-    assert Path(again.result["drums"]["kick"]).exists() if again.result else False
+    assert again.result is not None
+    assert Path(again.result["drums"]["kick"]).exists()
 
 
 # --- failures ----------------------------------------------------------------------------
@@ -402,6 +445,18 @@ def _recording(steps: list[tuple[float, str]]) -> Progress:
     return report
 
 
+def _params(timeline: str = "sunset-set v3", model: str = "htdemucs_ft.yaml") -> dict[str, Any]:
+    """A job's params: where the audio came from, and what is being run on it."""
+    return {
+        "scope": "timeline",
+        "timeline": timeline,
+        "model": model,
+        "drum_model": "MDX23C-DrumSep-6stem-FT.ckpt",
+        "stems": list(FOUR_STEMS),
+        "drum_stems": list(DRUM_STEMS),
+    }
+
+
 def _acquired(tmp_path: Path) -> dict[str, Any]:
     """What an acquisition job hands the worker: a WAV on disk and its content hash."""
     path = write_wav(tmp_path / "cache" / "audio" / "mix.wav", seconds=0.5)
@@ -429,5 +484,5 @@ def _copying() -> FfmpegRunner:
     return runner
 
 
-def _absent(argv: Sequence[str], on_line: separator.Lines) -> separator.Completed:
+def _absent(argv: Sequence[str], on_line: separator.Lines) -> int:
     raise FileNotFoundError(argv[0])

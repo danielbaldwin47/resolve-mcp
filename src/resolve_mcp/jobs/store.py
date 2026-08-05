@@ -25,6 +25,7 @@ import json
 import os
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -45,9 +46,9 @@ STATES = (RUNNING, COMPLETED, FAILED)
 SESSION = uuid.uuid4().hex
 """This server process. Records written under any other session predate a restart."""
 
-REPLACE_ATTEMPTS = 20
-REPLACE_PAUSE = 0.01
-"""How long a record write waits out a reader holding the file open. See ``_replace``."""
+SHARING_ATTEMPTS = 20
+SHARING_PAUSE = 0.01
+"""How long either side of a poll waits out the other's handle. See ``_sharing``."""
 
 _sequence = itertools.count()
 """Breaks ties in "newest first": the Windows clock is coarser than two starts in a row."""
@@ -120,7 +121,7 @@ def save(record: JobRecord, config: Config | None = None) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     scratch = target.with_suffix(".writing")
     scratch.write_text(json.dumps(record.payload(), indent=2), encoding="utf-8")
-    _replace(scratch, target)
+    _sharing(lambda: os.replace(scratch, target))
 
 
 def finish(
@@ -163,28 +164,30 @@ def load_all(state: str | None = None, config: Config | None = None) -> list[Job
     return [one for one in found if one.state == state]
 
 
-def _replace(scratch: Path, target: Path) -> None:
-    """Put the new record in place, waiting out a reader that has the old one open.
+def _sharing[T](attempt: Callable[[], T]) -> T:
+    """Do it again if the other side of a poll had the file open.
 
-    Windows refuses to replace a file while another handle holds it, and a reader is
-    exactly what polling is — ``get_job`` on one side, a job following the job it chained
-    on the other. The window is microseconds wide, so a short retry closes it. Letting the
-    error out instead would kill the worker thread mid-save and leave the record saying
-    ``running`` forever, which is the one failure the whole store exists to prevent.
+    Windows refuses to replace a file while another handle holds it, and refuses the read
+    that lands mid-replace — and polling is exactly two handles on one record: ``get_job``
+    or a chained job on one side, the worker saving its progress on the other. The window
+    is microseconds wide, so a short retry closes it. Letting the error out would kill the
+    worker thread mid-save and leave the record saying ``running`` forever, which is the
+    one failure the whole store exists to prevent; on the reading side it would report a
+    running job as gone.
     """
-    for attempt in range(REPLACE_ATTEMPTS):
+    for attempt_number in range(SHARING_ATTEMPTS):
         try:
-            os.replace(scratch, target)
-            return
+            return attempt()
         except PermissionError:
-            if attempt == REPLACE_ATTEMPTS - 1:
+            if attempt_number == SHARING_ATTEMPTS - 1:
                 raise
-            time.sleep(REPLACE_PAUSE)
+            time.sleep(SHARING_PAUSE)
+    raise AssertionError("unreachable")  # pragma: no cover
 
 
 def _read(path: Path) -> JobRecord | None:
     try:
-        raw = json.loads(_read_text(path))
+        raw = json.loads(_sharing(lambda: path.read_text(encoding="utf-8")))
     except FileNotFoundError:
         return None
     except (OSError, ValueError):
@@ -197,21 +200,6 @@ def _read(path: Path) -> JobRecord | None:
     return JobRecord(**known)
 
 
-def _read_text(path: Path) -> str:
-    """Read the record, waiting out the instant a writer is swapping it in underneath.
-
-    The same Windows rule from the other side: a read can land in the moment the replace
-    holds the file. Missing that would report a running job as gone, which reads as a far
-    worse failure than the pause it costs to try again.
-    """
-    for attempt in range(REPLACE_ATTEMPTS):
-        try:
-            return path.read_text(encoding="utf-8")
-        except PermissionError:
-            if attempt == REPLACE_ATTEMPTS - 1:
-                raise
-            time.sleep(REPLACE_PAUSE)
-    raise AssertionError("unreachable")  # pragma: no cover
 
 
 def _recovered(record: JobRecord, config: Config) -> JobRecord:
