@@ -23,12 +23,52 @@ class DroppedHandleError(RuntimeError):
     """What a stale Resolve handle raises when the app has gone away."""
 
 
+class FakeSpline:
+    """An animation modifier on one input: keyframes written by index assignment.
+
+    That is the whole Fusion keyframe API from Python — ``tool.Opacity1[frame] = value``
+    once a spline is connected. ``takes_keyframes=False`` models the bridge refusing the
+    assignment, which is a ``TypeError`` rather than a return value.
+    """
+
+    def __init__(self, takes_keyframes: bool = True) -> None:
+        self.keyframes: dict[float, float] = {}
+        self.takes_keyframes = takes_keyframes
+
+    def __setitem__(self, frame: Any, value: Any) -> None:
+        if not self.takes_keyframes:
+            raise TypeError("'FakeSpline' object does not support item assignment")
+        self.keyframes[float(frame)] = float(value)
+
+    def __getitem__(self, frame: Any) -> float | None:
+        return self.keyframes.get(float(frame))
+
+    def at(self, frame: Any) -> float | None:
+        """What the animated input reads at a time — a keyframe or nothing between them."""
+        return self.keyframes.get(float(frame))
+
+
 class FakeFusionTool:
     """One node inside a Fusion comp; for titling only the Text+ node matters.
 
     ``SetInput`` returns ``None`` in the real API — it reports nothing, so the only way to
     know a write landed is to read it back, which is what the probe does.
+
+    Attribute access is the other half of the Fusion API and behaves nothing like Python's:
+    an input is *connected* to a modifier by assigning to an attribute named after it
+    (``tool.Opacity1 = comp.BezierSpline()``), and every attribute name answers — an input
+    this node does not have reads back as ``None`` rather than raising. Both are modelled,
+    because a wrapper that guarded with ``hasattr`` would pass here and fail live.
+
+    ``animatable=False`` models a node that has no such input at all: the assignment is
+    accepted, nothing is connected, and the attribute still reads back as ``None``.
+    ``reads_at_a_time=False`` models a build whose ``GetInput`` takes no time argument, so
+    an animated value cannot be read back at a keyframe.
     """
+
+    _OWN = frozenset(
+        {"tool_id", "name", "inputs", "animated", "animatable", "reads_at_a_time"}
+    )
 
     def __init__(
         self,
@@ -36,14 +76,43 @@ class FakeFusionTool:
         name: str = "Template Text",
         inputs: dict[str, Any] | None = None,
         owner: FakeResolve | None = None,
+        animatable: bool = True,
+        reads_at_a_time: bool = True,
     ) -> None:
         self.tool_id = tool_id
         self.name = name
         self.inputs: dict[str, Any] = dict(inputs or {"StyledText": "TEMPLATE"})
+        self.animated: dict[str, FakeSpline] = {}
+        self.animatable = animatable
+        self.reads_at_a_time = reads_at_a_time
         self._owner = owner
 
+    def __setattr__(self, key: str, value: Any) -> None:
+        if key.startswith("_") or key in FakeFusionTool._OWN:
+            object.__setattr__(self, key, value)
+            return
+        self._check()
+        if not self.animatable:
+            return  # accepted and dropped, exactly as a node without the input answers
+        self.animated[key] = value
+
+    def __getattr__(self, key: str) -> Any:
+        # Only reached when normal lookup failed, which for fusionscript means "an input
+        # or a method this build does not have" — and that answers None, never raises.
+        if key.startswith("_"):
+            raise AttributeError(key)
+        return self.__dict__.get("animated", {}).get(key)
+
     def copy(self) -> FakeFusionTool:
-        return FakeFusionTool(self.tool_id, self.name, dict(self.inputs), self._owner)
+        twin = FakeFusionTool(
+            self.tool_id,
+            self.name,
+            dict(self.inputs),
+            self._owner,
+            self.animatable,
+            self.reads_at_a_time,
+        )
+        return twin
 
     def adopt(self, owner: FakeResolve) -> None:
         self._owner = owner
@@ -62,9 +131,15 @@ class FakeFusionTool:
         self._check()
         self.inputs[key] = value
 
-    def GetInput(self, key: str) -> Any:  # noqa: N802
+    def GetInput(self, key: str, time: Any = None) -> Any:  # noqa: N802
+        """The input's value, at a time when one is asked for and the build answers for it."""
         self._check()
-        return self.inputs.get(key)
+        if time is None:
+            return self.inputs.get(key)
+        if not self.reads_at_a_time:
+            raise TypeError("GetInput() takes 2 positional arguments but 3 were given")
+        spline = self.animated.get(key)
+        return spline.at(time) if spline is not None else self.inputs.get(key)
 
 
 class FakeFusionComp:
@@ -72,19 +147,41 @@ class FakeFusionComp:
 
     ``GetToolList`` is filtered by node type in the real API and returns a *one-based dict*
     rather than a list — a comp with no matching node answers an empty dict, not ``None``.
+
+    ``render_range`` is what ``GetAttrs`` reports as the comp's own frame range, which is
+    the clock a keyframe time is counted in; ``None`` models a comp that will not say, so
+    the caller has to fall back to the placed instance's length. ``missing`` hides a method
+    the way fusionscript does — answering ``None`` rather than raising.
     """
 
     def __init__(
         self,
         tools: Sequence[FakeFusionTool] | None = None,
         owner: FakeResolve | None = None,
+        render_range: tuple[int, int] | None = (0, 119),
+        takes_keyframes: bool = True,
+        missing: frozenset[str] | set[str] | None = None,
     ) -> None:
         self.tools: list[FakeFusionTool] = list(tools if tools is not None else [FakeFusionTool()])
+        self.render_range = render_range
+        self.takes_keyframes = takes_keyframes
+        self._missing = set(missing or ())
         self._owner = owner
+
+    def __getattribute__(self, name: str) -> Any:
+        if not name.startswith("_") and name in object.__getattribute__(self, "_missing"):
+            return None
+        return object.__getattribute__(self, name)
 
     def copy(self) -> FakeFusionComp:
         """What placing a template instance does: the new instance gets its own comp."""
-        return FakeFusionComp([tool.copy() for tool in self.tools], self._owner)
+        return FakeFusionComp(
+            [tool.copy() for tool in self.tools],
+            self._owner,
+            self.render_range,
+            self.takes_keyframes,
+            set(self._missing),
+        )
 
     def adopt(self, owner: FakeResolve) -> None:
         self._owner = owner
@@ -94,6 +191,20 @@ class FakeFusionComp:
     def _check(self) -> None:
         if self._owner is not None:
             self._owner._check()
+
+    def GetAttrs(self, key: str | None = None) -> Any:  # noqa: N802
+        """The comp's own attributes; the render range is the one titling reads."""
+        self._check()
+        if self.render_range is None:
+            return {}
+        start, end = self.render_range
+        attrs = {"COMPN_RenderStart": start, "COMPN_RenderEnd": end}
+        return attrs if key is None else attrs.get(key)
+
+    def BezierSpline(self) -> FakeSpline:  # noqa: N802
+        """Fusion's constructor-style tool creation: ``comp.BezierSpline()`` makes one."""
+        self._check()
+        return FakeSpline(self.takes_keyframes)
 
     def GetToolList(  # noqa: N802
         self,
@@ -279,8 +390,10 @@ class FakeTimeline:
         # normally, but the type is not the fake's to promise, and the wrapper parses them.
         markers: dict[Any, dict[str, Any]] | None = None,
         end_frame: int | None = None,
+        missing: frozenset[str] | set[str] | None = None,
         owner: FakeResolve | None = None,
     ) -> None:
+        self._missing = set(missing or ())
         self._name = name
         self._fps = fps
         self._start_frame = start_frame
@@ -302,6 +415,17 @@ class FakeTimeline:
         self.export_result = True
         self.export_writes_the_file = True
         self.add_track_result = True
+        self.set_track_name_result = True
+        # A clear that answers True and leaves the clips standing is the failure a caller
+        # can only find by re-reading the track — the same shape as a locked-track append.
+        self.delete_clips_leaves_them = False
+        self.deleted_clips: list[tuple[list[FakeTimelineItem], bool]] = []
+
+    def __getattribute__(self, name: str) -> Any:
+        """A method this build does not have answers ``None``, as fusionscript does."""
+        if not name.startswith("_") and name in object.__getattribute__(self, "_missing"):
+            return None
+        return object.__getattribute__(self, name)
 
     def adopt(self, owner: FakeResolve) -> None:
         self._owner = owner
@@ -453,6 +577,36 @@ class FakeTimeline:
             return False
         tracks = self._tracks.setdefault(track_type, [])
         tracks.append(FakeTrack(f"{track_type.capitalize()} {len(tracks) + 1}"))
+        return True
+
+    def SetTrackName(self, track_type: str, index: int, name: str) -> bool:  # noqa: N802
+        """Rename a track. Resolve refuses with a bare ``False`` and never says why."""
+        self._check()
+        track = self._track(track_type, index)
+        if track is None or not self.set_track_name_result:
+            return False
+        track.name = name
+        return True
+
+    def DeleteClips(  # noqa: N802
+        self,
+        items: list[FakeTimelineItem],
+        ripple: bool = False,
+    ) -> bool:
+        """Remove items from whichever track holds them, recording the ripple flag.
+
+        The flag is recorded rather than acted on: what matters to a caller that owns one
+        track is that it never asks for a ripple, because that would drag the cut on the
+        tracks below along with the titles it deleted.
+        """
+        self._check()
+        self.deleted_clips.append((list(items), bool(ripple)))
+        if self.delete_clips_leaves_them:
+            return True
+        wanted = {id(item) for item in items}
+        for tracks in self._tracks.values():
+            for track in tracks:
+                track.items = [held for held in track.items if id(held) not in wanted]
         return True
 
     def place(self, track_type: str, index: int, item: FakeTimelineItem) -> None:
@@ -914,6 +1068,12 @@ class FakeMediaPool:
         track_type = "audio" if media_type == AUDIO_TYPE else "video"
         index = int(info.get("trackIndex", 1))
         record = int(info.get("recordFrame", _track_end(timeline, track_type, index)))
+
+        # A placed instance's comp is rendered over the instance, so its render range is
+        # the clip's own length — which is the clock a keyframe on it is counted in.
+        for comp in comps:
+            if comp.render_range is not None:
+                comp.render_range = (0, duration - 1)
 
         item = FakeTimelineItem(
             clip.GetName(),

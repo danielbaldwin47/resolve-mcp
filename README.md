@@ -7,9 +7,10 @@ Build contract: [issue #22](https://github.com/danielbaldwin47/resolve-mcp/issue
 
 ## Status
 
-P1 in progress. Shipped so far: the server skeleton, the session/project tools, the media
-pool tools, the timeline read and interchange tools, the background-job infrastructure
-with audio acquisition, and the `run_python` escape hatch.
+P1 in progress, P2 titling started. Shipped so far: the server skeleton, the
+session/project tools, the media pool tools, the timeline read, marker and interchange
+tools, the declarative cut file and `build_timeline`, the Text+ titling tools, the
+background-job infrastructure with audio acquisition, and the `run_python` escape hatch.
 
 | Tool | What it does |
 | --- | --- |
@@ -25,8 +26,16 @@ with audio acquisition, and the `run_python` escape hatch.
 | `relink_media` | Points offline clips at media that moved (folder relink or file replace) |
 | `list_timelines` | Timelines with version, duration, fps and track stack; names the newest cut |
 | `inspect_timeline` | One timeline at a chosen detail and range, in dual time |
+| `list_markers` | Markers in record time, narrowed by colour and range |
+| `set_markers` | Batch marker writes; an existing marker is never overwritten unless asked |
 | `export_timeline` | Writes a timeline out as OTIO, FCPXML or DRT |
 | `import_timeline` | Materialises a **new** timeline from such a file — never overwrites one |
+| `get_cut_schema` | The cut-file contract, its annotated example and the validation rules |
+| `validate_cut` | Dry-runs a cut file: every error and warning at once, with fix hints |
+| `build_timeline` | Builds a cut file into a fresh `<name> v<N>` timeline and verifies what landed |
+| `get_titles_schema` | The titles-file contract, its annotated example and the validation rules |
+| `validate_titles` | Dry-runs a titles file before the Titles track is touched |
+| `apply_titles` | Places Text+ titles from `titles.json` onto an owned Titles track, fades and all |
 | `get_job` | Polls one background job: progress, result, or a structured failure |
 | `list_jobs` | Lists jobs newest first — how a restarted session finds what it started |
 | `run_python` | Escape hatch: runs scripting-API Python in the server process |
@@ -42,6 +51,15 @@ in the project answers to — colliding names walk the `<base> v<N>` convention.
 Resolve's own document and accepts no import options at all, so it names its own timeline;
 what holds there is the check on the way out. Either way the cut already in the project is
 never the thing that gets written over.
+
+Editing is declarative and split across two files that never mention each other. The
+**cut file** owns the cut and materialises as a new `<name> v<N>` timeline every build.
+**`titles.json`** owns the titles, and `apply_titles` owns the topmost video track named
+`Titles` — every apply clears that track whole and re-places from the file, so the same
+file always produces the same track. Title positions are offsets from the *blue marker*
+naming their song rather than timeline frames, which is what lets one titles file be
+re-applied unchanged to every rebuild. Fades are Fusion opacity keyframes inside each
+placed instance, because Resolve exposes no clip-level fade to the scripting API at all.
 
 Heavy work runs as a background job: the starter returns a `job_id` immediately, `get_job`
 polls it, and results are cached under the cache root against the media and the parameters,
