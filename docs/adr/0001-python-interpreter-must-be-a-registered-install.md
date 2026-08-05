@@ -40,11 +40,9 @@ under all three; only the extension-module initialisation crashes.
    process, immediately before the scripting library is imported (which also happens
    once), and is the only way to turn a fatal crash into an error message.
    `RESOLVE_MCP_ALLOW_ANY_PYTHON=1` bypasses it for anyone retesting the finding.
-3. **`requires-python` is widened to `>=3.11,<3.13`.** 3.11 remains the target — #11
-   chose it as the safe overlap for the P3 analysis stack (torch-CUDA, beat_this,
-   audio-separator, PANNs) and nothing here disturbs that. The widening exists so the live
-   path is usable on a machine whose only registered interpreter is 3.12, which is how P1
-   was verified against real Resolve.
+3. **`requires-python` is `>=3.12,<3.13`** (amended 2026-08-05; the interim state after
+   P1 was a `>=3.11,<3.13` widening with 3.11 still the target). 3.12 is now the single
+   target — see the resolution note under Consequences.
 
 The registry match is a proxy, not a proven cause: what was measured is that registered
 python.org builds work and standalone builds crash. It is the discriminator that matched
@@ -59,7 +57,11 @@ explanation rather than trusted into a crash.
   including uv-managed ones, because it never loads the scripting library.
 - The live smoke tier only runs on a registered interpreter; on any other it skips with
   the structured cause rather than taking pytest down with it.
-- Open: whether to install python.org **3.11** (restores the exact #11 pin, keeps the P3
-  stack on its verified version) or to standardise on the **3.12** already installed
-  (verified end-to-end against Resolve today, but moves the analysis stack off its pinned
-  version). P1 needs neither to be settled; P3 does.
+- Resolved (2026-08-05): standardise on the **3.12** already installed, not python.org
+  3.11. The deciding asymmetry: the attach is the one failure no test tier can observe
+  (this ADR's whole subject), and python.org 3.12.10 is the interpreter empirically
+  proven to attach on this machine — installing 3.11 would mean re-proving the attach
+  live for no gain. The P3 analysis stack (torch-CUDA, beat_this, audio-separator,
+  PANNs) publishes 3.12 wheels throughout, and P3 builds a fresh environment either
+  way, so its re-verification happens regardless of version — and its failures are
+  loud (imports, tests), unlike the attach. `requires-python` is now `>=3.12,<3.13`.

@@ -22,7 +22,7 @@ P1 in progress. Shipped so far: the server skeleton, the session/project tools, 
 
 - Windows 11, DaVinci Resolve **Studio** 21.0.3 (external scripting must be enabled:
   _Preferences > System > General > External scripting using_ = **Local**)
-- **CPython 3.11 x64 installed from python.org** — not a uv-managed interpreter. See
+- **CPython 3.12 x64 installed from python.org** — not a uv-managed interpreter. See
   [ADR 0001](docs/adr/0001-python-interpreter-must-be-a-registered-install.md): the
   Resolve scripting library crashes the process outright on a standalone build, so the
   server refuses to attach on one. [uv](https://docs.astral.sh/uv/) still manages the

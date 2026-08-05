@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import functools
 from collections.abc import Callable
-from typing import Any, ParamSpec
+from typing import Any
 
 from ..errors import InternalError, ResolveMcpError, ResolveUnavailableError
 from ..logging_config import get_logger
@@ -22,14 +22,13 @@ from ..resolve.session import context
 log = get_logger("tools")
 
 Envelope = dict[str, Any]
-P = ParamSpec("P")
 
 
 def current_context() -> dict[str, Any]:
     return context(get_connection())
 
 
-def tool(fn: Callable[P, dict[str, Any]]) -> Callable[P, Envelope]:
+def tool[**P](fn: Callable[P, dict[str, Any]]) -> Callable[P, Envelope]:
     """Wrap a wrapper-layer call as a tool: payload in, envelope out."""
 
     @functools.wraps(fn)
@@ -50,7 +49,7 @@ def tool(fn: Callable[P, dict[str, Any]]) -> Callable[P, Envelope]:
     return wrapper
 
 
-def _retry_if_the_handle_died(
+def _retry_if_the_handle_died[**P](
     fn: Callable[P, dict[str, Any]],
     args: Any,
     kwargs: Any,

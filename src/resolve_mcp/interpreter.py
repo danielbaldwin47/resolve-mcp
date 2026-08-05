@@ -30,7 +30,7 @@ log = get_logger("interpreter")
 
 FIX = (
     "Run this server on a python.org (or otherwise PEP 514-registered) CPython install "
-    "rather than a uv-managed standalone build: install CPython 3.11 or 3.12 x64 from "
+    "rather than a uv-managed standalone build: install CPython 3.12 x64 from "
     "python.org, then recreate the venv against it "
     "(uv venv --python <path-to-python.exe>). "
     f"Set {BYPASS_ENV}=1 to bypass this check."
