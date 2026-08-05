@@ -6,6 +6,10 @@ readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "fastmcp>=3.4,<4",
+    # The analysis substrate: numpy does the arithmetic, scipy the IIR filtering the
+    # loudness standard needs. Both are imported inside workers, never at startup.
+    "numpy>=2.0,<3",
+    "scipy>=1.14,<2",
 ]
 
 [project.scripts]
@@ -48,3 +52,8 @@ python_version = "3.12"
 files = ["src", "tests"]
 strict = true
 warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+# scipy ships no type information; the two functions used from it are filters over arrays.
+module = ["scipy.*"]
+ignore_missing_imports = true

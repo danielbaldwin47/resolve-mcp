@@ -79,6 +79,11 @@ class Config:
         return self.cache_dir / "audio"
 
     @property
+    def analysis_dir(self) -> Path:
+        """Beat grids and energy curves. Read in slices, so they outlive the job that wrote them."""
+        return self.cache_dir / "analysis"
+
+    @property
     def interchange_dir(self) -> Path:
         """Where exported timelines (OTIO, FCPXML, DRT) land when no path is given.
 

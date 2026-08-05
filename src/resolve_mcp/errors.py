@@ -333,6 +333,30 @@ class AudioMappingError(ResolveMcpError):
     )
 
 
+class AnalysisDependencyError(ResolveMcpError):
+    """An analysis model is not installed on this machine.
+
+    Kept apart from a plain failure because the fix is an install the human has to run, not
+    something the agent can retry its way out of.
+    """
+
+    code = "analysis_dependency_missing"
+    default_fix = (
+        "Install the missing package on the machine running the server, then start the job "
+        "again. Analysis that does not need it can be asked for on its own."
+    )
+
+
+class AnalysisFailedError(ResolveMcpError):
+    """A model or a curve refused the audio — a bad mix, a truncated file, a model falling over."""
+
+    code = "analysis_failed"
+    default_fix = (
+        "Check the audio plays and holds what you expect, then start the job again. "
+        "Analysis can be narrowed to one half (beats or energy) to isolate which fails."
+    )
+
+
 class InternalError(ResolveMcpError):
     code = "internal_error"
     default_fix = (
