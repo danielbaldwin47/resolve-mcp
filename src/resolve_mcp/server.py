@@ -11,7 +11,7 @@ from fastmcp import FastMCP
 from . import __version__
 from .config import get_config
 from .logging_config import configure_logging, get_logger
-from .tools import escape_hatch, media, project
+from .tools import escape_hatch, media, project, timeline
 
 log = get_logger("server")
 
@@ -23,6 +23,10 @@ Call get_status first to see what Resolve has open — every result echoes the c
 project, timeline and fps, so watch that context for switches. Take a snapshot_project
 backup before any big or risky operation. Failures come back as ok:false with a cause and
 a fix; act on the fix rather than retrying blindly.
+
+Time is frames-first: every position comes back as frames, seconds, timecode and fps
+together, ranges are half-open [in, out), and a time you give in seconds must say how to
+snap it to a frame ({"seconds": 2.52, "snap": "floor"}).
 """
 
 
@@ -33,7 +37,7 @@ def build_server() -> FastMCP:
         instructions=INSTRUCTIONS,
         version=__version__,
     )
-    for fn in (*project.TOOLS, *media.TOOLS, *escape_hatch.TOOLS):
+    for fn in (*project.TOOLS, *media.TOOLS, *timeline.TOOLS, *escape_hatch.TOOLS):
         mcp.tool(fn)
     return mcp
 

@@ -18,6 +18,7 @@ import pytest
 from resolve_mcp.tools.escape_hatch import run_python
 from resolve_mcp.tools.media import inspect_clip, list_media
 from resolve_mcp.tools.project import get_status, list_projects, snapshot_project
+from resolve_mcp.tools.timeline import inspect_timeline, list_timelines
 
 pytestmark = pytest.mark.live
 
@@ -73,6 +74,46 @@ def test_inspects_a_real_clip_with_the_property_keys_the_wrappers_assume() -> No
     assert result["ok"] is True
     assert "File Path" in result["properties"]
     assert result["bounds"]["media"]["duration"] is not None
+
+
+def test_lists_the_real_timelines() -> None:
+    if get_status()["context"]["project"] is None:
+        pytest.skip("No project open in Resolve")
+
+    result = list_timelines()
+
+    assert result["ok"] is True
+    assert isinstance(result["timelines"], list)
+    for entry in result["timelines"]:
+        assert entry["fps"]
+        assert entry["duration"] is not None
+
+
+def test_the_frame_math_holds_on_a_real_timeline() -> None:
+    """The fakes prove the arithmetic; only Resolve proves the numbers fed into it.
+
+    Every reported out point is derived from ``GetDuration`` rather than ``GetEnd`` — see
+    the wrapper docstring — so this is where that derivation meets real timeline items:
+    durations must close, shots must land inside the timeline, and the sync offset must be
+    the difference the agent will plan against.
+    """
+    if get_status()["context"]["timeline"] is None:
+        pytest.skip("No timeline open in Resolve")
+
+    result = inspect_timeline(detail="clips")
+
+    assert result["ok"] is True
+    ends_at = result["timeline"]["end"]["frames"]
+    for track in result["tracks"]:
+        for item in track["items"]:
+            record = item["record"]
+            assert record["out"]["frames"] - record["in"]["frames"] == record["duration"]["frames"]
+            assert record["out"]["frames"] <= ends_at
+            if item["source"]["in"] is not None:
+                assert (
+                    item["sync_offset"]["frames"]
+                    == record["in"]["frames"] - item["source"]["in"]["frames"]
+                )
 
 
 def test_snapshot_writes_a_real_drp(tmp_path: Path) -> None:

@@ -11,6 +11,7 @@ come back as strings.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -19,16 +20,211 @@ class DroppedHandleError(RuntimeError):
     """What a stale Resolve handle raises when the app has gone away."""
 
 
-class FakeTimeline:
-    def __init__(self, name: str, fps: str = "59.94") -> None:
+class FakeTimelineItem:
+    """A clip on a track.
+
+    ``GetEnd`` is deliberately configurable: the scripting docs do not say whether it is
+    the last frame or one past it, so a fake that only ever agreed with
+    ``GetStart() + GetDuration()`` would hide a wrapper that trusted the wrong one.
+    """
+
+    def __init__(
+        self,
+        name: str,
+        start: int,
+        duration: int,
+        source_start: int | None = None,
+        media_item: FakeMediaPoolItem | None = None,
+        enabled: bool = True,
+        takes: int = 0,
+        supports_source_frames: bool = True,
+        end_is_inclusive: bool = False,
+        owner: FakeResolve | None = None,
+    ) -> None:
         self._name = name
-        self._fps = fps
+        self._start = start
+        self._duration = duration
+        self._source_start = source_start
+        self._media_item = media_item
+        self._enabled = enabled
+        self._takes = takes
+        self._supports_source_frames = supports_source_frames
+        self._end_is_inclusive = end_is_inclusive
+        self._owner = owner
+
+    def adopt(self, owner: FakeResolve) -> None:
+        self._owner = owner
+
+    def _check(self) -> None:
+        if self._owner is not None:
+            self._owner._check()
 
     def GetName(self) -> str:  # noqa: N802 - mirrors the Resolve API
+        self._check()
+        return self._name
+
+    def GetStart(self) -> int:  # noqa: N802
+        self._check()
+        return self._start
+
+    def GetDuration(self) -> int:  # noqa: N802
+        self._check()
+        return self._duration
+
+    def GetEnd(self) -> int:  # noqa: N802
+        self._check()
+        end = self._start + self._duration
+        return end - 1 if self._end_is_inclusive else end
+
+    def GetLeftOffset(self) -> int:  # noqa: N802
+        self._check()
+        return self._source_start or 0
+
+    def GetSourceStartFrame(self) -> int:  # noqa: N802
+        self._check()
+        if not self._supports_source_frames:
+            raise AttributeError("GetSourceStartFrame")
+        if self._source_start is None:
+            return 0
+        return self._source_start
+
+    def GetSourceEndFrame(self) -> int:  # noqa: N802
+        self._check()
+        if not self._supports_source_frames:
+            raise AttributeError("GetSourceEndFrame")
+        return (self._source_start or 0) + self._duration - 1
+
+    def GetMediaPoolItem(self) -> FakeMediaPoolItem | None:  # noqa: N802
+        self._check()
+        return self._media_item
+
+    def GetClipEnabled(self) -> bool:  # noqa: N802
+        self._check()
+        return self._enabled
+
+    def GetTakeCount(self) -> int:  # noqa: N802
+        self._check()
+        return self._takes
+
+
+class FakeTrack:
+    """One track's worth of state: the API reaches it only through the timeline."""
+
+    def __init__(
+        self,
+        name: str,
+        items: list[FakeTimelineItem] | None = None,
+        enabled: bool = True,
+        locked: bool = False,
+    ) -> None:
+        self.name = name
+        self.items = list(items or [])
+        self.enabled = enabled
+        self.locked = locked
+
+
+TrackSpec = Sequence["FakeTrack | list[FakeTimelineItem]"]
+
+
+def _as_tracks(spec: TrackSpec | None, label: str) -> list[FakeTrack]:
+    tracks: list[FakeTrack] = []
+    for index, entry in enumerate(spec or [], start=1):
+        tracks.append(
+            entry if isinstance(entry, FakeTrack) else FakeTrack(f"{label} {index}", entry)
+        )
+    return tracks
+
+
+class FakeTimeline:
+    def __init__(
+        self,
+        name: str,
+        fps: str = "59.94",
+        start_frame: int = 0,
+        video: TrackSpec | None = None,
+        audio: TrackSpec | None = None,
+        markers: dict[float, dict[str, Any]] | None = None,
+        owner: FakeResolve | None = None,
+    ) -> None:
+        self._name = name
+        self._fps = fps
+        self._start_frame = start_frame
+        self._tracks: dict[str, list[FakeTrack]] = {
+            "video": _as_tracks(video, "Video"),
+            "audio": _as_tracks(audio, "Audio"),
+            "subtitle": [],
+        }
+        self._markers = markers or {}
+        self._owner = owner
+
+    def adopt(self, owner: FakeResolve) -> None:
+        self._owner = owner
+        for tracks in self._tracks.values():
+            for track in tracks:
+                for item in track.items:
+                    item.adopt(owner)
+
+    def _check(self) -> None:
+        if self._owner is not None:
+            self._owner._check()
+
+    def _track(self, track_type: str, index: int) -> FakeTrack | None:
+        tracks = self._tracks.get(track_type, [])
+        return tracks[index - 1] if 1 <= index <= len(tracks) else None
+
+    def GetName(self) -> str:  # noqa: N802 - mirrors the Resolve API
+        self._check()
         return self._name
 
     def GetSetting(self, key: str) -> str | None:  # noqa: N802
+        self._check()
         return self._fps if key == "timelineFrameRate" else None
+
+    def GetStartFrame(self) -> int:  # noqa: N802
+        self._check()
+        return self._start_frame
+
+    def GetEndFrame(self) -> int:  # noqa: N802
+        self._check()
+        ends = [
+            item.GetStart() + item.GetDuration()
+            for tracks in self._tracks.values()
+            for track in tracks
+            for item in track.items
+        ]
+        return max(ends, default=self._start_frame)
+
+    def GetTrackCount(self, track_type: str) -> int:  # noqa: N802
+        self._check()
+        return len(self._tracks.get(track_type, []))
+
+    def GetTrackName(self, track_type: str, index: int) -> str | None:  # noqa: N802
+        self._check()
+        track = self._track(track_type, index)
+        return track.name if track else None
+
+    def GetItemListInTrack(  # noqa: N802
+        self,
+        track_type: str,
+        index: int,
+    ) -> list[FakeTimelineItem] | None:
+        self._check()
+        track = self._track(track_type, index)
+        return list(track.items) if track else None
+
+    def GetIsTrackEnabled(self, track_type: str, index: int) -> bool:  # noqa: N802
+        self._check()
+        track = self._track(track_type, index)
+        return bool(track and track.enabled)
+
+    def GetIsTrackLocked(self, track_type: str, index: int) -> bool:  # noqa: N802
+        self._check()
+        track = self._track(track_type, index)
+        return bool(track and track.locked)
+
+    def GetMarkers(self) -> dict[float, dict[str, Any]]:  # noqa: N802
+        self._check()
+        return dict(self._markers)
 
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".exr", ".dpx", ".tga"}
@@ -300,17 +496,31 @@ class FakeProject:
         timeline: FakeTimeline | None = None,
         fps: str = "24",
         media_pool: FakeMediaPool | None = None,
+        timelines: list[FakeTimeline] | None = None,
     ) -> None:
         self._name = name
         self._timeline = timeline
         self._fps = fps
         self._media_pool = media_pool
+        if timelines is not None:
+            self._timelines = list(timelines)
+        else:
+            self._timelines = [timeline] if timeline is not None else []
 
     def GetName(self) -> str:  # noqa: N802
         return self._name
 
     def GetCurrentTimeline(self) -> FakeTimeline | None:  # noqa: N802
         return self._timeline
+
+    def GetTimelineCount(self) -> int:  # noqa: N802
+        return len(self._timelines)
+
+    def GetTimelineByIndex(self, index: int) -> FakeTimeline | None:  # noqa: N802
+        """One-based, as in the real API; out of range returns ``None`` rather than raising."""
+        if 1 <= index <= len(self._timelines):
+            return self._timelines[index - 1]
+        return None
 
     def GetSetting(self, key: str) -> str | None:  # noqa: N802
         return self._fps if key == "timelineFrameRate" else None
@@ -454,25 +664,67 @@ def media_pool(bins: dict[str, list[FakeMediaPoolItem]] | None = None) -> FakeMe
     return pool
 
 
+def sync_reference(
+    name: str = "sunset-set sync",
+    fps: str = "59.94",
+    angles: dict[str, tuple[int, int, int]] | None = None,
+    start_frame: int = 0,
+) -> FakeTimeline:
+    """The director's stacked layout: one angle per video track, each landing on its own frame.
+
+    ``angles`` maps a track name to ``(record_start, source_start, duration)``. That is the
+    shape a hand-synced reference has, and the per-angle sync offset is the difference
+    between the two starts.
+    """
+    angles = angles or {"Cam A": (0, 1000, 500), "Cam B": (120, 3000, 400)}
+    video = [
+        FakeTrack(
+            track,
+            [FakeTimelineItem(f"{track}.mp4", record, duration, source_start=source)],
+        )
+        for track, (record, source, duration) in angles.items()
+    ]
+    return FakeTimeline(name, fps, start_frame=start_frame, video=video)
+
+
 def studio(
     project: str | None = "sunset-set",
-    timeline: str | None = "sunset-set v3",
+    timeline: str | FakeTimeline | None = "sunset-set v3",
     fps: str = "59.94",
     extra_projects: tuple[str, ...] = ("holiday-gig",),
     pool: FakeMediaPool | None = None,
+    timelines: list[FakeTimeline] | None = None,
 ) -> FakeResolve:
-    """A conventional fake: Studio running, one project open, one timeline current."""
+    """A conventional fake: Studio running, one project open, one timeline current.
+
+    ``timeline`` is the current one, by name or as a built ``FakeTimeline``; ``timelines``
+    is everything the project holds, defaulting to the current one alone. Passing
+    ``timelines`` makes the first of them current, unless ``timeline`` says otherwise —
+    ``None`` for a project whose timelines are all closed.
+    """
+    if isinstance(timeline, FakeTimeline) or timeline is None:
+        current = timeline
+    elif timelines is not None:
+        current = timelines[0] if timelines else None
+    else:
+        current = FakeTimeline(timeline, fps)
     projects: dict[str, FakeProject] = {}
     for name in extra_projects:
         projects[name] = FakeProject(name, fps=fps)
     if project is not None:
         projects[project] = FakeProject(
             project,
-            FakeTimeline(timeline, fps) if timeline else None,
+            current,
             fps=fps,
             media_pool=pool,
+            timelines=timelines,
         )
     resolve = FakeResolve(projects, current=project)
     if pool is not None:
         pool.adopt(resolve)
+    owned = list(timelines or [])
+    if current is not None and current not in owned:
+        owned.append(current)
+    for one in owned:
+        one.adopt(resolve)
     return resolve
