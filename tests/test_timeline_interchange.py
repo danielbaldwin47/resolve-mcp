@@ -43,6 +43,11 @@ def an_interchange_file(tmp_path: Path, name: str = "sunset-set v3.otio") -> Pat
     return target
 
 
+def test_every_format_answers_to_the_name_it_is_filed_under() -> None:
+    """The key is in the reply and in every error detail, so the two must not drift."""
+    assert all(key == spec.key for key, spec in interchange.FORMATS.items())
+
+
 # --- export ------------------------------------------------------------------------------
 
 
@@ -280,6 +285,7 @@ def test_import_refuses_a_result_that_is_an_existing_timeline(
     assert result["ok"] is False
     assert result["error"]["code"] == "timeline_import_failed"
     assert "sunset-set v3" in result["error"]["cause"]
+    assert "asked for 'encore'" in result["error"]["fix"]
 
 
 def test_import_reports_a_file_that_is_not_there(attach: Attach, tmp_path: Path) -> None:
@@ -360,18 +366,27 @@ def test_a_drt_is_sent_no_options_because_resolve_honours_none(
     assert result["timeline"]["name"] == "encore"
 
 
-def test_a_drt_refuses_the_options_it_cannot_honour(attach: Attach, tmp_path: Path) -> None:
-    """Told, not quietly ignored: a reply naming a timeline the caller did not ask for
-    reads as a rename, and the caller would carry on believing the name was theirs."""
+def test_a_drt_refuses_every_option_it_cannot_honour(attach: Attach, tmp_path: Path) -> None:
+    """Told, not quietly ignored: a request that was made and dropped leaves the caller
+    believing it took, and the reply gives them no reason to look."""
     pool = media_pool()
     attach(studio(pool=pool, timelines=[a_cut()]))
     source = an_interchange_file(tmp_path, "encore.drt")
 
-    result = import_timeline(str(source), name="my cut", source_media_path=str(tmp_path))
+    result = import_timeline(
+        str(source),
+        name="my cut",
+        import_source_clips=False,
+        source_media_path=str(tmp_path),
+    )
 
     assert result["ok"] is False
     assert result["error"]["code"] == "invalid_request"
-    assert result["error"]["detail"]["ignored"] == ["name", "source_media_path"]
+    assert result["error"]["detail"]["ignored"] == [
+        "name",
+        "import_source_clips",
+        "source_media_path",
+    ]
     assert pool.timeline_imports == []
 
 
@@ -390,6 +405,9 @@ def test_a_drt_import_that_lands_on_an_existing_cut_is_a_failure(
     assert result["ok"] is False
     assert result["error"]["code"] == "timeline_import_failed"
     assert "sunset-set v3" in result["error"]["cause"]
+    # Route-specific: on this one Resolve chose the name, so both outcomes are open and the
+    # fix must not claim the import was a no-op the way the .otio route's can.
+    assert ".drt names its own timeline" in result["error"]["fix"]
 
 
 def test_import_needs_a_project(attach: Attach, tmp_path: Path) -> None:

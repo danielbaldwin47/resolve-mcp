@@ -8,9 +8,9 @@ Four things are decisions rather than API calls:
 
 * **A format name is not an export constant.** ``Timeline.Export`` takes a number that
   lives on the Resolve app object, and which numbers exist depends on the build — FCPXML
-  alone has had eight versions. So a format maps to an ordered list of constant names and
-  the newest one this build has wins; a build that has none of them fails naming what it
-  looked for, rather than throwing ``AttributeError`` from inside a wrapper. The lookup
+  has gained a constant per version of the format. So a format maps to an ordered list of
+  constant names and the newest one this build has wins; a build with none of them fails
+  naming what it looked for, not with an ``AttributeError`` from inside a wrapper. The lookup
   tests against ``None`` and never against truthiness, because the first constant Resolve
   defines has the value 0.
 * **The export is confirmed on disk, not by the return value.** ``Export`` answers a bool,
@@ -198,7 +198,7 @@ def import_timeline(
     connection: ResolveConnection,
     path: str | Path,
     name: str | None = None,
-    import_source_clips: bool = True,
+    import_source_clips: bool | None = None,
     source_media_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Materialise a new timeline from an interchange file. Never lands on an existing one."""
@@ -216,8 +216,9 @@ def import_timeline(
     project = project_of(connection)
     pool = pool_of(project)
     existing = set(timeline_names(project))
+    native = source.suffix.lower() == NATIVE_SUFFIX
     requested, options = _import_options(
-        source, name, import_source_clips, source_media_path, existing
+        source, native, name, import_source_clips, source_media_path, existing
     )
 
     imported = pool.ImportTimelineFromFile(str(source), options)
@@ -234,11 +235,7 @@ def import_timeline(
                 f"Resolve handed back {landed!r}, a timeline the project already had, "
                 f"rather than a new one."
             ),
-            fix=(
-                f"Snapshot the project and check whether {landed!r} still holds the cut it "
-                "did before. A .drt names its own timeline — Resolve chose that name, not "
-                "this server — so re-export the cut as .otio to choose it here."
-            ),
+            fix=_collision_fix(native, landed, options),
             detail={"path": str(source), "timeline": landed, "options": options},
         )
 
@@ -255,31 +252,35 @@ def import_timeline(
 
 def _import_options(
     source: Path,
+    native: bool,
     name: str | None,
-    import_source_clips: bool,
+    import_source_clips: bool | None,
     source_media_path: str | Path | None,
     existing: set[str],
 ) -> tuple[str | None, dict[str, Any]]:
     """The options to send, and the name asked for — ``None`` when the file chooses it.
 
-    A ``.drt`` is sent no options because Resolve honours none of them; a caller who
-    explicitly asked for one is told rather than left to discover it from a reply that
-    quietly disagrees with the request. ``import_source_clips`` is not that kind of ask —
-    it has a default, so a ``.drt`` import silently leaves it out rather than refusing a
-    value the caller may never have chosen.
+    A ``.drt`` is sent no options because Resolve honours none of them. Every option is
+    therefore ``None`` by default and refused when given: a request that was made and
+    dropped is worse than one that was refused, because the reply then quietly disagrees
+    with what was asked for and the caller has no reason to look.
     """
-    if source.suffix.lower() == NATIVE_SUFFIX:
-        refused = {"name": name, "source_media_path": source_media_path}
+    if native:
+        refused = {
+            "name": name,
+            "import_source_clips": import_source_clips,
+            "source_media_path": source_media_path,
+        }
         given = [key for key, value in refused.items() if value is not None]
         if given:
             raise InvalidRequestError(
                 cause=(
                     f"A .drt carries its own timeline name and media links, so "
-                    f"{' and '.join(given)} cannot be honoured for one."
+                    f"{', '.join(given)} cannot be honoured for one."
                 ),
                 fix=(
                     "Import the .drt as it is — the reply names the timeline Resolve made — "
-                    "or use an .otio or .fcpxml export, where both are honoured."
+                    "or use an .otio or .fcpxml export, where all three are honoured."
                 ),
                 detail={"path": str(source), "ignored": given},
             )
@@ -288,8 +289,32 @@ def _import_options(
     requested = name or source.stem
     options: dict[str, Any] = {
         "timelineName": next_free_name(requested, existing),
-        "importSourceClips": bool(import_source_clips),
+        "importSourceClips": True if import_source_clips is None else bool(import_source_clips),
     }
     if source_media_path is not None:
         options["sourceClipsPath"] = str(source_media_path)
     return requested, options
+
+
+def _collision_fix(native: bool, landed: str, options: dict[str, Any]) -> str:
+    """What to do about an import that came back as a timeline the project already had.
+
+    The two routes leave the project in different states and must not be given the same
+    advice. On the ``.drt`` route Resolve chose the name, so both outcomes are open — it
+    may have replaced that cut or made a second one carrying the name. On the others a free
+    name was handed over and came back changed, which is Resolve disagreeing with a request
+    this server did make.
+    """
+    if native:
+        return (
+            f"A .drt names its own timeline, so Resolve chose {landed!r} — it may have "
+            f"replaced that cut or made a second one under the same name. Snapshot the "
+            f"project, check {landed!r} against the cut it held, and re-export as .otio to "
+            "choose the name here."
+        )
+    asked = options.get("timelineName")
+    return (
+        f"Resolve was asked for {asked!r} and answered with {landed!r} instead. Snapshot "
+        f"the project, check {landed!r} against the cut it held, and retry naming the "
+        "import explicitly."
+    )

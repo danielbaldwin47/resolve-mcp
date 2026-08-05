@@ -89,7 +89,7 @@ def export_timeline(
 def import_timeline(
     path: str,
     name: str | None = None,
-    import_source_clips: bool = True,
+    import_source_clips: bool | None = None,
     source_media_path: str | None = None,
 ) -> dict[str, Any]:
     """Materialise a *new* timeline from an otio, fcpxml or drt file. Nothing is overwritten.
@@ -99,15 +99,16 @@ def import_timeline(
     "sunset-set v5" when v4 is taken), and the reply gives requested_name alongside the
     timeline that was actually made, with renamed saying whether the two differ.
 
-    Source clips are imported by default, which is what an OTIO round trip needs to relink
-    to media; pass source_media_path when the media sits somewhere other than where the
-    document says. The reply is the new timeline's heading — version, fps, bounds, track
-    stack; inspect_timeline reads what is on it.
+    Source clips are imported unless import_source_clips is false, which is what an OTIO
+    round trip needs to relink to media; pass source_media_path when the media sits
+    somewhere other than where the document says. The reply is the new timeline's heading —
+    version, fps, bounds, track stack; inspect_timeline reads what is on it.
 
     A .drt is Resolve's own document and accepts none of these: it names its own timeline
-    and carries its own media links, so name and source_media_path are refused for one
-    rather than quietly ignored, and requested_name comes back null. The result is still
-    checked against the timelines the project already had, so a .drt cannot land on one.
+    and carries its own media links, so name, import_source_clips and source_media_path are
+    refused for one rather than quietly ignored, and requested_name comes back null. The
+    result is still checked against the timelines the project already had, so an import
+    that came back as an existing cut is reported as a failure, never as a new timeline.
     """
     connection = get_connection()
     return interchange.import_timeline(
