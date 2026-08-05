@@ -12,7 +12,9 @@ rather than API calls, and are the reason this file exists at all:
 * **Metadata fields route by what the clip itself reports.** The clip property key names are
   undocumented, so nothing is hard-coded: each clip is enumerated once with
   ``GetClipProperty()`` and a field whose key is in that dict is written as a clip property,
-  everything else as metadata. The route taken comes back in the result.
+  everything else as metadata. The route taken comes back in the result. Live, that dict
+  holds the whole namespace and the property route reaches metadata too, so the metadata
+  branch rarely fires — see ``_set_field``.
 * **Image media gets the still-duration workaround at import.** A one-time
   ``SetClipProperty("Out", …)`` is what makes ``endFrame`` respected on stills later; doing
   it at import means no timeline code ever has to remember.
@@ -564,7 +566,15 @@ def inspect_clip(
 
 
 def _set_field(clip: Clip, key: str, value: Any, reported: dict[str, str]) -> str:
-    """Write one field, choosing the route from what the clip itself reports."""
+    """Write one field, choosing the route from what the clip itself reports.
+
+    The property branch takes nearly everything. A real clip enumerates around 250 keys —
+    the whole namespace, production metadata (``Scene``, ``Take``, ``Director``, ``Keyword``)
+    included — and a property write to one of those names reads back through
+    ``GetMetadata()``, so the two accessors are one store rather than two (verified live,
+    Resolve 21.0.3.7). The metadata branch is the fallback for a clip that reports less,
+    not the route metadata-named fields take.
+    """
     if key in reported:
         if not clip.SetClipProperty(key, str(value)):
             raise MediaOperationError(cause=f"Resolve refused to set the clip property {key!r}.")
