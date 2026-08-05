@@ -33,21 +33,41 @@ DISCONNECTED: Context = {
 
 
 def context(connection: ResolveConnection) -> Context:
-    """The context every tool result echoes. Best-effort: this never raises."""
+    """The context every tool result echoes. Best-effort: this never raises.
+
+    ``connected`` answers one question only — is there a live handle. A field that cannot
+    be read comes back as ``None``; it must not make a live session claim it is
+    disconnected, because that is the one thing the agent trusts this echo for.
+    """
     try:
         resolve = connection.handle()
+    except Exception:  # noqa: BLE001 - context decorates a result, it never is one
+        log.debug("Could not reach Resolve for context", exc_info=True)
+        return dict(DISCONNECTED)
+
+    reading = dict(DISCONNECTED)
+    reading["connected"] = True
+    reading["resolve_version"] = _read(resolve.GetVersionString)
+    try:
         project = _current_project(resolve)
         timeline = project.GetCurrentTimeline() if project is not None else None
-        return {
-            "connected": True,
-            "resolve_version": str(resolve.GetVersionString()),
-            "project": str(project.GetName()) if project is not None else None,
-            "timeline": str(timeline.GetName()) if timeline is not None else None,
-            "fps": _fps(project, timeline),
-        }
-    except Exception:  # noqa: BLE001 - context is decoration, never the failure itself
-        log.debug("Could not read Resolve context", exc_info=True)
-        return dict(DISCONNECTED)
+    except Exception:  # noqa: BLE001
+        log.debug("Could not read the current project or timeline", exc_info=True)
+        return reading
+
+    reading["project"] = _read(project.GetName) if project is not None else None
+    reading["timeline"] = _read(timeline.GetName) if timeline is not None else None
+    reading["fps"] = _fps(project, timeline)
+    return reading
+
+
+def _read(getter: Any) -> str | None:
+    try:
+        value = getter()
+    except Exception:  # noqa: BLE001 - one unreadable field is not a lost session
+        log.debug("Could not read %s", getattr(getter, "__name__", getter), exc_info=True)
+        return None
+    return None if value is None else str(value)
 
 
 def product_name(connection: ResolveConnection) -> str | None:
@@ -84,6 +104,10 @@ def snapshot_project(
     """Export the open project to an opaque ``.drp`` backup. Returns (path, project name).
 
     Opaque by design: the snapshot is a restore point, not something to read or edit.
+
+    The project is saved first: ``ExportProject`` serialises what is in the database, so
+    without a save the restore point silently omits everything done in this session —
+    which is exactly the work a snapshot is being taken to protect.
     """
     config = config or get_config()
     manager = connection.handle().GetProjectManager()
@@ -92,6 +116,8 @@ def snapshot_project(
         raise NoProjectOpenError(cause="No project is open, so there is nothing to snapshot.")
 
     name = str(project.GetName())
+    if not manager.SaveProject():
+        log.warning("SaveProject() returned false before snapshotting %s", name)
     target = Path(path) if path is not None else config.snapshot_dir / _snapshot_filename(name)
     if target.suffix.lower() != ".drp":
         target = target.with_suffix(".drp")

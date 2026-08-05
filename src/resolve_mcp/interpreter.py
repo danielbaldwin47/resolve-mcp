@@ -22,17 +22,17 @@ import sys
 from collections.abc import Iterable
 from pathlib import Path
 
-from .config import Config, get_config
+from .config import BYPASS_ENV, Config, get_config
 from .errors import UnsupportedInterpreterError
 from .logging_config import get_logger
 
 log = get_logger("interpreter")
 
-BYPASS_ENV = "RESOLVE_MCP_ALLOW_ANY_PYTHON"
 FIX = (
     "Run this server on a python.org (or otherwise PEP 514-registered) CPython install "
-    "rather than a uv-managed standalone build: install Python 3.11 x64 from python.org, "
-    "then recreate the venv against it (uv venv --python <path-to-python.exe>). "
+    "rather than a uv-managed standalone build: install CPython 3.11 or 3.12 x64 from "
+    "python.org, then recreate the venv against it "
+    "(uv venv --python <path-to-python.exe>). "
     f"Set {BYPASS_ENV}=1 to bypass this check."
 )
 

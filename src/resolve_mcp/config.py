@@ -19,6 +19,7 @@ CACHE_DIR_NAME = "resolve-mcp"
 
 
 TRUTHY = {"1", "true", "yes", "on"}
+BYPASS_ENV = "RESOLVE_MCP_ALLOW_ANY_PYTHON"
 
 
 @dataclass(frozen=True)
@@ -41,7 +42,7 @@ class Config:
             script_lib=Path(env.get("RESOLVE_SCRIPT_LIB") or DEFAULT_SCRIPT_LIB),
             cache_dir=Path(env.get("RESOLVE_MCP_CACHE") or local_app_data / CACHE_DIR_NAME),
             log_level=env.get("RESOLVE_MCP_LOG_LEVEL") or DEFAULT_LOG_LEVEL,
-            allow_any_python=(env.get("RESOLVE_MCP_ALLOW_ANY_PYTHON") or "").lower() in TRUTHY,
+            allow_any_python=(env.get(BYPASS_ENV) or "").lower() in TRUTHY,
         )
 
     @property

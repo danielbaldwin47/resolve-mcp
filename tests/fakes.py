@@ -57,20 +57,27 @@ class FakeProjectManager:
         self._owner = owner
         self.exports: list[tuple[str, str, bool]] = []
         self.export_result = True
+        self.save_result = True
+        self.calls: list[str] = []
 
-    def _check(self) -> None:
+    def _check(self, method: str) -> None:
+        self.calls.append(method)
         self._owner._check()
 
     def GetProjectListInCurrentFolder(self) -> list[str]:  # noqa: N802
-        self._check()
+        self._check("GetProjectListInCurrentFolder")
         return list(self._owner.projects)
 
     def GetCurrentProject(self) -> FakeProject | None:  # noqa: N802
-        self._check()
+        self._check("GetCurrentProject")
         return self._owner.current_project
 
+    def SaveProject(self) -> bool:  # noqa: N802
+        self._check("SaveProject")
+        return self.save_result
+
     def LoadProject(self, name: str) -> FakeProject | None:  # noqa: N802
-        self._check()
+        self._check("LoadProject")
         if name not in self._owner.projects:
             return None
         self._owner.current_project = self._owner.projects[name]
@@ -82,7 +89,7 @@ class FakeProjectManager:
         file_path: str,
         with_stills_and_luts: bool = False,
     ) -> bool:
-        self._check()
+        self._check("ExportProject")
         self.exports.append((project_name, file_path, with_stills_and_luts))
         if self.export_result:
             Path(file_path).write_bytes(b"fake-drp")
@@ -103,13 +110,28 @@ class FakeResolve:
         self.version = version or [21, 0, 3, 15, ""]
         self.alive = True
         self.probe_count = 0
+        self.fail_version_string = False
+        self._calls_left: int | None = None
         self._project_manager = FakeProjectManager(self)
 
     def drop(self) -> None:
         """Simulate Resolve quitting: every call through this handle now fails."""
         self.alive = False
 
+    def die_after(self, calls: int) -> None:
+        """Survive ``calls`` more calls, then die — Resolve quitting mid-operation.
+
+        With ``calls=1`` the handle passes the connection's probe and dies on the very
+        next call, which is the case a probe alone cannot catch.
+        """
+        self._calls_left = calls
+
     def _check(self) -> None:
+        if self._calls_left is not None:
+            if self._calls_left <= 0:
+                self.alive = False
+            else:
+                self._calls_left -= 1
         if not self.alive:
             raise DroppedHandleError("The object is no longer valid")
 
@@ -120,6 +142,8 @@ class FakeResolve:
 
     def GetVersionString(self) -> str:  # noqa: N802
         self._check()
+        if self.fail_version_string:
+            raise RuntimeError("version string unavailable")
         return ".".join(str(part) for part in self.version[:3])
 
     def GetProductName(self) -> str:  # noqa: N802

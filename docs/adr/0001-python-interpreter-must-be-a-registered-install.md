@@ -36,8 +36,9 @@ under all three; only the extension-module initialisation crashes.
 2. **The interpreter is checked before the scripting library is loaded.**
    `resolve_mcp.interpreter.ensure_supported` compares `sys.base_prefix` against the
    `SOFTWARE\Python\PythonCore\*\InstallPath` entries in HKCU and HKLM, and raises a
-   structured `unsupported_interpreter` error if there is no match. The check is cheap,
-   runs once per attach, and is the only way to turn a fatal crash into an error message.
+   structured `unsupported_interpreter` error if there is no match. It runs once per
+   process, immediately before the scripting library is imported (which also happens
+   once), and is the only way to turn a fatal crash into an error message.
    `RESOLVE_MCP_ALLOW_ANY_PYTHON=1` bypasses it for anyone retesting the finding.
 3. **`requires-python` is widened to `>=3.11,<3.13`.** 3.11 remains the target — #11
    chose it as the safe overlap for the P3 analysis stack (torch-CUDA, beat_this,

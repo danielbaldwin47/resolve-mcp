@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from resolve_mcp.config import Config, set_config
 from resolve_mcp.tools.project import (
     get_status,
@@ -158,6 +160,85 @@ def test_tools_survive_a_dropped_handle_with_one_reconnect(attach: Attach) -> No
 
     assert result["ok"] is True
     assert result["context"]["project"] == "sunset-set"
+
+
+def test_a_handle_that_dies_mid_call_still_costs_only_one_retry(attach: Attach) -> None:
+    dying = studio(project="sunset-set")
+    dying.die_after(1)  # passes the connection's probe, dies on the very next call
+    connector = attach(dying, studio(project="sunset-set"))
+
+    result = list_projects()
+
+    assert result["ok"] is True
+    assert "sunset-set" in result["projects"]
+    assert connector.attempts == 2
+
+
+def test_a_mid_call_death_is_reported_as_resolve_being_gone_not_as_a_bug(
+    attach: Attach,
+) -> None:
+    dying = studio(project="sunset-set")
+    dying.die_after(1)
+    attach(dying, None)
+
+    result = list_projects()
+
+    assert result["ok"] is False
+    assert result["error"]["code"] == "resolve_unavailable"
+    assert result["error"]["fix"]
+
+
+def test_a_bug_on_a_live_handle_is_not_retried(
+    attach: Attach, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    attach(studio(project="sunset-set"))
+    calls = []
+
+    def boom(_connection: object) -> list[str]:
+        calls.append(1)
+        raise ValueError("a genuine bug")
+
+    monkeypatch.setattr("resolve_mcp.resolve.session.list_projects", boom)
+
+    result = list_projects()
+
+    assert result["ok"] is False
+    assert result["error"]["code"] == "internal_error"
+    assert len(calls) == 1
+
+
+def test_context_survives_a_field_it_cannot_read(attach: Attach) -> None:
+    fake = studio(project="sunset-set", timeline="sunset-set v3")
+    attach(fake)
+    fake.fail_version_string = True
+
+    context = get_status()["context"]
+
+    assert context["connected"] is True
+    assert context["resolve_version"] is None
+    assert context["project"] == "sunset-set"
+    assert context["timeline"] == "sunset-set v3"
+
+
+def test_snapshot_saves_before_it_exports(attach: Attach) -> None:
+    fake = studio(project="sunset-set")
+    attach(fake)
+
+    assert snapshot_project()["ok"] is True
+
+    calls = fake.GetProjectManager().calls
+    assert calls.index("SaveProject") < calls.index("ExportProject")
+
+
+def test_a_refused_save_does_not_block_the_snapshot(attach: Attach) -> None:
+    fake = studio(project="sunset-set")
+    attach(fake)
+    fake.GetProjectManager().save_result = False
+
+    result = snapshot_project()
+
+    assert result["ok"] is True
+    assert Path(result["snapshot"]).exists()
 
 
 def test_tools_report_cause_and_fix_when_resolve_stays_down(attach: Attach) -> None:

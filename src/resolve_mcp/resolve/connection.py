@@ -43,6 +43,15 @@ class ResolveConnection:
         with self._lock:
             self._handle = None
 
+    def dropped(self) -> bool:
+        """Whether the handle we handed out has died since.
+
+        Asked after a call fails: it separates "Resolve went away mid-operation", which
+        is worth one retry, from a genuine bug, which is not.
+        """
+        with self._lock:
+            return self._handle is not None and not self._probe(self._handle)
+
     def handle(self) -> Any:
         """Return a live Resolve handle, reconnecting once if the held one has died."""
         with self._lock:

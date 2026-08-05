@@ -6,7 +6,7 @@ from typing import Any
 
 from ..resolve import session
 from ..resolve.connection import get_connection
-from .envelope import Envelope, tool
+from .envelope import tool
 
 
 @tool
@@ -57,4 +57,4 @@ def snapshot_project(path: str | None = None) -> dict[str, Any]:
 
 TOOLS: tuple[Any, ...] = (get_status, list_projects, open_project, snapshot_project)
 
-__all__ = ["Envelope", "TOOLS", "get_status", "list_projects", "open_project", "snapshot_project"]
+__all__ = ["TOOLS", "get_status", "list_projects", "open_project", "snapshot_project"]
