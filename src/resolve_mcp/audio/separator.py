@@ -1,0 +1,184 @@
+"""Running python-audio-separator, without loading it into this process.
+
+It brings torch and a CUDA runtime with it. Importing that here would cost seconds of
+startup on every attach, hold GPU memory for a whole session, and put a model load between
+the agent and a Resolve call — so it runs as a subprocess through the CLI it ships, and the
+server never imports it at all. That also keeps it out of ``pyproject.toml``: the models
+live in whatever environment the director installed them into, and a machine with no GPU
+runs every test in this repo.
+
+The shape is the one ``ffmpeg`` already uses: the subprocess call is a parameter
+(``runner``), so command construction, progress parsing, the missing-binary case and every
+refusal are testable with no models and no GPU present.
+
+Two things here are decisions rather than plumbing:
+
+* **Output is read line by line, not collected at the end.** A concert pass runs for
+  minutes and the percentages it prints are the only progress that exists; waiting for the
+  process to exit would make the job silent for the whole run.
+
+* **Stems are matched by the label the separator parenthesises, not by predicting
+  filenames.** It writes ``<input>_(Drums)_<model>.wav``, and the input to the second pass
+  is already a labelled file — so the *last* parenthesised label is this file's own stem.
+  Reading the label back is what makes a model that renames its outputs a clear failure
+  ("produced no toms stem") instead of a silently missing file.
+"""
+
+from __future__ import annotations
+
+import re
+import subprocess
+from collections import deque
+from collections.abc import Callable, Iterable, Sequence
+from pathlib import Path
+from typing import NamedTuple
+
+from ..config import Config, get_config
+from ..errors import SeparatorUnavailableError, StemSeparationError
+from ..logging_config import get_logger
+
+log = get_logger("audio")
+
+OUTPUT_FORMAT = "WAV"
+OUTPUT_TAIL = 40
+"""Lines of the separator's own output kept for a failure message."""
+
+LABEL = re.compile(r"\(([^()]+)\)")
+PERCENT = re.compile(r"(\d{1,3})\s*%")
+FULL = 100.0
+
+
+class Completed(NamedTuple):
+    """What the runner reports back once the separator has exited."""
+
+    returncode: int
+    output: str
+
+
+Lines = Callable[[str], None]
+Runner = Callable[[Sequence[str], Lines], Completed]
+Fraction = Callable[[float], None]
+
+
+def command(executable: str, model: str, source: Path | str, out_dir: Path | str) -> list[str]:
+    """The audio-separator invocation, as a list — never a shell string."""
+    return [
+        executable,
+        str(source),
+        "--model_filename",
+        model,
+        "--output_dir",
+        str(out_dir),
+        "--output_format",
+        OUTPUT_FORMAT,
+    ]
+
+
+def label_of(path: Path | str) -> str | None:
+    """The stem this file holds, read off the label the separator wrote into its name."""
+    found = LABEL.findall(Path(path).stem)
+    return found[-1].strip().lower() if found else None
+
+
+def collect(out_dir: Path | str) -> dict[str, Path]:
+    """Every labelled stem in a directory, keyed by its label."""
+    found: dict[str, Path] = {}
+    for one in sorted(Path(out_dir).glob("*.wav")):
+        label = label_of(one)
+        if label is not None:
+            found[label] = one
+    return found
+
+
+def separate(
+    source: Path | str,
+    out_dir: Path | str,
+    model: str,
+    wanted: Sequence[str],
+    progress: Fraction | None = None,
+    runner: Runner | None = None,
+    config: Config | None = None,
+) -> dict[str, Path]:
+    """Run one pass, and return the stems it wrote — or fail naming what it left out."""
+    config = config or get_config()
+    destination = Path(out_dir)
+    destination.mkdir(parents=True, exist_ok=True)
+    argv = command(config.audio_separator, model, source, destination)
+    tail: deque[str] = deque(maxlen=OUTPUT_TAIL)
+
+    def on_line(line: str) -> None:
+        text = line.strip()
+        if not text:
+            return
+        tail.append(text)
+        fraction = _percent(text)
+        if fraction is not None and progress is not None:
+            progress(fraction)
+
+    log.info("Separating %s with %s", Path(source).name, model)
+    try:
+        finished = (runner or _run)(argv, on_line)
+    except FileNotFoundError as exc:
+        raise SeparatorUnavailableError(
+            cause=f"No audio-separator at {config.audio_separator!r}.",
+            detail={"executable": config.audio_separator, "model": model},
+        ) from exc
+
+    output = "\n".join(tail) or finished.output
+    if finished.returncode != 0:
+        raise StemSeparationError(
+            cause=(
+                f"audio-separator refused {Path(source).name} with {model} "
+                f"(exit {finished.returncode})."
+            ),
+            detail={"model": model, "exit_code": finished.returncode, "output": output},
+        )
+
+    produced = collect(destination)
+    missing = [one for one in wanted if one not in produced]
+    if missing:
+        raise StemSeparationError(
+            cause=f"{model} produced no {', '.join(missing)} stem.",
+            detail={
+                "model": model,
+                "expected": list(wanted),
+                "produced": sorted(produced),
+                "output": output,
+            },
+        )
+    log.info("%s produced %s", model, ", ".join(sorted(produced)))
+    return produced
+
+
+def missing_from(out_dir: Path | str, wanted: Iterable[str]) -> list[str]:
+    """Which of these stems are not already sitting in this directory."""
+    produced = collect(out_dir)
+    return [one for one in wanted if one not in produced]
+
+
+def _percent(line: str) -> float | None:
+    """The progress bar's own percentage, as a fraction — ``None`` for any other line."""
+    found = PERCENT.search(line)
+    if found is None:
+        return None
+    return min(int(found.group(1)) / FULL, 1.0)
+
+
+def _run(argv: Sequence[str], on_line: Lines) -> Completed:
+    """The real call: stderr folded into stdout, read as it arrives.
+
+    Universal newlines makes the progress bar's carriage returns line breaks, which is the
+    only reason a tqdm bar can be followed line by line at all.
+    """
+    with subprocess.Popen(
+        argv,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    ) as process:
+        if process.stdout is not None:
+            for line in process.stdout:
+                on_line(line)
+        returncode = process.wait()
+    return Completed(returncode, "")

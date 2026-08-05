@@ -17,6 +17,9 @@ DEFAULT_SCRIPT_LIB = Path("C:/Program Files/Blackmagic Design/DaVinci Resolve/fu
 DEFAULT_LOG_LEVEL = "INFO"
 CACHE_DIR_NAME = "resolve-mcp"
 DEFAULT_FFMPEG = "ffmpeg"
+DEFAULT_AUDIO_SEPARATOR = "audio-separator"
+DEFAULT_STEM_MODEL = "htdemucs_ft.yaml"
+DEFAULT_DRUM_MODEL = "MDX23C-DrumSep-6stem-FT.ckpt"
 
 
 TRUTHY = {"1", "true", "yes", "on"}
@@ -31,6 +34,9 @@ class Config:
     log_level: str
     allow_any_python: bool = False
     ffmpeg: str = DEFAULT_FFMPEG
+    audio_separator: str = DEFAULT_AUDIO_SEPARATOR
+    stem_model: str = DEFAULT_STEM_MODEL
+    drum_model: str = DEFAULT_DRUM_MODEL
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Config:
@@ -46,6 +52,9 @@ class Config:
             log_level=env.get("RESOLVE_MCP_LOG_LEVEL") or DEFAULT_LOG_LEVEL,
             allow_any_python=(env.get(BYPASS_ENV) or "").lower() in TRUTHY,
             ffmpeg=env.get("RESOLVE_MCP_FFMPEG") or DEFAULT_FFMPEG,
+            audio_separator=env.get("RESOLVE_MCP_AUDIO_SEPARATOR") or DEFAULT_AUDIO_SEPARATOR,
+            stem_model=env.get("RESOLVE_MCP_STEM_MODEL") or DEFAULT_STEM_MODEL,
+            drum_model=env.get("RESOLVE_MCP_DRUM_MODEL") or DEFAULT_DRUM_MODEL,
         )
 
     @property
@@ -77,6 +86,11 @@ class Config:
     def audio_dir(self) -> Path:
         """Acquired WAVs. Analysis workers key off the content hash of what lands here."""
         return self.cache_dir / "audio"
+
+    @property
+    def stems_dir(self) -> Path:
+        """Separated stems, one directory per content hash + params, two passes inside it."""
+        return self.cache_dir / "stems"
 
     @property
     def interchange_dir(self) -> Path:

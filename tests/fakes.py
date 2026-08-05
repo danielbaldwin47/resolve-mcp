@@ -14,7 +14,7 @@ from __future__ import annotations
 import contextlib
 import math
 import wave
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -1322,6 +1322,48 @@ class FakeConnector:
         if not self._handles:
             return None
         return self._handles.pop(0)
+
+
+class FakeSeparator:
+    """Stand in for the audio-separator CLI, one pass per call.
+
+    It writes real WAVs under the naming convention the real thing uses —
+    ``<input>_(Label)_<model>.wav`` — because the stems are matched by reading that label
+    back, so a fake that wrote arbitrary names would prove nothing about the mapping. Each
+    positional argument is one pass's labels; the last one repeats if it is called again.
+    """
+
+    def __init__(
+        self,
+        *passes: Sequence[str],
+        returncode: int = 0,
+        output: Sequence[str] = (),
+    ) -> None:
+        self.passes = [tuple(one) for one in passes]
+        self.returncode = returncode
+        self.output = tuple(output)
+        self.calls: list[list[str]] = []
+
+    def __call__(self, argv: Sequence[str], on_line: Callable[[str], None]) -> Any:
+        from resolve_mcp.audio.separator import Completed
+
+        self.calls.append(list(argv))
+        for line in self.output:
+            on_line(line)
+        if self.returncode == 0:
+            for label in self._labels():
+                write_wav(self._target(argv, label), seconds=0.2)
+        return Completed(self.returncode, "\n".join(self.output))
+
+    def _labels(self) -> tuple[str, ...]:
+        if not self.passes:
+            return ()
+        return self.passes[min(len(self.calls) - 1, len(self.passes) - 1)]
+
+    def _target(self, argv: Sequence[str], label: str) -> Path:
+        out_dir = Path(argv[list(argv).index("--output_dir") + 1])
+        model = Path(argv[list(argv).index("--model_filename") + 1]).stem
+        return out_dir / f"{Path(argv[1]).stem}_({label.title()})_{model}.wav"
 
 
 def write_wav(

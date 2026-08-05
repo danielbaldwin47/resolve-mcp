@@ -151,6 +151,18 @@ def _work(record: JobRecord, work: Work, config: Config) -> None:
     store.finish(record, result=output.result, config=config)
 
 
+def alive(job_id: str) -> bool:
+    """Whether a worker thread for this job is still running in this process.
+
+    A job that a chained job is following can only be finished by that thread. If the
+    thread is gone while the record still says running, nothing will ever close it, and a
+    follower that kept polling would wait forever.
+    """
+    with _threads_lock:
+        thread = _threads.get(job_id)
+    return thread is not None and thread.is_alive()
+
+
 def wait_for(job_id: str, timeout: float = WAIT_TIMEOUT, config: Config | None = None) -> JobRecord:
     """Block until the job is off the thread pool — for chained work, and for tests.
 

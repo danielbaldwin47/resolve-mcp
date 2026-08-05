@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,9 @@ from typing import Any
 import pytest
 
 from resolve_mcp.audio.acquire import acquire_timeline_audio
+from resolve_mcp.audio.stems import DRUM_STEMS, FOUR_STEMS, two_pass
+from resolve_mcp.config import get_config
+from resolve_mcp.jobs import cache
 from resolve_mcp.jobs.runner import wait_for
 from resolve_mcp.resolve.connection import get_connection
 from resolve_mcp.tools.cut import build_timeline, validate_cut
@@ -44,6 +48,7 @@ from resolve_mcp.tools.timeline import (
 )
 
 from . import otio
+from .fakes import write_wav
 from .text_plus_probe import TEMPLATE_ENV, probe_template_append
 
 pytestmark = pytest.mark.live
@@ -508,6 +513,31 @@ def test_the_render_queue_exports_the_real_timeline_mix() -> None:
 
     again = acquire_timeline_audio(get_connection())
     assert again["cached"] is True, "an unchanged timeline must be a cache hit"
+
+
+@pytest.mark.skipif(shutil.which("audio-separator") is None, reason="audio-separator not on PATH")
+def test_the_real_separator_produces_the_stems_the_two_passes_expect() -> None:
+    """The AC no seam can check: that these models exist and label their output that way.
+
+    The fakes prove the two commands, the progress mapping, the caching and every refusal.
+    What they cannot prove is that ``htdemucs_ft.yaml`` and the DrumSep checkpoint are
+    names audio-separator resolves, that the drum model yields kick/snare/toms at all, or
+    that the real CLI writes ``<input>_(Label)_<model>.wav`` — the naming the stem mapping
+    reads back. Slow: the first run downloads both models.
+    """
+    fixture = write_wav(Path(get_config().cache_dir) / "live" / "separator-probe.wav", seconds=4.0)
+    audio = {
+        "path": str(fixture),
+        "content_sha256": cache.content_hash(fixture),
+        "scope": "live",
+    }
+
+    output = two_pass(audio, {"scope": "live"}, lambda fraction, step: None)
+
+    assert set(output.result["stems"]) >= set(FOUR_STEMS)
+    assert set(output.result["drums"]) >= set(DRUM_STEMS)
+    assert all(Path(one).stat().st_size > 0 for one in output.result["stems"].values())
+    assert all(Path(one).stat().st_size > 0 for one in output.result["drums"].values())
 
 
 def test_snapshot_writes_a_real_drp(tmp_path: Path) -> None:
