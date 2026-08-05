@@ -203,7 +203,7 @@ def test_a_cut_without_audio_builds_video_alone(attach: Attach, tmp_path: Path) 
     result = build_timeline(a_cut(tmp_path, doc))
 
     assert result["ok"] is True
-    assert result["placed"] == {"segments": 3, "audio": False}
+    assert result["placed"] == {"segments": 3, "overlays": 0, "audio": False}
     assert placements(built(resolve, "sunset-set v1"), "audio") == []
 
 
@@ -229,7 +229,7 @@ def test_the_built_timeline_reports_its_own_span(attach: Attach, tmp_path: Path)
 
     assert result["timeline"]["duration"]["frames"] == TOTAL_FRAMES
     assert result["timeline"]["fps"] == 59.94
-    assert result["placed"] == {"segments": 3, "audio": True}
+    assert result["placed"] == {"segments": 3, "overlays": 0, "audio": True}
 
 
 def test_the_build_opens_the_timeline_it_made(attach: Attach, tmp_path: Path) -> None:
@@ -350,30 +350,6 @@ def test_warnings_are_reported_and_do_not_block(attach: Attach, tmp_path: Path) 
     assert [finding["rule"] for finding in result["warnings"]] == ["W1"]
 
 
-def test_overlays_are_refused_rather_than_silently_dropped(
-    attach: Attach, tmp_path: Path
-) -> None:
-    """Anchored overlays are a later tool; building the V1 alone would be a half-built cut."""
-    doc = valid_doc()
-    doc["overlays"] = [
-        {
-            "id": "b01",
-            "source": "keys_wide",
-            "in": 4000,
-            "out": 4020,
-            "over": {"segment": "s001", "offset": 10},
-        }
-    ]
-    pool = a_pool()
-    attach(empty_project(pool))
-
-    result = build_timeline(a_cut(tmp_path, doc))
-
-    assert result["ok"] is False
-    assert result["error"]["code"] == "unsupported_cut_feature"
-    assert "CreateEmptyTimeline" not in pool.calls
-
-
 def test_no_project_open_fails_before_anything_else(attach: Attach, tmp_path: Path) -> None:
     attach(studio(project=None))
 
@@ -381,6 +357,169 @@ def test_no_project_open_fails_before_anything_else(attach: Attach, tmp_path: Pa
 
     assert result["ok"] is False
     assert result["error"]["code"] == "no_project_open"
+
+
+# --- anchored overlays --------------------------------------------------------------------
+
+
+def with_overlay(**overrides: Any) -> dict[str, Any]:
+    """:func:`valid_doc` plus one b-roll overlay anchored 10 frames into ``s002``.
+
+    ``s002`` starts at frame 100 of the V1, so the overlay belongs at 110 — a number
+    nothing in the cut file states, which is the point of anchoring.
+    """
+    doc = valid_doc(
+        overlays=[
+            {
+                "id": "b01",
+                "source": "gtr_close",
+                "in": 3000,
+                "out": 3030,
+                "over": {"segment": "s002", "offset": 10},
+            }
+        ]
+    )
+    doc.update(overrides)
+    return doc
+
+
+def test_an_overlay_lands_on_v2_at_its_anchor_plus_offset(
+    attach: Attach, tmp_path: Path
+) -> None:
+    resolve = empty_project(a_pool())
+    attach(resolve)
+
+    result = build_timeline(a_cut(tmp_path, with_overlay()))
+
+    assert result["ok"] is True
+    assert placements(built(resolve, "sunset-set v1"), "video", 2) == [("C0012.mp4", 110, 30)]
+
+
+def test_an_overlay_takes_the_source_frames_the_cut_named(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """``mediaType`` travels with ``trackIndex``, or Resolve drops the clip (#18 (d))."""
+    pool = a_pool()
+    attach(empty_project(pool))
+
+    build_timeline(a_cut(tmp_path, with_overlay()))
+
+    overlay = next(append for append in pool.appends if append["trackIndex"] == 2)
+    assert (overlay["startFrame"], overlay["endFrame"]) == (3000, 3030)
+    assert (overlay["mediaType"], overlay["recordFrame"]) == (1, 110)
+
+
+def test_the_v1_under_an_overlay_is_laid_out_as_if_it_were_not_there(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Overlays ride above the cut; they never displace the segments they cover."""
+    resolve = empty_project(a_pool())
+    attach(resolve)
+
+    build_timeline(a_cut(tmp_path, with_overlay()))
+
+    assert placements(built(resolve, "sunset-set v1")) == [
+        ("C0012.mp4", 0, 100),
+        ("C0031.mp4", 100, 80),
+        ("C0012.mp4", 180, 60),
+    ]
+
+
+def test_tightening_an_earlier_segment_keeps_the_overlay_over_the_same_content(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The reason anchors exist: a re-time upstream moves the overlay with its anchor.
+
+    ``s001`` loses 40 frames, so everything after it slides 40 earlier — and the overlay
+    stays exactly 10 frames into ``s002``, covering the same frames of the same clip.
+    """
+    resolve = empty_project(a_pool())
+    attach(resolve)
+    build_timeline(a_cut(tmp_path, with_overlay()))
+
+    tightened = with_overlay()
+    tightened["segments"][0]["out"] = 1060
+    tightened["audio"]["out"] = 200
+    build_timeline(a_cut(tmp_path, tightened))
+
+    before, after = (built(resolve, name) for name in ("sunset-set v1", "sunset-set v2"))
+    assert placements(after, "video", 2) == [("C0012.mp4", 70, 30)]
+    # Same clip, same source frames, same 10-frame offset into the same anchor segment.
+    anchor_before, anchor_after = placements(before)[1], placements(after)[1]
+    assert placements(before, "video", 2)[0][1] - anchor_before[1] == 10
+    assert placements(after, "video", 2)[0][1] - anchor_after[1] == 10
+
+
+def test_the_report_counts_the_overlays_apart_from_the_segments(
+    attach: Attach, tmp_path: Path
+) -> None:
+    attach(empty_project(a_pool()))
+
+    result = build_timeline(a_cut(tmp_path, with_overlay()))
+
+    assert result["placed"] == {"segments": 3, "overlays": 1, "audio": True}
+
+
+def test_a_cut_without_overlays_builds_no_second_video_track(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """V2 is the overlays' track; a cut that has none must not grow one."""
+    resolve = empty_project(a_pool())
+    attach(resolve)
+
+    result = build_timeline(a_cut(tmp_path, valid_doc()))
+
+    assert result["placed"] == {"segments": 3, "overlays": 0, "audio": True}
+    assert built(resolve, "sunset-set v1").GetTrackCount("video") == 1
+
+
+def test_the_overlay_track_is_created_when_the_new_timeline_has_none(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """An append onto a track index past the next free one is dropped silently (#18 (d))."""
+    pool = a_pool()
+    pool.new_timeline_tracks = (0, 0)
+    resolve = empty_project(pool)
+    attach(resolve)
+
+    result = build_timeline(a_cut(tmp_path, with_overlay()))
+
+    assert result["ok"] is True
+    assert len(placements(built(resolve, "sunset-set v1"))) == 3
+    assert placements(built(resolve, "sunset-set v1"), "video", 2) == [("C0012.mp4", 110, 30)]
+
+
+def test_a_locked_overlay_track_is_reported_before_anything_is_appended(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """V2 is as lockable as V1, and a locked track swallows the append reporting success."""
+    pool = a_pool()
+    pool.new_timeline_tracks = (2, 1)
+    pool.new_timeline_locked = True
+    attach(empty_project(pool))
+
+    result = build_timeline(a_cut(tmp_path, with_overlay()))
+
+    assert result["ok"] is False
+    assert result["error"]["code"] == "build_failed"
+    assert [f["id"] for f in result["error"]["detail"]["errors"]] == ["V1", "V2", "A1"]
+    assert "AppendToTimeline" not in pool.calls
+
+
+def test_an_overlay_that_never_landed_fails_the_build(attach: Attach, tmp_path: Path) -> None:
+    """V2 is read back like every other track: the append's word is not evidence."""
+    pool = a_pool()
+    pool.appends_land_nowhere = True
+    attach(empty_project(pool))
+
+    result = build_timeline(a_cut(tmp_path, with_overlay()))
+
+    assert result["ok"] is False
+    assert result["error"]["code"] == "build_failed"
+    reported = result["error"]["detail"]["misplaced"]
+    misplaced = {finding["id"]: finding["track"] for finding in reported}
+    assert misplaced["b01"] == "V2"
+    assert misplaced["s001"] == "V1"
 
 
 # --- the footguns -------------------------------------------------------------------------
