@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..cut.validate import DEFAULT_MIN_SEGMENT_FRAMES
 from ..resolve import cut
 from ..resolve.connection import get_connection
 from .envelope import tool
@@ -28,7 +27,7 @@ def get_cut_schema() -> dict[str, Any]:
 @tool
 def validate_cut(
     cut_file: str,
-    min_segment_frames: int = DEFAULT_MIN_SEGMENT_FRAMES,
+    min_segment_frames: int = cut.MIN_SEGMENT_FRAMES,
 ) -> dict[str, Any]:
     """Dry-run a cut file and return every error and warning it has, with fix hints.
 

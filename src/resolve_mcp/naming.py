@@ -31,14 +31,14 @@ def timestamped_name(
     return f"{slug}-{stamp}{suffix}"
 
 
-def version_pattern(base: str) -> re.Pattern[str]:
+def _version_pattern(base: str) -> re.Pattern[str]:
     """Matches exactly ``<base> v<N>`` — a name that merely starts with the base is not one."""
     return re.compile(rf"^{re.escape(base)} v(\d+)$")
 
 
 def version_number(base: str, name: str) -> int | None:
     """The version ``name`` carries for ``base``, or ``None`` if it is not a version of it."""
-    found = version_pattern(base).match(name)
+    found = _version_pattern(base).match(name)
     return int(found.group(1)) if found else None
 
 

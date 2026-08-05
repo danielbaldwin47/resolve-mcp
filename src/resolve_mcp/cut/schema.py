@@ -62,56 +62,64 @@ ANNOTATED_EXAMPLE: Final = """\
 _PLACEMENT: Final = """\
 ## 1. Placement model: sequential V1, positioned overlays
 
-V1 segments are butt-joined in array order; record positions are computed at
-build. Gaps and flash-frame positions are unrepresentable rather than checked,
-and duration edits never require downstream position fixes. Only overlays carry
-position — anchored, not absolute (§4)."""
+V1 segments are butt-joined in array order; record positions computed at build.
+Gaps/flash-frame positions unrepresentable rather than checked; sidesteps the
+unclamped-recordFrame footgun; duration edits never require downstream position
+fixes. Only overlays carry position — anchored, not absolute (§4)."""
 
 _TAKES: Final = """\
 ## 3. Takes
 
-- Selector = [main, alternates in order]; the selected take is main. The main
-  slot *is* the current selection, always.
-- Every alternate's duration must equal main's — in-place `swap_take` cannot
-  ripple a sequential timeline. An unequal-length take choice is a main-segment
-  edit plus a rebuild.
-- Swap sync: after `swap_take`, you edit the cut file — alternate promoted to
-  main, main demoted. The server never writes your cut file."""
+- Selector = [main, alternates in order]; selected take = main. The main slot
+  *is* the current selection, always.
+- Every alternate's duration must equal main's — in-place `swap_take` can't
+  ripple a sequential timeline; an unequal-length take choice is a main-segment
+  edit + rebuild. Also dodges untested Resolve behavior on mismatched selector
+  lengths.
+- Swap sync: after `swap_take`, Claude edits the file — alternate promoted to
+  main, main demoted. The server never writes the cut file."""
 
 _OVERLAYS: Final = """\
 ## 4. Overlays
 
 Anchored to `{segment, offset}`, never absolute timeline frames — they ride with
 the content they cover through tightening passes; build computes absolute
-position = the anchor segment's computed start + offset. An overlay may run past
-its anchor's end (seam coverage) but must land inside the total V1 span. Video
-only: audio always omitted, no alternates, V2."""
+position = segment's computed start + offset. May run past the anchor's end
+(seam coverage), must land inside the total V1 span. Video only, audio always
+omitted, no alternates, V2."""
 
 _TITLES: Final = """\
 ## 5. Titles: not in the cut file
 
-`apply_titles` and `titles.json` own the Titles track. `build_timeline` never
-touches it; after a rebuild, re-run `apply_titles` on the new version. The cut
-file plus titles.json together fully describe a deliverable."""
+`apply_titles` + `titles.json` own the Titles track. `build_timeline` never
+touches it; after a rebuild, re-run `apply_titles` on the new version. Cut JSON
++ titles.json together fully describe a deliverable."""
 
 _VERSIONING: Final = """\
-## 6. Versioning and naming
+## 6. Versioning/naming
 
-- Timelines materialize as `<name> v<N>`; build scans `^<name> v(\\d+)$` and
-  takes max + 1. One version per review round.
-- The cut file is one evolving `<name>.cut.json` beside songs.json, titles.json
-  and sidecars — no per-version copies; history is versioned timelines + git.
-- The build report echoes the cut file's BLAKE2b hash and the resulting version
-  name, so every timeline is traceable to the exact cut state that built it and
-  `swap_take` drift is detectable."""
+- Timelines materialize as `<name> v<N>`; build scans `^<name> v(\\d+)$`, takes
+  max+1. One version per review round.
+- Cut file: one evolving `<name>.cut.json` beside `songs.json`/`titles.json`/
+  sidecars — no per-version copies; history = versioned timelines + git.
+- Build report echoes the cut-file BLAKE2b hash + resulting version name: every
+  timeline traceable to the exact cut state that built it; `swap_take` drift
+  detectable."""
 
 _TIME: Final = """\
 ## Time
 
-Frames are authoritative; ranges are half-open `[in, out)`, so duration =
-out − in and adjacent takes share a boundary frame without overlap ambiguity.
-Seconds are accepted at the tool boundary with explicit snapping — floor for
-in-points, ceil for out-points."""
+Frames authoritative, half-open `[in, out)` — duration = out − in; adjacent
+takes share a boundary frame without overlap ambiguity. Snapping (floor in,
+ceil out) at the tool boundary."""
+
+_RULES: Final = """\
+## 7. Validation
+
+11 hard errors (E1-E11) block a build; 2 warnings (W1-W2) never do. The list is
+identical in the `validate_cut` dry run and `build_timeline`'s pre-flight, and a
+failing file aborts before Resolve is touched. Every finding is
+`{rule, id, message, fix_hint}` — see the `rules` field of this result."""
 
 SCHEMA_DOC: Final = "\n\n".join(
     [
@@ -123,6 +131,7 @@ SCHEMA_DOC: Final = "\n\n".join(
         _OVERLAYS,
         _TITLES,
         _VERSIONING,
+        _RULES,
     ]
 )
 """The full schema document: prose contract with the annotated example embedded."""

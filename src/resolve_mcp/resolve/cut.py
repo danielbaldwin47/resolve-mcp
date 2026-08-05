@@ -23,6 +23,7 @@ from ..cut.validate import (
     RULE_DESCRIPTIONS,
     ClipFacts,
     Finding,
+    severity_of,
     total_frames,
     validate_project,
     validate_structure,
@@ -37,6 +38,9 @@ log = get_logger("cut")
 Clip = Any
 Pool = Any
 
+MIN_SEGMENT_FRAMES = DEFAULT_MIN_SEGMENT_FRAMES
+"""Re-exported so the tool layer takes its default from the wrapper it calls."""
+
 
 def get_cut_schema() -> dict[str, Any]:
     """The cut-file contract: the schema document, its annotated example, and the rules."""
@@ -47,7 +51,7 @@ def get_cut_schema() -> dict[str, Any]:
         "rules": [
             {
                 "rule": rule,
-                "severity": "warning" if rule.startswith("W") else "error",
+                "severity": severity_of(rule),
                 "description": description,
             }
             for rule, description in RULE_DESCRIPTIONS.items()
@@ -58,7 +62,7 @@ def get_cut_schema() -> dict[str, Any]:
 def validate_cut(
     connection: ResolveConnection,
     cut_file: str,
-    min_segment_frames: int = DEFAULT_MIN_SEGMENT_FRAMES,
+    min_segment_frames: int = MIN_SEGMENT_FRAMES,
 ) -> dict[str, Any]:
     """Dry-run ``cut_file``: every rule, every failure, before anything is built."""
     loaded = read_cut_file(cut_file)
@@ -88,11 +92,17 @@ def clip_facts(connection: ResolveConnection, doc: dict[str, Any]) -> list[ClipF
 
 
 def _facts(bin_path: str, clip: Clip) -> ClipFacts:
+    name = str(clip.GetName() or "")
     reported = media.properties(clip)
     start, out = media.frame_bounds(reported)
     channels = media.audio_channels(reported)
+    if channels is None:
+        # E7's has-audio leg reads an undocumented property key. If Resolve renames it
+        # the rule silently passes everything, and no fake can catch that — so say so
+        # here, where a live session's log is the only place it can be noticed.
+        log.info("No %r property on %s; E7 cannot check for audio", media.AUDIO_CHANNELS, name)
     return ClipFacts(
-        name=str(clip.GetName() or ""),
+        name=name,
         bin_path=bin_path,
         start=start if start is not None else 0,
         end_exclusive=out if out is not None else 0,
@@ -134,4 +144,4 @@ def _summary(doc: dict[str, Any] | None) -> dict[str, Any] | None:
     }
 
 
-__all__ = ["clip_facts", "get_cut_schema", "validate_cut"]
+__all__ = ["MIN_SEGMENT_FRAMES", "clip_facts", "get_cut_schema", "validate_cut"]

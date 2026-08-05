@@ -54,7 +54,7 @@ def a_pool(**overrides: dict[str, str]) -> Any:
     return media_pool({"Angles": [angle], "": [master]})
 
 
-# --- get_cut_schema -------------------------------------------------------------------
+# --- get_cut_schema ---------------------------------------------------------------------
 
 
 def test_the_schema_is_served_with_its_annotated_example_verbatim(attach: Attach) -> None:
@@ -96,7 +96,7 @@ def test_the_schema_serves_without_resolve(attach: Attach) -> None:
     assert result["context"]["connected"] is False
 
 
-# --- validate_cut: the clean case -----------------------------------------------------
+# --- validate_cut: the clean case -------------------------------------------------------
 
 
 def test_a_valid_cut_file_passes_clean(attach: Attach, tmp_path: Path) -> None:
@@ -143,7 +143,7 @@ def test_the_report_echoes_the_hash_of_the_bytes_it_validated(
     assert validate_cut(cut_file)["content_hash"] == first["content_hash"]
 
 
-# --- validate_cut: failures -----------------------------------------------------------
+# --- validate_cut: failures -------------------------------------------------------------
 
 
 def test_a_missing_clip_is_reported_against_its_alias(attach: Attach, tmp_path: Path) -> None:
@@ -208,7 +208,7 @@ def test_the_flash_frame_threshold_is_tunable(attach: Attach, tmp_path: Path) ->
     assert [warning["rule"] for warning in result["warnings"]] == ["W1"]
 
 
-# --- validate_cut: files that are not cut files ---------------------------------------
+# --- validate_cut: files that are not cut files -----------------------------------------
 
 
 def test_a_file_that_is_not_json_fails_e1_and_is_still_hashed(
@@ -256,7 +256,7 @@ def test_a_cut_file_that_is_not_there_is_a_request_failure(
     assert result["error"]["fix"]
 
 
-# --- connection behaviour -------------------------------------------------------------
+# --- connection behaviour ---------------------------------------------------------------
 
 
 def test_validation_survives_resolve_dying_mid_call(attach: Attach, tmp_path: Path) -> None:

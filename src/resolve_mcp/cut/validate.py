@@ -71,6 +71,11 @@ _FIX_HINTS: Final[dict[str, str]] = {
 }
 
 
+def severity_of(rule: str) -> str:
+    """``error`` blocks the build; ``warning`` is reported and never blocks."""
+    return "warning" if rule.startswith("W") else "error"
+
+
 @dataclass(frozen=True)
 class Finding:
     """One rule firing on one thing, in the shape the agent reads."""
@@ -83,7 +88,7 @@ class Finding:
     @property
     def severity(self) -> str:
         """``error`` blocks the build; ``warning`` is reported and never blocks."""
-        return "warning" if self.rule.startswith("W") else "error"
+        return severity_of(self.rule)
 
     def as_dict(self) -> dict[str, str | None]:
         return {
@@ -522,19 +527,27 @@ def _overlay_errors(doc: dict[str, Any]) -> list[Finding]:
 
 
 def _overlap_errors(spans: list[tuple[str, int, int]]) -> list[Finding]:
-    """E10: overlays share one V2 track, and Resolve will not overwrite on overlap."""
+    """E10: overlays share one V2 track, and Resolve will not overwrite on overlap.
+
+    Swept against the span reaching furthest right rather than the previous one: a short
+    overlay sitting wholly inside a long one is not adjacent to it once sorted, and
+    comparing neighbours alone would wave it through.
+    """
     findings: list[Finding] = []
     ordered = sorted(spans, key=lambda span: (span[1], span[2], span[0]))
-    for earlier, later in zip(ordered, ordered[1:], strict=False):
-        if ranges_overlap(earlier[1], earlier[2], later[1], later[2]):
+    furthest: tuple[str, int, int] | None = None
+    for span in ordered:
+        if furthest is not None and ranges_overlap(furthest[1], furthest[2], span[1], span[2]):
             findings.append(
                 _finding(
                     "E10",
-                    later[0],
-                    f"Overlays {earlier[0]!r} ({earlier[1]}-{earlier[2]}) and {later[0]!r} "
-                    f"({later[1]}-{later[2]}) cover the same frames.",
+                    span[0],
+                    f"Overlays {furthest[0]!r} ({furthest[1]}-{furthest[2]}) and {span[0]!r} "
+                    f"({span[1]}-{span[2]}) cover the same frames.",
                 )
             )
+        if furthest is None or span[2] > furthest[2]:
+            furthest = span
     return findings
 
 
@@ -653,6 +666,18 @@ def _bounds_errors(doc: dict[str, Any], resolved: dict[str, ClipFacts]) -> list[
     return findings
 
 
+def _outside_media(item: dict[str, Any], clip: ClipFacts) -> bool:
+    """Whether a half-open range asks for frames the clip's media does not have."""
+    return bool(item["in"] < clip.start or item["out"] > clip.end_exclusive)
+
+
+def _overrun_message(item: dict[str, Any], clip: ClipFacts, subject: str) -> str:
+    return (
+        f"{subject} asks for frames {item['in']}-{item['out']} of {clip.name!r}, whose "
+        f"media runs {clip.start}-{clip.end_exclusive}."
+    )
+
+
 def _bounds_error(
     item: dict[str, Any],
     resolved: dict[str, ClipFacts],
@@ -666,16 +691,9 @@ def _bounds_error(
         # A still has one frame of media and any duration on a timeline — the
         # end-frame workaround is what makes that exact. Bounds do not apply.
         return []
-    if item["in"] >= clip.start and item["out"] <= clip.end_exclusive:
+    if not _outside_media(item, clip):
         return []
-    return [
-        _finding(
-            "E5",
-            id,
-            f"{subject} asks for frames {item['in']}-{item['out']} of {clip.name!r}, whose "
-            f"media runs {clip.start}-{clip.end_exclusive}.",
-        )
-    ]
+    return [_finding("E5", id, _overrun_message(item, clip, subject))]
 
 
 def _rate_errors(doc: dict[str, Any], resolved: dict[str, ClipFacts]) -> list[Finding]:
@@ -721,15 +739,8 @@ def _audio_errors(doc: dict[str, Any], resolved: dict[str, ClipFacts]) -> list[F
         findings.append(
             _finding("E7", None, f"The audio source {alias!r} ({clip.name}) has no audio.")
         )
-    if audio["in"] < clip.start or audio["out"] > clip.end_exclusive:
-        findings.append(
-            _finding(
-                "E7",
-                None,
-                f"The audio block asks for frames {audio['in']}-{audio['out']} of "
-                f"{clip.name!r}, whose media runs {clip.start}-{clip.end_exclusive}.",
-            )
-        )
+    if _outside_media(audio, clip):
+        findings.append(_finding("E7", None, _overrun_message(audio, clip, "The audio block")))
     return findings
 
 
@@ -740,6 +751,7 @@ __all__ = [
     "Finding",
     "locked_track_finding",
     "parse_failure_finding",
+    "severity_of",
     "total_frames",
     "validate_project",
     "validate_structure",
