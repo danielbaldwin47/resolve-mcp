@@ -48,10 +48,20 @@ once. The same class lives here between the fakes and the attach.
 ## Session workflow
 
 Work from ticket #N happens on branch `issue-<N>`: push early, open a draft
-PR. After `/code-review` (the two-axis mattpocock skill — Standards and Spec
-as parallel sub-agents), append a `Review:` line to the PR body — `Review:
-clean`, or `Review:` followed by the findings written out. "findings held"
-with nothing above it is a contentless token; the review gate rejects it.
+PR. Review weight follows what the diff touches, not how simple it looks (a
+three-line log fix here hid a mislabelled recovery path that only the review
+caught):
+
+- **Anything executable** — `src/`, `tests/`, `.claude/hooks/`, workflow
+  YAML — gets `/code-review` (the two-axis mattpocock skill — Standards and
+  Spec as parallel sub-agents). Hooks and workflows count: they are config
+  that executes, and a broken gate fails silently for weeks.
+- **Pure prose** — docs, README, CLAUDE.md — gets one lightweight inline
+  pass, and the line reads `Review: clean — prose only, single-pass`.
+
+Either way, append a `Review:` line to the PR body — `Review: clean`, or
+`Review:` followed by the findings written out. "findings held" with nothing
+above it is a contentless token; the review gate rejects it.
 Everything reaches `main` through a PR — never commit to `main` directly.
 After a stacked PR merges, verify its head is an ancestor of `origin/main`
 (`git merge-base --is-ancestor`) — a PR that merges into a just-consumed
