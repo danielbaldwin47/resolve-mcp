@@ -99,21 +99,24 @@ def test_every_connection_state_change_logs_a_line(
 ) -> None:
     """Attach, reconnect, handle death, invalidate: each leaves a log line, because a
     live failure on a machine no one is at gets diagnosed from the log or not at all."""
-    dead, alive = studio(), studio()
-    attach(dead, alive)
+    first, second, third = studio(), studio(), studio()
+    attach(first, second, third)
     conn = connection_module.get_connection()
 
     with caplog.at_level("INFO", logger=connection_module.log.name):
         conn.handle()
-        dead.drop()
-        conn.handle()
+        first.drop()
+        conn.handle()  # stale handle noticed inside handle()
         conn.invalidate()
+        conn.handle()  # the envelope's recovery path: invalidate, then retry
 
-    messages = [record.getMessage() for record in caplog.records]
-    assert "Resolve attached" in messages
-    assert "Resolve handle went stale; reconnecting once" in messages
-    assert "Resolve reconnected" in messages
-    assert "Resolve handle invalidated; next call reconnects" in messages
+    assert [record.getMessage() for record in caplog.records] == [
+        "Resolve attached",
+        "Resolve handle went stale; reconnecting once",
+        "Resolve reconnected",
+        "Resolve handle invalidated; next call reconnects",
+        "Resolve reconnected",
+    ]
 
 
 def test_reports_whether_it_currently_holds_a_handle(attach: Attach) -> None:
