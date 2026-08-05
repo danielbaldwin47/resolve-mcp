@@ -30,8 +30,11 @@ def test_the_installed_beat_model_hears_a_click_track(tmp_path: Path) -> None:
     path = write_clicks(tmp_path / "clicks.wav", beats_per_minute=CLICK_BPM, seconds=CLICK_SECONDS)
 
     grid = beats.detect(path)
+    found = beats.gist(grid, beats.numbered(grid))
 
-    assert len(grid.beats) > CLICK_SECONDS / 2
+    # Times in seconds, not frames or samples: the unit is what a wrong call gets wrong.
     assert all(0.0 <= one <= CLICK_SECONDS for one in grid.beats)
-    assert set(grid.downbeats) <= set(grid.beats) or grid.downbeats
-    assert beats.numbered(grid)[0]["bar"] == 1
+    assert found["tempo_bpm"] == pytest.approx(CLICK_BPM, abs=10.0)
+    # Downbeats are the second of the two lists the model returns, and a subset of the first.
+    assert grid.downbeats
+    assert set(grid.downbeats) <= set(grid.beats)

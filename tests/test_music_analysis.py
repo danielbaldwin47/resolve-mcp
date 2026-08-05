@@ -237,7 +237,7 @@ def test_a_master_the_director_handed_over_is_not_read_end_to_end(
 
     monkeypatch.setattr(cache, "content_hash", refuse)
 
-    assert music.analyze_music(fixture_audio, energy=False, detector=_detector())["job_id"]
+    assert _result(music.analyze_music(fixture_audio, energy=False, detector=_detector()))
 
 
 def test_a_deleted_curve_file_is_not_a_cache_hit(fixture_audio: Path) -> None:

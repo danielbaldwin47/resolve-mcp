@@ -170,9 +170,9 @@ def measure(audio: Audio, window_seconds: float, hop_seconds: float) -> Measurem
 
     Once, not three times: K-weighting an hour of concert is the expensive part of this
     job, and the curve's windows and the gated 400 ms blocks the integrated figure needs
-    are both sums over the same filtered signal. So each channel is filtered and
-    accumulated a single time, and every window either measurement wants is read off that
-    one running sum.
+    are both sums over the same filtered signal. So each channel is K-weighted once and
+    both window sets are read off that one running sum. The unweighted pass underneath is
+    the RMS curve, which by definition is not the filtered signal.
     """
     windows = _windows(audio, window_seconds, hop_seconds)
     blocks = _windows(audio, BLOCK_SECONDS, BLOCK_SECONDS * (1.0 - BLOCK_OVERLAP))
