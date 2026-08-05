@@ -33,14 +33,9 @@ from pathlib import Path
 from typing import Any
 
 from .config import Config, get_config
-from .errors import (
-    InvalidRequestError,
-    RenderPresetNotFoundError,
-    RenderQueueError,
-    RenderTargetExistsError,
-)
+from .errors import InvalidRequestError, RenderQueueError, RenderTargetExistsError
 from .jobs import cache
-from .jobs.runner import JobOutput, Progress, start_job
+from .jobs.runner import JobOutput, Progress, band, start_job
 from .logging_config import get_logger
 from .naming import slug
 from .resolve import render
@@ -55,8 +50,6 @@ Timeline = Any
 Project = Any
 
 KIND = "render_timeline"
-SINGLE_CLIP = 1
-"""One file for the span asked for. The other mode writes a file per clip on the timeline."""
 
 DELIVER_TIMEOUT = 6 * 3600.0
 """A concert render legitimately runs for hours; the timeout is for a queue that has stalled.
@@ -107,10 +100,9 @@ def render_timeline(
 
     # Reading the preset list is cheap and does not disturb the queue; loading it is what
     # changes project state, and that waits for the job's turn under the Resolve lock.
-    available = render.presets(project)
-    if preset not in available:
-        raise RenderPresetNotFoundError(preset, available)
+    render.require_preset(project, preset)
 
+    covered = span or (int(found.GetStartFrame()), int(found.GetEndFrame()))
     stem = _stem(name, timeline_name, span)
     directory = Path(target_dir) if target_dir is not None else config.render_dir
     params: dict[str, Any] = {
@@ -118,17 +110,21 @@ def render_timeline(
         "preset": preset,
         "name": stem,
         "target_dir": str(directory),
-        "start": span[0] if span else None,
-        "end": span[1] if span else None,
+        "whole_timeline": span is None,
+        "start": covered[0],
+        "end": covered[1],
         "fps": fps,
     }
     key = cache.cache_key(KIND, [fingerprint(Reader(connection), found)], params)
 
+    # The lookup start_job is about to make, made a moment early: a cache hit renders
+    # nothing, so it is the one case where a file already at the target is this job's own
+    # and not something to refuse over.
     if target_dir is not None and not refresh and cache.lookup(key, config) is None:
-        _refuse_a_file_already_there(directory, stem)
+        _refuse_a_taken_target(directory, stem)
 
     def work(progress: Progress) -> JobOutput:
-        return render_deliverable(project, found, params, progress, config)
+        return render_deliverable(project, found, params, progress)
 
     return start_job(
         KIND,
@@ -146,10 +142,12 @@ def render_deliverable(
     timeline: Timeline,
     params: dict[str, Any],
     progress: Progress,
-    config: Config | None = None,
 ) -> JobOutput:
-    """The worker: load the preset, queue the span, wait for the file it writes."""
-    config = config or get_config()
+    """The worker: load the preset, queue the span, wait for the file it writes.
+
+    Everything it needs is in ``params``, which is also what the job record shows: a render
+    that has to be diagnosed from a job file on disk is one whose inputs are all in it.
+    """
     directory = Path(str(params["target_dir"]))
     directory.mkdir(parents=True, exist_ok=True)
     stem = str(params["name"])
@@ -157,8 +155,8 @@ def render_deliverable(
     progress(0.02, "loading the render preset")
     with current_timeline(project, timeline):
         render.load_preset(project, str(params["preset"]))
-        shape = render.current_format(project)
-        extension = shape.get("format", "")
+        format_and_codec = render.current_format(project)
+        extension = format_and_codec.get("format", "")
         if not extension:
             raise RenderQueueError(
                 cause=f"Resolve would not say what format {params['preset']!r} renders.",
@@ -169,21 +167,21 @@ def render_deliverable(
                 detail={"preset": params["preset"]},
             )
         expecting = directory / f"{stem}.{extension}"
-        _clear(directory, stem)
+        _clear(expecting)
 
-        project.SetCurrentRenderMode(SINGLE_CLIP)
+        project.SetCurrentRenderMode(render.SINGLE_CLIP)
         progress(0.04, "queuing the render")
         job_id = render.submit(project, _settings(directory, stem, params))
         render.render(
             project,
             job_id,
             expecting,
-            _scaled(progress),
+            band(progress, RENDER_FLOOR, RENDER_CEILING),
             timeout=DELIVER_TIMEOUT,
         )
 
     log.info("Rendered %s from %s", expecting, params["timeline"])
-    return JobOutput(_result(expecting, shape, params), (expecting,))
+    return JobOutput(_result(expecting, format_and_codec, params), (expecting,))
 
 
 def _settings(directory: Path, stem: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -193,7 +191,7 @@ def _settings(directory: Path, stem: str, params: dict[str, Any]) -> dict[str, A
     contradict an audio-only or video-only preset the director saved deliberately.
     """
     settings: dict[str, Any] = {"TargetDir": str(directory), "CustomName": stem}
-    if params["start"] is None:
+    if params["whole_timeline"]:
         settings["SelectAllFrames"] = True
         return settings
     settings["SelectAllFrames"] = False
@@ -203,26 +201,33 @@ def _settings(directory: Path, stem: str, params: dict[str, Any]) -> dict[str, A
     return settings
 
 
-def _result(expecting: Path, shape: dict[str, str], params: dict[str, Any]) -> dict[str, Any]:
-    """What the agent reads off a finished render — where the file is, and what it covers."""
+def _result(
+    expecting: Path,
+    format_and_codec: dict[str, str],
+    params: dict[str, Any],
+) -> dict[str, Any]:
+    """What the agent reads off a finished render — where the file is, and what it covers.
+
+    The range is reported whether or not one was asked for: a whole-timeline render covers
+    the timeline's own bounds, and a deliverable that will not say what it holds is one the
+    agent has to open Resolve to identify.
+    """
     fps = params["fps"]
-    span = None
-    if params["start"] is not None:
-        start = int(params["start"])
-        end = int(params["end"])
-        span = {
-            "start": dual_time(start, fps),
-            "end": dual_time(end, fps),
-            "duration": dual_time(end - start, fps),
-        }
+    start = int(params["start"])
+    end = int(params["end"])
     return {
         "path": str(expecting),
         "size_bytes": expecting.stat().st_size,
         "timeline": params["timeline"],
         "preset": params["preset"],
-        "format": shape.get("format"),
-        "codec": shape.get("codec"),
-        "range": span,
+        "format": format_and_codec.get("format"),
+        "codec": format_and_codec.get("codec"),
+        "whole_timeline": params["whole_timeline"],
+        "range": {
+            "start": dual_time(start, fps),
+            "end": dual_time(end, fps),
+            "duration": dual_time(end - start, fps),
+        },
     }
 
 
@@ -282,8 +287,13 @@ def _stem(name: str | None, timeline_name: str, span: tuple[int, int] | None) ->
     return base if span is None else f"{base}-{span[0]}-{span[1]}"
 
 
-def _refuse_a_file_already_there(directory: Path, stem: str) -> None:
-    """A caller-named directory is the director's; nothing in it is replaced on a guess."""
+def _refuse_a_taken_target(directory: Path, stem: str) -> None:
+    """A caller-named directory is the director's; nothing in it is replaced on a guess.
+
+    Which suffix the render will take is not known until the preset loads, so the check is
+    on the name: any file called ``<name>.<anything>`` is close enough to be worth asking
+    about, including a sidecar a re-render would leave describing the wrong file.
+    """
     found = sorted(str(path) for path in directory.glob(f"{stem}.*") if path.is_file())
     if found:
         raise RenderTargetExistsError(
@@ -292,23 +302,18 @@ def _refuse_a_file_already_there(directory: Path, stem: str) -> None:
         )
 
 
-def _clear(directory: Path, stem: str) -> None:
+def _clear(expecting: Path) -> None:
     """Take the old file out of the way so Resolve cannot rename around it.
 
-    Only reached once the render is going ahead — either the directory is the server's own,
+    Exactly the one file about to be written, never a glob: a sidecar the director keeps
+    beside a deliverable — a subtitle, a still, an earlier take in another format — is not
+    what this render replaces, even when it carries the same name.
+
+    Only reached once the render is going ahead: either the directory is the server's own,
     or ``refresh`` said to replace what is in the caller's.
     """
-    for path in directory.glob(f"{stem}.*"):
-        if path.is_file():
-            path.unlink()
-            log.info("Replacing %s", path)
+    if expecting.exists():
+        expecting.unlink()
+        log.info("Replacing %s", expecting)
 
 
-def _scaled(progress: Progress) -> Progress:
-    """Map the render's own 0-1 onto the part of the job the render actually is."""
-    span = RENDER_CEILING - RENDER_FLOOR
-
-    def scaled(fraction: float, step: str) -> None:
-        progress(RENDER_FLOOR + span * fraction, step)
-
-    return scaled

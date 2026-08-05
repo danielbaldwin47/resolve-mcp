@@ -30,18 +30,13 @@ from typing import Any
 from ..config import Config, get_config
 from ..errors import AudioExportError, AudioExtractionError, AudioMappingError, RenderQueueError
 from ..jobs import cache
-from ..jobs.runner import JobOutput, Progress, start_job
+from ..jobs.runner import JobOutput, Progress, band, start_job
 from ..logging_config import get_logger
 from ..naming import slug
 from ..resolve import media, render
 from ..resolve.connection import ResolveConnection
 from ..resolve.session import current_project
-from ..resolve.timeline import (
-    Reader,
-    current_timeline,
-    find_timeline,
-)
-from ..resolve.timeline import fingerprint as timeline_fingerprint
+from ..resolve.timeline import Reader, current_timeline, find_timeline, fingerprint
 from . import ffmpeg, wav
 
 log = get_logger("audio")
@@ -57,7 +52,6 @@ CLIP_KIND = "acquire_clip_audio"
 
 RENDER_FORMAT = "wav"
 RENDER_CODEC = "lpcm"
-SINGLE_CLIP = 1
 
 EXPORT_FLOOR = 0.1
 EXPORT_CEILING = 0.9
@@ -87,8 +81,8 @@ def acquire_timeline_audio(
         "sample_rate": sample_rate,
         "bit_depth": bit_depth,
     }
-    fingerprint = timeline_fingerprint(Reader(connection), found)
-    key = cache.cache_key(TIMELINE_KIND, [fingerprint], params)
+    identity = fingerprint(Reader(connection), found)
+    key = cache.cache_key(TIMELINE_KIND, [identity], params)
 
     def work(progress: Progress) -> JobOutput:
         return export_timeline_mix(project, found, key, params, progress, config)
@@ -123,7 +117,7 @@ def export_timeline_mix(
     with current_timeline(project, timeline):
         # One file for the whole timeline. The other mode renders a file per clip on it,
         # which for a concert cut is hundreds of fragments instead of the mix.
-        project.SetCurrentRenderMode(SINGLE_CLIP)
+        project.SetCurrentRenderMode(render.SINGLE_CLIP)
         settings = {
             "SelectAllFrames": True,
             "TargetDir": str(target_dir),
@@ -135,8 +129,13 @@ def export_timeline_mix(
             "AudioSampleRate": int(params["sample_rate"]),
         }
         try:
-            job_id = render.submit(project, settings, RENDER_FORMAT, RENDER_CODEC)
-            render.render(project, job_id, expecting, _scaled(progress))
+            job_id = render.submit(project, settings, (RENDER_FORMAT, RENDER_CODEC))
+            render.render(
+                project,
+                job_id,
+                expecting,
+                band(progress, EXPORT_FLOOR, EXPORT_CEILING),
+            )
         except RenderQueueError as exc:
             raise _as_export_failure(exc) from exc
 
@@ -153,16 +152,6 @@ def _as_export_failure(exc: RenderQueueError) -> AudioExportError:
     """
     specific = exc.fix if exc.fix != RenderQueueError.default_fix else None
     return AudioExportError(cause=exc.cause, fix=specific, detail=exc.detail)
-
-
-def _scaled(progress: Progress) -> Progress:
-    """Map the render's own 0-1 onto the part of the job the render actually is."""
-    span = EXPORT_CEILING - EXPORT_FLOOR
-
-    def scaled(fraction: float, step: str) -> None:
-        progress(EXPORT_FLOOR + span * fraction, step)
-
-    return scaled
 
 
 # --- clip scope: ffmpeg ------------------------------------------------------------------

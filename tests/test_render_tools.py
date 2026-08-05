@@ -74,7 +74,7 @@ def test_a_full_timeline_render_produces_the_file(attach: Attach) -> None:
     assert written.suffix == ".mp4"
     assert record.result["format"] == "mp4"
     assert record.result["codec"] == "H.264"
-    assert record.result["range"] is None
+    assert record.result["whole_timeline"] is True
     assert record.result["size_bytes"] > 0
 
     project = _project(resolve)
@@ -84,6 +84,20 @@ def test_a_full_timeline_render_produces_the_file(attach: Attach) -> None:
     assert project.render_settings["TargetDir"] == str(get_config().render_dir)
     assert project.render_mode == 1
     assert project.render_queue == []
+
+
+def test_a_whole_timeline_render_still_says_what_it_covers(attach: Attach) -> None:
+    """Dual time everywhere: a file that will not say what it holds has to be opened to know."""
+    attach(studio(timeline=_concert()))
+
+    record = wait_for(render_timeline(preset=PRESET)["job"]["job_id"])
+
+    assert record.result is not None
+    covered = record.result["range"]
+    assert covered["start"]["frames"] == 86_400
+    assert covered["end"]["frames"] == 87_400
+    assert covered["duration"]["frames"] == 1_000
+    assert covered["duration"]["timecode"] == "00:00:41:16"
 
 
 def test_the_render_reports_through_get_job_like_any_other_job(attach: Attach) -> None:
@@ -157,6 +171,7 @@ def test_a_range_render_marks_in_and_out_on_the_timelines_own_clock(attach: Atta
     assert project.render_settings["MarkOut"] == 86_599
 
     assert record.result is not None
+    assert record.result["whole_timeline"] is False
     rendered = record.result["range"]
     assert rendered["start"]["frames"] == 86_500
     assert rendered["end"]["frames"] == 86_600
@@ -373,6 +388,33 @@ def test_refresh_is_how_a_file_at_the_target_gets_replaced(
 
     assert record.state == "completed"
     assert (deliverables / "Blue-Monk.mp4").read_bytes() != b"an older take"
+
+
+def test_replacing_a_deliverable_leaves_its_sidecars_alone(
+    attach: Attach,
+    tmp_path: Path,
+) -> None:
+    """refresh replaces the file this render writes — not everything sharing its name."""
+    resolve = studio(timeline=_concert())
+    attach(resolve)
+    deliverables = tmp_path / "deliverables"
+    deliverables.mkdir()
+    (deliverables / "Blue-Monk.mp4").write_bytes(b"an older take")
+    sidecar = deliverables / "Blue-Monk.srt"
+    sidecar.write_text("1\n00:00:00,000 --> 00:00:02,000\nthe subtitles\n", encoding="utf-8")
+
+    record = wait_for(
+        render_timeline(
+            preset=PRESET,
+            name="Blue Monk",
+            target_dir=str(deliverables),
+            refresh=True,
+        )["job"]["job_id"]
+    )
+
+    assert record.state == "completed"
+    assert sidecar.exists()
+    assert "the subtitles" in sidecar.read_text(encoding="utf-8")
 
 
 def test_a_cut_that_changed_renders_again_over_the_servers_own_file(attach: Attach) -> None:

@@ -54,7 +54,11 @@ def render_timeline(
 
     An unchanged cut rendered twice comes back from cache without rendering again; refresh
     forces the render, which is also how a change no reading can see (a clip's audio level)
-    gets picked up.
+    gets picked up. The result says what the file covers either way — a whole-timeline
+    render reports the timeline's own bounds, with whole_timeline true.
+
+    A render leaves the Deliver page set to the preset it used, the same way rendering by
+    hand would; the timeline the director had open is the one thing put back.
     """
     connection = get_connection()
     return {
