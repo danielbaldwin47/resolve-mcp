@@ -48,8 +48,7 @@ once. The same class lives here between the fakes and the attach.
 ## Session workflow
 
 Work from ticket #N happens on branch `issue-<N>`: push early, open a draft
-PR. Review weight follows what the diff touches, not how simple it looks —
-"looks simple" is self-assessed by the same author who made the mistake (a
+PR. Review weight follows what the diff touches, not how simple it looks (a
 three-line log fix here hid a mislabelled recovery path that only the review
 caught):
 
