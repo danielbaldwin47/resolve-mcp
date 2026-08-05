@@ -2,8 +2,8 @@
 """PreToolUse hook enforcing CLAUDE.md's context-discipline rules on Bash.
 
 Blocks (exit 2, message to the model):
-  1. Noisy runs (test suite, harnesses, budget scripts) piped to tail/head/cat —
-     the mktemp+grep rule.
+  1. Noisy runs (pytest, mypy, ruff) piped to tail/head/cat — the mktemp+grep
+     rule.
   2. `cat` of source/config files straight into context — that is a whole-file
      Read with a worse interface; use the Read tool or pipe to grep.
 
@@ -25,7 +25,7 @@ if data.get("tool_name") != "Bash":
 
 cmd = data.get("tool_input", {}).get("command", "") or ""
 
-NOISY = r"(tests/run\.sh|[\w./-]*harness\.sh|nested-session\.sh|qmltestrunner|frame-budget\.sh|idle-budget\.sh|\bpytest\b|\bmypy\b|\bruff\b)"
+NOISY = r"(\bpytest\b|\bmypy\b|\bruff\b)"
 if re.search(NOISY + r"[^|]*\|\s*(tail|head|less|more|cat)\b", cmd):
     sys.stderr.write(
         "Blocked (context discipline): noisy runs never pipe to tail/head — a tail caps one run, runs repeat.\n"
@@ -43,9 +43,9 @@ if re.search(r"\bgh (issue|pr) view\b[^|]*--comments[^|]*\|\s*(tail|head)\b", cm
     )
     sys.exit(2)
 
-SRC_EXT = r"\.(qml|md|sh|py|js|ts|json|yml|yaml|txt|log|conf|ini)\b"
+SRC_EXT = r"\.(md|sh|py|js|ts|json|yml|yaml|txt|log|conf|ini)\b"
 
-# for-loop cat sweep: `for f in Core/*.qml; do cat $f; done`
+# for-loop cat sweep: `for f in src/*.py; do cat $f; done`
 if re.search(r"\bfor\b[^;]*" + SRC_EXT + r".*\bcat\b", cmd):
     sys.stderr.write(
         "Blocked (context discipline): a cat loop over source files is a mass whole-file Read.\n"
