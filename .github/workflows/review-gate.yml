@@ -18,7 +18,7 @@ jobs:
   review-line:
     runs-on: ubuntu-latest
     steps:
-      - name: Require "Review: clean" in the PR body
+      - name: 'Require "Review: clean" in the PR body'
         env:
           BODY: ${{ github.event.pull_request.body }}
         run: |
