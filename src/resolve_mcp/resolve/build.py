@@ -32,7 +32,7 @@ from ..cut.validate import locked_track_finding, positions
 from ..errors import BuildFailedError, CutInvalidError, UnsupportedCutFeatureError
 from ..logging_config import get_logger
 from ..naming import next_version_name
-from . import cut, media
+from . import cut, media, takes
 from . import timeline as timeline_read
 from .connection import ResolveConnection
 
@@ -118,11 +118,15 @@ def build_timeline(
     _unlock_stills(clips)
 
     built = _create(pool, project, name)
-    shots = _shots(doc, clips, _start_frame(built))
+    shots = _shots(doc, clips, timeline_read.start_frame(built))
     _make_tracks(built, shots, name)
     _refuse_locked_tracks(built, shots, name)
     _append(pool, shots, name)
     _verify(built, shots, name)
+    # Takes hang off placed clips, so they are attached only once every placement has been
+    # read back — a selector on a shot that slid somewhere else would be alternates for a
+    # shot the cut file does not have.
+    selectors = takes.attach_takes(built, _selectors(doc, clips, shots), name)
 
     log.info("Built %s: %d clips from %s", name, len(shots), checked.loaded.content_hash)
     return {
@@ -132,6 +136,7 @@ def build_timeline(
         "placed": {
             "segments": sum(1 for shot in shots if shot.track_type == "video"),
             "audio": any(shot.track_type == "audio" for shot in shots),
+            "selectors": selectors,
         },
         "warnings": [finding.as_dict() for finding in checked.warnings],
     }
@@ -211,13 +216,38 @@ def _shot(
     )
 
 
-def _start_frame(timeline: Timeline) -> int:
-    """The timeline's own first frame. A record frame below it is *not* clamped (#18 (d))."""
-    try:
-        return int(float(timeline.GetStartFrame()))
-    except (TypeError, ValueError):
-        log.warning("Resolve gave an unreadable start frame; placing from 0")
-        return 0
+def _selectors(
+    doc: dict[str, Any],
+    clips: dict[str, media.LocatedClip],
+    shots: list[Shot],
+) -> list[takes.Selector]:
+    """The alternates each segment carries, against the record frame its shot landed on."""
+    records = {shot.id: shot.record for shot in shots if shot.track_type == "video"}
+    found = []
+    for segment in doc["segments"]:
+        alternates = segment.get("alternates") or []
+        if not alternates:
+            continue
+        found.append(
+            takes.Selector(
+                segment=str(segment["id"]),
+                record=records[str(segment["id"])],
+                takes=tuple(_take(alternate, clips) for alternate in alternates),
+            )
+        )
+    return found
+
+
+def _take(alternate: dict[str, Any], clips: dict[str, media.LocatedClip]) -> takes.Take:
+    source = str(alternate["source"])
+    located = clips[source]
+    return takes.Take(
+        source=source,
+        clip=located.clip,
+        name=str(located.clip.GetName() or ""),
+        source_in=int(alternate["in"]),
+        duration=int(alternate["out"]) - int(alternate["in"]),
+    )
 
 
 # --- the writes -------------------------------------------------------------------------------
