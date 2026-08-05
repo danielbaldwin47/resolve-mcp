@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +20,7 @@ from resolve_mcp.analysis import beats as beats_module
 from resolve_mcp.analysis import music
 from resolve_mcp.analysis.beats import BeatGrid
 from resolve_mcp.config import get_config
-from resolve_mcp.jobs import store
+from resolve_mcp.jobs import cache, store
 from resolve_mcp.jobs.runner import wait_for
 from resolve_mcp.tools import analysis as analysis_tools
 
@@ -156,7 +157,7 @@ def test_asking_for_neither_is_refused_before_a_job_is_started(fixture_audio: Pa
 def test_a_rerun_on_unchanged_audio_is_answered_from_cache(fixture_audio: Path) -> None:
     first = _result(music.analyze_music(fixture_audio, detector=_detector()))
 
-    second = music.analyze_music(fixture_audio, detector=_exploding_detector())
+    second = music.analyze_music(fixture_audio, detector=_detector_that_must_not_run())
 
     assert second["cached"] is True
     assert second["state"] == "completed"
@@ -184,9 +185,59 @@ def test_refresh_redoes_the_work_and_replaces_the_entry(fixture_audio: Path) -> 
     )
 
     assert redone["beats"]["count"] == 4
-    again = music.analyze_music(fixture_audio, energy=False, detector=_exploding_detector())
+    kept = _detector_that_must_not_run()
+    again = music.analyze_music(fixture_audio, energy=False, detector=kept)
     assert again["cached"] is True
     assert again["result"] == redone
+
+
+def test_changing_the_energy_window_does_not_re_run_the_beat_model(fixture_audio: Path) -> None:
+    """Beats cost minutes of GPU on a concert; an energy setting must not buy them again."""
+    first = _result(music.analyze_music(fixture_audio, hop_seconds=0.5, detector=_detector()))
+
+    second = _result(
+        music.analyze_music(
+            fixture_audio, hop_seconds=0.25, detector=_detector_that_must_not_run()
+        )
+    )
+
+    assert second["beats"] == first["beats"]
+    assert second["energy"]["count"] != first["energy"]["count"]
+
+
+def test_running_one_half_then_both_reuses_the_half_already_paid_for(fixture_audio: Path) -> None:
+    first = _result(music.analyze_music(fixture_audio, beats=False))
+
+    both = _result(music.analyze_music(fixture_audio, detector=_detector()))
+
+    assert both["energy"] == first["energy"]
+
+
+def test_audio_the_server_wrote_is_identified_by_its_content(fixture_audio: Path) -> None:
+    """A cache directory WAV is hashed, so the same mix under two names is analysed once."""
+    acquired = get_config().audio_dir / "mix-abc123.wav"
+    acquired.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(fixture_audio, acquired)
+    renamed = acquired.with_name("mix-def456.wav")
+    shutil.copyfile(fixture_audio, renamed)
+
+    _result(music.analyze_music(acquired, energy=False, detector=_detector()))
+    again = music.analyze_music(renamed, energy=False, detector=_detector_that_must_not_run())
+
+    assert again["cached"] is True
+
+
+def test_a_master_the_director_handed_over_is_not_read_end_to_end(
+    fixture_audio: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A concert master is tens of gigabytes; hashing it would stall the starter (jobs.cache)."""
+
+    def refuse(path: Any) -> str:
+        raise AssertionError("source media the server did not write is fingerprinted, not hashed")
+
+    monkeypatch.setattr(cache, "content_hash", refuse)
+
+    assert music.analyze_music(fixture_audio, energy=False, detector=_detector())["job_id"]
 
 
 def test_a_deleted_curve_file_is_not_a_cache_hit(fixture_audio: Path) -> None:
@@ -238,7 +289,8 @@ def test_a_missing_beat_model_names_the_install(
 
 
 def test_a_detector_that_raises_is_reported_as_an_analysis_failure(fixture_audio: Path) -> None:
-    record = _finished(music.analyze_music(fixture_audio, energy=False, detector=_exploding()))
+    failing = _failing_detector()
+    record = _finished(music.analyze_music(fixture_audio, energy=False, detector=failing))
 
     assert record.state == "failed"
     assert record.error is not None
@@ -264,8 +316,8 @@ def test_the_job_reports_progress_while_it_runs(fixture_audio: Path) -> None:
     def watched(fraction: float, step: str) -> None:
         steps.append((fraction, step))
 
-    params = {"beats": True, "energy": True, "window_seconds": 1.0, "hop_seconds": 0.5}
-    output = music.analyze(fixture_audio, "watched", params, watched, detector=_detector())
+    settings = {"beats": True, "energy": True, "window_seconds": 1.0, "hop_seconds": 0.5}
+    output = music.analyze(fixture_audio, settings, watched, detector=_detector())
 
     fractions = [fraction for fraction, _ in steps]
     assert fractions == sorted(fractions)
@@ -313,15 +365,15 @@ def _joined(target: Path, first: Path, second: Path) -> Path:
     return target
 
 
-def _exploding() -> beats_module.Detector:
+def _failing_detector() -> beats_module.Detector:
     def detect(path: Path) -> BeatGrid:
         raise RuntimeError("the model fell over")
 
     return detect
 
 
-def _exploding_detector() -> beats_module.Detector:
+def _detector_that_must_not_run() -> beats_module.Detector:
     def detect(path: Path) -> BeatGrid:
-        raise AssertionError("a cache hit must not run the detector")
+        raise AssertionError("this analysis was supposed to be reused, not recomputed")
 
     return detect

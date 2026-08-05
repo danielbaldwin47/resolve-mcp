@@ -19,6 +19,7 @@ standard tabulates for 48 kHz.
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from typing import NamedTuple
 
 import numpy as np
@@ -54,6 +55,8 @@ FLUX_MEDIAN_SECONDS = 0.5
 FLUX_EPSILON = 1e-6
 MINIMUM_RISE = 0.2
 """How much of a spectrum has to be new before it counts as a transient rather than a wobble."""
+LOCAL_RISE_MULTIPLE = 1.5
+"""And how far above its neighbours, so a busy passage does not read as one long onset."""
 MINIMUM_ONSET_GAP = 0.03
 
 
@@ -139,59 +142,87 @@ def _weights(channels: int) -> NDArray[np.float64]:
     return weights
 
 
-def integrated_lufs(audio: Audio) -> float:
-    """The whole file as one number, gated the way the standard gates it.
+class Measurement(NamedTuple):
+    """Everything one pass over the audio produces."""
 
-    Two gates: anything below -70 LUFS is not programme, and once the loud material is
-    known, anything more than 10 LU below *its* average is background rather than the thing
-    being measured. Without them a concert's silences drag the figure down.
+    points: tuple[EnergyPoint, ...]
+    integrated_lufs: float
+
+
+class Windows(NamedTuple):
+    """Where each window starts and ends, in frames. Never runs past the audio."""
+
+    starts: NDArray[np.int64]
+    ends: NDArray[np.int64]
+    sample_rate: int
+
+    @property
+    def seconds(self) -> NDArray[np.float64]:
+        return np.asarray(self.starts / self.sample_rate, dtype=np.float64)
+
+    @property
+    def spans(self) -> NDArray[np.float64]:
+        return np.asarray((self.ends - self.starts) / self.sample_rate, dtype=np.float64)
+
+
+def measure(audio: Audio, window_seconds: float, hop_seconds: float) -> Measurement:
+    """Walk the file once, reporting loudness, level and activity per window.
+
+    Once, not three times: K-weighting an hour of concert is the expensive part of this
+    job, and the curve's windows and the gated 400 ms blocks the integrated figure needs
+    are both sums over the same filtered signal. So each channel is filtered and
+    accumulated a single time, and every window either measurement wants is read off that
+    one running sum.
     """
-    block = max(int(BLOCK_SECONDS * audio.sample_rate), 1)
-    hop = max(int(block * (1.0 - BLOCK_OVERLAP)), 1)
-    starts = _starts(audio.frames, block, hop, full_blocks_only=True)
-    squares = _mean_squares(audio, block, starts)
-    blocks = loudness(squares, audio.channels)
+    windows = _windows(audio, window_seconds, hop_seconds)
+    blocks = _windows(audio, BLOCK_SECONDS, BLOCK_SECONDS * (1.0 - BLOCK_OVERLAP))
+    weighted_windows, weighted_blocks = _sweep(audio, (windows, blocks), weighted=True)
+    (plain_windows,) = _sweep(audio, (windows,), weighted=False)
 
-    above_absolute = blocks > ABSOLUTE_GATE
-    if not above_absolute.any():
-        return SILENCE_LUFS
-    threshold = _gate_threshold(squares[:, above_absolute], audio.channels)
-    kept = above_absolute & (blocks > threshold)
-    if not kept.any():
-        kept = above_absolute
-    return float(loudness(squares[:, kept].mean(axis=1, keepdims=True), audio.channels)[0])
+    lufs = loudness(weighted_windows, audio.channels)
+    rms = _dbfs(plain_windows.mean(axis=0))
+    density = onset_density(onsets(audio), windows)
 
-
-def _gate_threshold(squares: NDArray[np.float64], channels: int) -> float:
-    average = loudness(squares.mean(axis=1, keepdims=True), channels)[0]
-    return float(average + RELATIVE_GATE)
-
-
-def curve(
-    audio: Audio,
-    window_seconds: float = 3.0,
-    hop_seconds: float = 0.5,
-) -> tuple[EnergyPoint, ...]:
-    """Walk the file in windows, reporting loudness, level and activity for each one."""
-    window = max(int(window_seconds * audio.sample_rate), 1)
-    hop = max(int(hop_seconds * audio.sample_rate), 1)
-    starts = _starts(audio.frames, window, hop, full_blocks_only=False)
-
-    weighted = _mean_squares(audio, window, starts)
-    plain = _mean_squares(audio, window, starts, weighted=False)
-    lufs = loudness(weighted, audio.channels)
-    rms = _dbfs(plain.mean(axis=0))
-    density = onset_density(onsets(audio), starts / audio.sample_rate, window_seconds)
-
-    return tuple(
+    points = tuple(
         EnergyPoint(
-            seconds=round(float(start) / audio.sample_rate, 3),
+            seconds=round(float(start), 3),
             lufs=round(float(one), 2),
             rms_dbfs=round(float(level), 2),
             onsets_per_second=round(float(rate), 3),
         )
-        for start, one, level, rate in zip(starts, lufs, rms, density, strict=True)
+        for start, one, level, rate in zip(windows.seconds, lufs, rms, density, strict=True)
     )
+    return Measurement(points, _gated(weighted_blocks, audio.channels))
+
+
+def curve(audio: Audio, window_seconds: float, hop_seconds: float) -> tuple[EnergyPoint, ...]:
+    """The curve alone, for callers with no use for the integrated figure."""
+    return measure(audio, window_seconds, hop_seconds).points
+
+
+def integrated_lufs(audio: Audio) -> float:
+    """The whole file as one number, gated the way the standard gates it."""
+    blocks = _windows(audio, BLOCK_SECONDS, BLOCK_SECONDS * (1.0 - BLOCK_OVERLAP))
+    (squares,) = _sweep(audio, (blocks,), weighted=True)
+    return _gated(squares, audio.channels)
+
+
+def _gated(squares: NDArray[np.float64], channels: int) -> float:
+    """The standard's two gates over the 400 ms blocks.
+
+    Anything below -70 LUFS is not programme, and once the loud material is known, anything
+    more than 10 LU below *its* average is background rather than the thing being measured.
+    Without them a concert's silences drag the figure down.
+    """
+    blocks = loudness(squares, channels)
+    above_absolute = blocks > ABSOLUTE_GATE
+    if not above_absolute.any():
+        return SILENCE_LUFS
+    average = loudness(squares[:, above_absolute].mean(axis=1, keepdims=True), channels)[0]
+    kept = above_absolute & (blocks > average + RELATIVE_GATE)
+    if not kept.any():
+        kept = above_absolute
+    return float(loudness(squares[:, kept].mean(axis=1, keepdims=True), channels)[0])
 
 
 def _dbfs(mean_squares: NDArray[np.float64]) -> NDArray[np.float64]:
@@ -200,29 +231,38 @@ def _dbfs(mean_squares: NDArray[np.float64]) -> NDArray[np.float64]:
     return np.asarray(np.where(mean_squares > 0.0, values, SILENCE_LUFS), dtype=np.float64)
 
 
-def _starts(frames: int, window: int, hop: int, full_blocks_only: bool) -> NDArray[np.int64]:
-    """Window start frames. A file shorter than one window still gets one window."""
-    last = frames - window if full_blocks_only else frames - 1
-    if last < 0:
-        return np.zeros(1, dtype=np.int64)
-    return np.arange(0, last + 1, hop, dtype=np.int64)
+def _windows(audio: Audio, window_seconds: float, hop_seconds: float) -> Windows:
+    """Whole windows only — a stub of a window at the end is a misleading measurement.
+
+    A window running off the end of the file holds less audio than the ones before it, so
+    its onset density would be divided by a second that is not there and its loudness would
+    be a different measurement wearing the same units. The one exception is a file shorter
+    than a single window: there, one short window is all there is, and its true span is what
+    every per-second figure is divided by.
+    """
+    window = max(int(window_seconds * audio.sample_rate), 1)
+    hop = max(int(hop_seconds * audio.sample_rate), 1)
+    last = audio.frames - window
+    starts = np.zeros(1, np.int64) if last < 0 else np.arange(0, last + 1, hop, dtype=np.int64)
+    return Windows(
+        starts=starts,
+        ends=np.minimum(starts + window, audio.frames),
+        sample_rate=audio.sample_rate,
+    )
 
 
-def _mean_squares(
+def _sweep(
     audio: Audio,
-    window: int,
-    starts: NDArray[np.int64],
-    weighted: bool = True,
-) -> NDArray[np.float64]:
-    """Mean square per channel per window, one channel in memory at a time.
+    wanted: Sequence[Windows],
+    weighted: bool,
+) -> list[NDArray[np.float64]]:
+    """Mean square per channel for every window set, one channel in memory at a time.
 
     A running sum rather than a window-per-window loop: an hour of audio at a half-second
     hop is 7200 windows over 173 million frames, and the cumulative sum reads each frame
-    once whatever the window length is.
+    once whatever the window lengths are.
     """
-    ends = np.minimum(starts + window, audio.frames)
-    lengths = np.maximum(ends - starts, 1)
-    squares = np.empty((audio.channels, starts.size), dtype=np.float64)
+    squares = [np.empty((audio.channels, one.starts.size), dtype=np.float64) for one in wanted]
     for channel in range(audio.channels):
         one = audio.samples[channel]
         # Both branches own their array: the square below is done in place.
@@ -232,8 +272,13 @@ def _mean_squares(
             else np.array(one, dtype=np.float64, copy=True)
         )
         np.square(signal, out=signal)
-        running = np.concatenate(([0.0], np.cumsum(signal)))
-        squares[channel] = (running[ends] - running[starts]) / lengths
+        running = np.empty(signal.size + 1, dtype=np.float64)
+        running[0] = 0.0
+        np.cumsum(signal, out=running[1:])
+        del signal
+        for result, windows in zip(squares, wanted, strict=True):
+            lengths = np.maximum(windows.ends - windows.starts, 1)
+            result[channel] = (running[windows.ends] - running[windows.starts]) / lengths
     return squares
 
 
@@ -249,8 +294,8 @@ def onsets(audio: Audio) -> NDArray[np.float64]:
         return np.zeros(0, dtype=np.float64)
 
     span = max(int(FLUX_MEDIAN_SECONDS * audio.sample_rate / FLUX_HOP), 3)
-    local = np.asarray(median_filter(flux, size=span, mode="nearest"), dtype=np.float64) * 1.5
-    threshold = np.maximum(local, MINIMUM_RISE)
+    nearby = np.asarray(median_filter(flux, size=span, mode="nearest"), dtype=np.float64)
+    threshold = np.maximum(nearby * LOCAL_RISE_MULTIPLE, MINIMUM_RISE)
     peaks = (flux > threshold) & (flux >= np.roll(flux, 1)) & (flux > np.roll(flux, -1))
     peaks[0] = peaks[-1] = False
 
@@ -310,14 +355,9 @@ def _spaced(times: NDArray[np.float64], gap: float) -> NDArray[np.float64]:
     return np.array(kept, dtype=np.float64)
 
 
-def onset_density(
-    times: NDArray[np.float64],
-    starts: NDArray[np.float64],
-    window_seconds: float,
-) -> NDArray[np.float64]:
-    """Onsets per second inside each window."""
-    if window_seconds <= 0:
-        return np.zeros(starts.size, dtype=np.float64)
-    opened = np.searchsorted(times, starts, side="left")
-    closed = np.searchsorted(times, starts + window_seconds, side="left")
-    return np.asarray((closed - opened) / window_seconds, dtype=np.float64)
+def onset_density(times: NDArray[np.float64], windows: Windows) -> NDArray[np.float64]:
+    """Onsets per second inside each window, over the seconds the window actually holds."""
+    spans = windows.spans
+    opened = np.searchsorted(times, windows.seconds, side="left")
+    closed = np.searchsorted(times, windows.seconds + spans, side="left")
+    return np.asarray((closed - opened) / np.maximum(spans, np.finfo(np.float64).tiny), np.float64)

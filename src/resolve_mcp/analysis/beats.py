@@ -12,6 +12,7 @@ from __future__ import annotations
 import bisect
 import importlib
 import statistics
+from collections import Counter
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any, NamedTuple
@@ -136,8 +137,7 @@ def gist(grid: BeatGrid, records: Sequence[dict[str, Any]]) -> dict[str, Any]:
         if later > earlier
     ]
     tempos = sorted(60.0 / interval for interval in intervals)
-    bars = [record["bar"] for record in records]
-    lengths = [bars.count(bar) for bar in sorted(set(bars))]
+    lengths = list(Counter(record["bar"] for record in records).values())
     return {
         "count": len(grid.beats),
         "downbeat_count": sum(1 for record in records if record["downbeat"]),
