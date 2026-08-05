@@ -25,7 +25,15 @@ if data.get("tool_name") != "Bash":
 
 cmd = data.get("tool_input", {}).get("command", "") or ""
 
-NOISY = r"(\bpytest\b|\bmypy\b|\bruff\b)"
+# Anchored at command position (line start, `;`, `&`, `|`, `(`, or a backtick/
+# $( substitution), optionally behind a `uv run` / `python -m` launcher — a bare
+# word match false-positived on commit messages and PR bodies that merely
+# mention pytest/mypy/ruff in quoted text.
+NOISY = (
+    r"(?:^|[;&|(`\n]\s*|\$\(\s*)"
+    r"(?:uv\s+run\s+(?:-\S+\s+)*|python3?\s+-m\s+)?"
+    r"(?:pytest|mypy|ruff)\b"
+)
 if re.search(NOISY + r"[^|]*\|\s*(tail|head|less|more|cat)\b", cmd):
     sys.stderr.write(
         "Blocked (context discipline): noisy runs never pipe to tail/head — a tail caps one run, runs repeat.\n"
