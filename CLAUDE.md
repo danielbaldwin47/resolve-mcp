@@ -43,12 +43,12 @@ cannot-unlock bug with two candidate causes for a week.)
 
 Why the seam rule exists: forest-shell ran seven tickets green against its
 unit tier alone; the first pass on a real compositor produced eight bugs at
-once. The same class lives here between the fakes and the attach.
+once.
 
 ## Session workflow
 
-Work from ticket #N happens on branch `issue-<N>`: push early, open a draft
-PR. Non-ticket changes (doc tweaks, tooling fixes) take the same path on a
+Work from ticket #N happens on branch `issue-<N>`: push and open a draft PR
+after the first commit. Non-ticket changes (doc tweaks, tooling fixes) take the same path on a
 branch named for the change (e.g. `fix-context-guard`). Review weight follows what the diff touches, not how simple it looks (a
 three-line log fix here hid a mislabelled recovery path that only the review
 caught):
@@ -67,11 +67,13 @@ review found issues: write them into the body, fix them, re-review, then
 append a new `Review: clean` line; the earlier findings lines stay above it
 as the record.
 Everything reaches `main` through a PR — never commit to `main` directly.
-After a stacked PR merges, verify its head is an ancestor of `origin/main`
-(`git merge-base --is-ancestor`) — a PR that merges into a just-consumed
-parent branch reads MERGED while its commits never reach main.
-Close the ticket with the PR link when the work is complete; name any unrun
-live ACs in the close comment.
+
+- After a stacked PR merges, verify its head is an ancestor of
+  `origin/main` (`git merge-base --is-ancestor`) — a PR that merges into a
+  just-consumed parent branch reads MERGED while its commits never reach
+  main.
+- Close the ticket with the PR link when the work is complete; name any
+  unrun live ACs in the close comment.
 
 CI (`.github/workflows/ci.yml`) runs the fake tier, mypy strict, and ruff on
 every PR; `review-gate.yml` blocks merge until the PR body's `Review:` line
