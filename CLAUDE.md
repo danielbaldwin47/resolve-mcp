@@ -47,11 +47,15 @@ once.
 
 ## Session workflow
 
-Work from ticket #N happens on branch `issue-<N>`: push and open a draft PR
-after the first commit. Non-ticket changes (doc tweaks, tooling fixes) take the same path on a
-branch named for the change (e.g. `fix-context-guard`). Review weight follows what the diff touches, not how simple it looks (a
-three-line log fix here hid a mislabelled recovery path that only the review
-caught):
+Work from ticket #N happens on branch `issue-<N>`; non-ticket changes (doc
+tweaks, tooling fixes) take a branch named for the change (e.g.
+`fix-context-guard`). Push the branch after the first commit — pushed work
+survives a lost session — but do **not** open a PR yet: a pre-review PR has
+no valid `Review:` line, so it is born gate-red and forces a second full
+review after fixes land just to satisfy the check. The review happens on the
+branch, before the PR exists. Review weight follows what the diff touches,
+not how simple it looks (a three-line log fix here hid a mislabelled
+recovery path that only the review caught):
 
 - **Anything executable** — `src/`, `tests/`, `.claude/hooks/`, workflow
   YAML — gets `/code-review` (the two-axis mattpocock skill — Standards and
@@ -60,12 +64,17 @@ caught):
 - **Pure prose** — docs, README, CLAUDE.md — gets one lightweight inline
   pass, and the line reads `Review: clean — prose only, single-pass`.
 
-Either way, append a `Review:` line to the PR body. The gate reads only the
-**last** `Review:` line in the body and passes only `Review: clean`
-(optionally followed by a summary) — any other last line blocks merge. If the
-review found issues: write them into the body, fix them, re-review, then
-append a new `Review: clean` line; the earlier findings lines stay above it
-as the record.
+If the review finds issues, fix them and re-check the fix diff — a focused
+pass over what changed, not a second full review. One full review per PR is
+the default; a fresh full pass is only for fixes large enough to be a new
+diff. Then open the PR with the review record already in the body: findings
+and their resolutions (if any) first, ending with the `Review:` line. The
+gate reads only the **last** `Review:` line in the body and passes only
+`Review: clean` (optionally followed by a summary) — any other last line
+blocks merge — so a PR opened this way is green from its first gate run. If
+a PR gains commits after opening (human feedback, CI failures), re-review
+the new diff and append a fresh `Review:` line; the earlier lines stay
+above it as the record.
 Everything reaches `main` through a PR — never commit to `main` directly.
 
 - After a stacked PR merges, verify its head is an ancestor of
