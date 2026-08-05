@@ -38,6 +38,8 @@ class FakeTimelineItem:
         start: int,
         duration: int,
         source_start: int | None = None,
+        left_offset: int | None = None,
+        source_end: int | None = None,
         media_item: FakeMediaPoolItem | None = None,
         enabled: bool = True,
         takes: int = 0,
@@ -49,6 +51,8 @@ class FakeTimelineItem:
         self._start = start
         self._duration = duration
         self._source_start = source_start
+        self._left_offset = left_offset
+        self._source_end = source_end
         self._media_item = media_item
         self._enabled = enabled
         self._takes = takes
@@ -91,15 +95,20 @@ class FakeTimelineItem:
         return end - 1 if self._end_is_inclusive else end
 
     def GetLeftOffset(self) -> int:  # noqa: N802
+        """How far into the media the shot begins. Set it apart from the source start to
+        say which getter a reading came from."""
         self._check()
-        return self._source_start or 0
+        return (self._left_offset if self._left_offset is not None else self._source_start) or 0
 
     def GetSourceStartFrame(self) -> int:  # noqa: N802
         self._check()
         return self._source_start or 0
 
     def GetSourceEndFrame(self) -> int:  # noqa: N802
+        """The last source frame — inclusive, and not derivable from duration on a retime."""
         self._check()
+        if self._source_end is not None:
+            return self._source_end
         return (self._source_start or 0) + self._duration - 1
 
     def GetMediaPoolItem(self) -> FakeMediaPoolItem | None:  # noqa: N802

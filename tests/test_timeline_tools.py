@@ -247,16 +247,41 @@ def test_each_angle_carries_the_offset_that_maps_its_source_onto_the_timeline(
     assert offsets["Cam A"]["seconds"] == -16.683
 
 
+def test_the_source_start_is_read_before_the_left_offset_that_stands_in_for_it(
+    attach: Attach,
+) -> None:
+    item = FakeTimelineItem("A.mp4", 120, 400, source_start=3000, left_offset=7)
+    attach(studio(timeline=FakeTimeline("sync", video=[FakeTrack("Cam A", [item])])))
+
+    result = inspect_timeline(detail="clips")
+
+    assert result["tracks"][0]["items"][0]["source"]["in"]["frames"] == 3000
+
+
 def test_an_angle_on_a_resolve_without_source_frames_still_reports_its_offset(
     attach: Attach,
 ) -> None:
-    """Pre-18.5 has no GetSourceStartFrame; the left offset carries the same information."""
-    item = FakeTimelineItem("A.mp4", 120, 400, source_start=3000, supports_source_frames=False)
+    """Pre-18.5 has no GetSourceStartFrame; the left offset is the closest thing it has."""
+    item = FakeTimelineItem(
+        "A.mp4", 120, 400, source_start=3000, left_offset=3000, supports_source_frames=False
+    )
     attach(studio(timeline=FakeTimeline("sync", video=[FakeTrack("Cam A", [item])])))
 
     result = inspect_timeline(detail="clips")
 
     assert result["tracks"][0]["items"][0]["sync_offset"]["frames"] == -2880
+
+
+def test_a_retimed_shot_reports_the_source_frames_it_really_covers(attach: Attach) -> None:
+    """Half speed: 400 timeline frames over 200 source frames, so duration will not do."""
+    item = FakeTimelineItem("A.mp4", 0, 400, source_start=1000, source_end=1199)
+    attach(studio(timeline=FakeTimeline("cut v1", video=[FakeTrack("Video 1", [item])])))
+
+    result = inspect_timeline(detail="clips")
+
+    source = result["tracks"][0]["items"][0]["source"]
+    assert source["in"]["frames"] == 1000
+    assert source["out"]["frames"] == 1200
 
 
 def test_a_shot_reports_the_media_pool_clip_it_came_from(attach: Attach) -> None:
@@ -366,6 +391,23 @@ def test_a_long_timeline_caps_the_shots_it_returns_and_spills_the_rest(attach: A
     assert len(json.loads(spilled.read_text(encoding="utf-8"))["tracks"][0]["items"]) == 20
 
 
+def test_a_busy_video_track_cannot_starve_the_angles_stacked_under_it(attach: Attach) -> None:
+    """The stacked reference is the layout this tool exists to make readable."""
+    busy = FakeTrack(
+        "Cam A", [FakeTimelineItem(f"A{index}.mp4", index * 10, 10) for index in range(10)]
+    )
+    quiet = FakeTrack(
+        "Cam B", [FakeTimelineItem(f"B{index}.mp4", index * 10, 10) for index in range(2)]
+    )
+    attach(studio(timeline=FakeTimeline("sync", video=[busy, quiet])))
+
+    result = inspect_timeline(detail="clips", limit=4)
+
+    kept = {track["name"]: [item["name"] for item in track["items"]] for track in result["tracks"]}
+    assert kept == {"Cam A": ["A0.mp4", "A1.mp4"], "Cam B": ["B0.mp4", "B1.mp4"]}
+    assert result["truncated"] is True
+
+
 def test_the_cap_counts_shots_across_every_track(attach: Attach) -> None:
     tracks = [
         FakeTrack(f"Cam {letter}", [FakeTimelineItem(f"{letter}.mp4", index * 10, 10)])
@@ -384,8 +426,10 @@ def test_the_cap_counts_shots_across_every_track(attach: Attach) -> None:
 def test_the_default_cap_keeps_a_reply_inside_the_client_token_budget(attach: Attach) -> None:
     """The 25k-token cap is the reason the cap exists, so the default has to fit under it.
 
-    Four characters to a token is the rough conversion; a shot carries six dual-time
-    readings, which is what makes a default anyone picked by feel land wrong.
+    Dense JSON — repeated keys, runs of digits, six dual-time blocks a shot — runs nearer
+    3.3 characters to the token than the 4 that prose does, so the budget is counted at the
+    tighter rate. It is the shot shape, not the number of shots, that makes a limit picked
+    by feel land wrong; this fails if either grows.
     """
     shots = [
         FakeTimelineItem(f"C{index:04d}.mp4", index * 10, 10, source_start=index)
@@ -396,7 +440,7 @@ def test_the_default_cap_keeps_a_reply_inside_the_client_token_budget(attach: At
     result = inspect_timeline(detail="clips")
 
     assert result["truncated"] is True
-    assert len(json.dumps(result)) < 4 * 25_000
+    assert len(json.dumps(result)) < 3.3 * 25_000
 
 
 def test_the_timeline_duration_is_the_end_resolve_reports(attach: Attach) -> None:
@@ -458,29 +502,68 @@ def test_resolve_quitting_mid_call_is_a_connection_failure_not_a_bug(attach: Att
     assert result["error"]["code"] == "resolve_unavailable"
 
 
-@pytest.mark.parametrize("survives", range(1, 16))
+def a_telling_cut() -> FakeTimeline:
+    """A cut whose every readable field differs from the value a fallback would invent.
+
+    Track names, marker counts, clip names, take counts and the enabled flag all have a
+    default somewhere in the reading path; a timeline built out of those defaults could be
+    fabricated without any test noticing. This one cannot.
+    """
+    return FakeTimeline(
+        "sunset-set v3",
+        start_frame=100,
+        markers={120.0: {"note": "fill"}, 240.0: {"note": "solo"}},
+        video=[
+            FakeTrack(
+                "Cam A",
+                [
+                    FakeTimelineItem(
+                        "C0012.mp4",
+                        100,
+                        60,
+                        source_start=1000,
+                        media_item=FakeMediaPoolItem("C0012.mp4", "D:/angles/C0012.mp4"),
+                        enabled=False,
+                        takes=2,
+                    )
+                ],
+                locked=True,
+            )
+        ],
+        audio=[FakeTrack("Master", [FakeTimelineItem("master_mix.wav", 100, 200)])],
+    )
+
+
+@pytest.mark.parametrize("survives", range(1, 41))
 def test_a_death_part_way_through_a_read_never_returns_half_a_timeline(
     attach: Attach, survives: int
 ) -> None:
     """Wherever the handle dies, the answer is a complete reading or a stated failure.
 
-    The field-level readers fall back rather than raise, which is right for a getter an
-    older Resolve does not have and wrong for a handle that has gone away — this pins the
-    difference at every point in the walk, so no fallback can quietly stand in for a
-    dropped connection.
+    Falling back is right for a getter an older Resolve does not have and wrong for a
+    handle that has gone away: the second would hand the agent a timeline of plausible
+    defaults with nothing to distrust. This walks the death forward through every call the
+    read makes, and every field it checks would read as a fallback if one had been taken.
     """
-    dying = studio(timeline=a_cut())
+    dying = studio(timeline=a_telling_cut())
     dying.die_after(survives)
-    attach(dying, studio(timeline=a_cut()))
+    attach(dying, studio(timeline=a_telling_cut()))
 
     result = inspect_timeline(detail="clips")
 
     assert result["ok"] is True
-    shots = result["tracks"][0]["items"]
-    assert [shot["name"] for shot in shots] == ["C0012.mp4", "C0031.mp4", "C0012.mp4"]
-    assert all(shot["record"]["duration"]["frames"] for shot in shots)
-    assert all(shot["sync_offset"] is not None for shot in shots)
     assert result["timeline"]["duration"]["frames"] == 200
+    assert result["timeline"]["markers"] == 2
+    assert result["timeline"]["tracks"] == {"video": 1, "audio": 1, "subtitle": 0}
+    video = result["tracks"][0]
+    assert video["name"] == "Cam A"
+    assert video["locked"] is True
+    shot = video["items"][0]
+    assert shot["name"] == "C0012.mp4"
+    assert shot["clip"] == "C0012.mp4"
+    assert shot["takes"] == 2
+    assert shot["enabled"] is False
+    assert shot["sync_offset"]["frames"] == -900
 
 
 def test_a_bug_in_the_wrapper_is_reported_once_as_a_bug(

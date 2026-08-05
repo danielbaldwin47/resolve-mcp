@@ -100,18 +100,26 @@ def test_the_frame_math_holds_on_a_real_timeline() -> None:
     if get_status()["context"]["timeline"] is None:
         pytest.skip("No timeline open in Resolve")
 
-    result = inspect_timeline(detail="clips")
+    whole = inspect_timeline(detail="summary")
+    assert whole["ok"] is True
+    ends_at = whole["timeline"]["end"]["frames"]
 
-    assert result["ok"] is True
-    ends_at = result["timeline"]["end"]["frames"]
-    outs = [
-        item["record"]["out"]["frames"] for track in result["tracks"] for item in track["items"]
-    ]
-    if outs and not result["truncated"]:
-        # The timeline's own duration is the one number taken from GetEndFrame on trust
-        # (a timeline has no duration getter). A Resolve that reported the last frame
-        # rather than one past it would show up here as an off-by-one, and nowhere else.
+    # The timeline's own duration is the one number taken from GetEndFrame on trust (a
+    # timeline has no duration getter). A Resolve that reported the last frame rather than
+    # one past it shows up here as an off-by-one and nowhere else — so read the tail
+    # rather than the whole cut, which on a real concert timeline would truncate and skip
+    # this check exactly where it matters.
+    tail = inspect_timeline(
+        detail="clips", start=max(ends_at - 600, whole["timeline"]["start"]["frames"])
+    )
+    assert tail["ok"] is True
+    assert tail["truncated"] is False, "the tail was still too long to check the end frame"
+    outs = [item["record"]["out"]["frames"] for track in tail["tracks"] for item in track["items"]]
+    if outs:
         assert ends_at == max(outs)
+
+    result = inspect_timeline(detail="clips")
+    assert result["ok"] is True
     for track in result["tracks"]:
         for item in track["items"]:
             record = item["record"]

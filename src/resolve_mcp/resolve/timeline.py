@@ -168,29 +168,22 @@ def _frames(value: Any) -> int | None:
 
 
 def _optional(getter: Any, default: Any, *args: Any) -> Any:
-    """Read something this Resolve build may not offer; the default is not a failure.
+    """Read a getter this Resolve build may not have at all; a missing one is not a failure.
 
-    Getters come and go between versions and a few refuse on particular clip kinds, so a
-    reading that cannot be taken falls back rather than sinking the whole inspection.
+    Absence is the only thing forgiven here. A getter that is present and *raises* is left
+    to raise, because that is what a handle dying mid-read looks like — and a field-level
+    fallback would turn a lost connection into a reading full of plausible defaults that
+    the agent has no reason to distrust. One reconnect, or a stated failure, is the only
+    honest pair of outcomes.
     """
-    if getter is None:
-        return default
-    try:
-        return getter(*args)
-    except Exception:  # noqa: BLE001 - one unreadable field is not a lost timeline
-        log.debug("Could not read %s%s", getattr(getter, "__name__", getter), args, exc_info=True)
-        return default
+    return default if getter is None else getter(*args)
 
 
 def _track_counts(timeline: Timeline) -> dict[str, int]:
-    counts = {}
-    for track_type in TRACK_TYPES:
-        try:
-            counts[track_type] = int(_optional(timeline.GetTrackCount, 0, track_type) or 0)
-        except (TypeError, ValueError):
-            log.debug("Unreadable %s track count", track_type, exc_info=True)
-            counts[track_type] = 0
-    return counts
+    """How many tracks of each kind — the stack that identifies a sync reference."""
+    return {
+        track_type: _frames(timeline.GetTrackCount(track_type)) or 0 for track_type in TRACK_TYPES
+    }
 
 
 def summarise(timeline: Timeline, project: Project, current: str | None) -> dict[str, Any]:
@@ -236,7 +229,7 @@ def list_timelines(
     }
     if truncated:
         full = {**result, "timelines": timelines, "truncated": False, "spilled_to": None}
-        result["spilled_to"] = spill("timelines", full, config or get_config(), "timeline")
+        result["spilled_to"] = spill("timelines", full, config or get_config(), fallback="timeline")
     return result
 
 
@@ -281,12 +274,12 @@ def inspect_timeline(
     heading = summarise(timeline, project, _name(current) if current is not None else None)
     fps = heading["fps"]
 
-    window = _window(timeline, start, end, fps)
+    window = _window(heading, start, end, fps)
     with_items = detail == "clips"
     tracks = [
         _read_track(timeline, track_type, index, window, fps, with_items)
-        for track_type in TRACK_TYPES
-        for index in range(1, heading["tracks"][track_type] + 1)
+        for track_type, count in heading["tracks"].items()
+        for index in range(1, count + 1)
     ]
     item_count = sum(track["item_count"] for track in tracks)
 
@@ -307,16 +300,24 @@ def inspect_timeline(
     if item_count > cap:
         result["truncated"] = True
         full = {**result, "tracks": tracks, "truncated": False, "spilled_to": None}
-        result["spilled_to"] = spill(heading["name"], full, config or get_config(), "timeline")
+        result["spilled_to"] = spill(
+            heading["name"], full, config or get_config(), fallback="timeline"
+        )
     return result
 
 
-def _window(timeline: Timeline, start: Any, end: Any, fps: float | None) -> tuple[int, int]:
-    """The range to read, half-open ``[in, out)``, defaulting to the whole timeline."""
+def _window(heading: dict[str, Any], start: Any, end: Any, fps: float | None) -> tuple[int, int]:
+    """The range to read, half-open ``[in, out)``, defaulting to the whole timeline.
+
+    The default comes from the heading rather than from Resolve again: two reads of the
+    same bounds are two chances to disagree, and the range would then not be the range the
+    reply says it is.
+    """
     asked_start = to_frames(start, fps, field="start")
     asked_end = to_frames(end, fps, field="end")
-    first = asked_start if asked_start is not None else (_frames(timeline.GetStartFrame()) or 0)
-    last = asked_end if asked_end is not None else _frames(timeline.GetEndFrame())
+    bounds = {edge: (heading[edge] or {}).get("frames") for edge in ("start", "end")}
+    first = asked_start if asked_start is not None else (bounds["start"] or 0)
+    last = asked_end if asked_end is not None else bounds["end"]
     if last is None:
         last = first
     if last < first:
@@ -369,14 +370,25 @@ def _without_items(track: dict[str, Any]) -> dict[str, Any]:
 
 
 def _capped(tracks: list[dict[str, Any]], cap: int) -> list[dict[str, Any]]:
-    """Keep the first ``cap`` items across the whole stack, tracks in order."""
+    """Share ``cap`` shots across the stack, a round at a time.
+
+    Filling track by track would spend the whole budget on a busy V1 and hand back a
+    stacked reference with every angle below it empty — which is the one layout this tool
+    exists to make readable. Taking a round from each track keeps the stack visible, and
+    each track still reads in its own order.
+    """
+    kept: list[list[dict[str, Any]]] = [[] for _ in tracks]
     left = cap
-    capped = []
-    for track in tracks:
-        kept = track["items"][:left]
-        left -= len(kept)
-        capped.append({**track, "items": kept})
-    return capped
+    depth = 0
+    while left > 0 and any(len(track["items"]) > depth for track in tracks):
+        for position, track in enumerate(tracks):
+            if left == 0:
+                break
+            if len(track["items"]) > depth:
+                kept[position].append(track["items"][depth])
+                left -= 1
+        depth += 1
+    return [{**track, "items": kept[position]} for position, track in enumerate(tracks)]
 
 
 def _touches(placement: Placement, window: tuple[int, int]) -> bool:
@@ -417,7 +429,7 @@ def read_item(
     record_in, duration = placement.start, placement.duration
     record_out = placement.end
     source_in = _source_start(item)
-    source_out = source_in + duration if source_in is not None and duration is not None else None
+    source_out = _source_end(item, source_in, duration)
     offset = record_in - source_in if record_in is not None and source_in is not None else None
     return {
         "name": str(item.GetName() or ""),
@@ -438,15 +450,31 @@ def read_item(
 def _source_start(item: TimelineItem) -> int | None:
     """Where the shot starts in its own media.
 
-    ``GetSourceStartFrame`` is the direct answer and only exists on newer builds;
-    ``GetLeftOffset`` carries the same number counted from the media's first frame, which
-    is what an offset against a common clock needs either way.
+    ``GetSourceStartFrame`` is the direct answer and exists only on newer builds. Failing
+    that, ``GetLeftOffset`` is how far into the media pool item the shot begins — the same
+    number whenever the media itself starts at frame zero, which camera files do, and the
+    closest answer available on a build without the newer getter.
     """
     for getter in ("GetSourceStartFrame", "GetLeftOffset"):
         frames = _frames(_optional(getattr(item, getter, None), None))
         if frames is not None:
             return frames
     return None
+
+
+def _source_end(item: TimelineItem, source_in: int | None, duration: int | None) -> int | None:
+    """One past the shot's last source frame.
+
+    Read rather than derived where Resolve offers it: a retimed shot covers more or fewer
+    source frames than it occupies on the timeline, so ``source_in + duration`` is only
+    right at 1:1 speed. ``GetSourceEndFrame`` reports the last frame, hence the plus one.
+    """
+    reported = _frames(_optional(getattr(item, "GetSourceEndFrame", None), None))
+    if reported is not None:
+        return reported + 1
+    if source_in is None or duration is None:
+        return None
+    return source_in + duration
 
 
 def _clip_name(item: TimelineItem) -> str | None:
