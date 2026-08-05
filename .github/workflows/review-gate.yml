@@ -7,8 +7,8 @@ name: review-gate
 # contentless token. A held finding must be written out and resolved, not
 # tokenized past the gate.
 #
-# Install steps live in the header of ci.yml (same one-time `workflow`-scope
-# dance, both files move together).
+# Installed 2026-08-05 alongside ci.yml; `review-line` is a required status
+# check on main via branch protection.
 
 on:
   pull_request:
