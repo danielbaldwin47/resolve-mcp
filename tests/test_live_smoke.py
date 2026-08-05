@@ -10,9 +10,11 @@ place the direct-attach path itself is exercised.
 
 Every test here is read-only except the Text+ probe, which creates and then deletes a
 scratch bin and timeline in the open project. It stays skipped until you opt in by
-pointing ``RESOLVE_MCP_TEXTPLUS_TEMPLATE`` at a ``.drb`` you exported from the GUI:
+pointing ``RESOLVE_MCP_TEXTPLUS_TEMPLATE`` at a ``.drb`` you exported from the GUI —
+in PowerShell, which is the shell on the machine this runs on:
 
-    RESOLVE_MCP_TEXTPLUS_TEMPLATE=C:\\titles\\Titles.drb uv run pytest -m live -s
+    $env:RESOLVE_MCP_TEXTPLUS_TEMPLATE = 'C:\\titles\\Titles.drb'
+    uv run pytest -m live -s
 """
 
 from __future__ import annotations
@@ -27,7 +29,8 @@ from resolve_mcp.tools.escape_hatch import run_python
 from resolve_mcp.tools.media import inspect_clip, list_media
 from resolve_mcp.tools.project import get_status, list_projects, snapshot_project
 from resolve_mcp.tools.timeline import inspect_timeline, list_timelines
-from tests.text_plus_probe import TEMPLATE_ENV, probe_template_append
+
+from .text_plus_probe import TEMPLATE_ENV, probe_template_append
 
 pytestmark = pytest.mark.live
 

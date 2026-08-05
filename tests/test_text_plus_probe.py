@@ -16,27 +16,40 @@ import pytest
 
 from resolve_mcp.errors import NoProjectOpenError
 from resolve_mcp.resolve.connection import get_connection
-from tests.conftest import Attach
-from tests.fakes import (
+
+from .conftest import Attach
+from .fakes import (
     DroppedHandleError,
     FakeFolder,
     FakeFusionComp,
     FakeFusionTool,
     FakeMediaPoolItem,
+    FakeProject,
+    FakeResolve,
     FakeTimelineItem,
     media_pool,
     studio,
     text_plus_template,
 )
-from tests.text_plus_probe import ProbeFailed, probe_template_append
+from .text_plus_probe import ProbeFailed, probe_template_append
 
 
 def a_template_file(tmp_path: Path, name: str = "Titles.drb") -> Path:
-    """The ``.drb`` the human exported from the GUI. Its bytes never matter — only Resolve
-    reads them — but its existence does: an unreadable path is refused, not imported."""
+    """The ``.drb`` the human exported from the GUI.
+
+    Its bytes never matter — only Resolve reads them — but its existence does: an
+    unreadable path is refused, not imported.
+    """
     target = tmp_path / name
     target.write_bytes(b"fake-drb")
     return target
+
+
+def the_open_project(handle: FakeResolve) -> FakeProject:
+    """``studio()`` always opens one; this is only here to say so in the type."""
+    project = handle.current_project
+    assert project is not None
+    return project
 
 
 def test_the_route_runs_end_to_end_and_each_instance_keeps_its_own_text(
@@ -60,6 +73,16 @@ def test_the_route_runs_end_to_end_and_each_instance_keeps_its_own_text(
     assert report.clip_type == "Generator"
     assert report.cleaned_up is True
     assert pool.folder_imports == [(str(a_template_file(tmp_path)), "")]
+    # Each instance is asked for with an inclusive end frame, and lands after the one
+    # before it — two titles stacked on one frame would read back as one title placed twice.
+    sent = [dict(one) for one in pool.appends[0]]
+    assert [{key: one[key] for key in ("startFrame", "endFrame")} for one in sent] == [
+        {"startFrame": 0, "endFrame": 119},
+        {"startFrame": 0, "endFrame": 119},
+    ]
+    assert {one["mediaPoolItem"].GetName() for one in sent} == {"Song Title"}
+    assert [placed.record_in for placed in report.placed] == [0, 120]
+    assert [placed.duration for placed in report.placed] == [120, 120]
 
 
 def test_instances_that_share_one_comp_are_caught_by_reading_every_title_back(
@@ -80,6 +103,65 @@ def test_instances_that_share_one_comp_are_caught_by_reading_every_title_back(
     assert raised.value.step == "read the text back"
     assert "share one comp" in str(raised.value)
     assert "'Two'" in str(raised.value)
+
+
+def test_nothing_is_appended_until_the_scratch_timeline_is_confirmed_current(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The footgun that would have cost the operator their cut.
+
+    ``AppendToTimeline`` appends to the project's *current* timeline, not to the one just
+    created. A probe that assumed ``CreateEmptyTimeline`` switched would, on a Resolve
+    that did not, place two Text+ instances on the open cut — and still pass every
+    assertion after it, because the instances would be perfectly real.
+    """
+    pool = media_pool()
+    pool.switches_current_timeline = False
+    handle = studio(pool=pool)
+    open_cut = the_open_project(handle).GetCurrentTimeline()
+    the_open_project(handle).refuse_set_current = True
+    attach(handle)
+
+    with pytest.raises(ProbeFailed) as raised:
+        probe_template_append(get_connection(), a_template_file(tmp_path))
+
+    assert raised.value.step == "target the scratch timeline"
+    assert "nothing was appended" in str(raised.value)
+    assert pool.appends == []
+    assert open_cut is not None
+    assert open_cut.first_video_track().items == []
+
+
+def test_an_append_the_timeline_does_not_hold_is_not_taken_on_trust(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """What the append returned proves a call succeeded; what the timeline holds proves a
+    title was placed. Only the second is what titling needs."""
+    pool = media_pool()
+    pool.appends_land_nowhere = True
+    attach(studio(pool=pool))
+
+    with pytest.raises(ProbeFailed) as raised:
+        probe_template_append(get_connection(), a_template_file(tmp_path))
+
+    assert raised.value.step == "find the placed instances"
+    assert "holds 0" in str(raised.value)
+
+
+def test_the_current_folder_and_timeline_are_put_back(attach: Attach, tmp_path: Path) -> None:
+    """A probe that leaves the GUI somewhere else is a probe that gets blamed for the mess."""
+    pool = media_pool({"Concert/Angles": [FakeMediaPoolItem("C0012.mp4")]})
+    was_in = pool.GetRootFolder().GetSubFolderList()[0]
+    pool.SetCurrentFolder(was_in)
+    handle = studio(pool=pool)
+    was_on = the_open_project(handle).GetCurrentTimeline()
+    attach(handle)
+
+    report = probe_template_append(get_connection(), a_template_file(tmp_path))
+
+    assert report.per_instance_text is True
+    assert pool.GetCurrentFolder() is was_in
+    assert the_open_project(handle).GetCurrentTimeline() is was_on
 
 
 def test_an_import_that_answers_true_and_lands_nothing_is_not_mistaken_for_success(
@@ -191,7 +273,8 @@ def test_a_build_without_the_fusion_getters_is_named_rather_than_left_to_blow_up
     names neither the method nor the build."""
     pool = media_pool()
     pool.append_result = [
-        FakeTimelineItem("Song Title", 0, 120, missing={"GetFusionCompCount"}) for _ in range(2)
+        FakeTimelineItem("Song Title", record, 120, missing={"GetFusionCompCount"})
+        for record in (0, 120)
     ]
     attach(studio(pool=pool))
 
@@ -202,10 +285,11 @@ def test_a_build_without_the_fusion_getters_is_named_rather_than_left_to_blow_up
     assert "no GetFusionCompCount" in str(raised.value)
 
 
-def test_the_scratch_bin_and_timeline_are_deleted_even_when_a_step_fails(
+def test_the_scratch_bin_is_removed_when_the_timeline_was_never_created(
     attach: Attach, tmp_path: Path
 ) -> None:
-    """A probe that leaves its scratch bin behind is a probe nobody runs twice."""
+    """A probe that leaves its scratch bin behind is a probe nobody runs twice — and the
+    bin is already in the pool by the time a later step fails."""
     pool = media_pool()
     pool.refuses_create_timeline = True
     attach(studio(pool=pool))

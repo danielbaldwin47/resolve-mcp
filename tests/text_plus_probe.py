@@ -10,28 +10,37 @@ for a ticket, not a tool for an agent. It runs at both seams. Against fakes
 (``test_text_plus_probe.py``) it proves it walks the route in the right order and names
 each failure; against real Resolve (``test_live_smoke.py``) it answers the question.
 
-Three things here are decisions rather than API calls:
+Five things here are decisions rather than API calls:
 
 * **The imported bin is recognised by name, not by identity.** ``ImportFolderFromFile``
   returns a bare ``True`` and names the bin after the ``.drb``, and Resolve hands out a
   fresh proxy object per call — so the only way to find what landed is to diff the root's
   child *names*. A name already in use is therefore indistinguishable from an import that
   landed nothing, and is reported as such rather than answered with the older bin.
+* **The scratch timeline is made current and checked, before anything is appended.**
+  ``AppendToTimeline`` appends to the project's *current* timeline, not to the one just
+  created. Assuming ``CreateEmptyTimeline`` also switched would, on a build that does not,
+  quietly append two Text+ instances onto the operator's open cut — and every assertion
+  below would still pass, because the instances would be real.
+* **The instances are read back off the timeline, not off the append.** What the append
+  returned proves a call succeeded; what the timeline holds proves a title was placed. The
+  second is what titling needs, so the placed items are re-read from the track.
 * **Every title is read back after every write, never one at a time.** A probe that set a
   title and immediately read it would pass whether the instances have their own comps or
   share one; the second write is what exposes the difference.
-* **Cleanup never costs the answer.** The probe creates a scratch bin and a scratch
-  timeline in a real project, and deletes both in a ``finally``; a cleanup that fails is
-  recorded in the report, not raised over the finding the live run was made for.
+* **Cleanup never costs the answer.** The probe mutates a real project — a scratch bin, a
+  scratch timeline, the current folder and the current timeline — and puts all four back in
+  a ``finally``. A cleanup that fails is recorded in the report, not raised over the
+  finding the live run was made for.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from dataclasses import dataclass, field, replace
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from resolve_mcp.logging_config import get_logger
 from resolve_mcp.naming import timestamped_name
@@ -43,8 +52,10 @@ log = get_logger("probe.textplus")
 TEMPLATE_ENV = "RESOLVE_MCP_TEXTPLUS_TEMPLATE"
 TEXT_PLUS = "TextPlus"
 STYLED_TEXT = "StyledText"
+SCRATCH_LABEL = "textplus-probe"
 DEFAULT_TEXTS = ("Sunset Boulevard", "Bass — Ana Ruiz")
 DEFAULT_DURATION = 120
+VIDEO = "video"
 
 
 class ProbeFailed(AssertionError):
@@ -60,6 +71,18 @@ class ProbeFailed(AssertionError):
         self.trail = tuple(trail)
         walked = "\n".join(f"  {done}" for done in self.trail)
         super().__init__(f"{step}: {detail}\nwalked:\n{walked}")
+
+
+class TextPlusNode(NamedTuple):
+    """An instance's Text+ node, with how many its comp holds.
+
+    The count travels with the node because a template may hold several Text+ nodes, and
+    which one answered is the part ``apply_titles`` cannot guess later.
+    """
+
+    name: str
+    tool: Any
+    of_how_many: int
 
 
 @dataclass(frozen=True)
@@ -91,7 +114,6 @@ class Report:
     timeline_name: str
     placed: tuple[Placed, ...]
     cleaned_up: bool
-    trail: tuple[str, ...] = field(default=())
 
     @property
     def per_instance_text(self) -> bool:
@@ -119,20 +141,32 @@ class Report:
         return "\n".join(lines)
 
 
+@dataclass
+class _Scratch:
+    """Everything the probe changed in a real project, and what it has to put back."""
+
+    pool: Any
+    project: Any
+    previous_folder: Any
+    previous_timeline: Any
+    imported: Any = None
+    timeline: Any = None
+
+
 def probe_template_append(
     connection: ResolveConnection,
     template: Path,
     *,
     texts: Sequence[str] = DEFAULT_TEXTS,
     duration: int = DEFAULT_DURATION,
-    label: str = "textplus-probe",
     now: datetime | None = None,
 ) -> Report:
     """Walk the whole route and report what Resolve did, or raise ``ProbeFailed``.
 
-    Mutates the open project — a scratch bin and a scratch timeline, both removed again.
-    ``texts`` must hold at least two distinct strings: one title proves only that a write
-    landed somewhere, not that it landed on the instance it was aimed at.
+    Mutates the open project — a scratch bin and a scratch timeline, both removed again,
+    and the current folder and timeline, both restored. ``texts`` must hold at least two
+    distinct strings: one title proves only that a write landed somewhere, not that it
+    landed on the instance it was aimed at.
     """
     asked = list(texts)
     if len(asked) < 2 or len(set(asked)) != len(asked):
@@ -153,13 +187,14 @@ def probe_template_append(
     walked(step, str(template))
 
     pool = media_pool(connection)
+    # Safe only because media_pool() has already refused a session with no project open.
+    project = connection.handle().GetProjectManager().GetCurrentProject()
     root = pool.GetRootFolder()
     known = {str(sub.GetName() or "") for sub in root.GetSubFolderList()}
+    scratch = _Scratch(pool, project, pool.GetCurrentFolder(), project.GetCurrentTimeline())
     pool.SetCurrentFolder(root)
     walked("reach the media pool", f"root {str(root.GetName() or '')!r}, {len(known)} bins")
 
-    imported: Any = None
-    timeline: Any = None
     try:
         step = "import the template bin"
         if not pool.ImportFolderFromFile(str(template)):
@@ -167,9 +202,7 @@ def probe_template_append(
         walked(step, f"ImportFolderFromFile({template.name}) answered True")
 
         step = "find the imported bin"
-        landed = [
-            sub for sub in root.GetSubFolderList() if str(sub.GetName() or "") not in known
-        ]
+        landed = [sub for sub in root.GetSubFolderList() if str(sub.GetName() or "") not in known]
         if not landed:
             raise failed(
                 step,
@@ -180,12 +213,12 @@ def probe_template_append(
             )
         if len(landed) > 1:
             raise failed(step, f"One import produced several bins: {_names(landed)}.")
-        imported = landed[0]
-        bin_name = str(imported.GetName() or "")
+        scratch.imported = landed[0]
+        bin_name = str(scratch.imported.GetName() or "")
         walked(step, f"bin {bin_name!r}")
 
         step = "find the template clip"
-        clips = _clips_under(imported)
+        clips = _clips_under(scratch.imported)
         if not clips:
             raise failed(step, f"The imported bin {bin_name!r} holds no clips.")
         if len(clips) > 1:
@@ -200,54 +233,61 @@ def probe_template_append(
         walked(step, f"{clip_name!r} (Type={clip_type or '<none>'})")
 
         step = "create the scratch timeline"
-        timeline_name = timestamped_name(label, "", "textplus-probe", now)
-        timeline = pool.CreateEmptyTimeline(timeline_name)
-        if timeline is None:
+        timeline_name = timestamped_name(SCRATCH_LABEL, "", SCRATCH_LABEL, now)
+        scratch.timeline = pool.CreateEmptyTimeline(timeline_name)
+        if scratch.timeline is None:
             raise failed(step, f"Resolve created no timeline called {timeline_name!r}.")
         walked(step, timeline_name)
+
+        step = "target the scratch timeline"
+        project.SetCurrentTimeline(scratch.timeline)
+        current = project.GetCurrentTimeline()
+        if current is None or current.GetUniqueId() != scratch.timeline.GetUniqueId():
+            raise failed(
+                step,
+                f"Resolve would not make {timeline_name!r} current — it is still on "
+                f"{'nothing' if current is None else repr(str(current.GetName() or ''))}. "
+                f"Appending now would place titles on the open cut, so nothing was appended.",
+            )
+        walked(step, f"{timeline_name!r} is current")
 
         step = "append the instances"
         placements = [
             {"mediaPoolItem": clip, "startFrame": 0, "endFrame": duration - 1} for _ in asked
         ]
-        items = list(pool.AppendToTimeline(placements) or [])
+        returned = list(pool.AppendToTimeline(placements) or [])
+        if len(returned) != len(asked):
+            raise failed(
+                step,
+                f"Asked for {len(asked)} instances of {clip_name!r}, got back {len(returned)}.",
+            )
+        walked(step, f"{len(returned)} instances of {clip_name!r} at {duration}f each")
+
+        step = "find the placed instances"
+        items = _placed_on(scratch.timeline)
         if len(items) != len(asked):
             raise failed(
                 step,
-                f"Asked for {len(asked)} instances of {clip_name!r}, got back {len(items)}.",
+                f"AppendToTimeline answered {len(returned)} instances but {timeline_name!r} "
+                f"holds {len(items)} on its first video track.",
             )
-        walked(step, f"{len(items)} instances of {clip_name!r} at {duration}f each")
+        _check_each_landed_apart(items, trail)
+        walked(step, f"{len(items)} on the first video track of {timeline_name!r}")
 
         step = "open the Fusion comp"
-        tools = [_text_plus_node(item, position, trail) for position, item in enumerate(items, 1)]
-        walked(step, f"a Text+ node in each of {len(tools)} comps")
+        nodes = [_text_plus_node(item, position, trail) for position, item in enumerate(items, 1)]
+        walked(step, f"a Text+ node in each of {len(nodes)} comps")
 
         step = "write the text"
-        for (_, tool, _), text in zip(tools, asked, strict=True):
-            tool.SetInput(STYLED_TEXT, text)
+        for node, text in zip(nodes, asked, strict=True):
+            node.tool.SetInput(STYLED_TEXT, text)
         walked(step, ", ".join(repr(text) for text in asked))
 
-        # Every write first, then every read: a shared comp only shows up once a later
-        # write has had the chance to overwrite an earlier instance's title.
+        # Every write first, then every read, and every read off the timeline rather than
+        # off the handles written through: a shared comp only shows up once a later write
+        # has had the chance to overwrite an earlier instance's title.
         step = "read the text back"
-        placed: list[Placed] = []
-        for position, (item, (name, _, count), text) in enumerate(
-            zip(items, tools, asked, strict=True), start=1
-        ):
-            _, fresh, _ = _text_plus_node(item, position, trail)
-            read_back = fresh.GetInput(STYLED_TEXT)
-            placed.append(
-                Placed(
-                    index=position,
-                    name=str(item.GetName() or ""),
-                    record_in=int(item.GetStart()),
-                    duration=int(item.GetDuration()),
-                    tool_name=name,
-                    tool_count=count,
-                    asked=text,
-                    read_back=None if read_back is None else str(read_back),
-                )
-            )
+        placed = _read_each_back(_placed_on(scratch.timeline), nodes, asked, trail)
         _check_each_kept_its_own(placed, trail)
         walked(step, "each instance kept the text it was given")
 
@@ -259,10 +299,9 @@ def probe_template_append(
             timeline_name=timeline_name,
             placed=tuple(placed),
             cleaned_up=False,
-            trail=tuple(trail),
         )
     finally:
-        tidy = _clean_up(pool, imported, timeline)
+        tidy = _clean_up(scratch)
 
     return replace(report, cleaned_up=tidy)
 
@@ -300,12 +339,12 @@ def _clips_under(folder: Any) -> list[Any]:
     return found
 
 
-def _text_plus_node(
-    item: Any,
-    position: int,
-    trail: Sequence[str],
-) -> tuple[str, Any, int]:
-    """The instance's Text+ node, as ``(name, tool, how many the comp holds)``."""
+def _placed_on(timeline: Any) -> list[Any]:
+    """What the timeline itself holds — the only witness that a title was placed."""
+    return list(timeline.GetItemListInTrack(VIDEO, 1) or [])
+
+
+def _text_plus_node(item: Any, position: int, trail: Sequence[str]) -> TextPlusNode:
     step = "open the Fusion comp"
     if not int(_method(item, "GetFusionCompCount", step, trail)() or 0):
         raise _failure(
@@ -317,7 +356,7 @@ def _text_plus_node(
     comp = _method(item, "GetFusionCompByIndex", step, trail)(1)
     if comp is None:
         raise _failure(
-            "open the Fusion comp",
+            step,
             f"Instance {position} counts a Fusion comp but hands out none at index 1.",
             trail,
         )
@@ -332,11 +371,47 @@ def _text_plus_node(
             trail,
         )
     first = matching[min(matching)]
-    return str(first.GetAttrs("TOOLS_Name") or ""), first, len(matching)
+    return TextPlusNode(str(first.GetAttrs("TOOLS_Name") or ""), first, len(matching))
 
 
 def _tool_names(tools: dict[int, Any]) -> str:
     return ", ".join(repr(str(tool.GetAttrs("TOOLS_Name") or "")) for tool in tools.values())
+
+
+def _read_each_back(
+    items: Sequence[Any],
+    nodes: Sequence[TextPlusNode],
+    asked: Sequence[str],
+    trail: Sequence[str],
+) -> list[Placed]:
+    placed: list[Placed] = []
+    for position, (item, node, text) in enumerate(zip(items, nodes, asked, strict=True), start=1):
+        fresh = _text_plus_node(item, position, trail)
+        read_back = fresh.tool.GetInput(STYLED_TEXT)
+        placed.append(
+            Placed(
+                index=position,
+                name=str(item.GetName() or ""),
+                record_in=int(item.GetStart()),
+                duration=int(item.GetDuration()),
+                tool_name=node.name,
+                tool_count=node.of_how_many,
+                asked=text,
+                read_back=None if read_back is None else str(read_back),
+            )
+        )
+    return placed
+
+
+def _check_each_landed_apart(items: Sequence[Any], trail: Sequence[str]) -> None:
+    """Two instances stacked on one frame would read back as one title placed twice."""
+    starts = [int(item.GetStart()) for item in items]
+    if len(set(starts)) != len(starts):
+        raise _failure(
+            "find the placed instances",
+            f"The instances did not land apart — record starts {starts}.",
+            trail,
+        )
 
 
 def _check_each_kept_its_own(placed: Sequence[Placed], trail: Sequence[str]) -> None:
@@ -360,23 +435,36 @@ def _check_each_kept_its_own(placed: Sequence[Placed], trail: Sequence[str]) -> 
     )
 
 
-def _clean_up(pool: Any, imported: Any, timeline: Any) -> bool:
-    """Remove the scratch timeline and bin. Never raises — see the module docstring."""
+def _clean_up(scratch: _Scratch) -> bool:
+    """Put the project back. Never raises — see the module docstring.
+
+    The current timeline is restored before the scratch one is deleted, because Resolve
+    should never be asked to delete the cut it is sitting on.
+    """
+    pool, project = scratch.pool, scratch.project
+    was_on, was_in = scratch.previous_timeline, scratch.previous_folder
+    scratch_timeline, scratch_bin = scratch.timeline, scratch.imported
+
+    steps: list[tuple[str, Callable[[], Any]]] = []
+    if was_on is not None:
+        steps.append(("restore the current timeline", lambda: project.SetCurrentTimeline(was_on)))
+    if scratch_timeline is not None:
+        steps.append(
+            ("delete the scratch timeline", lambda: pool.DeleteTimelines([scratch_timeline]))
+        )
+    if scratch_bin is not None:
+        steps.append(("delete the scratch bin", lambda: pool.DeleteFolders([scratch_bin])))
+    steps.append(("restore the current folder", lambda: pool.SetCurrentFolder(was_in)))
+
     tidy = True
-    for what, removed in (("timeline", timeline), ("bin", imported)):
-        if removed is None:
-            continue
+    for what, undo in steps:
         try:
-            gone = (
-                pool.DeleteTimelines([removed])
-                if what == "timeline"
-                else pool.DeleteFolders([removed])
-            )
+            done = undo()
         except Exception:  # noqa: BLE001 - a departed Resolve must not mask the finding
-            log.exception("Text+ probe could not delete its scratch %s", what)
+            log.exception("Text+ probe could not %s", what)
             tidy = False
             continue
-        if not gone:
-            log.warning("Text+ probe could not delete its scratch %s", what)
-        tidy = tidy and bool(gone)
+        if not done:
+            log.warning("Text+ probe could not %s", what)
+            tidy = False
     return tidy

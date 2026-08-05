@@ -303,9 +303,21 @@ class FakeTimeline:
         tracks = self._tracks.get(track_type, [])
         return tracks[index - 1] if 1 <= index <= len(tracks) else None
 
+    def first_video_track(self) -> FakeTrack:
+        """The track an append lands on; a timeline Resolve made always has one."""
+        tracks = self._tracks["video"]
+        if not tracks:
+            tracks.append(FakeTrack("Video 1"))
+        return tracks[0]
+
     def GetName(self) -> str:  # noqa: N802 - mirrors the Resolve API
         self._check()
         return self._name
+
+    def GetUniqueId(self) -> str:  # noqa: N802
+        """Resolve's own identity for a cut — the only way to tell two proxies apart."""
+        self._check()
+        return f"fake-timeline-{id(self):x}"
 
     def GetSetting(self, key: str) -> str | None:  # noqa: N802
         self._check()
@@ -507,12 +519,12 @@ class FakeMediaPool:
         self.appends: list[list[Any]] = []
         self.append_result: list[FakeTimelineItem] | None = None
         self.appends_share_one_comp = False
+        self.appends_land_nowhere = False
         self.created_timelines: list[str] = []
-        self.create_timeline_result: FakeTimeline | None = None
         self.refuses_create_timeline = False
+        self.switches_current_timeline = True
         self.deleted_timelines: list[FakeTimeline] = []
         self.deleted_folders: list[FakeFolder] = []
-        self.delete_timelines_result = True
         self.delete_folders_result = True
 
     def _check(self, method: str) -> None:
@@ -614,24 +626,35 @@ class FakeMediaPool:
         return True
 
     def CreateEmptyTimeline(self, name: str) -> FakeTimeline | None:  # noqa: N802
-        """A new empty cut, registered on the open project. ``None`` when Resolve refuses."""
+        """A new empty cut — one video track, no clips. ``None`` when Resolve refuses.
+
+        Whether creating a timeline also *switches* to it is undocumented, so
+        ``switches_current_timeline`` can withhold the switch: a caller that assumed it
+        happened would append onto whatever cut was already open.
+        """
         self._check("CreateEmptyTimeline")
         self.created_timelines.append(name)
         if self.refuses_create_timeline:
             return None
-        timeline = self.create_timeline_result or FakeTimeline(name)
+        timeline = FakeTimeline(name, video=[FakeTrack("Video 1")])
         if self._owner is not None:
             timeline.adopt(self._owner)
             project = self._owner.current_project
             if project is not None:
                 project.add_timeline(timeline)
+                if self.switches_current_timeline:
+                    project.SetCurrentTimeline(timeline)
         return timeline
 
     def AppendToTimeline(  # noqa: N802
         self,
         clips: list[FakeMediaPoolItem | dict[str, Any]],
     ) -> list[FakeTimelineItem]:
-        """Place clips at the end of the current timeline, one timeline item each.
+        """Place clips at the end of the *current* timeline, one timeline item each.
+
+        Which timeline that is matters: the pool appends to whatever cut the project has
+        open, not to the one most recently created, so the placed items land on the
+        current timeline's first video track and nowhere else.
 
         Each placed instance is given its *own copy* of the template's comp, which is what
         makes per-instance text possible at all. ``appends_share_one_comp`` models the
@@ -640,11 +663,12 @@ class FakeMediaPool:
         """
         self._check("AppendToTimeline")
         self.appends.append(list(clips))
+        target = self._current_timeline()
         if self.append_result is not None:
-            return list(self.append_result)
+            return self._land(list(self.append_result), target)
         placed: list[FakeTimelineItem] = []
         shared: FakeFusionComp | None = None
-        record = 0
+        record = _track_end(target)
         for entry in clips:
             asked: dict[str, Any] = (
                 dict(entry) if isinstance(entry, dict) else {"mediaPoolItem": entry}
@@ -672,13 +696,29 @@ class FakeMediaPool:
                 item.adopt(self._owner)
             placed.append(item)
             record += duration
+        return self._land(placed, target)
+
+    def _current_timeline(self) -> FakeTimeline | None:
+        project = self._owner.current_project if self._owner is not None else None
+        return project.GetCurrentTimeline() if project is not None else None
+
+    def _land(
+        self,
+        placed: list[FakeTimelineItem],
+        target: FakeTimeline | None,
+    ) -> list[FakeTimelineItem]:
+        """Put the placed items on the target's first video track, as the append does.
+
+        ``appends_land_nowhere`` models the answer that would fool a caller who trusted the
+        return value: real timeline items handed back, and a timeline that holds none.
+        """
+        if target is not None and not self.appends_land_nowhere:
+            target.first_video_track().items.extend(placed)
         return placed
 
     def DeleteTimelines(self, timelines: list[FakeTimeline]) -> bool:  # noqa: N802
         self._check("DeleteTimelines")
         self.deleted_timelines.extend(timelines)
-        if not self.delete_timelines_result:
-            return False
         project = self._owner.current_project if self._owner is not None else None
         if project is not None:
             for timeline in timelines:
@@ -716,6 +756,14 @@ class FakeMediaPool:
         for sub in folder.subfolders:
             found.extend(self._walk(sub))
         return found
+
+
+def _track_end(timeline: FakeTimeline | None) -> int:
+    """Where the next append starts: after everything already on the first video track."""
+    if timeline is None:
+        return 0
+    placed = timeline.first_video_track().items
+    return max((item.GetStart() + item.GetDuration() for item in placed), default=0)
 
 
 def _import_one(item: str | dict[str, Any]) -> FakeMediaPoolItem | None:
@@ -776,6 +824,7 @@ class FakeProject:
         self._timeline = timeline
         self._fps = fps
         self._media_pool = media_pool
+        self.refuse_set_current = False
         if timelines is not None:
             self._timelines = list(timelines)
         else:
@@ -805,6 +854,13 @@ class FakeProject:
     def add_timeline(self, timeline: FakeTimeline) -> None:
         """What creating a cut does to a project: one more timeline, nothing else touched."""
         self._timelines.append(timeline)
+
+    def SetCurrentTimeline(self, timeline: FakeTimeline) -> bool:  # noqa: N802
+        """Switch the open cut. ``refuse_set_current`` models a Resolve that will not."""
+        if self.refuse_set_current:
+            return False
+        self._timeline = timeline
+        return True
 
     def remove_timeline(self, timeline: FakeTimeline) -> None:
         """Deleting a cut the project never held is a no-op, as in Resolve."""
@@ -948,12 +1004,7 @@ def media_pool(bins: dict[str, list[FakeMediaPoolItem]] | None = None) -> FakeMe
     return pool
 
 
-def text_plus_template(
-    name: str = "Song Title",
-    text: str = "TEMPLATE",
-    tool_id: str = "TextPlus",
-    clip_type: str = "Generator",
-) -> FakeMediaPoolItem:
+def text_plus_template(name: str = "Song Title") -> FakeMediaPoolItem:
     """A GUI-authored Text+ template as it sits in the media pool after a ``.drb`` import.
 
     It has no file path — a title is generated, not read off disk — so anything that
@@ -961,8 +1012,8 @@ def text_plus_template(
     """
     return FakeMediaPoolItem(
         name,
-        properties={"Type": clip_type, "File Path": ""},
-        template_comp=FakeFusionComp([FakeFusionTool(tool_id, inputs={"StyledText": text})]),
+        properties={"Type": "Generator", "File Path": ""},
+        template_comp=FakeFusionComp([FakeFusionTool()]),
     )
 
 
