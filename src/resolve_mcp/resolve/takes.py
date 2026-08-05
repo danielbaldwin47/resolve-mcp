@@ -286,7 +286,7 @@ def _shot_at(
     is not this segment's at all, and the swap would land on the wrong angle.
     """
     item = _items_by_record(timeline).get(record)
-    if item is not None and int(item.GetDuration() or 0) == duration:
+    if item is not None and timeline_read.read_frames(item.GetDuration()) == duration:
         return item
     raise InvalidRequestError(
         cause=f"No {duration}-frame shot starts at frame {record} on V1 of {name!r}, where this "
