@@ -31,6 +31,8 @@ def test_registers_the_p1_session_media_timeline_and_cut_tools() -> None:
         "relink_media",
         "list_timelines",
         "inspect_timeline",
+        "export_timeline",
+        "import_timeline",
         "get_cut_schema",
         "validate_cut",
         "build_timeline",

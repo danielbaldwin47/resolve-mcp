@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..resolve import interchange
 from ..resolve import timeline as timelines
 from ..resolve.connection import get_connection
 from .envelope import tool
@@ -62,9 +63,74 @@ def inspect_timeline(
     )
 
 
+@tool
+def export_timeline(
+    timeline: str | None = None,
+    format: str = interchange.DEFAULT_FORMAT,  # noqa: A002 - the agent-facing word
+    path: str | None = None,
+) -> dict[str, Any]:
+    """Write a timeline (the open one by default) out as otio, fcpxml or drt.
+
+    This is the structural escape hatch: the scripting API cannot cut a transition, so a
+    dissolve is made by exporting to otio, editing the transition into that document by
+    hand, and importing it back with import_timeline — which materialises it as a real
+    transition. Use fcpxml to hand the cut to another NLE, drt for a Resolve-native copy.
+
+    Without a path the file lands in the server's cache under a timestamped name, and path
+    holds where it went. An explicit path keeps its folder but gets the format's own
+    suffix. export_type names the Resolve export constant used — fcpxml is versioned and
+    the newest one this build offers is written.
+    """
+    connection = get_connection()
+    return interchange.export_timeline(connection, name=timeline, export_format=format, path=path)
+
+
+@tool
+def import_timeline(
+    path: str,
+    name: str | None = None,
+    import_source_clips: bool | None = None,
+    source_media_path: str | None = None,
+) -> dict[str, Any]:
+    """Materialise a *new* timeline from an otio, fcpxml or drt file. Nothing is overwritten.
+
+    The name defaults to the file's own stem; a name already in the project is never
+    reused — the import lands on the next free version of it ("sunset-set v3" becomes
+    "sunset-set v5" when v4 is taken), and the reply gives requested_name alongside the
+    timeline that was actually made, with renamed saying whether the two differ.
+
+    Source clips are imported unless import_source_clips is false, which is what an OTIO
+    round trip needs to relink to media; pass source_media_path when the media sits
+    somewhere other than where the document says. The reply is the new timeline's heading —
+    version, fps, bounds, track stack; inspect_timeline reads what is on it.
+
+    A .drt is Resolve's own document and accepts none of these: it names its own timeline
+    and carries its own media links, so name, import_source_clips and source_media_path are
+    refused for one rather than quietly ignored, and requested_name comes back null. The
+    result is still checked against the timelines the project already had, so an import
+    that came back as an existing cut is reported as a failure, never as a new timeline.
+    """
+    connection = get_connection()
+    return interchange.import_timeline(
+        connection,
+        path,
+        name=name,
+        import_source_clips=import_source_clips,
+        source_media_path=source_media_path,
+    )
+
+
 TOOLS: tuple[Any, ...] = (
     list_timelines,
     inspect_timeline,
+    export_timeline,
+    import_timeline,
 )
 
-__all__ = ["TOOLS", "inspect_timeline", "list_timelines"]
+__all__ = [
+    "TOOLS",
+    "export_timeline",
+    "import_timeline",
+    "inspect_timeline",
+    "list_timelines",
+]

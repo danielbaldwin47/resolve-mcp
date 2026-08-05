@@ -91,11 +91,6 @@ def open_project(connection: ResolveConnection) -> Project:
     return project
 
 
-def timeline_names(project: Project) -> list[str]:
-    """Every timeline name the project holds — what a version scan counts against."""
-    return [_name(timeline) for timeline in _timelines(project)]
-
-
 def _timelines(project: Project) -> list[Timeline]:
     """Every timeline the project holds, in Resolve's own order.
 
@@ -118,7 +113,7 @@ def _timelines(project: Project) -> list[Timeline]:
     return found
 
 
-def _name(timeline: Timeline) -> str:
+def name_of(timeline: Timeline) -> str:
     return str(timeline.GetName() or "")
 
 
@@ -133,9 +128,20 @@ def find_timeline(project: Project, name: str | None) -> Timeline:
         return current
     held = _timelines(project)
     for timeline in held:
-        if _name(timeline) == name:
+        if name_of(timeline) == name:
             return timeline
-    raise TimelineNotFoundError(name, [_name(timeline) for timeline in held])
+    raise TimelineNotFoundError(name, [name_of(timeline) for timeline in held])
+
+
+def timeline_names(project: Project) -> list[str]:
+    """Every timeline name the project holds — what a new name must not collide with."""
+    return [name_of(timeline) for timeline in _timelines(project)]
+
+
+def current_name(project: Project) -> str | None:
+    """The open timeline's name, or ``None`` when the project has nothing open."""
+    current = project.GetCurrentTimeline()
+    return name_of(current) if current is not None else None
 
 
 def version_of(name: str) -> tuple[str, int | None]:
@@ -144,6 +150,23 @@ def version_of(name: str) -> tuple[str, int | None]:
     if match is None:
         return name, None
     return match.group("base"), int(match.group("number"))
+
+
+def next_free_name(requested: str, existing: set[str]) -> str:
+    """A name no timeline in the project answers to, following ``<base> v<N>``.
+
+    The project's own convention for a new cut made from an old one is the next version
+    number, so a collision walks that sequence rather than inventing a suffix of its own —
+    and an unversioned name starts the sequence at v2, which reads as what it is: the
+    second thing to carry that name.
+    """
+    if requested not in existing:
+        return requested
+    base, version = version_of(requested)
+    number = (version or 1) + 1
+    while f"{base} v{number}" in existing:
+        number += 1
+    return f"{base} v{number}"
 
 
 # --- shape ---------------------------------------------------------------------------------
@@ -220,7 +243,7 @@ def summarise(
     current: str | None,
 ) -> dict[str, Any]:
     """The one-line view of a timeline that list and inspect both open with."""
-    name = _name(timeline)
+    name = name_of(timeline)
     base, version = version_of(name)
     fps = frame_rate(project, timeline)
     return {
@@ -245,18 +268,15 @@ def list_timelines(
     """Every timeline in the project with its version, duration and track stack."""
     project = open_project(connection)
     reader = Reader(connection)
-    current = project.GetCurrentTimeline()
-    current_name = _name(current) if current is not None else None
+    current = current_name(project)
 
-    timelines = [
-        summarise(reader, timeline, project, current_name) for timeline in _timelines(project)
-    ]
+    timelines = [summarise(reader, timeline, project, current) for timeline in _timelines(project)]
 
     cap = max(int(limit), 0)
     truncated = len(timelines) > cap
     result: dict[str, Any] = {
         "count": len(timelines),
-        "current": current_name,
+        "current": current,
         "timelines": timelines[:cap] if truncated else timelines,
         "latest_versions": _latest_versions(timelines),
         "truncated": truncated,
@@ -306,8 +326,8 @@ def inspect_timeline(
     project = open_project(connection)
     reader = Reader(connection)
     timeline = find_timeline(project, name)
-    current = project.GetCurrentTimeline()
-    heading = summarise(reader, timeline, project, _name(current) if current is not None else None)
+    current = current_name(project)
+    heading = summarise(reader, timeline, project, current)
     fps = heading["fps"]
 
     window = _window(heading, start, end, fps)
