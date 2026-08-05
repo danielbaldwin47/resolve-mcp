@@ -12,7 +12,7 @@ from typing import Any
 from ..config import Config, get_config
 from ..errors import NoProjectOpenError, ProjectNotFoundError, SnapshotFailedError
 from ..logging_config import get_logger
-from ..naming import timestamped_name
+from ..naming import write_target
 from .connection import ResolveConnection
 
 log = get_logger("session")
@@ -68,6 +68,18 @@ def _read(getter: Any) -> str | None:
     return None if value is None else str(value)
 
 
+def current_project(
+    connection: ResolveConnection,
+    cause: str = "No project is open.",
+) -> Any:
+    """The open project, or a failure saying so. ``cause`` names what wanted it."""
+    manager = connection.handle().GetProjectManager()
+    project = manager.GetCurrentProject() if manager is not None else None
+    if project is None:
+        raise NoProjectOpenError(cause=cause)
+    return project
+
+
 def product_name(connection: ResolveConnection) -> str | None:
     """Which Resolve edition is attached. Raises if Resolve is unreachable."""
     resolve = connection.handle()
@@ -116,13 +128,7 @@ def snapshot_project(
     name = str(project.GetName())
     if not manager.SaveProject():
         log.warning("SaveProject() returned false before snapshotting %s", name)
-    target = (
-        Path(path)
-        if path is not None
-        else config.snapshot_dir / timestamped_name(name, ".drp", "project")
-    )
-    if target.suffix.lower() != ".drp":
-        target = target.with_suffix(".drp")
+    target = write_target(path, name, ".drp", config.snapshot_dir, "project")
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
     except OSError as exc:

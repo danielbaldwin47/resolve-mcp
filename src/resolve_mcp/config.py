@@ -16,6 +16,7 @@ DEFAULT_PROGRAMDATA = Path("C:/ProgramData")
 DEFAULT_SCRIPT_LIB = Path("C:/Program Files/Blackmagic Design/DaVinci Resolve/fusionscript.dll")
 DEFAULT_LOG_LEVEL = "INFO"
 CACHE_DIR_NAME = "resolve-mcp"
+DEFAULT_FFMPEG = "ffmpeg"
 
 
 TRUTHY = {"1", "true", "yes", "on"}
@@ -29,6 +30,7 @@ class Config:
     cache_dir: Path
     log_level: str
     allow_any_python: bool = False
+    ffmpeg: str = DEFAULT_FFMPEG
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Config:
@@ -43,6 +45,7 @@ class Config:
             cache_dir=Path(env.get("RESOLVE_MCP_CACHE") or local_app_data / CACHE_DIR_NAME),
             log_level=env.get("RESOLVE_MCP_LOG_LEVEL") or DEFAULT_LOG_LEVEL,
             allow_any_python=(env.get(BYPASS_ENV) or "").lower() in TRUTHY,
+            ffmpeg=env.get("RESOLVE_MCP_FFMPEG") or DEFAULT_FFMPEG,
         )
 
     @property
@@ -59,6 +62,31 @@ class Config:
     def listing_dir(self) -> Path:
         """Where listings too big to return inline spill to."""
         return self.cache_dir / "listings"
+
+    @property
+    def job_dir(self) -> Path:
+        """One JSON record per job — the only thing that survives a server restart."""
+        return self.cache_dir / "jobs"
+
+    @property
+    def result_dir(self) -> Path:
+        """Cache entries, one per content+params key, pointing at the artifacts they own."""
+        return self.cache_dir / "results"
+
+    @property
+    def audio_dir(self) -> Path:
+        """Acquired WAVs. Analysis workers key off the content hash of what lands here."""
+        return self.cache_dir / "audio"
+
+    @property
+    def interchange_dir(self) -> Path:
+        """Where exported timelines (OTIO, FCPXML, DRT) land when no path is given.
+
+        Unlike a snapshot these are meant to be opened and edited — an injected dissolve is
+        a hand edit to an exported file — so they keep their own folder rather than sitting
+        among the opaque restore points.
+        """
+        return self.cache_dir / "interchange"
 
 
 _config: Config | None = None

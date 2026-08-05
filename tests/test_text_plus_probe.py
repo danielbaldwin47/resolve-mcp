@@ -74,12 +74,13 @@ def test_the_route_runs_end_to_end_and_each_instance_keeps_its_own_text(
     assert report.clip_type == "Generator"
     assert report.cleaned_up is True
     assert pool.folder_imports == [(str(a_template_file(tmp_path)), "")]
-    # Each instance is asked for with an inclusive end frame, and lands after the one
-    # before it — two titles stacked on one frame would read back as one title placed twice.
-    sent = [dict(one) for one in pool.appends[0]]
+    # Each instance is asked for with a half-open end frame (#18 spike (a)), and lands
+    # after the one before it — two titles stacked on one frame would read back as one
+    # title placed twice.
+    sent = [dict(one) for one in pool.append_calls[0]]
     assert [{key: one[key] for key in ("startFrame", "endFrame")} for one in sent] == [
-        {"startFrame": 0, "endFrame": 119},
-        {"startFrame": 0, "endFrame": 119},
+        {"startFrame": 0, "endFrame": 120},
+        {"startFrame": 0, "endFrame": 120},
     ]
     assert {one["mediaPoolItem"].GetName() for one in sent} == {"Song Title"}
     assert [placed.record_in for placed in report.placed] == [0, 120]

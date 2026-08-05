@@ -254,7 +254,7 @@ def probe_template_append(
 
         step = "append the instances"
         placements = [
-            {"mediaPoolItem": clip, "startFrame": 0, "endFrame": duration - 1} for _ in asked
+            {"mediaPoolItem": clip, "startFrame": 0, "endFrame": duration} for _ in asked
         ]
         returned = list(pool.AppendToTimeline(placements) or [])
         if len(returned) != len(asked):

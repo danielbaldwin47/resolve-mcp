@@ -32,7 +32,6 @@ from typing import Any, NamedTuple
 from ..config import Config, get_config
 from ..errors import (
     InvalidRequestError,
-    NoProjectOpenError,
     NoTimelineOpenError,
     TimelineNotFoundError,
 )
@@ -40,7 +39,7 @@ from ..logging_config import get_logger
 from ..spill import spill
 from ..timing import dual_time, to_frames
 from .connection import ResolveConnection
-from .session import frame_rate
+from .session import current_project, frame_rate
 
 log = get_logger("timeline")
 
@@ -82,12 +81,9 @@ class Placement(NamedTuple):
 # --- reaching a timeline ------------------------------------------------------------------
 
 
-def _project(connection: ResolveConnection) -> Project:
-    manager = connection.handle().GetProjectManager()
-    project = manager.GetCurrentProject() if manager is not None else None
-    if project is None:
-        raise NoProjectOpenError(cause="No project is open, so there are no timelines to read.")
-    return project
+def open_project(connection: ResolveConnection) -> Project:
+    """The open project, or a structured refusal — never a ``None`` to trip over later."""
+    return current_project(connection, "No project is open, so there are no timelines to read.")
 
 
 def _timelines(project: Project) -> list[Timeline]:
@@ -112,7 +108,7 @@ def _timelines(project: Project) -> list[Timeline]:
     return found
 
 
-def _name(timeline: Timeline) -> str:
+def name_of(timeline: Timeline) -> str:
     return str(timeline.GetName() or "")
 
 
@@ -127,9 +123,20 @@ def find_timeline(project: Project, name: str | None) -> Timeline:
         return current
     held = _timelines(project)
     for timeline in held:
-        if _name(timeline) == name:
+        if name_of(timeline) == name:
             return timeline
-    raise TimelineNotFoundError(name, [_name(timeline) for timeline in held])
+    raise TimelineNotFoundError(name, [name_of(timeline) for timeline in held])
+
+
+def timeline_names(project: Project) -> list[str]:
+    """Every timeline name the project holds — what a new name must not collide with."""
+    return [name_of(timeline) for timeline in _timelines(project)]
+
+
+def current_name(project: Project) -> str | None:
+    """The open timeline's name, or ``None`` when the project has nothing open."""
+    current = project.GetCurrentTimeline()
+    return name_of(current) if current is not None else None
 
 
 def version_of(name: str) -> tuple[str, int | None]:
@@ -140,12 +147,29 @@ def version_of(name: str) -> tuple[str, int | None]:
     return match.group("base"), int(match.group("number"))
 
 
+def next_free_name(requested: str, existing: set[str]) -> str:
+    """A name no timeline in the project answers to, following ``<base> v<N>``.
+
+    The project's own convention for a new cut made from an old one is the next version
+    number, so a collision walks that sequence rather than inventing a suffix of its own —
+    and an unversioned name starts the sequence at v2, which reads as what it is: the
+    second thing to carry that name.
+    """
+    if requested not in existing:
+        return requested
+    base, version = version_of(requested)
+    number = (version or 1) + 1
+    while f"{base} v{number}" in existing:
+        number += 1
+    return f"{base} v{number}"
+
+
 # --- shape ---------------------------------------------------------------------------------
 
 
 def _bounds(timeline: Timeline, fps: float | None) -> dict[str, Any]:
-    start = _frames(timeline.GetStartFrame())
-    end = _frames(timeline.GetEndFrame())
+    start = read_frames(timeline.GetStartFrame())
+    end = read_frames(timeline.GetEndFrame())
     duration = end - start if start is not None and end is not None else None
     return {
         "start": dual_time(start, fps),
@@ -154,7 +178,7 @@ def _bounds(timeline: Timeline, fps: float | None) -> dict[str, Any]:
     }
 
 
-def _frames(value: Any) -> int | None:
+def read_frames(value: Any) -> int | None:
     """A frame number as Resolve reports it — sometimes a string, sometimes nothing.
 
     Only the parsing is forgiving. A getter that *raises* is left to raise: that is what a
@@ -202,7 +226,7 @@ class Reader:
 def _track_counts(reader: Reader, timeline: Timeline) -> dict[str, int]:
     """How many tracks of each kind — the stack that identifies a sync reference."""
     return {
-        track_type: _frames(reader.optional(timeline, "GetTrackCount", 0, track_type)) or 0
+        track_type: read_frames(reader.optional(timeline, "GetTrackCount", 0, track_type)) or 0
         for track_type in TRACK_TYPES
     }
 
@@ -214,7 +238,7 @@ def summarise(
     current: str | None,
 ) -> dict[str, Any]:
     """The one-line view of a timeline that list and inspect both open with."""
-    name = _name(timeline)
+    name = name_of(timeline)
     base, version = version_of(name)
     fps = frame_rate(project, timeline)
     return {
@@ -237,20 +261,17 @@ def list_timelines(
     config: Config | None = None,
 ) -> dict[str, Any]:
     """Every timeline in the project with its version, duration and track stack."""
-    project = _project(connection)
+    project = open_project(connection)
     reader = Reader(connection)
-    current = project.GetCurrentTimeline()
-    current_name = _name(current) if current is not None else None
+    current = current_name(project)
 
-    timelines = [
-        summarise(reader, timeline, project, current_name) for timeline in _timelines(project)
-    ]
+    timelines = [summarise(reader, timeline, project, current) for timeline in _timelines(project)]
 
     cap = max(int(limit), 0)
     truncated = len(timelines) > cap
     result: dict[str, Any] = {
         "count": len(timelines),
-        "current": current_name,
+        "current": current,
         "timelines": timelines[:cap] if truncated else timelines,
         "latest_versions": _latest_versions(timelines),
         "truncated": truncated,
@@ -297,11 +318,11 @@ def inspect_timeline(
             detail={"requested": detail, "available": list(DETAIL_LEVELS)},
         )
 
-    project = _project(connection)
+    project = open_project(connection)
     reader = Reader(connection)
     timeline = find_timeline(project, name)
-    current = project.GetCurrentTimeline()
-    heading = summarise(reader, timeline, project, _name(current) if current is not None else None)
+    current = current_name(project)
+    heading = summarise(reader, timeline, project, current)
     fps = heading["fps"]
 
     window = _window(heading, start, end, fps)
@@ -343,20 +364,46 @@ def _window(heading: dict[str, Any], start: Any, end: Any, fps: float | None) ->
     same bounds are two chances to disagree, and the range would then not be the range the
     reply says it is.
     """
-    asked_start = to_frames(start, fps, field="start")
-    asked_end = to_frames(end, fps, field="end")
+    asked_start, asked_end = frame_window(start, end, fps)
     bounds = {edge: (heading[edge] or {}).get("frames") for edge in ("start", "end")}
     first = asked_start if asked_start is not None else (bounds["start"] or 0)
     last = asked_end if asked_end is not None else bounds["end"]
     if last is None:
         last = first
     if last < first:
-        raise InvalidRequestError(
-            cause=f"The range ends at {last} but starts at {first}.",
-            fix="Ranges are half-open [start, end) and run forwards; swap the two.",
-            detail={"start": first, "end": last},
-        )
+        raise _backwards(first, last)
     return first, last
+
+
+def frame_window(start: Any, end: Any, fps: float | None) -> tuple[int | None, int | None]:
+    """A caller's range read as frames, order checked, either edge left open.
+
+    Shared with the marker reader: two half-open ranges parsed in two places would drift
+    apart, and a range that means something different per tool is worse than no range.
+    """
+    first = to_frames(start, fps, field="start")
+    last = to_frames(end, fps, field="end")
+    if first is not None and last is not None and last < first:
+        raise _backwards(first, last)
+    return first, last
+
+
+def _backwards(first: int, last: int) -> InvalidRequestError:
+    return InvalidRequestError(
+        cause=f"The range ends at {last} but starts at {first}.",
+        fix="Ranges are half-open [start, end) and run forwards; swap the two.",
+        detail={"start": first, "end": last},
+    )
+
+
+def overlaps(first: int, last: int, window: tuple[int | None, int | None]) -> bool:
+    """Whether ``[first, last)`` touches the window — an edge that only meets it does not.
+
+    An open edge of the window excludes nothing, which is what an unasked-for start or end
+    means.
+    """
+    start, end = window
+    return (end is None or first < end) and (start is None or last > start)
 
 
 def _read_track(
@@ -431,10 +478,9 @@ def _touches(placement: Placement, window: tuple[int, int]) -> bool:
     A shot whose position cannot be read is kept: dropping it would quietly shorten the
     reading of a cut, which is worse than one entry the agent has to look at twice.
     """
-    first, last = window
     if placement.start is None or placement.end is None:
         return True
-    return bool(placement.start < last and placement.end > first)
+    return overlaps(placement.start, placement.end, window)
 
 
 def _items_in_track(timeline: Timeline, track_type: str, index: int) -> list[TimelineItem]:
@@ -449,7 +495,7 @@ def _marker_count(reader: Reader, timeline: Timeline) -> int:
 
 def _placement(item: TimelineItem) -> Placement:
     """Where a shot sits, in the two numbers everything else is derived from."""
-    return Placement(_frames(item.GetStart()), _frames(item.GetDuration()))
+    return Placement(read_frames(item.GetStart()), read_frames(item.GetDuration()))
 
 
 def read_item(
@@ -498,14 +544,14 @@ def _source_bounds(
     The two routes are never mixed: an in point counted from the media start against an
     out point in absolute source frames would be a span that means nothing.
     """
-    start = _frames(reader.optional(item, "GetSourceStartFrame", None))
+    start = read_frames(reader.optional(item, "GetSourceStartFrame", None))
     if start is not None:
-        last = _frames(reader.optional(item, "GetSourceEndFrame", None))
+        last = read_frames(reader.optional(item, "GetSourceEndFrame", None))
         if last is not None:
             return start, last + 1
         return start, (start + duration if duration is not None else None)
 
-    offset = _frames(reader.optional(item, "GetLeftOffset", None))
+    offset = read_frames(reader.optional(item, "GetLeftOffset", None))
     if offset is None:
         return None, None
     return offset, (offset + duration if duration is not None else None)

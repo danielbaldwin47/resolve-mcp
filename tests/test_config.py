@@ -71,3 +71,13 @@ def test_artifacts_live_under_the_cache_root(tmp_path: Path) -> None:
     config = Config.from_env({"RESOLVE_MCP_CACHE": str(tmp_path)})
 
     assert config.snapshot_dir == tmp_path / "snapshots"
+    assert config.job_dir == tmp_path / "jobs"
+    assert config.result_dir == tmp_path / "results"
+    assert config.audio_dir == tmp_path / "audio"
+
+
+def test_ffmpeg_is_a_bare_name_on_path_until_told_otherwise() -> None:
+    assert Config.from_env({}).ffmpeg == "ffmpeg"
+    assert Config.from_env({"RESOLVE_MCP_FFMPEG": r"D:\tools\ffmpeg.exe"}).ffmpeg == (
+        r"D:\tools\ffmpeg.exe"
+    )

@@ -96,6 +96,27 @@ class TimelineNotFoundError(ResolveMcpError):
         )
 
 
+class TimelineExportFailedError(ResolveMcpError):
+    """Resolve would not write the interchange file, or wrote nothing."""
+
+    code = "timeline_export_failed"
+    default_fix = (
+        "Check the target directory is writable from the machine Resolve runs on, then "
+        "retry. Another format may be supported where this one is not: otio, fcpxml, drt."
+    )
+
+
+class TimelineImportFailedError(ResolveMcpError):
+    """Resolve would not materialise a timeline from the file."""
+
+    code = "timeline_import_failed"
+    default_fix = (
+        "Check the file is a timeline Resolve can read (.otio, .fcpxml, .drt) and is "
+        "readable from the machine Resolve runs on. If it was hand-edited, an invalid "
+        "document imports as nothing — validate the edit and retry."
+    )
+
+
 class SnapshotFailedError(ResolveMcpError):
     code = "snapshot_failed"
     default_fix = (
@@ -180,10 +201,54 @@ class MediaOperationError(ResolveMcpError):
     )
 
 
+class TimelineOperationError(ResolveMcpError):
+    """Resolve refused a timeline write — a bare ``False``, with no reason given."""
+
+    code = "timeline_operation_failed"
+    default_fix = (
+        "Check the timeline is not locked or mid-render in the Resolve GUI, and that the "
+        "frame is inside it, then retry. run_python can reproduce the call for diagnosis."
+    )
+
+
 class InvalidRequestError(ResolveMcpError):
     """The request could not be acted on as written — a shape problem, not a Resolve one."""
 
     code = "invalid_request"
+
+
+class CutInvalidError(ResolveMcpError):
+    """The cut file did not pass the rules, so nothing was built. ``detail`` holds them all."""
+
+    code = "cut_invalid"
+    default_fix = (
+        "Fix every error in detail.errors and build again — validate_cut runs the identical "
+        "checks without touching Resolve."
+    )
+
+
+class UnsupportedCutFeatureError(ResolveMcpError):
+    """The cut is valid but describes something this build cannot place yet.
+
+    Refused rather than partially built: a timeline missing a part of the cut that made it
+    is the half-built outcome the pre-flight exists to prevent.
+    """
+
+    code = "unsupported_cut_feature"
+
+
+class BuildFailedError(ResolveMcpError):
+    """Resolve would not build the cut — creation refused, a locked track, a clip astray.
+
+    ``detail`` names the timeline it was building when it stopped, because that timeline
+    may exist and be incomplete: the earlier versions are untouched, this one is scrap.
+    """
+
+    code = "build_failed"
+    default_fix = (
+        "Fix what detail names in the Resolve GUI (unlock the track, clear the timeline), "
+        "delete the incomplete version if one was made, and build again."
+    )
 
 
 class PythonExecutionError(ResolveMcpError):
@@ -193,6 +258,78 @@ class PythonExecutionError(ResolveMcpError):
     default_fix = (
         "Fix the code and retry. get_status confirms what is currently open; "
         "the namespace holds resolve, project_manager, project and timeline."
+    )
+
+
+class JobNotFoundError(ResolveMcpError):
+    code = "job_not_found"
+
+    def __init__(self, job_id: str) -> None:
+        super().__init__(
+            cause=f"No job with id {job_id!r}.",
+            fix="list_jobs shows every job this cache directory knows about, newest first.",
+            detail={"requested": job_id},
+        )
+
+
+class JobInterruptedError(ResolveMcpError):
+    """The server restarted while this job was running, so its thread died with it."""
+
+    code = "job_interrupted"
+    default_fix = (
+        "Start the job again. Anything it had already finished is in the result cache, "
+        "so completed work is not paid for twice."
+    )
+
+
+class RenderQueueError(ResolveMcpError):
+    """The render queue refused a job, failed one, or never produced the file."""
+
+    code = "render_queue_failed"
+    default_fix = (
+        "Open the Deliver page and check the render queue for a failed or cancelled job, "
+        "clear it, and retry. A render that reports success but writes nothing usually means "
+        "the target directory is not writable from the machine Resolve runs on."
+    )
+
+
+class AudioExportError(ResolveMcpError):
+    """Resolve's render queue would not produce the timeline mix."""
+
+    code = "audio_export_failed"
+    default_fix = (
+        "Check the render queue in the Deliver page for a stuck or failed job, make sure the "
+        "timeline has audio on it, then retry."
+    )
+
+
+class FfmpegUnavailableError(ResolveMcpError):
+    """ffmpeg is not on PATH — the per-clip extraction route cannot run without it."""
+
+    code = "ffmpeg_unavailable"
+    default_fix = (
+        "Install ffmpeg and put it on PATH, or point RESOLVE_MCP_FFMPEG at the executable. "
+        "The timeline route needs no ffmpeg if you only want the timeline mix."
+    )
+
+
+class AudioExtractionError(ResolveMcpError):
+    """ffmpeg ran and refused the file."""
+
+    code = "audio_extraction_failed"
+    default_fix = (
+        "Check the clip is online and holds an audio stream — inspect_clip reports both. "
+        "ffmpeg's own message is in detail.stderr."
+    )
+
+
+class AudioMappingError(ResolveMcpError):
+    """The clip's audio does not live in the clip's own file, so extracting it would lie."""
+
+    code = "audio_mapping_unsupported"
+    default_fix = (
+        "Acquire this audio from the timeline instead (scope=timeline): only the render "
+        "route captures audio Resolve has linked or offset away from the source file."
     )
 
 
