@@ -12,7 +12,8 @@ rather than API calls, and are the reason this file exists at all:
 * **Metadata fields route by what the clip itself reports.** The clip property key names are
   undocumented, so nothing is hard-coded: each clip is enumerated once with
   ``GetClipProperty()`` and a field whose key is in that dict is written as a clip property,
-  everything else as metadata. The route taken comes back in the result.
+  everything else as metadata. The route taken comes back in the result; on real media that
+  dict is large enough that the property branch takes nearly everything — see ``_set_field``.
 * **Image media gets the still-duration workaround at import.** A one-time
   ``SetClipProperty("Out", …)`` is what makes ``endFrame`` respected on stills later; doing
   it at import means no timeline code ever has to remember.
@@ -38,7 +39,7 @@ from ..errors import (
     RelinkFailedError,
 )
 from ..logging_config import get_logger
-from ..naming import timestamped_name
+from ..spill import spill
 from ..timing import dual_time
 from .connection import ResolveConnection
 
@@ -485,20 +486,13 @@ def list_media(
         "spilled_to": None,
     }
     if truncated:
-        result["spilled_to"] = _spill(result["bin"], clips, config or get_config())
+        result["spilled_to"] = spill(
+            result["bin"],
+            {"bin": result["bin"], "count": len(clips), "clips": clips},
+            config or get_config(),
+            fallback="media-pool",
+        )
     return result
-
-
-def _spill(bin_path: str, clips: list[dict[str, Any]], config: Config) -> str:
-    """Write the whole listing where the agent can grep it, and return the path."""
-    target = config.listing_dir / timestamped_name(bin_path, ".json", "media-pool")
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(
-        json.dumps({"bin": bin_path, "count": len(clips), "clips": clips}, indent=2),
-        encoding="utf-8",
-    )
-    log.info("Spilled %d clip summaries to %s", len(clips), target)
-    return str(target)
 
 
 # --- inspect ----------------------------------------------------------------------------
@@ -607,7 +601,16 @@ def inspect_clip(
 
 
 def _set_field(clip: Clip, key: str, value: Any, reported: dict[str, str]) -> str:
-    """Write one field, choosing the route from what the clip itself reports."""
+    """Write one field, choosing the route from what the clip itself reports.
+
+    The property branch takes nearly everything. The one clip probed live so far (Resolve
+    Studio 21.0.3.7) enumerated around 250 keys — the whole namespace, production metadata
+    (``Scene``, ``Take``, ``Director``, ``Keyword``) included — while ``GetMetadata()`` on
+    the same clip returned ``{}``. Writing ``Scene`` through ``SetClipProperty`` then read
+    back through ``GetMetadata()``, so for that field the two accessors reach the same
+    value; whether that holds across the other keys was not tested. The metadata branch is
+    kept for a clip that reports less, which no probe has yet found.
+    """
     if key in reported:
         if not clip.SetClipProperty(key, str(value)):
             raise MediaOperationError(cause=f"Resolve refused to set the clip property {key!r}.")
