@@ -7,11 +7,20 @@ Resolve upgrade, with Resolve running and a project open:
 
 Everything here goes through the real connection singleton — no fakes — so it is the only
 place the direct-attach path itself is exercised.
+
+Every test here is read-only except the Text+ probe, which creates and then deletes a
+scratch bin and timeline in the open project. It stays skipped until you opt in by
+pointing ``RESOLVE_MCP_TEXTPLUS_TEMPLATE`` at a ``.drb`` you exported from the GUI —
+in PowerShell, which is the shell on the machine this runs on:
+
+    $env:RESOLVE_MCP_TEXTPLUS_TEMPLATE = 'C:\\titles\\Titles.drb'
+    uv run pytest -m live -s
 """
 
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -35,6 +44,7 @@ from resolve_mcp.tools.timeline import (
 )
 
 from . import otio
+from .text_plus_probe import TEMPLATE_ENV, probe_template_append
 
 pytestmark = pytest.mark.live
 
@@ -510,3 +520,26 @@ def test_snapshot_writes_a_real_drp(tmp_path: Path) -> None:
     snapshot = Path(result["snapshot"])
     assert snapshot.exists()
     assert snapshot.stat().st_size > 0
+
+
+def test_the_text_plus_template_route_survives_a_drb_round_trip() -> None:
+    """#41: the one question no fake can answer — does Resolve give each placed instance
+    of a GUI-authored Text+ template its own text?
+
+    The whole titling design downstream assumes yes. This mutates the open project (a
+    scratch bin and a scratch timeline, both deleted again), so it stays skipped until
+    the template path is set; run it on a throwaway project the first time.
+
+    Paste the printed report onto the ticket — that is the record the ticket asks for.
+    """
+    exported = os.environ.get(TEMPLATE_ENV, "").strip()
+    if not exported:
+        pytest.skip(f"Set {TEMPLATE_ENV} to a .drb holding one GUI-authored Text+ template")
+    if get_status()["context"]["project"] is None:
+        pytest.skip("No project open in Resolve")
+
+    report = probe_template_append(get_connection(), Path(exported))
+
+    print("\n" + report.render())
+    assert report.per_instance_text, report.render()
+    assert report.cleaned_up, report.render()
