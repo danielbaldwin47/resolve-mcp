@@ -55,6 +55,11 @@ class Config:
         """Where opaque ``.drp`` safety snapshots land."""
         return self.cache_dir / "snapshots"
 
+    @property
+    def listing_dir(self) -> Path:
+        """Where listings too big to return inline spill to."""
+        return self.cache_dir / "listings"
+
 
 _config: Config | None = None
 

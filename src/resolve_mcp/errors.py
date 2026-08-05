@@ -82,6 +82,88 @@ class SnapshotFailedError(ResolveMcpError):
     )
 
 
+class MediaPoolUnavailableError(ResolveMcpError):
+    """A project is open but Resolve would not hand over its media pool."""
+
+    code = "media_pool_unavailable"
+    default_fix = (
+        "Reopen the project with open_project and retry; if it persists, check the project "
+        "is not mid-import in the GUI."
+    )
+
+
+class BinNotFoundError(ResolveMcpError):
+    code = "bin_not_found"
+
+    def __init__(self, path: str, available: list[str]) -> None:
+        listed = ", ".join(available) if available else "the media pool root only"
+        super().__init__(
+            cause=f"No bin at {path!r} in the media pool.",
+            fix=(
+                f"Bin paths are slash-separated from the root and case-sensitive. "
+                f"These exist: {listed}. organize_media creates missing bins."
+            ),
+            detail={"requested": path, "available": available},
+        )
+
+
+class ClipNotFoundError(ResolveMcpError):
+    code = "clip_not_found"
+
+    def __init__(self, name: str, where: str, available: list[str]) -> None:
+        listed = ", ".join(available) if available else "no clips at all"
+        super().__init__(
+            cause=f"No clip named {name!r} in {where}.",
+            fix=f"Clip names must match exactly. list_media shows what is there: {listed}.",
+            detail={"requested": name, "searched": where, "available": available},
+        )
+
+
+class AmbiguousClipError(ResolveMcpError):
+    code = "ambiguous_clip"
+
+    def __init__(self, name: str, bins: list[str]) -> None:
+        listed = ", ".join(bin_path or "the root" for bin_path in bins)
+        super().__init__(
+            cause=f"{len(bins)} clips are named {name!r}, so the reference is ambiguous.",
+            fix=f"Pass bin= to say which one: {listed}.",
+            detail={"requested": name, "bins": bins},
+        )
+
+
+class ImportFailedError(ResolveMcpError):
+    code = "import_failed"
+    default_fix = (
+        "Resolve imported none of these paths. Check they exist and are readable from the "
+        "machine Resolve runs on, and that an image sequence pattern (file_%04d.png) matches "
+        "the frames on disk."
+    )
+
+
+class RelinkFailedError(ResolveMcpError):
+    code = "relink_failed"
+    default_fix = (
+        "Point relink_media at a folder that holds the moved media, or at the replacement "
+        "file itself. list_media with offline_only shows what is still unlinked."
+    )
+
+
+class MediaOperationError(ResolveMcpError):
+    """Resolve refused a media pool write without saying why — its usual failure mode."""
+
+    code = "media_operation_failed"
+    default_fix = (
+        "Check the media pool is not locked by an open dialog in the Resolve GUI, then retry. "
+        "run_python can reproduce the call directly for diagnosis."
+    )
+
+
+class InvalidRequestError(ResolveMcpError):
+    """The request could not be acted on as written — a shape problem, not a Resolve one."""
+
+    code = "invalid_request"
+
+
 class PythonExecutionError(ResolveMcpError):
     """The escape-hatch code raised. The traceback is logged, not returned."""
 

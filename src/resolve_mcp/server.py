@@ -11,7 +11,7 @@ from fastmcp import FastMCP
 from . import __version__
 from .config import get_config
 from .logging_config import configure_logging, get_logger
-from .tools import escape_hatch, project
+from .tools import escape_hatch, media, project
 
 log = get_logger("server")
 
@@ -33,7 +33,7 @@ def build_server() -> FastMCP:
         instructions=INSTRUCTIONS,
         version=__version__,
     )
-    for fn in (*project.TOOLS, *escape_hatch.TOOLS):
+    for fn in (*project.TOOLS, *media.TOOLS, *escape_hatch.TOOLS):
         mcp.tool(fn)
     return mcp
 
