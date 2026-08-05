@@ -55,7 +55,7 @@ def context(connection: ResolveConnection) -> Context:
 
     reading["project"] = _read(project.GetName) if project is not None else None
     reading["timeline"] = _read(timeline.GetName) if timeline is not None else None
-    reading["fps"] = _fps(project, timeline)
+    reading["fps"] = frame_rate(project, timeline)
     return reading
 
 
@@ -141,8 +141,12 @@ def _current_project(resolve: Any) -> Any | None:
     return manager.GetCurrentProject() if manager is not None else None
 
 
-def _fps(project: Any, timeline: Any) -> float | None:
-    """Frames per second, timeline setting first — it is what a cut is measured in."""
+def frame_rate(project: Any, timeline: Any) -> float | None:
+    """Frames per second, timeline setting first — it is what a cut is measured in.
+
+    Either side may be ``None``: a timeline read on its own still knows its own rate, and a
+    project with nothing open still knows the rate its timelines are created at.
+    """
     for source in (timeline, project):
         if source is None:
             continue

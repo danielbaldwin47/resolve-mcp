@@ -74,6 +74,28 @@ class ProjectNotFoundError(ResolveMcpError):
         )
 
 
+class NoTimelineOpenError(ResolveMcpError):
+    """A project is open but nothing is on the timeline — or it holds no timelines at all."""
+
+    code = "no_timeline_open"
+    default_fix = (
+        "Open a timeline in Resolve, or name one explicitly — list_timelines shows what "
+        "the project has."
+    )
+
+
+class TimelineNotFoundError(ResolveMcpError):
+    code = "timeline_not_found"
+
+    def __init__(self, name: str, available: list[str]) -> None:
+        listed = ", ".join(available) if available else "the project has no timelines"
+        super().__init__(
+            cause=f"No timeline named {name!r} in the open project.",
+            fix=f"Timeline names must match exactly, version suffix included: {listed}.",
+            detail={"requested": name, "available": available},
+        )
+
+
 class SnapshotFailedError(ResolveMcpError):
     code = "snapshot_failed"
     default_fix = (
