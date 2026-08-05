@@ -43,12 +43,13 @@ cannot-unlock bug with two candidate causes for a week.)
 
 Why the seam rule exists: forest-shell ran seven tickets green against its
 unit tier alone; the first pass on a real compositor produced eight bugs at
-once. The same class lives here between the fakes and the attach.
+once.
 
 ## Session workflow
 
-Work from ticket #N happens on branch `issue-<N>`: push early, open a draft
-PR. Review weight follows what the diff touches, not how simple it looks (a
+Work from ticket #N happens on branch `issue-<N>`: push and open a draft PR
+after the first commit. Non-ticket changes (doc tweaks, tooling fixes) take the same path on a
+branch named for the change (e.g. `fix-context-guard`). Review weight follows what the diff touches, not how simple it looks (a
 three-line log fix here hid a mislabelled recovery path that only the review
 caught):
 
@@ -59,15 +60,20 @@ caught):
 - **Pure prose** — docs, README, CLAUDE.md — gets one lightweight inline
   pass, and the line reads `Review: clean — prose only, single-pass`.
 
-Either way, append a `Review:` line to the PR body — `Review: clean`, or
-`Review:` followed by the findings written out. "findings held" with nothing
-above it is a contentless token; the review gate rejects it.
+Either way, append a `Review:` line to the PR body. The gate reads only the
+**last** `Review:` line in the body and passes only `Review: clean`
+(optionally followed by a summary) — any other last line blocks merge. If the
+review found issues: write them into the body, fix them, re-review, then
+append a new `Review: clean` line; the earlier findings lines stay above it
+as the record.
 Everything reaches `main` through a PR — never commit to `main` directly.
-After a stacked PR merges, verify its head is an ancestor of `origin/main`
-(`git merge-base --is-ancestor`) — a PR that merges into a just-consumed
-parent branch reads MERGED while its commits never reach main.
-Close the ticket with the PR link when the work is complete; name any unrun
-live ACs in the close comment.
+
+- After a stacked PR merges, verify its head is an ancestor of
+  `origin/main` (`git merge-base --is-ancestor`) — a PR that merges into a
+  just-consumed parent branch reads MERGED while its commits never reach
+  main.
+- Close the ticket with the PR link when the work is complete; name any
+  unrun live ACs in the close comment.
 
 Every implementation comment on a ticket (close or status) ends with a
 `## Needs from you` section as its **last** section, listing each item that
@@ -83,7 +89,8 @@ reads clean. Both are required status checks on `main`.
 
 One rule: nothing enters the session unless the session is about to act on
 it. Noisy commands (`pytest`, `mypy`, `ruff`) redirect to a scratch file and
-grep the decisive line back:
+grep the decisive line back — via the Bash tool; this snippet is bash, not
+PowerShell:
 
     log=$(mktemp); uv run pytest -m 'not live' >"$log" 2>&1; grep -E 'FAILED|passed|error' "$log"
 
@@ -105,4 +112,5 @@ The five canonical triage roles, each label string equal to its role name. See `
 
 ### Domain docs
 
-Single-context — one `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+Single-context — one `CONTEXT.md` (created lazily; may not exist yet) and
+`docs/adr/` at the repo root. See `docs/agents/domain.md`.
