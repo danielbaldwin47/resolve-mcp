@@ -80,7 +80,11 @@ def swap_take(
     Afterwards the timeline and the cut file disagree, and only you can fix that: `sync`
     holds the exact segment fields to write — the chosen alternate promoted to main, the
     old main demoted into its slot — so a later rebuild reproduces what is on screen now.
-    A swap on a timeline this cut file did not build is refused rather than guessed at.
+
+    A shot is found by the position and length this cut file computes for the segment, and
+    its selector must be the size the file describes; anything else is refused as drift with
+    a fix rather than swapped on a guess. That is a shape check, not proof of provenance —
+    if it matters which version you are on, compare `content_hash` against the build report.
     """
     connection = get_connection()
     return takes.swap_take(connection, cut_file, segment, take, timeline)

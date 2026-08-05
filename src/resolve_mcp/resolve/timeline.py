@@ -27,7 +27,7 @@ rather than API calls, and are the reason this file exists at all:
 from __future__ import annotations
 
 import re
-from typing import Any, NamedTuple
+from typing import Any, Final, NamedTuple
 
 from ..config import Config, get_config
 from ..errors import (
@@ -145,6 +145,14 @@ def version_of(name: str) -> tuple[str, int | None]:
     if match is None:
         return name, None
     return match.group("base"), int(match.group("number"))
+
+
+FIRST_TRACK: Final = 1
+"""A sequential V1 cut is one video track and one audio track: both the first of their kind.
+
+Where the build places and where a swap looks have to be the same track, so the index is
+named once rather than written as a literal 1 in each of them.
+"""
 
 
 def start_frame(timeline: Timeline) -> int:

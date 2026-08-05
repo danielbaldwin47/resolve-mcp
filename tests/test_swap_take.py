@@ -210,7 +210,20 @@ def test_a_segment_with_no_alternates_has_nothing_to_swap(attach: Attach, tmp_pa
     assert result["ok"] is False
     assert result["error"]["code"] == "invalid_request"
     assert [take["source"] for take in result["error"]["detail"]["selector"]] == ["gtr_close"]
-    assert "no alternates" in result["error"]["fix"]
+    assert "no alternates" in result["error"]["cause"]
+
+
+def test_take_one_on_a_segment_with_no_alternates_says_so_rather_than_crying_drift(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The shot is a plain clip, not a selector sitting on take 1 — and nothing has drifted."""
+    _, cut_file = a_built_cut(attach, tmp_path)
+
+    result = swap_take(cut_file, "s003", 1)
+
+    assert result["ok"] is False
+    assert result["error"]["code"] == "invalid_request"
+    assert "no alternates" in result["error"]["cause"]
 
 
 def test_an_unknown_segment_is_refused_with_the_ids_that_exist(
@@ -266,6 +279,23 @@ def test_a_timeline_the_cut_does_not_line_up_with_is_refused(
     assert result["ok"] is False
     assert result["error"]["code"] == "invalid_request"
     assert result["error"]["detail"]["record_frame"] == 50
+
+
+def test_a_shot_of_the_wrong_length_at_the_right_frame_is_not_this_segment(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Two cuts can agree on where a segment starts and disagree on what it is."""
+    _, _ = a_built_cut(attach, tmp_path, doc=valid_doc())
+    relengthed = doc_with_alternates()
+    relengthed["segments"][1]["out"] = 4070
+    relengthed["segments"][1]["alternates"] = [{"source": "gtr_close", "in": 5000, "out": 5070}]
+
+    result = swap_take(a_cut(tmp_path, relengthed, name="relengthed.cut.json"), "s002", 2)
+
+    assert result["ok"] is False
+    assert result["error"]["code"] == "invalid_request"
+    assert result["error"]["detail"]["record_frame"] == 100
+    assert result["error"]["detail"]["duration"] == 70
 
 
 def test_an_unknown_timeline_name_is_refused(attach: Attach, tmp_path: Path) -> None:

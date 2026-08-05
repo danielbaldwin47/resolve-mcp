@@ -28,7 +28,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Final
 
-from ..cut.validate import locked_track_finding, positions
+from ..cut.validate import locked_track_finding, placements
 from ..errors import BuildFailedError, CutInvalidError, UnsupportedCutFeatureError
 from ..logging_config import get_logger
 from ..naming import next_version_name
@@ -46,7 +46,7 @@ Timeline = Any
 MEDIA_TYPES: Final[dict[str, int]] = {"video": 1, "audio": 2}
 """Resolve's ``mediaType``: 1 appends video only, 2 audio only. Never omitted."""
 
-TRACK_INDEX: Final = 1
+TRACK_INDEX: Final = timeline_read.FIRST_TRACK
 """Sequential V1 is one video track and one audio track; both are the first of their kind."""
 
 TRACK_LABELS: Final[dict[str, str]] = {"video": "V1", "audio": "A1"}
@@ -126,7 +126,7 @@ def build_timeline(
     # Takes hang off placed clips, so they are attached only once every placement has been
     # read back — a selector on a shot that slid somewhere else would be alternates for a
     # shot the cut file does not have.
-    selectors = takes.attach_takes(built, _selectors(doc, clips, shots), name)
+    made = takes.attach_takes(built, _selectors(doc, clips, shots), name)
 
     log.info("Built %s: %d clips from %s", name, len(shots), checked.loaded.content_hash)
     return {
@@ -136,7 +136,7 @@ def build_timeline(
         "placed": {
             "segments": sum(1 for shot in shots if shot.track_type == "video"),
             "audio": any(shot.track_type == "audio" for shot in shots),
-            "selectors": selectors,
+            "selectors": made,
         },
         "warnings": [finding.as_dict() for finding in checked.warnings],
     }
@@ -165,18 +165,18 @@ def _refuse_what_cannot_be_placed(doc: dict[str, Any]) -> None:
 
 def _shots(doc: dict[str, Any], clips: dict[str, media.LocatedClip], start: int) -> list[Shot]:
     """Every append the cut asks for, positioned absolutely from the timeline start."""
-    placed = positions(doc)
+    placed = placements(doc, start)
     shots = []
     for segment in doc["segments"]:
         id = str(segment["id"])
-        offset, duration = placed[id]
+        record, duration = placed[id]
         shots.append(
             _shot(
                 id=id,
                 track_type="video",
                 located=clips[str(segment["source"])],
                 source_in=int(segment["in"]),
-                record=start + offset,
+                record=record,
                 duration=duration,
             )
         )
@@ -209,11 +209,16 @@ def _shot(
         id=id,
         track_type=track_type,
         clip=located.clip,
-        name=str(located.clip.GetName() or ""),
+        name=_clip_name(located),
         source_in=source_in,
         record=record,
         duration=duration,
     )
+
+
+def _clip_name(located: media.LocatedClip) -> str:
+    """What to call the clip in a failure — read once, since a dead handle answers nothing."""
+    return str(located.clip.GetName() or "")
 
 
 def _selectors(
@@ -244,7 +249,7 @@ def _take(alternate: dict[str, Any], clips: dict[str, media.LocatedClip]) -> tak
     return takes.Take(
         source=source,
         clip=located.clip,
-        name=str(located.clip.GetName() or ""),
+        name=_clip_name(located),
         source_in=int(alternate["in"]),
         duration=int(alternate["out"]) - int(alternate["in"]),
     )

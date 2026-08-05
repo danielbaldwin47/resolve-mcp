@@ -26,8 +26,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Final
 
-from ..cut.document import read_cut_file
-from ..cut.validate import Finding, positions, validate_structure
+from ..cut.document import LoadedCut, read_cut_file
+from ..cut.validate import Finding, placements, validate_structure
 from ..errors import (
     BuildFailedError,
     CutInvalidError,
@@ -49,8 +49,8 @@ TimelineItem = Any
 MAIN_TAKE: Final = 1
 """The main clip's slot. The build ends every selector here; a swap counts from here."""
 
-VIDEO_TRACK: Final = 1
-"""Sequential V1: a segment's selector is always on the first video track."""
+VIDEO_TRACK: Final = timeline_read.FIRST_TRACK
+"""Sequential V1: a segment's selector is always on the video track the build placed it on."""
 
 
 @dataclass(frozen=True)
@@ -99,6 +99,7 @@ def attach_takes(timeline: Timeline, selectors: list[Selector], name: str) -> in
             raise BuildFailedError(
                 cause=f"The shot for segment {selector.segment!r} is no longer on V1 of "
                 f"{name!r}, so its alternates could not be attached.",
+                fix="Delete the version this build made and build again.",
                 detail={"timeline": name, "segment": selector.segment},
             )
         _add_takes(item, selector, name)
@@ -122,7 +123,7 @@ def _add_takes(item: TimelineItem, selector: Selector, name: str) -> None:
                     "clip": take.name,
                 },
             )
-    found = takes_count(item)
+    found = _takes_count(item)
     if found != selector.wanted:
         raise BuildFailedError(
             cause=f"Segment {selector.segment!r} holds {found} take(s) after adding "
@@ -157,7 +158,9 @@ def swap_take(
     timeline: str | None = None,
 ) -> dict[str, Any]:
     """Select take ``take`` on ``segment``'s shot, in place, and report the cut-file edit."""
-    doc = _checked_doc(cut_file)
+    loaded = _checked_cut(cut_file)
+    # E1 is an error, so a cut file that gets here parsed and matched the schema.
+    doc: dict[str, Any] = loaded.doc
     chosen = _segment(doc, segment)
     listed = _selector_of(doc, chosen)
     _refuse_index(segment, take, listed)
@@ -165,18 +168,17 @@ def swap_take(
     project = timeline_read.open_project(connection)
     target = timeline_read.find_timeline(project, timeline)
     name = timeline_read.name_of(target)
-    record = timeline_read.start_frame(target) + positions(doc)[segment][0]
-    item = _shot_at(target, record, segment, name)
+    record, duration = placements(doc, timeline_read.start_frame(target))[segment]
+    item = _shot_at(target, record, duration, segment, name)
     _refuse_drift(item, segment, listed, name)
 
-    previous = selected_take(item)
+    previous = _selected_take(item)
     changed = previous != take
     if changed:
         _select(item, take, _swap_failure(segment, take, name))
         log.info("Swapped segment %s of %s from take %d to take %d", segment, name, previous, take)
 
-    loaded = read_cut_file(cut_file)
-    fps = _fps(doc)
+    fps = float(doc["timeline"]["fps"])
     return {
         "cut_file": str(loaded.path),
         "content_hash": loaded.content_hash,
@@ -187,14 +189,19 @@ def swap_take(
         "changed": changed,
         "selected": listed[take - 1],
         "previous": listed[previous - 1] if 1 <= previous <= len(listed) else None,
-        "duration": dual_time(int(chosen["out"]) - int(chosen["in"]), fps),
+        "duration": dual_time(duration, fps),
         "selector": listed,
         "sync": _sync(chosen, take),
     }
 
 
-def _checked_doc(cut_file: str) -> dict[str, Any]:
-    """The cut file, refused unless it still validates — positions come out of it."""
+def _checked_cut(cut_file: str) -> LoadedCut:
+    """The cut file, refused unless it still validates.
+
+    Read once and carried, so the hash the report echoes is the hash of the very bytes the
+    swap was computed from — a second read could pick up an edit made in between and put a
+    provenance stamp on the report that nothing here ever looked at.
+    """
     loaded = read_cut_file(cut_file)
     findings: list[Finding] = (
         [loaded.parse_error] if loaded.parse_error is not None else validate_structure(loaded.doc)
@@ -209,9 +216,7 @@ def _checked_doc(cut_file: str) -> dict[str, Any]:
                 "errors": [finding.as_dict() for finding in errors],
             },
         )
-    # E1 is an error, so a document that gets here parsed and matched the schema.
-    checked: dict[str, Any] = loaded.doc
-    return checked
+    return loaded
 
 
 def _segment(doc: dict[str, Any], segment: str) -> dict[str, Any]:
@@ -243,30 +248,58 @@ def _selector_of(doc: dict[str, Any], segment: dict[str, Any]) -> list[dict[str,
 
 
 def _refuse_index(segment: str, take: int, listed: list[dict[str, Any]]) -> None:
+    """A segment with no alternates has no selector at all, whatever index is asked for.
+
+    Take 1 on such a segment is not a harmless no-op to wave through: the shot on the
+    timeline is a plain clip, so there is nothing there to select and nothing the swap
+    could confirm. It is refused with the same answer as any other index — add an
+    alternate to the cut file, or you are asking for a rebuild rather than a swap.
+    """
+    if len(listed) == MAIN_TAKE:
+        raise InvalidRequestError(
+            cause=f"Segment {segment!r} has no alternates, so it has no takes to swap between.",
+            fix="Add an equal-duration alternate to this segment in the cut file and build a "
+            "new version — a shot with no alternates is a plain clip, not a take selector.",
+            detail={"segment": segment, "requested": take, "selector": listed},
+        )
     if MAIN_TAKE <= take <= len(listed):
         return
     raise InvalidRequestError(
         cause=f"Segment {segment!r} has {len(listed)} take(s), so take {take} does not exist.",
         fix="Takes are 1-based: 1 is the segment's own source, 2 onwards are its alternates "
-        "in the order the cut file lists them. detail.selector says which is which."
-        if len(listed) > MAIN_TAKE
-        else "This segment has no alternates, so there is nothing to swap to. Add an "
-        "equal-duration alternate to the cut file and build a new version.",
+        "in the order the cut file lists them. detail.selector says which is which.",
         detail={"segment": segment, "requested": take, "selector": listed},
     )
 
 
-def _shot_at(timeline: Timeline, record: int, segment: str, name: str) -> TimelineItem:
+def _shot_at(
+    timeline: Timeline,
+    record: int,
+    duration: int,
+    segment: str,
+    name: str,
+) -> TimelineItem:
+    """The shot this segment built, identified by where it sits and how long it runs.
+
+    Position is identity on a sequential V1, and the length is checked with it: a cut whose
+    earlier segments happen to sum to the same frame would otherwise hand back a shot that
+    is not this segment's at all, and the swap would land on the wrong angle.
+    """
     item = _items_by_record(timeline).get(record)
-    if item is not None:
+    if item is not None and int(item.GetDuration() or 0) == duration:
         return item
     raise InvalidRequestError(
-        cause=f"Nothing starts at frame {record} on V1 of {name!r}, where this cut file puts "
-        f"segment {segment!r}.",
+        cause=f"No {duration}-frame shot starts at frame {record} on V1 of {name!r}, where this "
+        f"cut file puts segment {segment!r}.",
         fix="This timeline was not built from this cut file, or was built from an earlier "
         "state of it. Name the version that was, or build_timeline the file again and swap "
         "on the new version.",
-        detail={"timeline": name, "segment": segment, "record_frame": record},
+        detail={
+            "timeline": name,
+            "segment": segment,
+            "record_frame": record,
+            "duration": duration,
+        },
     )
 
 
@@ -277,7 +310,7 @@ def _refuse_drift(
     name: str,
 ) -> None:
     """A selector that is not the shape the cut file describes means the two have drifted."""
-    found = takes_count(item)
+    found = _takes_count(item)
     if found == len(listed):
         return
     raise InvalidRequestError(
@@ -305,9 +338,10 @@ def _swap_failure(segment: str, take: int, name: str) -> TimelineOperationError:
 def _sync(segment: dict[str, Any], take: int) -> dict[str, Any] | None:
     """The cut-file edit this swap needs: the alternate promoted, the old main demoted.
 
-    They trade slots rather than shuffling the list, so the selector a rebuild produces has
-    the same order as the one on the timeline now — and today's take indexes keep meaning
-    what they meant. Take 1 needs no edit at all: the file already says main is selected.
+    The two trade slots rather than the list shuffling up, so the selector a rebuild produces
+    is the same length and the same shape as the one on the timeline now: only slots 1 and
+    ``take`` change hands, and every other alternate keeps the index it has today. Take 1
+    needs no edit at all — the file already says main is the selection.
     """
     if take == MAIN_TAKE:
         return None
@@ -328,29 +362,22 @@ def _range(entry: dict[str, Any]) -> dict[str, Any]:
     return {"source": str(entry["source"]), "in": int(entry["in"]), "out": int(entry["out"])}
 
 
-def _fps(doc: dict[str, Any]) -> float | None:
-    try:
-        return float(doc["timeline"]["fps"])
-    except (KeyError, TypeError, ValueError):
-        return None
-
-
 # --- the seam itself --------------------------------------------------------------------------
 
 
 def _select(item: TimelineItem, index: int, failure: ResolveMcpError) -> None:
     """Select a take and read the selection back: the return value alone proves nothing."""
-    if not item.SelectTakeByIndex(index) or selected_take(item) != index:
-        failure.detail["selected"] = selected_take(item)
+    if not item.SelectTakeByIndex(index) or _selected_take(item) != index:
+        failure.detail["selected"] = _selected_take(item)
         raise failure
 
 
-def takes_count(item: TimelineItem) -> int:
+def _takes_count(item: TimelineItem) -> int:
     """How many takes the selector holds — zero for a clip that is not a selector at all."""
     return _reading(item, "GetTakesCount")
 
 
-def selected_take(item: TimelineItem) -> int:
+def _selected_take(item: TimelineItem) -> int:
     """The selected take's 1-based index, or zero when the clip is not a take selector."""
     return _reading(item, "GetSelectedTakeIndex")
 
