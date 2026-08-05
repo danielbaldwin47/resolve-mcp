@@ -173,8 +173,8 @@ def next_free_name(requested: str, existing: set[str]) -> str:
 
 
 def _bounds(timeline: Timeline, fps: float | None) -> dict[str, Any]:
-    start = _frames(timeline.GetStartFrame())
-    end = _frames(timeline.GetEndFrame())
+    start = read_frames(timeline.GetStartFrame())
+    end = read_frames(timeline.GetEndFrame())
     duration = end - start if start is not None and end is not None else None
     return {
         "start": dual_time(start, fps),
@@ -183,7 +183,7 @@ def _bounds(timeline: Timeline, fps: float | None) -> dict[str, Any]:
     }
 
 
-def _frames(value: Any) -> int | None:
+def read_frames(value: Any) -> int | None:
     """A frame number as Resolve reports it — sometimes a string, sometimes nothing.
 
     Only the parsing is forgiving. A getter that *raises* is left to raise: that is what a
@@ -231,7 +231,7 @@ class Reader:
 def _track_counts(reader: Reader, timeline: Timeline) -> dict[str, int]:
     """How many tracks of each kind — the stack that identifies a sync reference."""
     return {
-        track_type: _frames(reader.optional(timeline, "GetTrackCount", 0, track_type)) or 0
+        track_type: read_frames(reader.optional(timeline, "GetTrackCount", 0, track_type)) or 0
         for track_type in TRACK_TYPES
     }
 
@@ -369,20 +369,46 @@ def _window(heading: dict[str, Any], start: Any, end: Any, fps: float | None) ->
     same bounds are two chances to disagree, and the range would then not be the range the
     reply says it is.
     """
-    asked_start = to_frames(start, fps, field="start")
-    asked_end = to_frames(end, fps, field="end")
+    asked_start, asked_end = frame_window(start, end, fps)
     bounds = {edge: (heading[edge] or {}).get("frames") for edge in ("start", "end")}
     first = asked_start if asked_start is not None else (bounds["start"] or 0)
     last = asked_end if asked_end is not None else bounds["end"]
     if last is None:
         last = first
     if last < first:
-        raise InvalidRequestError(
-            cause=f"The range ends at {last} but starts at {first}.",
-            fix="Ranges are half-open [start, end) and run forwards; swap the two.",
-            detail={"start": first, "end": last},
-        )
+        raise _backwards(first, last)
     return first, last
+
+
+def frame_window(start: Any, end: Any, fps: float | None) -> tuple[int | None, int | None]:
+    """A caller's range read as frames, order checked, either edge left open.
+
+    Shared with the marker reader: two half-open ranges parsed in two places would drift
+    apart, and a range that means something different per tool is worse than no range.
+    """
+    first = to_frames(start, fps, field="start")
+    last = to_frames(end, fps, field="end")
+    if first is not None and last is not None and last < first:
+        raise _backwards(first, last)
+    return first, last
+
+
+def _backwards(first: int, last: int) -> InvalidRequestError:
+    return InvalidRequestError(
+        cause=f"The range ends at {last} but starts at {first}.",
+        fix="Ranges are half-open [start, end) and run forwards; swap the two.",
+        detail={"start": first, "end": last},
+    )
+
+
+def overlaps(first: int, last: int, window: tuple[int | None, int | None]) -> bool:
+    """Whether ``[first, last)`` touches the window — an edge that only meets it does not.
+
+    An open edge of the window excludes nothing, which is what an unasked-for start or end
+    means.
+    """
+    start, end = window
+    return (end is None or first < end) and (start is None or last > start)
 
 
 def _read_track(
@@ -457,10 +483,9 @@ def _touches(placement: Placement, window: tuple[int, int]) -> bool:
     A shot whose position cannot be read is kept: dropping it would quietly shorten the
     reading of a cut, which is worse than one entry the agent has to look at twice.
     """
-    first, last = window
     if placement.start is None or placement.end is None:
         return True
-    return bool(placement.start < last and placement.end > first)
+    return overlaps(placement.start, placement.end, window)
 
 
 def _items_in_track(timeline: Timeline, track_type: str, index: int) -> list[TimelineItem]:
@@ -475,7 +500,7 @@ def _marker_count(reader: Reader, timeline: Timeline) -> int:
 
 def _placement(item: TimelineItem) -> Placement:
     """Where a shot sits, in the two numbers everything else is derived from."""
-    return Placement(_frames(item.GetStart()), _frames(item.GetDuration()))
+    return Placement(read_frames(item.GetStart()), read_frames(item.GetDuration()))
 
 
 def read_item(
@@ -524,14 +549,14 @@ def _source_bounds(
     The two routes are never mixed: an in point counted from the media start against an
     out point in absolute source frames would be a span that means nothing.
     """
-    start = _frames(reader.optional(item, "GetSourceStartFrame", None))
+    start = read_frames(reader.optional(item, "GetSourceStartFrame", None))
     if start is not None:
-        last = _frames(reader.optional(item, "GetSourceEndFrame", None))
+        last = read_frames(reader.optional(item, "GetSourceEndFrame", None))
         if last is not None:
             return start, last + 1
         return start, (start + duration if duration is not None else None)
 
-    offset = _frames(reader.optional(item, "GetLeftOffset", None))
+    offset = read_frames(reader.optional(item, "GetLeftOffset", None))
     if offset is None:
         return None, None
     return offset, (offset + duration if duration is not None else None)
