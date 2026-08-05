@@ -12,7 +12,7 @@ from typing import Any
 from ..config import Config, get_config
 from ..errors import NoProjectOpenError, ProjectNotFoundError, SnapshotFailedError
 from ..logging_config import get_logger
-from ..naming import timestamped_name
+from ..naming import write_target
 from .connection import ResolveConnection
 
 log = get_logger("session")
@@ -116,13 +116,7 @@ def snapshot_project(
     name = str(project.GetName())
     if not manager.SaveProject():
         log.warning("SaveProject() returned false before snapshotting %s", name)
-    target = (
-        Path(path)
-        if path is not None
-        else config.snapshot_dir / timestamped_name(name, ".drp", "project")
-    )
-    if target.suffix.lower() != ".drp":
-        target = target.with_suffix(".drp")
+    target = write_target(path, name, ".drp", config.snapshot_dir, "project")
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
     except OSError as exc:

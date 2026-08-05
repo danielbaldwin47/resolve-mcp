@@ -96,6 +96,27 @@ class TimelineNotFoundError(ResolveMcpError):
         )
 
 
+class TimelineExportFailedError(ResolveMcpError):
+    """Resolve would not write the interchange file, or wrote nothing."""
+
+    code = "timeline_export_failed"
+    default_fix = (
+        "Check the target directory is writable from the machine Resolve runs on, then "
+        "retry. Another format may be supported where this one is not: otio, fcpxml, drt."
+    )
+
+
+class TimelineImportFailedError(ResolveMcpError):
+    """Resolve would not materialise a timeline from the file."""
+
+    code = "timeline_import_failed"
+    default_fix = (
+        "Check the file is a timeline Resolve can read (.otio, .fcpxml, .drt) and is "
+        "readable from the machine Resolve runs on. If it was hand-edited, an invalid "
+        "document imports as nothing — validate the edit and retry."
+    )
+
+
 class SnapshotFailedError(ResolveMcpError):
     code = "snapshot_failed"
     default_fix = (
@@ -194,6 +215,40 @@ class InvalidRequestError(ResolveMcpError):
     """The request could not be acted on as written — a shape problem, not a Resolve one."""
 
     code = "invalid_request"
+
+
+class CutInvalidError(ResolveMcpError):
+    """The cut file did not pass the rules, so nothing was built. ``detail`` holds them all."""
+
+    code = "cut_invalid"
+    default_fix = (
+        "Fix every error in detail.errors and build again — validate_cut runs the identical "
+        "checks without touching Resolve."
+    )
+
+
+class UnsupportedCutFeatureError(ResolveMcpError):
+    """The cut is valid but describes something this build cannot place yet.
+
+    Refused rather than partially built: a timeline missing a part of the cut that made it
+    is the half-built outcome the pre-flight exists to prevent.
+    """
+
+    code = "unsupported_cut_feature"
+
+
+class BuildFailedError(ResolveMcpError):
+    """Resolve would not build the cut — creation refused, a locked track, a clip astray.
+
+    ``detail`` names the timeline it was building when it stopped, because that timeline
+    may exist and be incomplete: the earlier versions are untouched, this one is scrap.
+    """
+
+    code = "build_failed"
+    default_fix = (
+        "Fix what detail names in the Resolve GUI (unlock the track, clear the timeline), "
+        "delete the incomplete version if one was made, and build again."
+    )
 
 
 class PythonExecutionError(ResolveMcpError):

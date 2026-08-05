@@ -187,6 +187,10 @@ class FakeTimeline:
         # takes the delete, refuses the add, and the restore of the displaced marker has
         # to be free to succeed or the test could not tell a restore from a loss.
         self.refuse_marker_names: set[str] = set()
+        self.exports: list[tuple[str, Any, tuple[Any, ...]]] = []
+        self.export_result = True
+        self.export_writes_the_file = True
+        self.add_track_result = True
 
     def adopt(self, owner: FakeResolve) -> None:
         self._owner = owner
@@ -303,6 +307,38 @@ class FakeTimeline:
     def DeleteMarkerAtFrame(self, frame: float) -> bool:  # noqa: N802
         self._check()
         return self._markers.pop(float(frame), None) is not None
+
+    def Export(self, file_name: str, export_type: Any, *subtype: Any) -> bool:  # noqa: N802
+        """Write an interchange file. The subtype is variadic because Resolve's is optional.
+
+        ``export_writes_the_file=False`` models the failure the return value hides: Resolve
+        answers True and nothing lands on disk.
+        """
+        self._check()
+        self.exports.append((file_name, export_type, subtype))
+        if not self.export_result:
+            return False
+        if self.export_writes_the_file:
+            target = Path(file_name)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(f"fake-export of {self._name}", encoding="utf-8")
+        return True
+
+    def AddTrack(self, track_type: str, *_: Any) -> bool:  # noqa: N802
+        self._check()
+        if not self.add_track_result:
+            return False
+        tracks = self._tracks.setdefault(track_type, [])
+        tracks.append(FakeTrack(f"{track_type.capitalize()} {len(tracks) + 1}"))
+        return True
+
+    def place(self, track_type: str, index: int, item: FakeTimelineItem) -> None:
+        """Put an item on a track, in start order — the pool's append reaches through here."""
+        track = self._track(track_type, index)
+        if track is None:
+            return
+        track.items.append(item)
+        track.items.sort(key=lambda placed: placed.GetStart())
 
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".exr", ".dpx", ".tga"}
@@ -431,6 +467,21 @@ class FakeMediaPool:
         self.relink_result: bool | None = None
         self.move_result = True
         self.calls: list[str] = []
+        self.timeline_imports: list[tuple[str, dict[str, Any]]] = []
+        self.imported_timeline: FakeTimeline | None = None
+        self.refuses_timeline_import = False
+        self._project: FakeProject | None = None
+        self.create_timeline_result: bool = True
+        self.new_timeline_start = 0
+        self.new_timeline_tracks: tuple[int, int] = (1, 1)
+        self.new_timeline_locked = False
+        self.new_timeline_items: list[FakeTimelineItem] = []
+        self.add_track_result = True
+        self.appends: list[dict[str, Any]] = []
+
+    def attach_project(self, project: FakeProject) -> None:
+        """The project this pool belongs to — appends land on *its* current timeline."""
+        self._project = project
 
     def _check(self, method: str) -> None:
         self.calls.append(method)
@@ -499,6 +550,37 @@ class FakeMediaPool:
             imported.append(clip)
         return imported
 
+    def ImportTimelineFromFile(  # noqa: N802
+        self,
+        file_path: str,
+        options: dict[str, Any] | None = None,
+    ) -> FakeTimeline | None:
+        """Materialise a timeline from an interchange file, as the real pool does.
+
+        The filesystem is consulted for the same reason ``ImportMedia`` consults it: a path
+        Resolve cannot read imports nothing and says so only by returning ``None``.
+        ``imported_timeline`` overrides the result — set it to a timeline the project
+        already holds to model the one outcome this must never be mistaken for, an import
+        that landed on an existing cut.
+        """
+        self._check("ImportTimelineFromFile")
+        asked = dict(options or {})
+        self.timeline_imports.append((file_path, asked))
+        if self.refuses_timeline_import or not Path(file_path).exists():
+            return None
+        if self.imported_timeline is not None:
+            return self.imported_timeline
+        timeline = FakeTimeline(
+            str(asked.get("timelineName") or Path(file_path).stem),
+            video=[[FakeTimelineItem("C0012.mp4", 0, 60, source_start=1000)]],
+        )
+        if self._owner is not None:
+            timeline.adopt(self._owner)
+            project = self._owner.current_project
+            if project is not None:
+                project.add_timeline(timeline)
+        return timeline
+
     def RelinkClips(  # noqa: N802
         self,
         clips: list[FakeMediaPoolItem],
@@ -516,11 +598,136 @@ class FakeMediaPool:
                 relinked = True
         return relinked
 
+    def CreateEmptyTimeline(self, name: str) -> FakeTimeline | None:  # noqa: N802
+        """A fresh timeline, added to the project and made current — as Resolve does."""
+        self._check("CreateEmptyTimeline")
+        if not self.create_timeline_result:
+            return None
+        video, audio = self.new_timeline_tracks
+        project_fps = (
+            self._project.GetSetting("timelineFrameRate") if self._project is not None else None
+        )
+        timeline = FakeTimeline(
+            name,
+            fps=project_fps or "59.94",
+            start_frame=self.new_timeline_start,
+            video=[
+                FakeTrack(
+                    f"Video {index + 1}",
+                    list(self.new_timeline_items) if index == 0 else None,
+                    locked=self.new_timeline_locked,
+                )
+                for index in range(video)
+            ],
+            audio=[
+                FakeTrack(f"Audio {index + 1}", locked=self.new_timeline_locked)
+                for index in range(audio)
+            ],
+            owner=self._owner,
+        )
+        timeline.add_track_result = self.add_track_result
+        if self._project is not None:
+            self._project.add_timeline(timeline)
+            self._project.SetCurrentTimeline(timeline)
+        return timeline
+
+    def AppendToTimeline(  # noqa: N802
+        self,
+        clips: list[dict[str, Any]],
+    ) -> list[FakeTimelineItem]:
+        """Append onto the project's *current* timeline, footguns and all (#18 spike (d)).
+
+        Every confirmed failure mode is modelled, because each one returns a truthy item
+        either way: the caller cannot tell an append that landed from one that vanished
+        without re-reading the track, and that re-read is what the wrapper is for.
+        """
+        self._check("AppendToTimeline")
+        timeline = self._project.GetCurrentTimeline() if self._project is not None else None
+        if timeline is None:
+            return []
+        placed = []
+        for info in clips:
+            self.appends.append(dict(info))
+            placed.append(self._append_one(timeline, info))
+        return placed
+
+    def _append_one(self, timeline: FakeTimeline, info: dict[str, Any]) -> FakeTimelineItem:
+        clip: FakeMediaPoolItem = info["mediaPoolItem"]
+        source_start = int(info.get("startFrame", 0))
+        duration = _appended_duration(clip, source_start, info.get("endFrame"))
+        media_type = info.get("mediaType")
+        track_type = "audio" if media_type == AUDIO_TYPE else "video"
+        index = int(info.get("trackIndex", 1))
+        record = int(info.get("recordFrame", _track_end(timeline, track_type, index)))
+
+        item = FakeTimelineItem(
+            clip.GetName(),
+            record,
+            duration,
+            source_start=source_start,
+            media_item=clip,
+            owner=self._owner,
+        )
+        # An explicit track index without a media type: Resolve reports success and drops it.
+        if media_type is None and "trackIndex" in info:
+            return item
+        count = timeline.GetTrackCount(track_type)
+        if index == count + 1:
+            timeline.AddTrack(track_type)
+        elif index > count + 1:
+            return item  # past the next free track: reported placed, never placed
+        if timeline.GetIsTrackLocked(track_type, index):
+            return item  # the silent one: a locked track swallows the append
+        # No overwrite on overlap — the clip slides to the first free frame after the
+        # blocker, so a placement is only exact if nothing was in the way.
+        for existing in timeline.GetItemListInTrack(track_type, index) or []:
+            if record < existing.GetStart() + existing.GetDuration() and existing.GetStart() < (
+                record + duration
+            ):
+                record = existing.GetStart() + existing.GetDuration()
+                item = FakeTimelineItem(
+                    clip.GetName(),
+                    record,
+                    duration,
+                    source_start=source_start,
+                    media_item=clip,
+                    owner=self._owner,
+                )
+        timeline.place(track_type, index, item)
+        return item
+
     def _walk(self, folder: FakeFolder) -> list[FakeFolder]:
         found = [folder]
         for sub in folder.subfolders:
             found.extend(self._walk(sub))
         return found
+
+
+AUDIO_TYPE = 2
+STILL_DEFAULT_FRAMES = 120
+
+
+def _appended_duration(clip: FakeMediaPoolItem, source_start: int, end_frame: Any) -> int:
+    """``endFrame - startFrame``, except on a still that has never had an out point written.
+
+    That is the (a) spike verbatim: a freshly imported still ignores ``endFrame`` entirely
+    and lands at the default duration until any ``Out`` write unlocks it.
+    """
+    still = Path(str(clip.GetClipProperty("File Path") or "")).suffix.lower() in IMAGE_SUFFIXES
+    unlocked = any(key == "Out" for key, _ in clip.property_writes)
+    if still and not unlocked:
+        return STILL_DEFAULT_FRAMES
+    if end_frame is None:
+        return STILL_DEFAULT_FRAMES if still else 1
+    return max(int(end_frame) - source_start, 1)
+
+
+def _track_end(timeline: FakeTimeline, track_type: str, index: int) -> int:
+    ends = [
+        item.GetStart() + item.GetDuration()
+        for item in timeline.GetItemListInTrack(track_type, index) or []
+    ]
+    return max(ends, default=timeline.GetStartFrame())
 
 
 def _import_one(item: str | dict[str, Any]) -> FakeMediaPoolItem | None:
@@ -585,12 +792,23 @@ class FakeProject:
             self._timelines = list(timelines)
         else:
             self._timelines = [timeline] if timeline is not None else []
+        if media_pool is not None:
+            media_pool.attach_project(self)
 
     def GetName(self) -> str:  # noqa: N802
         return self._name
 
     def GetCurrentTimeline(self) -> FakeTimeline | None:  # noqa: N802
         return self._timeline
+
+    def SetCurrentTimeline(self, timeline: FakeTimeline) -> bool:  # noqa: N802
+        """Resolve only appends to the current timeline, so the build has to set it."""
+        self._timeline = timeline
+        return True
+
+    def add_timeline(self, timeline: FakeTimeline) -> None:
+        """What creating a timeline does to a project — the pool reaches through here."""
+        self._timelines.append(timeline)
 
     def GetTimelineCount(self) -> int:  # noqa: N802
         return len(self._timelines)
@@ -652,6 +870,25 @@ class FakeProjectManager:
         return self.export_result
 
 
+EXPORT_TYPES: tuple[str, ...] = (
+    # First in the tuple, so its value is 0 — the export constants are plain numbers and
+    # one of them is falsy, which is the trap a "constant or default" lookup falls into.
+    "EXPORT_AAF",
+    "EXPORT_DRT",
+    "EXPORT_EDL",
+    "EXPORT_FCP_7_XML",
+    "EXPORT_FCPXML_1_3",
+    "EXPORT_FCPXML_1_4",
+    "EXPORT_FCPXML_1_5",
+    "EXPORT_FCPXML_1_6",
+    "EXPORT_FCPXML_1_7",
+    "EXPORT_FCPXML_1_8",
+    "EXPORT_FCPXML_1_9",
+    "EXPORT_FCPXML_1_10",
+    "EXPORT_OTIO",
+)
+
+
 class FakeResolve:
     """A stand-in for the object ``scriptapp("Resolve")`` returns."""
 
@@ -660,10 +897,16 @@ class FakeResolve:
         projects: dict[str, FakeProject] | None = None,
         current: str | None = None,
         version: list[Any] | None = None,
+        export_types: Sequence[str] | None = None,
     ) -> None:
         self.projects: dict[str, FakeProject] = projects or {}
         self.current_project: FakeProject | None = self.projects.get(current or "")
         self.version = version or [21, 0, 3, 15, ""]
+        # Export types are attributes on the app object itself, and an older build simply
+        # does not have the newer ones — so a narrowed tuple models that build exactly.
+        self.export_types = tuple(EXPORT_TYPES if export_types is None else export_types)
+        for value, export_type in enumerate(self.export_types):
+            setattr(self, export_type, value)
         self.alive = True
         self.probe_count = 0
         self.fail_version_string = False
@@ -773,6 +1016,7 @@ def studio(
     extra_projects: tuple[str, ...] = ("holiday-gig",),
     pool: FakeMediaPool | None = None,
     timelines: list[FakeTimeline | None] | None = None,
+    export_types: Sequence[str] | None = None,
 ) -> FakeResolve:
     """A conventional fake: Studio running, one project open, one timeline current.
 
@@ -798,7 +1042,7 @@ def studio(
             media_pool=pool,
             timelines=timelines,
         )
-    resolve = FakeResolve(projects, current=project)
+    resolve = FakeResolve(projects, current=project, export_types=export_types)
     if pool is not None:
         pool.adopt(resolve)
     owned = [one for one in (timelines or []) if one is not None]
