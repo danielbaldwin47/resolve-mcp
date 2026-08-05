@@ -34,9 +34,11 @@ disk — Resolve's scripting API exposes no offline flag.
 
 Interchange is the **structural escape hatch**. The scripting API cannot cut a transition,
 so a dissolve is made by exporting the cut to OTIO, editing the transition into that
-document, and importing it back. An import is always given a name no timeline in the
-project answers to — colliding names walk the `<base> v<N>` convention — so the cut that is
-already there is never the thing that gets written over.
+document, and importing it back. An `.otio` or `.fcpxml` import is given a name no timeline
+in the project answers to — colliding names walk the `<base> v<N>` convention. A `.drt` is
+Resolve's own document and accepts no import options at all, so it names its own timeline;
+what holds there is the check on the way out. Either way the cut already in the project is
+never the thing that gets written over.
 
 ## Requirements
 

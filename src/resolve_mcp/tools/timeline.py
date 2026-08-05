@@ -103,6 +103,11 @@ def import_timeline(
     to media; pass source_media_path when the media sits somewhere other than where the
     document says. The reply is the new timeline's heading — version, fps, bounds, track
     stack; inspect_timeline reads what is on it.
+
+    A .drt is Resolve's own document and accepts none of these: it names its own timeline
+    and carries its own media links, so name and source_media_path are refused for one
+    rather than quietly ignored, and requested_name comes back null. The result is still
+    checked against the timelines the project already had, so a .drt cannot land on one.
     """
     connection = get_connection()
     return interchange.import_timeline(

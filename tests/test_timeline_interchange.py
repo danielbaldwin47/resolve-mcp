@@ -14,6 +14,7 @@ from typing import Any
 import pytest
 
 from resolve_mcp.config import Config, set_config
+from resolve_mcp.resolve import interchange
 from resolve_mcp.tools.timeline import export_timeline, import_timeline
 
 from . import otio
@@ -130,7 +131,9 @@ def test_export_says_which_types_it_looked_for_when_the_build_has_none(attach: A
 
     assert result["ok"] is False
     assert result["error"]["code"] == "timeline_export_failed"
-    assert result["error"]["detail"]["tried"][0] == "EXPORT_FCPXML_1_10"
+    # The whole ladder, so the reply says what was looked for rather than only that
+    # something was missing — the version names are the thing a Resolve upgrade changes.
+    assert result["error"]["detail"]["tried"] == list(interchange.FORMATS["fcpxml"].export_types)
     assert result["error"]["fix"]
 
 
@@ -330,6 +333,63 @@ def test_import_leaves_source_clips_on_by_default(attach: Attach, tmp_path: Path
     asked = pool.timeline_imports[0][1]
     assert asked["importSourceClips"] is True
     assert "sourceClipsPath" not in asked
+
+
+# --- import: the .drt route ----------------------------------------------------------------
+#
+# Resolve's own document takes none of the import options — not the name, not the source
+# clip handling. So the collision-free name this server computes is inert on that route,
+# and what holds the never-overwrite guarantee is the check on the way out.
+
+
+def test_a_drt_is_sent_no_options_because_resolve_honours_none(
+    attach: Attach,
+    tmp_path: Path,
+) -> None:
+    pool = media_pool()
+    existing: list[FakeTimeline | None] = [a_cut("sunset-set v3")]
+    attach(studio(pool=pool, timelines=existing, timeline=existing[0]))
+    source = an_interchange_file(tmp_path, "encore.drt")
+
+    result = import_timeline(str(source))
+
+    assert result["ok"] is True
+    assert pool.timeline_imports[0][1] == {}
+    assert result["requested_name"] is None
+    assert result["renamed"] is False
+    assert result["timeline"]["name"] == "encore"
+
+
+def test_a_drt_refuses_the_options_it_cannot_honour(attach: Attach, tmp_path: Path) -> None:
+    """Told, not quietly ignored: a reply naming a timeline the caller did not ask for
+    reads as a rename, and the caller would carry on believing the name was theirs."""
+    pool = media_pool()
+    attach(studio(pool=pool, timelines=[a_cut()]))
+    source = an_interchange_file(tmp_path, "encore.drt")
+
+    result = import_timeline(str(source), name="my cut", source_media_path=str(tmp_path))
+
+    assert result["ok"] is False
+    assert result["error"]["code"] == "invalid_request"
+    assert result["error"]["detail"]["ignored"] == ["name", "source_media_path"]
+    assert pool.timeline_imports == []
+
+
+def test_a_drt_import_that_lands_on_an_existing_cut_is_a_failure(
+    attach: Attach,
+    tmp_path: Path,
+) -> None:
+    """The guarantee on the route where the name cannot be chosen in advance."""
+    pool = media_pool()
+    cut = a_cut("sunset-set v3")
+    attach(studio(pool=pool, timelines=[cut], timeline=cut))
+    pool.imported_timeline = cut
+
+    result = import_timeline(str(an_interchange_file(tmp_path, "sunset-set v3.drt")))
+
+    assert result["ok"] is False
+    assert result["error"]["code"] == "timeline_import_failed"
+    assert "sunset-set v3" in result["error"]["cause"]
 
 
 def test_import_needs_a_project(attach: Attach, tmp_path: Path) -> None:

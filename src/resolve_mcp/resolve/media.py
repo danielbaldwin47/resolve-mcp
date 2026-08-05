@@ -62,6 +62,7 @@ RESOLUTION = "Resolution"
 Clip = Any
 Folder = Any
 Pool = Any
+Project = Any
 
 
 class LocatedClip(NamedTuple):
@@ -93,6 +94,16 @@ def media_pool(connection: ResolveConnection) -> Pool:
     project = manager.GetCurrentProject() if manager is not None else None
     if project is None:
         raise NoProjectOpenError(cause="No project is open, so there is no media pool to work in.")
+    return pool_of(project)
+
+
+def pool_of(project: Project) -> Pool:
+    """The pool of a project already in hand — the same walk, without repeating it.
+
+    A caller that has the project must not reach for it a second time: two walks are two
+    chances to land on different projects if the GUI switches between them, and the pool
+    would then not belong to the project the rest of the call is reading.
+    """
     pool = project.GetMediaPool()
     if pool is None:
         raise MediaPoolUnavailableError(

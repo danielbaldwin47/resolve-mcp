@@ -151,6 +151,23 @@ def version_of(name: str) -> tuple[str, int | None]:
     return match.group("base"), int(match.group("number"))
 
 
+def next_free_name(requested: str, existing: set[str]) -> str:
+    """A name no timeline in the project answers to, following ``<base> v<N>``.
+
+    The project's own convention for a new cut made from an old one is the next version
+    number, so a collision walks that sequence rather than inventing a suffix of its own —
+    and an unversioned name starts the sequence at v2, which reads as what it is: the
+    second thing to carry that name.
+    """
+    if requested not in existing:
+        return requested
+    base, version = version_of(requested)
+    number = (version or 1) + 1
+    while f"{base} v{number}" in existing:
+        number += 1
+    return f"{base} v{number}"
+
+
 # --- shape ---------------------------------------------------------------------------------
 
 
