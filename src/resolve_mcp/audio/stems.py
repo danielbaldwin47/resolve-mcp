@@ -97,13 +97,7 @@ def separate_stems(
         runner=ffmpeg_runner,
         config=config,
     )
-    params = {
-        **source.params,
-        "model": config.stem_model,
-        "drum_model": config.drum_model,
-        "stems": list(FOUR_STEMS),
-        "drum_stems": list(DRUM_STEMS),
-    }
+    params = {**source.params, **separation_params(config)}
     key = cache.cache_key(KIND, [source.fingerprint], params)
 
     def work(progress: Progress) -> JobOutput:
@@ -146,6 +140,17 @@ def acquired(
     return finished.result
 
 
+def separation_params(config: Config | None = None) -> dict[str, Any]:
+    """What is being run, as opposed to what it is being run on. Keys the stems on disk."""
+    config = config or get_config()
+    return {
+        "model": config.stem_model,
+        "drum_model": config.drum_model,
+        "stems": list(FOUR_STEMS),
+        "drum_stems": list(DRUM_STEMS),
+    }
+
+
 def stem_key(audio: dict[str, Any], params: dict[str, Any]) -> str:
     """What the stems on disk are keyed by: the audio's own bytes and the models run on it.
 
@@ -155,7 +160,7 @@ def stem_key(audio: dict[str, Any], params: dict[str, Any]) -> str:
     GPU twice for a byte-identical answer (#22 story 26: analysis is paid for once per
     media state). Sample rate and bit depth are in the bytes already.
     """
-    settings = {name: params[name] for name in SEPARATION if name in params}
+    settings = {name: params.get(name) for name in SEPARATION}
     return cache.cache_key(KIND, [{"content_sha256": audio["content_sha256"]}], settings)
 
 
@@ -223,19 +228,18 @@ def _already_separated(mix_dir: Path, drums_dir: Path) -> bool:
 
 
 def _pass(progress: Progress, floor: float, ceiling: float, step: str) -> separator.Fraction:
-    """Map one pass's own 0-1 onto the slice of the job that pass is, and never go back.
+    """Map one pass's own 0-1 onto the slice of the job that pass is.
 
-    A first run downloads its model and prints a progress bar for *that* before the one for
-    the separation, so the percentages restart mid-pass. Reporting the restart would have
-    the agent watch a job apparently lose ground; the highest reading so far is the honest
-    summary of a pass made of several bars.
+    The bar always tracks the newest reading, including one lower than the last. A first
+    run prints a bar for the model download before the bar for the separation, and
+    ``separator`` drops the download's percentages precisely so that this stays rare — but
+    holding the highest reading instead would be worse than a backslide: a download bar
+    ends at 100%, so the separation that follows it, the long part, would report a frozen
+    number for its whole run. A number that moves is the point.
     """
     span = ceiling - floor
-    highest = 0.0
 
     def report(fraction: float) -> None:
-        nonlocal highest
-        highest = max(highest, fraction)
-        progress(floor + span * highest, f"{step} ({int(highest * PERCENT)}%)")
+        progress(floor + span * fraction, f"{step} ({int(fraction * PERCENT)}%)")
 
     return report

@@ -29,7 +29,7 @@ from typing import Any
 import pytest
 
 from resolve_mcp.audio.acquire import acquire_timeline_audio
-from resolve_mcp.audio.stems import DRUM_STEMS, FOUR_STEMS, two_pass
+from resolve_mcp.audio.stems import DRUM_STEMS, FOUR_STEMS, separation_params, two_pass
 from resolve_mcp.config import get_config
 from resolve_mcp.jobs import cache
 from resolve_mcp.jobs.runner import wait_for
@@ -538,7 +538,7 @@ def test_the_real_separator_produces_the_stems_the_two_passes_expect(tmp_path: P
         "scope": "live",
     }
 
-    output = two_pass(audio, {"scope": "live"}, lambda fraction, step: None)
+    output = two_pass(audio, separation_params(), lambda fraction, step: None)
 
     assert set(output.result["stems"]) >= set(FOUR_STEMS)
     assert set(output.result["drums"]) >= set(DRUM_STEMS)

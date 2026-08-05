@@ -44,6 +44,9 @@ OUTPUT_TAIL = 40
 
 LABEL = re.compile(r"\(([^()]+)\)")
 PERCENT = re.compile(r"(\d{1,3})\s*%")
+DOWNLOAD = re.compile(r"download", re.IGNORECASE)
+"""A first run fetches its model and prints a bar for that too. It is not the separation."""
+
 FULL = 100.0
 
 
@@ -155,7 +158,15 @@ def missing_from(out_dir: Path | str, wanted: Iterable[str]) -> list[str]:
 
 
 def _percent(line: str) -> float | None:
-    """The progress bar's own percentage, as a fraction — ``None`` for any other line."""
+    """The separation bar's own percentage, as a fraction — ``None`` for any other line.
+
+    A model download prints a bar of its own, and it is not progress through this pass: it
+    runs to 100% before the separation has started, and reporting it would have the job
+    look finished and then apparently restart. Dropping it costs nothing if the wording
+    ever changes — the reading is simply reported as the separation's own.
+    """
+    if DOWNLOAD.search(line):
+        return None
     found = PERCENT.search(line)
     if found is None:
         return None

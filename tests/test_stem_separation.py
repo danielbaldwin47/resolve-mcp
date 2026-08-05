@@ -28,9 +28,10 @@ from resolve_mcp.audio.stems import (
     SEPARATION,
     acquired,
     separate_stems,
+    separation_params,
     two_pass,
 )
-from resolve_mcp.config import get_config
+from resolve_mcp.config import Config, get_config, set_config
 from resolve_mcp.errors import InvalidRequestError, StemSeparationError
 from resolve_mcp.jobs import cache
 from resolve_mcp.jobs.runner import Progress, wait_for
@@ -153,16 +154,27 @@ def test_progress_climbs_through_both_passes(tmp_path: Path) -> None:
     assert steps[-1][0] == pytest.approx(0.95, abs=0.05)
 
 
-def test_a_percentage_that_restarts_mid_pass_never_reports_lost_ground(tmp_path: Path) -> None:
-    """A first run prints a bar for the model download before the bar for the separation."""
+def test_the_model_downloads_own_bar_is_not_this_passs_progress(tmp_path: Path) -> None:
+    """A first run fetches the model and prints a bar for that, ending at 100%, first.
+
+    Reporting it would run the pass to its ceiling before the separation had started, and
+    then either freeze there for the long part or visibly fall back.
+    """
     steps: list[tuple[float, str]] = []
-    restarting = FakeSeparator(FOUR_STEMS, SIX_DRUM_STEMS, output=(" 80%|", "  5%|", " 40%|"))
+    downloading = FakeSeparator(
+        FOUR_STEMS,
+        SIX_DRUM_STEMS,
+        output=(
+            "Downloading model htdemucs_ft.yaml:  50%|#####     |",
+            "Downloading model htdemucs_ft.yaml: 100%|##########|",
+            " 20%|##        | 2/10",
+        ),
+    )
 
-    two_pass(_acquired(tmp_path), _params(), _recording(steps), runner=restarting)
+    two_pass(_acquired(tmp_path), _params(), _recording(steps), runner=downloading)
 
-    fractions = [fraction for fraction, _ in steps]
-    assert fractions == sorted(fractions)
-    assert max(fraction for fraction, step in steps if "four stems" in step) == pytest.approx(0.53)
+    first = [fraction for fraction, step in steps if "four stems" in step]
+    assert first == [pytest.approx(0.32)]  # 20% of the pass one slice, and nothing before it
 
 
 def test_the_acquisition_is_reported_as_the_first_quarter_of_the_job(attach: Attach) -> None:
@@ -241,14 +253,22 @@ def test_a_different_model_is_a_different_stems_key(
     tmp_path: Path,
     separating: FakeSeparator,
 ) -> None:
-    """The other half of that: what the stems *are* must still move the key."""
-    audio = _acquired(tmp_path)
-    first = two_pass(audio, _params(), _ignored, runner=separating)
+    """The other half of that: what the stems *are* must still move the key.
 
-    other = two_pass(audio, _params(model="htdemucs_6s.yaml"), _ignored, runner=separating)
+    The model comes from config on both runs, so this pins the model actually run as well
+    as the key derived from it — a key that moved while the command did not would be worse
+    than no key at all.
+    """
+    audio = _acquired(tmp_path)
+    first = two_pass(audio, separation_params(), _ignored, runner=separating)
+
+    set_config(_configured(tmp_path, stem_model="htdemucs_6s.yaml"))
+    other = two_pass(audio, separation_params(), _ignored, runner=separating)
 
     assert other.result["directory"] != first.result["directory"]
     assert len(separating.calls) == 4
+    assert _flag(separating.calls[0], "--model_filename") == "htdemucs_ft.yaml"
+    assert _flag(separating.calls[2], "--model_filename") == "htdemucs_6s.yaml"
 
 
 def test_the_stems_a_job_owns_are_what_its_cache_entry_verifies(
@@ -445,16 +465,19 @@ def _recording(steps: list[tuple[float, str]]) -> Progress:
     return report
 
 
-def _params(timeline: str = "sunset-set v3", model: str = "htdemucs_ft.yaml") -> dict[str, Any]:
+def _params(timeline: str = "sunset-set v3") -> dict[str, Any]:
     """A job's params: where the audio came from, and what is being run on it."""
-    return {
-        "scope": "timeline",
-        "timeline": timeline,
-        "model": model,
-        "drum_model": "MDX23C-DrumSep-6stem-FT.ckpt",
-        "stems": list(FOUR_STEMS),
-        "drum_stems": list(DRUM_STEMS),
-    }
+    return {"scope": "timeline", "timeline": timeline, **separation_params()}
+
+
+def _configured(tmp_path: Path, stem_model: str) -> Config:
+    """The same cache root the fixture set up, with a different pass-one model."""
+    return Config.from_env(
+        {
+            "RESOLVE_MCP_CACHE": str(tmp_path / "cache"),
+            "RESOLVE_MCP_STEM_MODEL": stem_model,
+        }
+    )
 
 
 def _acquired(tmp_path: Path) -> dict[str, Any]:
