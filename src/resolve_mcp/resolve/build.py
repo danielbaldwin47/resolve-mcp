@@ -119,7 +119,7 @@ def build_timeline(
 
     built = _create(pool, project, name)
     shots = _shots(doc, clips, _start_frame(built))
-    _make_tracks(built, shots)
+    _make_tracks(built, shots, name)
     _refuse_locked_tracks(built, shots, name)
     _append(pool, shots, name)
     _verify(built, shots, name)
@@ -161,17 +161,20 @@ def _refuse_what_cannot_be_placed(doc: dict[str, Any]) -> None:
 def _shots(doc: dict[str, Any], clips: dict[str, media.LocatedClip], start: int) -> list[Shot]:
     """Every append the cut asks for, positioned absolutely from the timeline start."""
     placed = positions(doc)
-    shots = [
-        _shot(
-            id=str(segment["id"]),
-            track_type="video",
-            located=clips[str(segment["source"])],
-            source_in=int(segment["in"]),
-            record=start + placed[str(segment["id"])][0],
-            duration=placed[str(segment["id"])][1],
+    shots = []
+    for segment in doc["segments"]:
+        id = str(segment["id"])
+        offset, duration = placed[id]
+        shots.append(
+            _shot(
+                id=id,
+                track_type="video",
+                located=clips[str(segment["source"])],
+                source_in=int(segment["in"]),
+                record=start + offset,
+                duration=duration,
+            )
         )
-        for segment in doc["segments"]
-    ]
     audio = doc.get("audio")
     if isinstance(audio, dict):
         # One continuous clip under the whole cut: the substrate the segments are laid over,
@@ -241,22 +244,64 @@ def _create(pool: Pool, project: Project, name: str) -> Timeline:
     return created
 
 
-def _make_tracks(timeline: Timeline, shots: list[Shot]) -> None:
-    """Pre-create the tracks the cut needs: an index past the next free one is dropped."""
-    for track_type in sorted({shot.track_type for shot in shots}):
-        # Only an audio track has a sub-type, and its default is mono — which would fold a
-        # stereo master mix down on the way in.
+def _make_tracks(timeline: Timeline, shots: list[Shot], name: str) -> None:
+    """Pre-create the tracks the cut needs: an index past the next free one is dropped.
+
+    A track this build adds is made stereo, because ``AddTrack`` defaults to mono and a
+    master mix folded to one channel is a silent wrong answer. A track the new timeline
+    came with keeps whatever the project's timeline template gave it — the API cannot
+    restyle an existing track, so the layout is logged rather than assumed.
+    """
+    for track_type in _track_types(shots):
+        # Only an audio track takes a sub-type; passing one to video is meaningless.
         extra = (AUDIO_TRACK_TYPE,) if track_type == "audio" else ()
-        while int(timeline.GetTrackCount(track_type) or 0) < TRACK_INDEX:
-            timeline.AddTrack(track_type, *extra)
-            log.info("Added a %s track to %s", track_type, timeline.GetName())
+        while _track_count(timeline, track_type) < TRACK_INDEX:
+            if not timeline.AddTrack(track_type, *extra):
+                # Refused rather than merely unanswered: retrying would spin forever, and
+                # appending to a track that is not there drops the clip silently.
+                raise BuildFailedError(
+                    cause=f"Resolve refused to add a {track_type} track to {name!r}.",
+                    fix="Close any modal dialog in the Resolve GUI, delete the empty "
+                    "timeline, and build again.",
+                    detail={"timeline": name, "track_type": track_type},
+                )
+            log.info("Added a %s track to %s", track_type, name)
+    log.info(
+        "%s targets %s (%d video, %d audio tracks)",
+        name,
+        ", ".join(TRACK_LABELS[track_type] for track_type in _track_types(shots)),
+        _track_count(timeline, "video"),
+        _track_count(timeline, "audio"),
+    )
+
+
+def _track_count(timeline: Timeline, track_type: str) -> int:
+    try:
+        return int(timeline.GetTrackCount(track_type) or 0)
+    except (TypeError, ValueError):
+        log.warning("Resolve gave an unreadable %s track count", track_type)
+        return 0
+
+
+def _track_types(shots: list[Shot]) -> list[str]:
+    """The kinds of track this cut needs, in a fixed order so the logs read the same way."""
+    return [
+        track_type
+        for track_type in TRACK_LABELS
+        if any(shot.track_type == track_type for shot in shots)
+    ]
 
 
 def _refuse_locked_tracks(timeline: Timeline, shots: list[Shot], name: str) -> None:
-    """E11: a locked track accepts the append, reports items, and places nothing."""
+    """E11: a locked track accepts the append, reports items, and places nothing.
+
+    A timeline this build just created should have no locked track — but it is created
+    from the project's timeline template, which is the director's to configure, and the
+    check costs one call against a failure mode that leaves no trace anywhere else.
+    """
     locked = [
         locked_track_finding(TRACK_LABELS[track_type])
-        for track_type in sorted({shot.track_type for shot in shots})
+        for track_type in _track_types(shots)
         if timeline.GetIsTrackLocked(track_type, TRACK_INDEX)
     ]
     if not locked:
@@ -292,7 +337,11 @@ def _append(pool: Pool, shots: list[Shot], name: str) -> None:
 
 def _verify(timeline: Timeline, shots: list[Shot], name: str) -> None:
     """Read the tracks back: the only way to know an append landed where it was told to."""
-    misplaced = [shot for track in TRACK_LABELS for shot in _adrift(timeline, shots, track)]
+    misplaced = [
+        shot
+        for track_type in _track_types(shots)
+        for shot in _adrift(timeline, shots, track_type)
+    ]
     if not misplaced:
         return
     raise BuildFailedError(

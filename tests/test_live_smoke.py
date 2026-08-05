@@ -28,6 +28,24 @@ pytestmark = pytest.mark.live
 SMOKE_CUT = "resolve-mcp-smoke"
 """Every build here materialises a new version of this name; delete them when you are done."""
 
+LOCKED_TRACK_PROBE = """
+pool = project.GetMediaPool()
+timeline = pool.CreateEmptyTimeline("resolve-mcp-lock-probe")
+project.SetCurrentTimeline(timeline)
+timeline.SetTrackLock("video", 1, True)
+clips = [c for c in pool.GetRootFolder().GetClipList() if c.GetName() == {name}]
+returned = pool.AppendToTimeline([
+    {{"mediaPoolItem": clips[0], "startFrame": {start}, "endFrame": {end},
+      "mediaType": 1, "trackIndex": 1, "recordFrame": timeline.GetStartFrame()}}
+]) if clips else None
+result = {{
+    "found": bool(clips),
+    "returned_truthy": bool(returned),
+    "items_on_track": len(timeline.GetItemListInTrack("video", 1) or []),
+}}
+"""
+"""Spike #18 (d), reduced to its claim: a locked track reports a placement it did not make."""
+
 
 @pytest.fixture(autouse=True)
 def _requires_resolve() -> None:
@@ -231,6 +249,63 @@ def test_a_rebuild_makes_the_next_version_and_leaves_the_last_one_alone(tmp_path
     assert second["timeline"]["version"] == first["timeline"]["version"] + 1
     earlier = inspect_timeline(first["timeline"]["name"], detail="summary")
     assert earlier["timeline"]["duration"]["frames"] == 108
+
+
+def test_a_still_lands_at_the_duration_the_cut_asked_for(tmp_path: Path) -> None:
+    """The one-time Out write, end to end: without it every still is 120 frames (#18 (a))."""
+    if get_status()["context"]["project"] is None:
+        pytest.skip("No project open in Resolve")
+    listing = list_media()
+    stills = [
+        entry
+        for entry in listing["clips"]
+        if Path(str(entry.get("file_path") or "")).suffix.lower() in {".png", ".jpg", ".jpeg"}
+    ]
+    if not stills:
+        pytest.skip("No still image in the media pool")
+    still = stills[0]
+    fps = get_status()["context"]["fps"] or 24.0
+    doc = {
+        "schema": 1,
+        "timeline": {"name": SMOKE_CUT, "fps": fps},
+        "sources": {"still": {"clip": still["name"]}},
+        "segments": [{"id": "s000", "source": "still", "in": 0, "out": 90}],
+    }
+    path = tmp_path / "still.cut.json"
+    path.write_text(json.dumps(doc), encoding="utf-8")
+
+    result = build_timeline(str(path))
+
+    assert result["ok"] is True, result.get("error")
+    built = inspect_timeline(result["timeline"]["name"], detail="clips")
+    video = [track for track in built["tracks"] if track["type"] == "video"][0]
+    assert [item["record"]["duration"]["frames"] for item in video["items"]] == [90]
+
+
+def test_the_locked_track_footgun_is_still_real(tmp_path: Path) -> None:
+    """The spike's (d) probe, kept alive: an append onto a locked track reports success.
+
+    build_timeline cannot reach this through its own tools — it always creates a fresh,
+    unlocked timeline — so the guard it carries rests on this API behaviour rather than on
+    anything a fake can prove. If Resolve ever fixes it, this test is where that shows up,
+    and the E11 check can go.
+    """
+    if get_status()["context"]["project"] is None:
+        pytest.skip("No project open in Resolve")
+    source = a_source_clip()
+    probe = run_python(
+        LOCKED_TRACK_PROBE.format(
+            name=repr(source["name"]),
+            start=source["start"],
+            end=source["start"] + 48,
+        )
+    )
+
+    assert probe["ok"] is True, probe.get("error")
+    if not probe["result"]["found"]:
+        pytest.skip("The chosen clip is not in the root folder, so the probe could not run")
+    assert probe["result"]["returned_truthy"] is True
+    assert probe["result"]["items_on_track"] == 0
 
 
 def test_an_invalid_cut_creates_no_timeline_on_a_real_project(tmp_path: Path) -> None:

@@ -60,19 +60,24 @@ def get_cut_schema() -> dict[str, Any]:
     }
 
 
-class Preflight(NamedTuple):
-    """One pass of the rules, and the pool reading they were judged against.
+class Source(NamedTuple):
+    """One pool clip, as the rules see it and as the build has to place it.
 
-    The build needs both halves: the findings to decide whether to start at all, and the
-    clips themselves to place. Handing them back together is what keeps the build from
-    reading the pool a second time and resolving an alias to a different clip than the one
-    the rules passed.
+    The two travel as a pair rather than as two lists: the rules are judged on the facts
+    and the append is made with the handle, and a cut validated against one clip and built
+    from another is the failure this pairing makes impossible.
     """
+
+    facts: ClipFacts
+    located: media.LocatedClip
+
+
+class Preflight(NamedTuple):
+    """One pass of the rules, and the pool reading they were judged against."""
 
     loaded: LoadedCut
     findings: list[Finding]
-    clips: list[media.LocatedClip]
-    facts: list[ClipFacts]
+    sources: list[Source]
 
     @property
     def errors(self) -> list[Finding]:
@@ -81,6 +86,10 @@ class Preflight(NamedTuple):
     @property
     def warnings(self) -> list[Finding]:
         return [finding for finding in self.findings if finding.severity == "warning"]
+
+    @property
+    def facts(self) -> list[ClipFacts]:
+        return [source.facts for source in self.sources]
 
 
 def preflight(
@@ -91,16 +100,19 @@ def preflight(
     """Read ``cut_file`` and run every rule on it. The dry run and the build share this."""
     loaded = read_cut_file(cut_file)
     if loaded.parse_error is not None:
-        return Preflight(loaded, [loaded.parse_error], [], [])
+        return Preflight(loaded, [loaded.parse_error], [])
 
     findings = validate_structure(loaded.doc, min_segment_frames=min_segment_frames)
     if any(finding.rule == "E1" for finding in findings):
         log.info("Cut file %s is not schema-valid; the media pool was not read", loaded.path)
-        return Preflight(loaded, findings, [], [])
+        return Preflight(loaded, findings, [])
 
-    located = _located(connection, loaded.doc)
-    facts = [_facts(found.bin_path, found.clip) for found in located]
-    return Preflight(loaded, [*findings, *validate_project(loaded.doc, facts)], located, facts)
+    sources = [
+        Source(_facts(found.bin_path, found.clip), found)
+        for found in _located(connection, loaded.doc)
+    ]
+    facts = [source.facts for source in sources]
+    return Preflight(loaded, [*findings, *validate_project(loaded.doc, facts)], sources)
 
 
 def validate_cut(
@@ -112,22 +124,16 @@ def validate_cut(
     return _report(preflight(connection, cut_file, min_segment_frames))
 
 
-def clip_facts(connection: ResolveConnection, doc: dict[str, Any]) -> list[ClipFacts]:
-    """Read the media pool for the clips this cut names, and nothing else."""
-    return [_facts(found.bin_path, found.clip) for found in _located(connection, doc)]
-
-
-def clips_by_alias(preflighted: Preflight) -> dict[str, media.LocatedClip]:
+def clips_by_alias(checked: Preflight) -> dict[str, media.LocatedClip]:
     """Alias -> the pool clip the rules resolved it to, ready to append.
 
-    The pairing runs through the facts rather than a second lookup, so the clip that is
-    placed is the clip E4-E7 passed. Two clips that are alike in every fact are the same
-    clip as far as every rule is concerned, so collapsing them here changes nothing.
+    The alias is resolved by the same E4 rule the dry run uses, and the clip that comes
+    back is the very object those facts were read from — not a second lookup that could
+    land on a different one.
     """
-    doc = preflighted.loaded.doc
-    resolved, _ = resolve_aliases(doc, preflighted.facts)
-    handles = dict(zip(preflighted.facts, preflighted.clips, strict=True))
-    return {alias: handles[fact] for alias, fact in resolved.items()}
+    resolved, _ = resolve_aliases(checked.loaded.doc, checked.facts)
+    handles = {id(source.facts): source.located for source in checked.sources}
+    return {alias: handles[id(facts)] for alias, facts in resolved.items()}
 
 
 def _located(connection: ResolveConnection, doc: dict[str, Any]) -> list[media.LocatedClip]:
@@ -173,11 +179,11 @@ def _report(checked: Preflight) -> dict[str, Any]:
         "valid": not checked.errors,
         "errors": [finding.as_dict() for finding in checked.errors],
         "warnings": [finding.as_dict() for finding in checked.warnings],
-        "cut": _summary(readable_doc(checked)),
+        "cut": _summary(_readable_doc(checked)),
     }
 
 
-def readable_doc(checked: Preflight) -> dict[str, Any] | None:
+def _readable_doc(checked: Preflight) -> dict[str, Any] | None:
     """The document, or ``None`` when E1 fired and nothing about it can be trusted."""
     if any(finding.rule == "E1" for finding in checked.findings):
         return None
@@ -201,10 +207,9 @@ def _summary(doc: dict[str, Any] | None) -> dict[str, Any] | None:
 __all__ = [
     "MIN_SEGMENT_FRAMES",
     "Preflight",
-    "clip_facts",
+    "Source",
     "clips_by_alias",
     "get_cut_schema",
     "preflight",
-    "readable_doc",
     "validate_cut",
 ]

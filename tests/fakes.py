@@ -179,6 +179,7 @@ class FakeTimeline:
         }
         self._markers = markers or {}
         self._owner = owner
+        self.add_track_result = True
 
     def adopt(self, owner: FakeResolve) -> None:
         self._owner = owner
@@ -259,6 +260,8 @@ class FakeTimeline:
 
     def AddTrack(self, track_type: str, *_: Any) -> bool:  # noqa: N802
         self._check()
+        if not self.add_track_result:
+            return False
         tracks = self._tracks.setdefault(track_type, [])
         tracks.append(FakeTrack(f"{track_type.capitalize()} {len(tracks) + 1}"))
         return True
@@ -404,6 +407,7 @@ class FakeMediaPool:
         self.new_timeline_tracks: tuple[int, int] = (1, 1)
         self.new_timeline_locked = False
         self.new_timeline_items: list[FakeTimelineItem] = []
+        self.add_track_result = True
         self.appends: list[dict[str, Any]] = []
 
     def attach_project(self, project: FakeProject) -> None:
@@ -521,6 +525,7 @@ class FakeMediaPool:
             ],
             owner=self._owner,
         )
+        timeline.add_track_result = self.add_track_result
         if self._project is not None:
             self._project.add_timeline(timeline)
             self._project.SetCurrentTimeline(timeline)

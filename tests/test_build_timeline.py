@@ -401,7 +401,7 @@ def test_a_locked_target_track_is_reported_instead_of_silently_dropping_the_cut(
     assert result["error"]["code"] == "build_failed"
     findings = result["error"]["detail"]["errors"]
     assert [finding["rule"] for finding in findings] == ["E11", "E11"]
-    assert [finding["id"] for finding in findings] == ["A1", "V1"]
+    assert [finding["id"] for finding in findings] == ["V1", "A1"]
     assert "AppendToTimeline" not in pool.calls
 
 
@@ -454,6 +454,43 @@ def test_a_refused_timeline_creation_is_a_structured_failure(
     assert result["ok"] is False
     assert result["error"]["code"] == "build_failed"
     assert "sunset-set v1" in result["error"]["cause"]
+
+
+def test_a_refused_track_add_stops_rather_than_appending_into_nothing(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """An append onto a track that is not there is dropped silently, so this must not loop."""
+    pool = a_pool()
+    pool.new_timeline_tracks = (0, 0)
+    pool.add_track_result = False
+    attach(empty_project(pool))
+
+    result = build_timeline(a_cut(tmp_path, valid_doc()))
+
+    assert result["ok"] is False
+    assert result["error"]["code"] == "build_failed"
+    assert "AppendToTimeline" not in pool.calls
+
+
+def test_resolve_quitting_mid_build_is_a_structured_failure(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """A build cannot be resumed, so a death mid-write must not be smoothed into success.
+
+    The version it was making is scrap and the agent has to be told so — as a cause and a
+    fix like every other failure, never as a traceback across the tool boundary.
+    """
+    versions: list[FakeTimeline | None] = [FakeTimeline("sunset-set v1", "59.94")]
+    resolve = studio(timeline=None, timelines=versions, pool=a_pool())
+    attach(resolve, None)
+    resolve.die_after(14)
+
+    result = build_timeline(a_cut(tmp_path, valid_doc()))
+
+    assert result["ok"] is False
+    assert result["error"]["cause"]
+    assert result["error"]["fix"]
+    assert result["error"]["code"] in {"resolve_unavailable", "build_failed", "internal_error"}
 
 
 def test_a_missing_video_track_is_created_before_the_append(
