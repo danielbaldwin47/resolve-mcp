@@ -188,6 +188,18 @@ def test_a_master_clip_with_no_audio_is_reported(attach: Attach, tmp_path: Path)
     assert [error["rule"] for error in result["errors"]] == ["E7"]
 
 
+def test_a_channel_count_resolve_will_not_report_fails_open(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """E7 reads an undocumented property key; an unreadable one must not block a good cut."""
+    attach(studio(pool=a_pool(master={"Audio Ch": ""})))
+
+    result = validate_cut(a_cut(tmp_path, valid_doc()))
+
+    assert result["valid"] is True
+    assert result["errors"] == []
+
+
 def test_a_short_segment_warns_without_blocking(attach: Attach, tmp_path: Path) -> None:
     attach(studio(pool=a_pool()))
     doc = valid_doc()

@@ -100,7 +100,7 @@ def _facts(bin_path: str, clip: Clip) -> ClipFacts:
         # E7's has-audio leg reads an undocumented property key. If Resolve renames it
         # the rule silently passes everything, and no fake can catch that — so say so
         # here, where a live session's log is the only place it can be noticed.
-        log.info("No %r property on %s; E7 cannot check for audio", media.AUDIO_CHANNELS, name)
+        log.info("No usable %r on %s; E7 cannot check for audio", media.AUDIO_CHANNELS, name)
     return ClipFacts(
         name=name,
         bin_path=bin_path,
