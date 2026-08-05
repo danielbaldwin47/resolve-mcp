@@ -1,0 +1,57 @@
+"""Zero-config defaults, env overrides, no config file."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from resolve_mcp.config import Config
+
+
+def test_defaults_come_from_the_standard_windows_install() -> None:
+    config = Config.from_env(
+        {"PROGRAMDATA": r"C:\ProgramData", "LOCALAPPDATA": r"C:\Users\d\AppData\Local"}
+    )
+
+    assert config.script_api == Path(
+        r"C:\ProgramData\Blackmagic Design\DaVinci Resolve\Support\Developer\Scripting"
+    )
+    assert config.script_lib == Path(
+        r"C:\Program Files\Blackmagic Design\DaVinci Resolve\fusionscript.dll"
+    )
+    assert config.cache_dir == Path(r"C:\Users\d\AppData\Local\resolve-mcp")
+    assert config.log_level == "INFO"
+
+
+def test_every_path_has_an_env_override() -> None:
+    config = Config.from_env(
+        {
+            "RESOLVE_SCRIPT_API": r"D:\resolve\Scripting",
+            "RESOLVE_SCRIPT_LIB": r"D:\resolve\fusionscript.dll",
+            "RESOLVE_MCP_CACHE": r"E:\cache",
+            "RESOLVE_MCP_LOG_LEVEL": "DEBUG",
+        }
+    )
+
+    assert config.script_api == Path(r"D:\resolve\Scripting")
+    assert config.script_lib == Path(r"D:\resolve\fusionscript.dll")
+    assert config.cache_dir == Path(r"E:\cache")
+    assert config.log_level == "DEBUG"
+
+
+def test_survives_an_environment_with_nothing_set() -> None:
+    config = Config.from_env({})
+
+    assert config.script_api.name == "Scripting"
+    assert config.cache_dir.name == "resolve-mcp"
+
+
+def test_the_scripting_modules_directory_hangs_off_the_api_root() -> None:
+    config = Config.from_env({"RESOLVE_SCRIPT_API": r"D:\resolve\Scripting"})
+
+    assert config.script_modules == Path(r"D:\resolve\Scripting\Modules")
+
+
+def test_artifacts_live_under_the_cache_root(tmp_path: Path) -> None:
+    config = Config.from_env({"RESOLVE_MCP_CACHE": str(tmp_path)})
+
+    assert config.snapshot_dir == tmp_path / "snapshots"
