@@ -1,0 +1,39 @@
+name: ci
+
+# INSTALL (one-time, needs `workflow` token scope — agents' OAuth token lacks it):
+#   gh auth refresh -s workflow        # once, interactive
+#   git mv .claude/pending/ci.yml .github/workflows/ci.yml
+#   git mv .claude/pending/review-gate.yml .github/workflows/review-gate.yml
+#   git commit -m 'ci: install checks and review gate' && git push
+# then make both hard blocks on main:
+#   gh api --method PUT repos/danielbaldwin47/resolve-mcp/branches/main/protection \
+#     -f 'required_status_checks[strict]=false' \
+#     -f 'required_status_checks[checks][][context]=checks' \
+#     -f 'required_status_checks[checks][][context]=review-line' \
+#     -F enforce_admins=false \
+#     -F required_pull_request_reviews=null -F restrictions=null
+#
+# The fake tier is platform-parameterised (ADR 0001's interpreter guard takes
+# `platform=` as an argument), so it runs on ubuntu — no Resolve, no Windows.
+# The live tier (`-m live`) never runs in CI by design: it needs Resolve
+# Studio on the Windows box. Its results are recorded on tickets by hand.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Sync dependencies
+        run: uv sync
+      - name: Unit tests (fake tier)
+        run: uv run pytest -m 'not live'
+      - name: Type check
+        run: uv run mypy
+      - name: Lint
+        run: uv run ruff check

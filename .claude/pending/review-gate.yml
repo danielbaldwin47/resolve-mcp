@@ -1,0 +1,38 @@
+name: review-gate
+
+# Requires the PR body's last `Review:` line to read `Review: clean` before
+# merge. Ported from forest-shell, where the skill-text-only version of this
+# gate was walked past twice: PR #128 merged by hand over `Review: findings
+# held`, and by 2026-08-05, 10 of 14 post-fix PRs carried that same
+# contentless token. A held finding must be written out and resolved, not
+# tokenized past the gate.
+#
+# Install steps live in the header of ci.yml (same one-time `workflow`-scope
+# dance, both files move together).
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+
+jobs:
+  review-line:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require "Review: clean" in the PR body
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          line=$(printf '%s' "$BODY" | tr -d '\r' | grep -E '^Review:' | tail -1 || true)
+          case "$line" in
+            "Review: clean"|"Review: clean "*)
+              echo "gate: $line" ;;
+            "")
+              echo "::error::PR body has no 'Review:' line — run /code-review (two-axis), then append 'Review: clean' or 'Review:' plus the findings themselves."
+              exit 1 ;;
+            "Review: findings held"|"Review: findings held.")
+              echo "::error::'findings held' is a contentless token — write the findings into the body, resolve them, then set 'Review: clean'."
+              exit 1 ;;
+            *)
+              echo "::error::Review line reads '$line', not 'Review: clean' — resolve what it names before merging."
+              exit 1 ;;
+          esac

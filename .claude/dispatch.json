@@ -1,0 +1,28 @@
+{
+  "ticketLabel": "ready-for-agent",
+  "testCommand": "uv run pytest -m 'not live'",
+  "hubFiles": [
+    "src/resolve_mcp/server.py",
+    "tests/fakes.py",
+    "CLAUDE.md",
+    "pyproject.toml"
+  ],
+  "worktreeDir": ".claude/worktrees",
+  "defaultBatch": 4,
+  "mergeMethod": "merge",
+  "legTimeoutBase": "2.5h",
+  "legModel": "opus",
+  "maxStackDepth": 3,
+  "seams": [
+    {
+      "name": "unit",
+      "command": "uv run pytest -m 'not live'",
+      "covers": "decisions against the fake Resolve seam (tests/fakes.py at the connection singleton): config and env overrides, loader path resolution, interpreter guard, envelope and error shaping, run_python semantics, tool registration — plus pure functions and fixture-audio workers"
+    },
+    {
+      "name": "typecheck",
+      "command": "uv run mypy",
+      "covers": "strict typing across src and tests"
+    }
+  ]
+}
