@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 from resolve_mcp.tools.escape_hatch import run_python
+from resolve_mcp.tools.media import inspect_clip, list_media
 from resolve_mcp.tools.project import get_status, list_projects, snapshot_project
 
 pytestmark = pytest.mark.live
@@ -47,6 +48,31 @@ def test_escape_hatch_reaches_the_real_scripting_api() -> None:
 
     assert result["ok"] is True
     assert "Resolve" in (result["result"] or "")
+
+
+def test_lists_the_real_media_pool() -> None:
+    """Read-only. The mutating media ACs (import, relink) are run by hand — see the ticket."""
+    if get_status()["context"]["project"] is None:
+        pytest.skip("No project open in Resolve")
+
+    result = list_media()
+
+    assert result["ok"] is True
+    assert isinstance(result["clips"], list)
+
+
+def test_inspects_a_real_clip_with_the_property_keys_the_wrappers_assume() -> None:
+    """The one live check the fakes cannot make: that these key names exist at all."""
+    listing = list_media()
+    if not listing["ok"] or not listing["clips"]:
+        pytest.skip("No clips in the media pool")
+    first = listing["clips"][0]
+
+    result = inspect_clip(first["name"], bin=first["bin"] or None)
+
+    assert result["ok"] is True
+    assert "File Path" in result["properties"]
+    assert result["bounds"]["media"]["duration"] is not None
 
 
 def test_snapshot_writes_a_real_drp(tmp_path: Path) -> None:

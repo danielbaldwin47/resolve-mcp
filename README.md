@@ -7,8 +7,8 @@ Build contract: [issue #22](https://github.com/danielbaldwin47/resolve-mcp/issue
 
 ## Status
 
-P1 in progress. Shipped so far: the server skeleton, the session/project tools, and the
-`run_python` escape hatch.
+P1 in progress. Shipped so far: the server skeleton, the session/project tools, the media
+pool tools, and the `run_python` escape hatch.
 
 | Tool | What it does |
 | --- | --- |
@@ -16,7 +16,17 @@ P1 in progress. Shipped so far: the server skeleton, the session/project tools, 
 | `list_projects` | Project names in the current database folder |
 | `open_project` | Loads a project by name; the result echoes the new context |
 | `snapshot_project` | Writes an opaque `.drp` backup before a big operation |
+| `import_media` | Imports files and image sequences into a bin, still-duration workaround applied |
+| `list_media` | Summarises media pool clips, with offline state; spills big listings to disk |
+| `inspect_clip` | One clip in full: properties, metadata, audio mapping, markers, dual-time bounds |
+| `set_clip_metadata` | Batch metadata writes, each field routed by what the clip reports |
+| `organize_media` | Batch bin operations: create nested bins, move clips |
+| `relink_media` | Points offline clips at media that moved (folder relink or file replace) |
 | `run_python` | Escape hatch: runs scripting-API Python in the server process |
+
+Bin paths are slash-separated from the media pool root (`Concert/Angles`) and
+case-sensitive. A clip counts as **offline** when it has a file path that is not on
+disk — Resolve's scripting API exposes no offline flag.
 
 ## Requirements
 
