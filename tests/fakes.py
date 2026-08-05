@@ -44,6 +44,7 @@ class FakeTimelineItem:
         enabled: bool = True,
         takes: int = 0,
         supports_source_frames: bool = True,
+        refuses: frozenset[str] | set[str] | None = None,
         end_is_inclusive: bool = False,
         owner: FakeResolve | None = None,
     ) -> None:
@@ -57,6 +58,7 @@ class FakeTimelineItem:
         self._enabled = enabled
         self._takes = takes
         self._supports_source_frames = supports_source_frames
+        self._refuses = set(refuses or ())
         self._end_is_inclusive = end_is_inclusive
         self._owner = owner
 
@@ -73,7 +75,9 @@ class FakeTimelineItem:
     def adopt(self, owner: FakeResolve) -> None:
         self._owner = owner
 
-    def _check(self) -> None:
+    def _check(self, method: str = "") -> None:
+        if method and method in self._refuses:
+            raise RuntimeError(f"{method} is not supported for this clip type")
         if self._owner is not None:
             self._owner._check()
 
@@ -101,7 +105,7 @@ class FakeTimelineItem:
         return (self._left_offset if self._left_offset is not None else self._source_start) or 0
 
     def GetSourceStartFrame(self) -> int:  # noqa: N802
-        self._check()
+        self._check("GetSourceStartFrame")
         return self._source_start or 0
 
     def GetSourceEndFrame(self) -> int:  # noqa: N802
@@ -112,15 +116,15 @@ class FakeTimelineItem:
         return (self._source_start or 0) + self._duration - 1
 
     def GetMediaPoolItem(self) -> FakeMediaPoolItem | None:  # noqa: N802
-        self._check()
+        self._check("GetMediaPoolItem")
         return self._media_item
 
     def GetClipEnabled(self) -> bool:  # noqa: N802
-        self._check()
+        self._check("GetClipEnabled")
         return self._enabled
 
     def GetTakeCount(self) -> int:  # noqa: N802
-        self._check()
+        self._check("GetTakeCount")
         return self._takes
 
 

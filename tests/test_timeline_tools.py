@@ -272,6 +272,50 @@ def test_an_angle_on_a_resolve_without_source_frames_still_reports_its_offset(
     assert result["tracks"][0]["items"][0]["sync_offset"]["frames"] == -2880
 
 
+def test_one_title_that_refuses_a_getter_costs_a_field_not_the_inspection(
+    attach: Attach,
+) -> None:
+    """A Text+ generator answers some getters and refuses others; the cut still reads."""
+    title = FakeTimelineItem(
+        "Title 01",
+        0,
+        60,
+        refuses={"GetSourceStartFrame", "GetMediaPoolItem", "GetTakeCount"},
+    )
+    shot = FakeTimelineItem("C0012.mp4", 60, 40, source_start=1000)
+    attach(studio(timeline=FakeTimeline("cut v1", video=[FakeTrack("Video 1", [title, shot])])))
+
+    result = inspect_timeline(detail="clips")
+
+    assert result["ok"] is True
+    titled, filmed = result["tracks"][0]["items"]
+    assert titled["name"] == "Title 01"
+    assert titled["clip"] is None
+    assert titled["takes"] == 0
+    assert titled["record"]["duration"]["frames"] == 60
+    assert filmed["source"]["in"]["frames"] == 1000
+
+
+def test_a_source_span_is_never_half_one_clock_and_half_another(attach: Attach) -> None:
+    """An in point counted from the media start against an absolute out point is a lie."""
+    item = FakeTimelineItem(
+        "A.mp4",
+        0,
+        100,
+        source_start=5,
+        left_offset=5,
+        source_end=86_499,
+        supports_source_frames=False,
+    )
+    attach(studio(timeline=FakeTimeline("cut v1", video=[FakeTrack("Video 1", [item])])))
+
+    result = inspect_timeline(detail="clips")
+
+    source = result["tracks"][0]["items"][0]["source"]
+    assert source["in"]["frames"] == 5
+    assert source["out"]["frames"] == 105
+
+
 def test_a_retimed_shot_reports_the_source_frames_it_really_covers(attach: Attach) -> None:
     """Half speed: 400 timeline frames over 200 source frames, so duration will not do."""
     item = FakeTimelineItem("A.mp4", 0, 400, source_start=1000, source_end=1199)

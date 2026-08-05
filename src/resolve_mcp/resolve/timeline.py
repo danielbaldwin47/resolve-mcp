@@ -167,26 +167,52 @@ def _frames(value: Any) -> int | None:
         return None
 
 
-def _optional(getter: Any, default: Any, *args: Any) -> Any:
-    """Read a getter this Resolve build may not have at all; a missing one is not a failure.
+class Reader:
+    """Reads fields that may not answer, degrading only while Resolve is still there.
 
-    Absence is the only thing forgiven here. A getter that is present and *raises* is left
-    to raise, because that is what a handle dying mid-read looks like — and a field-level
-    fallback would turn a lost connection into a reading full of plausible defaults that
-    the agent has no reason to distrust. One reconnect, or a stated failure, is the only
-    honest pair of outcomes.
+    Two failures look identical at the call site and must not be treated alike. A getter
+    that refuses on one clip kind — a Fusion title has no source frames, an old build has
+    no getter at all — should cost that one field and nothing more. A getter that fails
+    because Resolve went away must not be smoothed into a plausible default: the agent
+    would have a whole timeline of them and no reason to distrust a single one.
+
+    The exception cannot tell them apart, so this asks the connection instead. A dead
+    handle re-raises, which is what the tool layer's single reconnect exists for. The
+    asking costs the same cheap version probe the connection already makes before every
+    call, and only on the path where a read has already failed.
     """
-    return default if getter is None else getter(*args)
+
+    def __init__(self, connection: ResolveConnection) -> None:
+        self._connection = connection
+
+    def optional(self, target: Any, method: str, default: Any, *args: Any) -> Any:
+        getter = getattr(target, method, None)
+        if getter is None:
+            return default
+        try:
+            return getter(*args)
+        except Exception:
+            if self._connection.dropped():
+                log.info("Resolve went away while reading %s", method)
+                raise
+            log.debug("Resolve would not answer %s%s", method, args, exc_info=True)
+            return default
 
 
-def _track_counts(timeline: Timeline) -> dict[str, int]:
+def _track_counts(reader: Reader, timeline: Timeline) -> dict[str, int]:
     """How many tracks of each kind — the stack that identifies a sync reference."""
     return {
-        track_type: _frames(timeline.GetTrackCount(track_type)) or 0 for track_type in TRACK_TYPES
+        track_type: _frames(reader.optional(timeline, "GetTrackCount", 0, track_type)) or 0
+        for track_type in TRACK_TYPES
     }
 
 
-def summarise(timeline: Timeline, project: Project, current: str | None) -> dict[str, Any]:
+def summarise(
+    reader: Reader,
+    timeline: Timeline,
+    project: Project,
+    current: str | None,
+) -> dict[str, Any]:
     """The one-line view of a timeline that list and inspect both open with."""
     name = _name(timeline)
     base, version = version_of(name)
@@ -198,7 +224,7 @@ def summarise(timeline: Timeline, project: Project, current: str | None) -> dict
         "current": name == current,
         "fps": fps,
         **_bounds(timeline, fps),
-        "tracks": _track_counts(timeline),
+        "tracks": _track_counts(reader, timeline),
     }
 
 
@@ -212,10 +238,13 @@ def list_timelines(
 ) -> dict[str, Any]:
     """Every timeline in the project with its version, duration and track stack."""
     project = _project(connection)
+    reader = Reader(connection)
     current = project.GetCurrentTimeline()
     current_name = _name(current) if current is not None else None
 
-    timelines = [summarise(timeline, project, current_name) for timeline in _timelines(project)]
+    timelines = [
+        summarise(reader, timeline, project, current_name) for timeline in _timelines(project)
+    ]
 
     cap = max(int(limit), 0)
     truncated = len(timelines) > cap
@@ -269,22 +298,23 @@ def inspect_timeline(
         )
 
     project = _project(connection)
+    reader = Reader(connection)
     timeline = find_timeline(project, name)
     current = project.GetCurrentTimeline()
-    heading = summarise(timeline, project, _name(current) if current is not None else None)
+    heading = summarise(reader, timeline, project, _name(current) if current is not None else None)
     fps = heading["fps"]
 
     window = _window(heading, start, end, fps)
     with_items = detail == "clips"
     tracks = [
-        _read_track(timeline, track_type, index, window, fps, with_items)
+        _read_track(reader, timeline, track_type, index, window, fps, with_items)
         for track_type, count in heading["tracks"].items()
         for index in range(1, count + 1)
     ]
     item_count = sum(track["item_count"] for track in tracks)
 
     result: dict[str, Any] = {
-        "timeline": {**heading, "markers": _marker_count(timeline)},
+        "timeline": {**heading, "markers": _marker_count(reader, timeline)},
         "detail": detail,
         "range": {"in": dual_time(window[0], fps), "out": dual_time(window[1], fps)},
         "tracks": None if detail == "summary" else [_without_items(track) for track in tracks],
@@ -330,6 +360,7 @@ def _window(heading: dict[str, Any], start: Any, end: Any, fps: float | None) ->
 
 
 def _read_track(
+    reader: Reader,
     timeline: Timeline,
     track_type: str,
     index: int,
@@ -353,12 +384,15 @@ def _read_track(
     return {
         "type": track_type,
         "index": index,
-        "name": str(_optional(timeline.GetTrackName, "", track_type, index) or ""),
-        "enabled": bool(_optional(timeline.GetIsTrackEnabled, True, track_type, index)),
-        "locked": bool(_optional(timeline.GetIsTrackLocked, False, track_type, index)),
+        "name": str(reader.optional(timeline, "GetTrackName", "", track_type, index) or ""),
+        "enabled": bool(reader.optional(timeline, "GetIsTrackEnabled", True, track_type, index)),
+        "locked": bool(reader.optional(timeline, "GetIsTrackLocked", False, track_type, index)),
         "item_count": len(in_range),
         "items": (
-            [read_item(item, track_type, index, fps, placement) for item, placement in in_range]
+            [
+                read_item(reader, item, track_type, index, fps, placement)
+                for item, placement in in_range
+            ]
             if with_items
             else []
         ),
@@ -408,8 +442,8 @@ def _items_in_track(timeline: Timeline, track_type: str, index: int) -> list[Tim
     return list(timeline.GetItemListInTrack(track_type, index) or [])
 
 
-def _marker_count(timeline: Timeline) -> int:
-    markers = _optional(timeline.GetMarkers, None)
+def _marker_count(reader: Reader, timeline: Timeline) -> int:
+    markers = reader.optional(timeline, "GetMarkers", None)
     return len(markers) if isinstance(markers, dict) else 0
 
 
@@ -419,6 +453,7 @@ def _placement(item: TimelineItem) -> Placement:
 
 
 def read_item(
+    reader: Reader,
     item: TimelineItem,
     track_type: str,
     index: int,
@@ -428,8 +463,7 @@ def read_item(
     """One shot: where it sits, where it came from, and the offset between the two."""
     record_in, duration = placement.start, placement.duration
     record_out = placement.end
-    source_in = _source_start(item)
-    source_out = _source_end(item, source_in, duration)
+    source_in, source_out = _source_bounds(reader, item, duration)
     offset = record_in - source_in if record_in is not None and source_in is not None else None
     return {
         "name": str(item.GetName() or ""),
@@ -441,46 +475,46 @@ def read_item(
         },
         "source": {"in": dual_time(source_in, fps), "out": dual_time(source_out, fps)},
         "sync_offset": dual_time(offset, fps),
-        "clip": _clip_name(item),
-        "enabled": bool(_optional(getattr(item, "GetClipEnabled", None), True)),
-        "takes": int(_optional(getattr(item, "GetTakeCount", None), 0) or 0),
+        "clip": _clip_name(reader, item),
+        "enabled": bool(reader.optional(item, "GetClipEnabled", True)),
+        "takes": int(reader.optional(item, "GetTakeCount", 0) or 0),
     }
 
 
-def _source_start(item: TimelineItem) -> int | None:
-    """Where the shot starts in its own media.
+def _source_bounds(
+    reader: Reader,
+    item: TimelineItem,
+    duration: int | None,
+) -> tuple[int | None, int | None]:
+    """Where the shot starts and ends in its own media, both on the same clock.
 
-    ``GetSourceStartFrame`` is the direct answer and exists only on newer builds. Failing
-    that, ``GetLeftOffset`` is how far into the media pool item the shot begins — the same
-    number whenever the media itself starts at frame zero, which camera files do, and the
-    closest answer available on a build without the newer getter.
+    ``GetSourceStartFrame``/``GetSourceEndFrame`` are the direct answer and exist only on
+    newer builds; the end is the last frame, hence the plus one. Reading it rather than
+    deriving it matters on a retime, where a shot covers more or fewer source frames than
+    it occupies on the timeline.
+
+    Failing those, ``GetLeftOffset`` is how far into the media pool item the shot begins —
+    the same number whenever the media itself starts at frame zero, which camera files do.
+    The two routes are never mixed: an in point counted from the media start against an
+    out point in absolute source frames would be a span that means nothing.
     """
-    for getter in ("GetSourceStartFrame", "GetLeftOffset"):
-        frames = _frames(_optional(getattr(item, getter, None), None))
-        if frames is not None:
-            return frames
-    return None
+    start = _frames(reader.optional(item, "GetSourceStartFrame", None))
+    if start is not None:
+        last = _frames(reader.optional(item, "GetSourceEndFrame", None))
+        if last is not None:
+            return start, last + 1
+        return start, (start + duration if duration is not None else None)
+
+    offset = _frames(reader.optional(item, "GetLeftOffset", None))
+    if offset is None:
+        return None, None
+    return offset, (offset + duration if duration is not None else None)
 
 
-def _source_end(item: TimelineItem, source_in: int | None, duration: int | None) -> int | None:
-    """One past the shot's last source frame.
-
-    Read rather than derived where Resolve offers it: a retimed shot covers more or fewer
-    source frames than it occupies on the timeline, so ``source_in + duration`` is only
-    right at 1:1 speed. ``GetSourceEndFrame`` reports the last frame, hence the plus one.
-    """
-    reported = _frames(_optional(getattr(item, "GetSourceEndFrame", None), None))
-    if reported is not None:
-        return reported + 1
-    if source_in is None or duration is None:
-        return None
-    return source_in + duration
-
-
-def _clip_name(item: TimelineItem) -> str | None:
+def _clip_name(reader: Reader, item: TimelineItem) -> str | None:
     """The media pool clip a shot came from — a generator or title has none."""
-    clip = _optional(item.GetMediaPoolItem, None)
+    clip = reader.optional(item, "GetMediaPoolItem", None)
     if clip is None:
         return None
-    name = _optional(clip.GetName, None)
+    name = reader.optional(clip, "GetName", None)
     return None if name is None else str(name)
