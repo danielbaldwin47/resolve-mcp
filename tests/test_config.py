@@ -1,10 +1,22 @@
-"""Zero-config defaults, env overrides, no config file."""
+"""Zero-config defaults, env overrides, no config file.
+
+Expected values are compared as ``PureWindowsPath`` so the assertions read
+"same Windows path" on any host — the fake tier runs on ubuntu in CI, where
+a native ``Path`` treats backslashes as filename characters, not separators.
+The conversion must go through ``str``: on Python 3.11, ``PureWindowsPath``
+built from a ``PosixPath`` object re-joins its parts and silently drops the
+root after the drive (``C:Program Files``).
+"""
 
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 from resolve_mcp.config import Config
+
+
+def as_windows(p: Path) -> PureWindowsPath:
+    return PureWindowsPath(str(p))
 
 
 def test_defaults_come_from_the_standard_windows_install() -> None:
@@ -12,13 +24,15 @@ def test_defaults_come_from_the_standard_windows_install() -> None:
         {"PROGRAMDATA": r"C:\ProgramData", "LOCALAPPDATA": r"C:\Users\d\AppData\Local"}
     )
 
-    assert config.script_api == Path(
+    assert as_windows(config.script_api) == PureWindowsPath(
         r"C:\ProgramData\Blackmagic Design\DaVinci Resolve\Support\Developer\Scripting"
     )
-    assert config.script_lib == Path(
+    assert as_windows(config.script_lib) == PureWindowsPath(
         r"C:\Program Files\Blackmagic Design\DaVinci Resolve\fusionscript.dll"
     )
-    assert config.cache_dir == Path(r"C:\Users\d\AppData\Local\resolve-mcp")
+    assert as_windows(config.cache_dir) == PureWindowsPath(
+        r"C:\Users\d\AppData\Local\resolve-mcp"
+    )
     assert config.log_level == "INFO"
 
 
@@ -48,7 +62,9 @@ def test_survives_an_environment_with_nothing_set() -> None:
 def test_the_scripting_modules_directory_hangs_off_the_api_root() -> None:
     config = Config.from_env({"RESOLVE_SCRIPT_API": r"D:\resolve\Scripting"})
 
-    assert config.script_modules == Path(r"D:\resolve\Scripting\Modules")
+    assert as_windows(config.script_modules) == PureWindowsPath(
+        r"D:\resolve\Scripting\Modules"
+    )
 
 
 def test_artifacts_live_under_the_cache_root(tmp_path: Path) -> None:

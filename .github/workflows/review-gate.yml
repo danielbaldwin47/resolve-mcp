@@ -7,8 +7,8 @@ name: review-gate
 # contentless token. A held finding must be written out and resolved, not
 # tokenized past the gate.
 #
-# Install steps live in the header of ci.yml (same one-time `workflow`-scope
-# dance, both files move together).
+# `review-line` is a required status check on main via branch protection —
+# renaming the job means updating the protection rule's contexts to match.
 
 on:
   pull_request:
@@ -18,7 +18,7 @@ jobs:
   review-line:
     runs-on: ubuntu-latest
     steps:
-      - name: Require "Review: clean" in the PR body
+      - name: 'Require "Review: clean" in the PR body'
         env:
           BODY: ${{ github.event.pull_request.body }}
         run: |
