@@ -59,8 +59,9 @@ parent branch reads MERGED while its commits never reach main.
 Close the ticket with the PR link when the work is complete; name any unrun
 live ACs in the close comment.
 
-CI (`.claude/pending/ci.yml`, install instructions in its header) runs the
-fake tier, mypy strict, and ruff on every PR.
+CI (`.github/workflows/ci.yml`) runs the fake tier, mypy strict, and ruff on
+every PR; `review-gate.yml` blocks merge until the PR body's `Review:` line
+reads clean. Both are required status checks on `main`.
 
 ## Context discipline
 

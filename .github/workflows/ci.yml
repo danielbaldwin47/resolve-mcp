@@ -1,0 +1,30 @@
+name: ci
+
+# Both this job (`checks`) and review-gate's `review-line` are required status
+# checks on main via branch protection — renaming a job means updating the
+# protection rule's contexts to match.
+#
+# The fake tier is platform-parameterised (ADR 0001's interpreter guard takes
+# `platform=` as an argument), so it runs on ubuntu — no Resolve, no Windows.
+# The live tier (`-m live`) never runs in CI by design: it needs Resolve
+# Studio on the Windows box. Its results are recorded on tickets by hand.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Sync dependencies
+        run: uv sync
+      - name: Unit tests (fake tier)
+        run: uv run pytest -m 'not live'
+      - name: Type check
+        run: uv run mypy
+      - name: Lint
+        run: uv run ruff check
