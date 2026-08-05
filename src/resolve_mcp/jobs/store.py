@@ -32,7 +32,7 @@ from typing import Any
 from ..config import Config, get_config
 from ..errors import JobInterruptedError, JobNotFoundError
 from ..logging_config import get_logger
-from ..naming import UNSAFE_IN_FILENAME
+from ..naming import slug
 
 log = get_logger("jobs")
 
@@ -77,8 +77,7 @@ class JobRecord:
 
 
 def _job_id(kind: str) -> str:
-    slug = UNSAFE_IN_FILENAME.sub("-", kind).strip("-") or "job"
-    return f"{slug}-{uuid.uuid4().hex[:12]}"
+    return f"{slug(kind, 'job')}-{uuid.uuid4().hex[:12]}"
 
 
 def _path(job_id: str, config: Config) -> Path:
@@ -148,19 +147,15 @@ def load(job_id: str, config: Config | None = None) -> JobRecord:
     return _recovered(record, config)
 
 
-def load_all(
-    state: str | None = None,
-    limit: int | None = None,
-    config: Config | None = None,
-) -> list[JobRecord]:
+def load_all(state: str | None = None, config: Config | None = None) -> list[JobRecord]:
     """Every job this cache directory knows about, newest first."""
     config = config or get_config()
     records = [_read(path) for path in sorted(config.job_dir.glob("*.json"))]
     found = [_recovered(one, config) for one in records if one is not None]
     found.sort(key=lambda one: (one.started_at, one.sequence), reverse=True)
-    if state is not None:
-        found = [one for one in found if one.state == state]
-    return found if limit is None else found[:limit]
+    if state is None:
+        return found
+    return [one for one in found if one.state == state]
 
 
 def _read(path: Path) -> JobRecord | None:

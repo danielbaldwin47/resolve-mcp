@@ -16,13 +16,14 @@ from pathlib import Path
 import pytest
 
 from resolve_mcp.audio.acquire import (
+    _as_export_failure,
     acquire_clip_audio,
     acquire_timeline_audio,
     mapping_conflict,
 )
 from resolve_mcp.audio.ffmpeg import Completed, Runner
 from resolve_mcp.config import get_config
-from resolve_mcp.errors import AudioExtractionError, AudioMappingError
+from resolve_mcp.errors import AudioExtractionError, AudioMappingError, RenderQueueError
 from resolve_mcp.jobs.runner import wait_for
 from resolve_mcp.resolve.connection import get_connection
 
@@ -34,6 +35,7 @@ from .fakes import (
     FakeTimeline,
     media_pool,
     studio,
+    sync_reference,
     write_wav,
 )
 
@@ -121,6 +123,33 @@ def test_an_edited_timeline_is_a_different_key_and_exports_again(attach: Attach)
     assert second.result is not None
     assert first.result is not None
     assert second.result["path"] != first.result["path"]
+
+
+def test_a_take_swap_that_keeps_the_duration_still_exports_again(attach: Attach) -> None:
+    """Bounds and track counts alone would call a recut timeline unchanged."""
+    timeline = sync_reference()
+    resolve = studio(timeline=timeline)
+    attach(resolve)
+    first = wait_for(acquire_timeline_audio(get_connection())["job_id"])
+
+    shots = timeline.GetItemListInTrack("video", 1)
+    assert shots is not None
+    shots[0]._name = "Cam C.mp4"
+    second = wait_for(acquire_timeline_audio(get_connection())["job_id"])
+
+    assert first.state == "completed"
+    assert second.cached is False
+    assert len(_project(resolve).render_jobs) == 2
+
+
+def test_the_export_renders_one_file_for_the_whole_timeline(attach: Attach) -> None:
+    """The other render mode writes a file per clip — hundreds of fragments, not the mix."""
+    resolve = studio(timeline=FakeTimeline("sunset-set v3", "59.94"))
+    attach(resolve)
+
+    wait_for(acquire_timeline_audio(get_connection())["job_id"])
+
+    assert _project(resolve).render_mode == 1
 
 
 def test_a_queue_that_refuses_the_job_fails_the_job_not_the_server(attach: Attach) -> None:
@@ -240,6 +269,19 @@ def test_real_ffmpeg_accepts_the_command_and_writes_the_wav(
     assert record.result["sample_rate"] == 48_000
     assert record.result["bit_depth"] == 24
     assert record.result["duration_seconds"] == pytest.approx(FIXTURE_SECONDS, abs=0.05)
+
+
+# --- the audio-mapping check ---------------------------------------------------------------
+
+
+def test_a_queue_failure_keeps_the_advice_the_queue_was_specific_about() -> None:
+    """A stalled queue names the dialog that stalled it; that beats the generic audio advice."""
+    stalled = RenderQueueError(cause="The render job was still Rendering.", fix="Check Deliver.")
+    refused = RenderQueueError(cause="Resolve would not add the job to the render queue.")
+
+    assert _as_export_failure(stalled).fix == "Check Deliver."
+    assert "audio on it" in _as_export_failure(refused).fix
+    assert _as_export_failure(refused).code == "audio_export_failed"
 
 
 # --- the audio-mapping check ---------------------------------------------------------------

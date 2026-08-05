@@ -12,7 +12,9 @@ Four decisions:
 
 * **Nothing escapes the worker.** There is no envelope around a thread — an exception here
   would vanish into a dead thread and leave a job running forever. Every failure is caught
-  and written into the record as the same ``cause``/``fix`` shape a tool returns.
+  and written into the record as the same ``cause``/``fix`` shape a tool returns, and that
+  includes writing the cache entry: a job that produced a result but could not record it is
+  a failed job, not a job that never ended.
 
 * **Only one job drives Resolve at a time.** The scripting API is one global application,
   and two jobs pushing the render queue at once corrupt it. Jobs that touch Resolve
@@ -132,6 +134,8 @@ def _work(record: JobRecord, work: Work, config: Config) -> None:
 
     try:
         output = work(progress)
+        if record.cache_key is not None:
+            cache.remember(record.cache_key, record.kind, output.result, output.artifacts, config)
     except ResolveMcpError as exc:
         store.finish(record, error=exc.payload(), config=config)
         return
@@ -144,8 +148,6 @@ def _work(record: JobRecord, work: Work, config: Config) -> None:
         )
         return
 
-    if record.cache_key is not None:
-        cache.remember(record.cache_key, record.kind, output.result, output.artifacts, config)
     store.finish(record, result=output.result, config=config)
 
 

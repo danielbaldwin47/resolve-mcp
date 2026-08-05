@@ -45,9 +45,10 @@ def list_jobs(state: str | None = None, limit: int = DEFAULT_JOB_LIMIT) -> dict[
             detail={"requested": state, "states": list(store.STATES)},
         )
     found = store.load_all(state=state)
+    shown = found[:limit]
     return {
-        "jobs": [one.payload() for one in found[:limit]],
-        "count": len(found[:limit]),
+        "jobs": [one.payload() for one in shown],
+        "count": len(shown),
         "total": len(found),
     }
 

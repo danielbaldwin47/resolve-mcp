@@ -15,14 +15,16 @@ Which route is chosen is not a preference, it is a correctness question:
 
 Caching follows the same split (see ``jobs.cache``): the source clip is fingerprinted
 cheaply, the acquired WAV is hashed for real, and that hash is what analysis jobs key off.
-A timeline has no bytes to fingerprint, so its identity is name, unique id, bounds, fps and
-track counts — a heuristic, which is why every starter takes ``refresh`` to force the
-export again when the director has changed something the heuristic cannot see.
+A timeline has no bytes to fingerprint, so its identity is name, unique id, bounds, track
+counts and a digest of the shots on it — still a heuristic, because a clip's audio level is
+not readable through the scripting API at all, which is why every starter takes ``refresh``
+to force the export again when the director changed something no reading can see.
 """
 
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import os
 from collections.abc import Iterator
 from pathlib import Path
@@ -33,11 +35,11 @@ from ..errors import AudioExportError, AudioExtractionError, AudioMappingError, 
 from ..jobs import cache
 from ..jobs.runner import JobOutput, Progress, start_job
 from ..logging_config import get_logger
-from ..naming import UNSAFE_IN_FILENAME
+from ..naming import slug
 from ..resolve import media, render
 from ..resolve.connection import ResolveConnection
 from ..resolve.session import current_project
-from ..resolve.timeline import find_timeline
+from ..resolve.timeline import Reader, find_timeline
 from . import ffmpeg, wav
 
 log = get_logger("audio")
@@ -53,6 +55,7 @@ CLIP_KIND = "acquire_clip_audio"
 
 RENDER_FORMAT = "wav"
 RENDER_CODEC = "lpcm"
+SINGLE_CLIP = 1
 
 EXPORT_FLOOR = 0.1
 EXPORT_CEILING = 0.9
@@ -63,17 +66,43 @@ OFFSET_HINT = ("offset", "delay")
 # --- timeline scope: the render queue ----------------------------------------------------
 
 
-def timeline_fingerprint(timeline: Timeline) -> dict[str, Any]:
-    """A timeline's identity, as far as anything outside Resolve can read it."""
-    reading: dict[str, Any] = {
-        "name": _text(timeline.GetName),
-        "unique_id": _text(getattr(timeline, "GetUniqueId", None)),
-        "start": _text(timeline.GetStartFrame),
-        "end": _text(timeline.GetEndFrame),
-        "audio_tracks": _text(lambda: timeline.GetTrackCount("audio")),
-        "video_tracks": _text(lambda: timeline.GetTrackCount("video")),
+def timeline_fingerprint(reader: Reader, timeline: Timeline) -> dict[str, Any]:
+    """A timeline's identity, as far as anything outside Resolve can read it.
+
+    Bounds and track counts alone would call a take swap or a reordered cut "unchanged" —
+    same duration, same stack — and hand back yesterday's mix, so the shots themselves are
+    digested too. What no reading can see is a clip's audio level, which the scripting API
+    does not expose at all; that is what ``refresh`` on the starter is for.
+
+    Nothing here smooths a failure into a default: a field that cannot be read while
+    Resolve is dying must not quietly produce a fingerprint, because every dead-handle
+    reading would collide on one key and serve one concert's audio for another.
+    """
+    return {
+        "name": str(timeline.GetName()),
+        "unique_id": reader.optional(timeline, "GetUniqueId", None),
+        "start": timeline.GetStartFrame(),
+        "end": timeline.GetEndFrame(),
+        "audio_tracks": timeline.GetTrackCount("audio"),
+        "video_tracks": timeline.GetTrackCount("video"),
+        "structure": _structure(reader, timeline),
     }
-    return reading
+
+
+def _structure(reader: Reader, timeline: Timeline) -> str:
+    """A digest of every shot on the cut: what it is, where it starts, how long it runs."""
+    digest = hashlib.sha256()
+    for track_type in ("video", "audio"):
+        count = int(timeline.GetTrackCount(track_type) or 0)
+        for index in range(1, count + 1):
+            items = reader.optional(timeline, "GetItemListInTrack", [], track_type, index) or []
+            digest.update(f"{track_type}{index}:".encode())
+            for item in items:
+                name = reader.optional(item, "GetName", "")
+                start = reader.optional(item, "GetStart", None)
+                duration = reader.optional(item, "GetDuration", None)
+                digest.update(f"{name}@{start}+{duration};".encode())
+    return digest.hexdigest()
 
 
 def acquire_timeline_audio(
@@ -88,14 +117,15 @@ def acquire_timeline_audio(
     config = config or get_config()
     project = current_project(connection, "No project is open, so there is no timeline to export.")
     found = find_timeline(project, timeline)
-    name = _text(found.GetName) or "timeline"
+    name = str(found.GetName() or "timeline")
     params = {
         "scope": "timeline",
         "timeline": name,
         "sample_rate": sample_rate,
         "bit_depth": bit_depth,
     }
-    key = cache.cache_key(TIMELINE_KIND, [timeline_fingerprint(found)], params)
+    fingerprint = timeline_fingerprint(Reader(connection), found)
+    key = cache.cache_key(TIMELINE_KIND, [fingerprint], params)
 
     def work(progress: Progress) -> JobOutput:
         return export_timeline_mix(project, found, key, params, progress, config)
@@ -128,6 +158,9 @@ def export_timeline_mix(
 
     progress(0.05, "queuing the audio export")
     with _current_timeline(project, timeline):
+        # One file for the whole timeline. The other mode renders a file per clip on it,
+        # which for a concert cut is hundreds of fragments instead of the mix.
+        project.SetCurrentRenderMode(SINGLE_CLIP)
         settings = {
             "SelectAllFrames": True,
             "TargetDir": str(target_dir),
@@ -142,10 +175,21 @@ def export_timeline_mix(
             job_id = render.submit(project, settings, RENDER_FORMAT, RENDER_CODEC)
             render.render(project, job_id, expecting, _scaled(progress))
         except RenderQueueError as exc:
-            raise AudioExportError(cause=exc.cause, detail=exc.detail) from exc
+            raise _as_export_failure(exc) from exc
 
     progress(0.95, "hashing the export")
     return JobOutput(_result(expecting, params), (expecting,))
+
+
+def _as_export_failure(exc: RenderQueueError) -> AudioExportError:
+    """Re-label a queue failure as an audio one, keeping any fix the queue was specific about.
+
+    The generic queue advice is worth replacing with "check the timeline has audio on it".
+    Advice the queue raised for one case — a modal dialog stalling the render — is not:
+    that is the more actionable of the two, so it survives the relabelling.
+    """
+    specific = exc.fix if exc.fix != RenderQueueError.default_fix else None
+    return AudioExportError(cause=exc.cause, fix=specific, detail=exc.detail)
 
 
 @contextlib.contextmanager
@@ -321,16 +365,4 @@ def _result(target: Path, params: dict[str, Any]) -> dict[str, Any]:
 
 def _stem(label: str, key: str) -> str:
     """Deterministic from the cache key, so a rerun overwrites instead of accumulating."""
-    slug = UNSAFE_IN_FILENAME.sub("-", label).strip("-") or "audio"
-    return f"{slug}-{key[:12]}"
-
-
-def _text(getter: Any) -> str | None:
-    if getter is None:
-        return None
-    try:
-        value = getter()
-    except Exception:  # noqa: BLE001 - a field the version does not have is not a failure
-        log.debug("Could not read a timeline field for its fingerprint", exc_info=True)
-        return None
-    return None if value is None else str(value)
+    return f"{slug(label, 'audio')}-{key[:12]}"

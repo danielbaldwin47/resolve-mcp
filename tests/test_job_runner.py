@@ -118,6 +118,22 @@ def test_a_cache_hit_is_still_a_job_the_agent_can_poll_and_list() -> None:
     assert [one.job_id for one in store.load_all()] == [started["job_id"]]
 
 
+def test_a_result_that_cannot_be_cached_fails_the_job_rather_than_stranding_it() -> None:
+    """A job left running forever is the one failure a poller can never diagnose."""
+    artifact = _artifact("mix.wav")
+    get_config().result_dir.parent.mkdir(parents=True, exist_ok=True)
+    get_config().result_dir.write_text("not a directory", encoding="utf-8")
+
+    def work(progress: Progress) -> JobOutput:
+        return JobOutput({"path": str(artifact)}, (artifact,))
+
+    record = wait_for(start_job("extract_audio", {}, work, cache_key="key1")["job_id"])
+
+    assert record.state == "failed"
+    assert record.error is not None
+    assert record.error["code"] == "internal_error"
+
+
 def test_a_failed_job_leaves_the_cache_alone() -> None:
     def work(progress: Progress) -> JobOutput:
         raise MediaOperationError(cause="Resolve refused the render job.")
