@@ -18,7 +18,7 @@ import pytest
 from resolve_mcp.tools.escape_hatch import run_python
 from resolve_mcp.tools.media import inspect_clip, list_media
 from resolve_mcp.tools.project import get_status, list_projects, snapshot_project
-from resolve_mcp.tools.timeline import inspect_timeline, list_timelines
+from resolve_mcp.tools.timeline import inspect_timeline, list_markers, list_timelines
 
 pytestmark = pytest.mark.live
 
@@ -130,6 +130,31 @@ def test_the_frame_math_holds_on_a_real_timeline() -> None:
                     item["sync_offset"]["frames"]
                     == record["in"]["frames"] - item["source"]["in"]["frames"]
                 )
+
+
+def test_hand_placed_markers_read_back_on_the_clock_the_agent_plans_in() -> None:
+    """The one thing no fake can settle: which frame Resolve keys a GUI marker by.
+
+    The wrapper takes ``GetMarkers`` keys as relative to the timeline start and reports a
+    record frame from them. If that assumption is wrong, every marker on a timeline
+    starting at 01:00:00:00 lands an hour away from the shot it is about — and this is
+    where it shows. Add a marker by hand in the GUI over a known shot first; the check is
+    that the record frame lands inside the timeline, next to that shot.
+    """
+    if get_status()["context"]["timeline"] is None:
+        pytest.skip("No timeline open in Resolve")
+
+    result = list_markers()
+    assert result["ok"] is True
+    if not result["markers"]:
+        pytest.skip("No markers on the open timeline — add one in the GUI and rerun")
+
+    bounds = result["timeline"]
+    for marker in result["markers"]:
+        assert bounds["start"]["frames"] <= marker["record"]["frames"] < bounds["end"]["frames"]
+        assert marker["record"]["frames"] == bounds["start"]["frames"] + marker["frame"]
+        assert marker["end"]["frames"] > marker["record"]["frames"]
+        assert marker["color"]
 
 
 def test_snapshot_writes_a_real_drp(tmp_path: Path) -> None:

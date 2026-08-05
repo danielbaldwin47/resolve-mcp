@@ -82,7 +82,7 @@ class Placement(NamedTuple):
 # --- reaching a timeline ------------------------------------------------------------------
 
 
-def _project(connection: ResolveConnection) -> Project:
+def open_project(connection: ResolveConnection) -> Project:
     manager = connection.handle().GetProjectManager()
     project = manager.GetCurrentProject() if manager is not None else None
     if project is None:
@@ -144,8 +144,8 @@ def version_of(name: str) -> tuple[str, int | None]:
 
 
 def _bounds(timeline: Timeline, fps: float | None) -> dict[str, Any]:
-    start = _frames(timeline.GetStartFrame())
-    end = _frames(timeline.GetEndFrame())
+    start = read_frames(timeline.GetStartFrame())
+    end = read_frames(timeline.GetEndFrame())
     duration = end - start if start is not None and end is not None else None
     return {
         "start": dual_time(start, fps),
@@ -154,7 +154,7 @@ def _bounds(timeline: Timeline, fps: float | None) -> dict[str, Any]:
     }
 
 
-def _frames(value: Any) -> int | None:
+def read_frames(value: Any) -> int | None:
     """A frame number as Resolve reports it — sometimes a string, sometimes nothing.
 
     Only the parsing is forgiving. A getter that *raises* is left to raise: that is what a
@@ -202,7 +202,7 @@ class Reader:
 def _track_counts(reader: Reader, timeline: Timeline) -> dict[str, int]:
     """How many tracks of each kind — the stack that identifies a sync reference."""
     return {
-        track_type: _frames(reader.optional(timeline, "GetTrackCount", 0, track_type)) or 0
+        track_type: read_frames(reader.optional(timeline, "GetTrackCount", 0, track_type)) or 0
         for track_type in TRACK_TYPES
     }
 
@@ -237,7 +237,7 @@ def list_timelines(
     config: Config | None = None,
 ) -> dict[str, Any]:
     """Every timeline in the project with its version, duration and track stack."""
-    project = _project(connection)
+    project = open_project(connection)
     reader = Reader(connection)
     current = project.GetCurrentTimeline()
     current_name = _name(current) if current is not None else None
@@ -297,7 +297,7 @@ def inspect_timeline(
             detail={"requested": detail, "available": list(DETAIL_LEVELS)},
         )
 
-    project = _project(connection)
+    project = open_project(connection)
     reader = Reader(connection)
     timeline = find_timeline(project, name)
     current = project.GetCurrentTimeline()
@@ -449,7 +449,7 @@ def _marker_count(reader: Reader, timeline: Timeline) -> int:
 
 def _placement(item: TimelineItem) -> Placement:
     """Where a shot sits, in the two numbers everything else is derived from."""
-    return Placement(_frames(item.GetStart()), _frames(item.GetDuration()))
+    return Placement(read_frames(item.GetStart()), read_frames(item.GetDuration()))
 
 
 def read_item(
@@ -498,14 +498,14 @@ def _source_bounds(
     The two routes are never mixed: an in point counted from the media start against an
     out point in absolute source frames would be a span that means nothing.
     """
-    start = _frames(reader.optional(item, "GetSourceStartFrame", None))
+    start = read_frames(reader.optional(item, "GetSourceStartFrame", None))
     if start is not None:
-        last = _frames(reader.optional(item, "GetSourceEndFrame", None))
+        last = read_frames(reader.optional(item, "GetSourceEndFrame", None))
         if last is not None:
             return start, last + 1
         return start, (start + duration if duration is not None else None)
 
-    offset = _frames(reader.optional(item, "GetLeftOffset", None))
+    offset = read_frames(reader.optional(item, "GetLeftOffset", None))
     if offset is None:
         return None, None
     return offset, (offset + duration if duration is not None else None)

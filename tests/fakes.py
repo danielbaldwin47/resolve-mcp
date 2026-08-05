@@ -164,7 +164,9 @@ class FakeTimeline:
         start_frame: int = 0,
         video: TrackSpec | None = None,
         audio: TrackSpec | None = None,
-        markers: dict[float, dict[str, Any]] | None = None,
+        # Marker keys come back across a C bridge as whatever Resolve put there — floats
+        # normally, but the type is not the fake's to promise, and the wrapper parses them.
+        markers: dict[Any, dict[str, Any]] | None = None,
         end_frame: int | None = None,
         owner: FakeResolve | None = None,
     ) -> None:
@@ -177,8 +179,10 @@ class FakeTimeline:
             "audio": _as_tracks(audio, "Audio"),
             "subtitle": [],
         }
-        self._markers = markers or {}
+        self._markers = dict(markers or {})
         self._owner = owner
+        self.marker_writes: list[dict[str, Any]] = []
+        self.refuse_markers = False
 
     def adopt(self, owner: FakeResolve) -> None:
         self._owner = owner
@@ -253,9 +257,46 @@ class FakeTimeline:
         track = self._track(track_type, index)
         return bool(track and track.locked)
 
-    def GetMarkers(self) -> dict[float, dict[str, Any]]:  # noqa: N802
+    def GetMarkers(self) -> dict[Any, dict[str, Any]]:  # noqa: N802
+        """Markers keyed by frame *relative to the timeline start*, as Resolve keys them."""
         self._check()
-        return dict(self._markers)
+        return {frame: dict(marker) for frame, marker in self._markers.items()}
+
+    def AddMarker(  # noqa: N802
+        self,
+        frame: float,
+        color: str,
+        name: str,
+        note: str,
+        duration: float,
+        custom_data: str = "",
+    ) -> bool:
+        """Add one marker, refusing a frame that already carries one — as Resolve does."""
+        self._check()
+        if self.refuse_markers or float(frame) in self._markers:
+            return False
+        self.marker_writes.append(
+            {
+                "frame": float(frame),
+                "color": color,
+                "name": name,
+                "note": note,
+                "duration": duration,
+                "customData": custom_data,
+            }
+        )
+        self._markers[float(frame)] = {
+            "color": color,
+            "name": name,
+            "note": note,
+            "duration": duration,
+            "customData": custom_data,
+        }
+        return True
+
+    def DeleteMarkerAtFrame(self, frame: float) -> bool:  # noqa: N802
+        self._check()
+        return self._markers.pop(float(frame), None) is not None
 
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".exr", ".dpx", ".tga"}

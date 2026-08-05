@@ -180,6 +180,16 @@ class MediaOperationError(ResolveMcpError):
     )
 
 
+class TimelineOperationError(ResolveMcpError):
+    """Resolve refused a timeline write — a bare ``False``, with no reason given."""
+
+    code = "timeline_operation_failed"
+    default_fix = (
+        "Check the timeline is not locked or mid-render in the Resolve GUI, and that the "
+        "frame is inside it, then retry. run_python can reproduce the call for diagnosis."
+    )
+
+
 class InvalidRequestError(ResolveMcpError):
     """The request could not be acted on as written — a shape problem, not a Resolve one."""
 
