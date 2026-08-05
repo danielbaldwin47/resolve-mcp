@@ -362,25 +362,24 @@ def test_no_project_open_fails_before_anything_else(attach: Attach, tmp_path: Pa
 # --- anchored overlays --------------------------------------------------------------------
 
 
-def with_overlay(**overrides: Any) -> dict[str, Any]:
+def with_overlay(out: int = 3030) -> dict[str, Any]:
     """:func:`valid_doc` plus one b-roll overlay anchored 10 frames into ``s002``.
 
     ``s002`` starts at frame 100 of the V1, so the overlay belongs at 110 — a number
-    nothing in the cut file states, which is the point of anchoring.
+    nothing in the cut file states, which is the point of anchoring. ``out`` lengthens it
+    past the anchor's end, which is what covering a seam looks like.
     """
-    doc = valid_doc(
+    return valid_doc(
         overlays=[
             {
                 "id": "b01",
                 "source": "gtr_close",
                 "in": 3000,
-                "out": 3030,
+                "out": out,
                 "over": {"segment": "s002", "offset": 10},
             }
         ]
     )
-    doc.update(overrides)
-    return doc
 
 
 def test_an_overlay_lands_on_v2_at_its_anchor_plus_offset(
@@ -448,6 +447,21 @@ def test_tightening_an_earlier_segment_keeps_the_overlay_over_the_same_content(
     anchor_before, anchor_after = placements(before)[1], placements(after)[1]
     assert placements(before, "video", 2)[0][1] - anchor_before[1] == 10
     assert placements(after, "video", 2)[0][1] - anchor_after[1] == 10
+
+
+def test_an_overlay_may_run_past_its_anchor_to_cover_a_seam(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """What b-roll is usually for: the overlay outlives its anchor and covers the cut."""
+    resolve = empty_project(a_pool())
+    attach(resolve)
+
+    result = build_timeline(a_cut(tmp_path, with_overlay(out=3130)))
+
+    assert result["ok"] is True
+    # 110 to 240: over the last 70 frames of s002, the s002/s003 seam, and all of s003.
+    assert placements(built(resolve, "sunset-set v1"), "video", 2) == [("C0012.mp4", 110, 130)]
+    assert placements(built(resolve, "sunset-set v1"))[2] == ("C0012.mp4", 180, 60)
 
 
 def test_the_report_counts_the_overlays_apart_from_the_segments(

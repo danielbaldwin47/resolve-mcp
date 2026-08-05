@@ -50,12 +50,6 @@ Timeline = Any
 MEDIA_TYPES: Final[dict[str, int]] = {"video": 1, "audio": 2}
 """Resolve's ``mediaType``: 1 appends video only, 2 audio only. Never omitted."""
 
-TRACK_INDEX: Final = 1
-"""The sequential cut: segments on V1, the master mix on A1, both first of their kind."""
-
-OVERLAY_TRACK_INDEX: Final = 2
-"""Overlays ride above the cut on V2, so covering a seam never displaces the segments."""
-
 TRACK_PREFIXES: Final[dict[str, str]] = {"video": "V", "audio": "A"}
 """Also the order tracks are reported in, so every log and failure detail reads the same."""
 
@@ -66,18 +60,39 @@ MISPLACED_CAP: Final = 20
 """A drifted build misplaces everything downstream of the blockage; the count says how many."""
 
 
-def _track_label(track_type: str, track_index: int) -> str:
-    """What the timeline header calls a track — the only name an agent or director sees."""
-    return f"{TRACK_PREFIXES[track_type]}{track_index}"
+@dataclass(frozen=True)
+class Track:
+    """One target track: a media type and a 1-based index, which never travel apart.
+
+    Resolve drops an append naming a ``trackIndex`` without its ``mediaType``, and a lock
+    check or a read-back is meaningless without both — so the pair is one value here.
+    """
+
+    type: str
+    index: int
+
+    @property
+    def label(self) -> str:
+        """What the timeline header calls it — the only name an agent or director sees."""
+        return f"{TRACK_PREFIXES[self.type]}{self.index}"
+
+
+V1: Final = Track("video", 1)
+"""The sequential cut: segments butt-joined in document order."""
+
+V2: Final = Track("video", 2)
+"""Overlays ride above the cut here, so covering a seam never displaces the segments."""
+
+A1: Final = Track("audio", 1)
+"""One continuous master mix under the whole cut."""
 
 
 @dataclass(frozen=True)
 class Shot:
-    """One append: which frames of which clip land where, on which kind of track."""
+    """One append: which frames of which clip land where, on which track."""
 
     id: str
-    track_type: str
-    track_index: int
+    track: Track
     clip: Clip
     name: str
     source_in: int
@@ -89,18 +104,13 @@ class Shot:
         """Half-open, and exactly what Resolve's ``endFrame`` means (#18 spike (a))."""
         return self.source_in + self.duration
 
-    @property
-    def track(self) -> str:
-        """``V1``/``V2``/``A1`` — how a timeline names the track, for logs and failures."""
-        return _track_label(self.track_type, self.track_index)
-
     def clip_info(self) -> dict[str, Any]:
         return {
             "mediaPoolItem": self.clip,
             "startFrame": self.source_in,
             "endFrame": self.source_out,
-            "mediaType": MEDIA_TYPES[self.track_type],
-            "trackIndex": self.track_index,
+            "mediaType": MEDIA_TYPES[self.track.type],
+            "trackIndex": self.track.index,
             "recordFrame": self.record,
         }
 
@@ -148,17 +158,17 @@ def build_timeline(
         "content_hash": checked.loaded.content_hash,
         "timeline": timeline_read.summarise(timeline_read.Reader(connection), built, project, name),
         "placed": {
-            "segments": _count(shots, ("video", TRACK_INDEX)),
-            "overlays": _count(shots, ("video", OVERLAY_TRACK_INDEX)),
-            "audio": any(shot.track_type == "audio" for shot in shots),
+            "segments": _count(shots, V1),
+            "overlays": _count(shots, V2),
+            "audio": bool(_count(shots, A1)),
         },
         "warnings": [finding.as_dict() for finding in checked.warnings],
     }
 
 
-def _count(shots: list[Shot], track: tuple[str, int]) -> int:
+def _count(shots: list[Shot], track: Track) -> int:
     """How many of this build's appends one track took — segments and overlays are both V."""
-    return sum(1 for shot in shots if (shot.track_type, shot.track_index) == track)
+    return sum(1 for shot in shots if shot.track == track)
 
 
 # --- placement ------------------------------------------------------------------------------
@@ -174,8 +184,7 @@ def _shots(doc: dict[str, Any], clips: dict[str, media.LocatedClip], start: int)
         shots.append(
             _shot(
                 id=id,
-                track_type="video",
-                track_index=TRACK_INDEX,
+                track=V1,
                 located=clips[str(segment["source"])],
                 source_in=int(segment["in"]),
                 record=start + offset,
@@ -191,8 +200,7 @@ def _shots(doc: dict[str, Any], clips: dict[str, media.LocatedClip], start: int)
         shots.append(
             _shot(
                 id=id,
-                track_type="video",
-                track_index=OVERLAY_TRACK_INDEX,
+                track=V2,
                 located=clips[str(overlay["source"])],
                 source_in=int(overlay["in"]),
                 record=start + offset,
@@ -206,8 +214,7 @@ def _shots(doc: dict[str, Any], clips: dict[str, media.LocatedClip], start: int)
         shots.append(
             _shot(
                 id="audio",
-                track_type="audio",
-                track_index=TRACK_INDEX,
+                track=A1,
                 located=clips[str(audio["source"])],
                 source_in=int(audio["in"]),
                 record=start,
@@ -219,8 +226,7 @@ def _shots(doc: dict[str, Any], clips: dict[str, media.LocatedClip], start: int)
 
 def _shot(
     id: str,
-    track_type: str,
-    track_index: int,
+    track: Track,
     located: media.LocatedClip,
     source_in: int,
     record: int,
@@ -228,8 +234,7 @@ def _shot(
 ) -> Shot:
     return Shot(
         id=id,
-        track_type=track_type,
-        track_index=track_index,
+        track=track,
         clip=located.clip,
         name=str(located.clip.GetName() or ""),
         source_in=source_in,
@@ -279,24 +284,24 @@ def _make_tracks(timeline: Timeline, shots: list[Shot], name: str) -> None:
     came with keeps whatever the project's timeline template gave it — the API cannot
     restyle an existing track, so the layout is logged rather than assumed.
     """
-    for track_type, track_index in _tracks(shots):
+    for track in _tracks(shots):
         # Only an audio track takes a sub-type; passing one to video is meaningless.
-        extra = (AUDIO_TRACK_TYPE,) if track_type == "audio" else ()
-        while _track_count(timeline, track_type) < track_index:
-            if not timeline.AddTrack(track_type, *extra):
+        extra = (AUDIO_TRACK_TYPE,) if track.type == "audio" else ()
+        while _track_count(timeline, track.type) < track.index:
+            if not timeline.AddTrack(track.type, *extra):
                 # Refused rather than merely unanswered: retrying would spin forever, and
                 # appending to a track that is not there drops the clip silently.
                 raise BuildFailedError(
-                    cause=f"Resolve refused to add a {track_type} track to {name!r}.",
+                    cause=f"Resolve refused to add a {track.type} track to {name!r}.",
                     fix="Close any modal dialog in the Resolve GUI, delete the empty "
                     "timeline, and build again.",
-                    detail={"timeline": name, "track_type": track_type},
+                    detail={"timeline": name, "track": track.label},
                 )
-            log.info("Added a %s track to %s", track_type, name)
+            log.info("Added %s to %s", track.label, name)
     log.info(
         "%s targets %s (%d video, %d audio tracks)",
         name,
-        ", ".join(_track_label(*track) for track in _tracks(shots)),
+        ", ".join(track.label for track in _tracks(shots)),
         _track_count(timeline, "video"),
         _track_count(timeline, "audio"),
     )
@@ -310,12 +315,12 @@ def _track_count(timeline: Timeline, track_type: str) -> int:
         return 0
 
 
-def _tracks(shots: list[Shot]) -> list[tuple[str, int]]:
+def _tracks(shots: list[Shot]) -> list[Track]:
     """The tracks this cut needs, in a fixed order so the logs read the same way each time."""
     order = list(TRACK_PREFIXES)
     return sorted(
-        {(shot.track_type, shot.track_index) for shot in shots},
-        key=lambda track: (order.index(track[0]), track[1]),
+        {shot.track for shot in shots},
+        key=lambda track: (order.index(track.type), track.index),
     )
 
 
@@ -327,9 +332,9 @@ def _refuse_locked_tracks(timeline: Timeline, shots: list[Shot], name: str) -> N
     check costs one call against a failure mode that leaves no trace anywhere else.
     """
     locked = [
-        locked_track_finding(_track_label(track_type, track_index))
-        for track_type, track_index in _tracks(shots)
-        if timeline.GetIsTrackLocked(track_type, track_index)
+        locked_track_finding(track.label)
+        for track in _tracks(shots)
+        if timeline.GetIsTrackLocked(track.type, track.index)
     ]
     if not locked:
         return
@@ -381,14 +386,13 @@ def _verify(timeline: Timeline, shots: list[Shot], name: str) -> None:
     )
 
 
-def _adrift(timeline: Timeline, shots: list[Shot], track: tuple[str, int]) -> list[Shot]:
-    track_type, track_index = track
-    wanted = [shot for shot in shots if (shot.track_type, shot.track_index) == track]
+def _adrift(timeline: Timeline, shots: list[Shot], track: Track) -> list[Shot]:
+    wanted = [shot for shot in shots if shot.track == track]
     if not wanted:
         return []
     landed = {
         (item.GetStart(), item.GetDuration())
-        for item in timeline.GetItemListInTrack(track_type, track_index) or []
+        for item in timeline.GetItemListInTrack(track.type, track.index) or []
     }
     return [shot for shot in wanted if (shot.record, shot.duration) not in landed]
 
@@ -397,10 +401,10 @@ def _expected(shot: Shot) -> dict[str, Any]:
     return {
         "id": shot.id,
         "clip": shot.name,
-        "track": shot.track,
+        "track": shot.track.label,
         "record_frame": shot.record,
         "duration": shot.duration,
     }
 
 
-__all__ = ["Shot", "build_timeline"]
+__all__ = ["Shot", "Track", "build_timeline"]

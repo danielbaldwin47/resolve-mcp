@@ -483,7 +483,8 @@ def total_frames(doc: dict[str, Any]) -> int:
 
 
 def overlay_positions(doc: dict[str, Any]) -> dict[str, tuple[int, int]]:
-    """Each overlay id to its computed ``(start, duration)`` on V2.
+    """Each overlay id to its computed ``(start, duration)`` on V2 — start measured from
+    the cut's first frame, exactly as :func:`positions` measures a segment's.
 
     An overlay names no absolute frame: its position is its anchor segment's computed
     start plus the offset, which is what makes it ride the content it covers through a
