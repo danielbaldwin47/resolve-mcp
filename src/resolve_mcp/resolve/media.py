@@ -12,9 +12,8 @@ rather than API calls, and are the reason this file exists at all:
 * **Metadata fields route by what the clip itself reports.** The clip property key names are
   undocumented, so nothing is hard-coded: each clip is enumerated once with
   ``GetClipProperty()`` and a field whose key is in that dict is written as a clip property,
-  everything else as metadata. The route taken comes back in the result. Live, that dict
-  holds the whole namespace and the property route reaches metadata too, so the metadata
-  branch rarely fires — see ``_set_field``.
+  everything else as metadata. The route taken comes back in the result; on real media that
+  dict is large enough that the property branch takes nearly everything — see ``_set_field``.
 * **Image media gets the still-duration workaround at import.** A one-time
   ``SetClipProperty("Out", …)`` is what makes ``endFrame`` respected on stills later; doing
   it at import means no timeline code ever has to remember.
@@ -568,12 +567,13 @@ def inspect_clip(
 def _set_field(clip: Clip, key: str, value: Any, reported: dict[str, str]) -> str:
     """Write one field, choosing the route from what the clip itself reports.
 
-    The property branch takes nearly everything. A real clip enumerates around 250 keys —
-    the whole namespace, production metadata (``Scene``, ``Take``, ``Director``, ``Keyword``)
-    included — and a property write to one of those names reads back through
-    ``GetMetadata()``, so the two accessors are one store rather than two (verified live,
-    Resolve 21.0.3.7). The metadata branch is the fallback for a clip that reports less,
-    not the route metadata-named fields take.
+    The property branch takes nearly everything. The one clip probed live so far (Resolve
+    Studio 21.0.3.7) enumerated around 250 keys — the whole namespace, production metadata
+    (``Scene``, ``Take``, ``Director``, ``Keyword``) included — while ``GetMetadata()`` on
+    the same clip returned ``{}``. Writing ``Scene`` through ``SetClipProperty`` then read
+    back through ``GetMetadata()``, so for that field the two accessors reach the same
+    value; whether that holds across the other keys was not tested. The metadata branch is
+    kept for a clip that reports less, which no probe has yet found.
     """
     if key in reported:
         if not clip.SetClipProperty(key, str(value)):
