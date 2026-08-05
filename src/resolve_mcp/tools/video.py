@@ -47,7 +47,7 @@ def grab_frames(
 @tool
 def detect_scene_cuts(
     clip: str,
-    bin: str | None = None,  # noqa: A002
+    bin: str | None = None,  # noqa: A002 - the agent-facing word for a media pool folder
     threshold: float = scenes.DEFAULT_THRESHOLD,
     refresh: bool = False,
 ) -> dict[str, Any]:

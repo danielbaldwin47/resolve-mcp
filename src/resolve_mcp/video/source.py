@@ -9,26 +9,25 @@ the offset lives here rather than in each caller.
 
 from __future__ import annotations
 
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
-from ..errors import ResolveMcpError
+from ..errors import InvalidRequestError, ResolveMcpError
 from ..resolve import media
 from ..resolve.connection import ResolveConnection
+from ..timing import dual_time
 
-RELINK_FIX = (
-    "relink_media points a clip back at its media; list_media shows what is offline."
-)
+RELINK_FIX = "relink_media points a clip back at its media; list_media shows what is offline."
 
 
 class Source(NamedTuple):
-    """A clip's media as the video routes need it."""
+    """A clip's media as the video routes need it, in the clip's own frame numbering."""
 
+    name: str
     path: str
     bin_path: str
     fps: float | None
     start: int
     out: int | None
-    reported: dict[str, str]
 
     def seek_seconds(self, frame: int) -> float:
         """Where ffmpeg has to seek to land on ``frame`` of this clip."""
@@ -36,9 +35,30 @@ class Source(NamedTuple):
             raise ValueError("seek_seconds needs a frame rate; callers check for one first")
         return (frame - self.start) / self.fps
 
+    def holds(self, frame: int) -> bool:
+        """Whether ``frame`` is inside this clip's media, half-open ``[start, out)``."""
+        return frame >= self.start and (self.out is None or frame < self.out)
+
+    def outside(self, frame: int) -> InvalidRequestError:
+        """Why a frame this clip does not hold cannot be asked for.
+
+        Worth refusing rather than passing on: ffmpeg seeked past the end of a file exits
+        zero and writes nothing, which reads as a server bug rather than as a bad time.
+        """
+        return InvalidRequestError(
+            cause=f"Frame {frame} is outside the media {self.name!r} holds.",
+            fix="inspect_clip reports the clip's own bounds; times sit inside them, half-open.",
+            detail={
+                "clip": self.name,
+                "requested": dual_time(frame, self.fps),
+                "bounds": self.bounds,
+            },
+        )
+
     @property
-    def duration_frames(self) -> int | None:
-        return None if self.out is None else self.out - self.start
+    def bounds(self) -> dict[str, Any]:
+        """The clip's media bounds in dual time, half-open."""
+        return {"in": dual_time(self.start, self.fps), "out": dual_time(self.out, self.fps)}
 
 
 def locate(
@@ -66,10 +86,10 @@ def locate(
 
     start, out = media.frame_bounds(reported)
     return Source(
+        name=clip,
         path=path,
         bin_path=located.bin_path,
         fps=media.frame_rate(reported),
         start=start or 0,
         out=out,
-        reported=reported,
     )

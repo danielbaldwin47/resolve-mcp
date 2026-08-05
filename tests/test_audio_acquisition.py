@@ -33,6 +33,8 @@ from .fakes import (
     FakeProject,
     FakeResolve,
     FakeTimeline,
+    ffmpeg_absent,
+    ffmpeg_refusing,
     media_pool,
     studio,
     sync_reference,
@@ -40,6 +42,7 @@ from .fakes import (
 )
 
 FIXTURE_SECONDS = 2.0
+REFUSAL = "Stream map '0:a:0' matches no streams."
 
 
 @pytest.fixture
@@ -229,7 +232,7 @@ def test_no_ffmpeg_on_the_machine_is_a_named_failure(attach: Attach, fixture_aud
     attach(_studio_holding(fixture_audio))
 
     record = wait_for(
-        acquire_clip_audio(get_connection(), "drums.wav", runner=_absent)["job_id"]
+        acquire_clip_audio(get_connection(), "drums.wav", runner=ffmpeg_absent)["job_id"]
     )
 
     assert record.state == "failed"
@@ -245,7 +248,7 @@ def test_ffmpegs_own_complaint_travels_back_with_the_failure(
     attach(_studio_holding(fixture_audio))
 
     record = wait_for(
-        acquire_clip_audio(get_connection(), "drums.wav", runner=_refusing)["job_id"]
+        acquire_clip_audio(get_connection(), "drums.wav", runner=ffmpeg_refusing(REFUSAL))["job_id"]
     )
 
     assert record.state == "failed"
@@ -338,9 +341,3 @@ def _copying(calls: list[Sequence[str]]) -> Runner:
     return runner
 
 
-def _absent(argv: Sequence[str]) -> Completed:
-    raise FileNotFoundError(argv[0])
-
-
-def _refusing(argv: Sequence[str]) -> Completed:
-    return Completed(1, "Stream map '0:a:0' matches no streams.")

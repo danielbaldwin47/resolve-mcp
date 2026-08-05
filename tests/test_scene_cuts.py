@@ -29,9 +29,17 @@ from resolve_mcp.tools import video as video_tools
 from resolve_mcp.video.scenes import DEFAULT_THRESHOLD, INLINE_CUTS, detect_scene_cuts
 
 from .conftest import Attach
-from .fakes import FakeMediaPoolItem, FakeResolve, media_pool, studio
+from .fakes import (
+    FakeMediaPoolItem,
+    FakeResolve,
+    ffmpeg_absent,
+    ffmpeg_refusing,
+    media_pool,
+    studio,
+)
 
 CLIP_FPS = 59.94
+REFUSAL = "[mp4 @ 0] moov atom not found\nInvalid data found processing input"
 CLIP_SECONDS = 10.0
 
 
@@ -159,6 +167,29 @@ def test_a_clip_with_no_cut_in_it_is_a_result_not_a_failure(
     assert record.result["shot_seconds"]["max"] == pytest.approx(CLIP_SECONDS, abs=0.02)
 
 
+def test_a_clip_resolve_reports_no_end_for_still_catalogs_the_shots_it_can(
+    attach: Attach,
+    fixture_video: Path,
+) -> None:
+    """The tail runs to an out point nothing knows; every shot before it is still real."""
+    attach(_studio_holding(fixture_video, {"End": "", "Frames": ""}))
+
+    record = wait_for(
+        detect_scene_cuts(get_connection(), "broll_pan.mp4", runner=_finding([], [1.0, 4.0]))[
+            "job_id"
+        ]
+    )
+
+    assert record.state == "completed", record.error
+    assert record.result is not None
+    assert record.result["cuts"] == 2
+    assert record.result["shots"] == 2
+    assert record.result["shot_seconds"]["min"] == pytest.approx(0.984, abs=0.01)
+    catalog = json.loads(Path(record.result["path"]).read_text(encoding="utf-8"))
+    assert catalog["shots"][-1]["out"]["frames"] == 239
+    assert catalog["bounds"]["out"] is None, "the missing tail has to be readable as missing"
+
+
 # --- the cache -----------------------------------------------------------------------------
 
 
@@ -230,7 +261,9 @@ def test_a_refused_scan_fails_the_job_and_carries_ffmpegs_message(
     attach(_studio_holding(fixture_video))
 
     record = wait_for(
-        detect_scene_cuts(get_connection(), "broll_pan.mp4", runner=_refusing)["job_id"]
+        detect_scene_cuts(get_connection(), "broll_pan.mp4", runner=ffmpeg_refusing(REFUSAL))[
+            "job_id"
+        ]
     )
 
     assert record.state == "failed"
@@ -246,7 +279,7 @@ def test_no_ffmpeg_on_the_machine_fails_the_job_by_name(
     attach(_studio_holding(fixture_video))
 
     record = wait_for(
-        detect_scene_cuts(get_connection(), "broll_pan.mp4", runner=_absent)["job_id"]
+        detect_scene_cuts(get_connection(), "broll_pan.mp4", runner=ffmpeg_absent)["job_id"]
     )
 
     assert record.state == "failed"
@@ -318,14 +351,6 @@ def _finding(calls: list[Sequence[str]], seconds: Sequence[float]) -> Runner:
         return Completed(0, "\n".join(["frame= 600 fps=0.0 q=-0.0", *lines]))
 
     return runner
-
-
-def _absent(argv: Sequence[str]) -> Completed:
-    raise FileNotFoundError(argv[0])
-
-
-def _refusing(argv: Sequence[str]) -> Completed:
-    return Completed(1, "[mp4 @ 0] moov atom not found\nInvalid data found processing input")
 
 
 def _render_two_shot_video(target: Path) -> Path:

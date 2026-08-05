@@ -5,8 +5,9 @@ enough that a job record and a poll would cost more than the work — and the wh
 it is that the agent gets a path it can open *now*, while it is reasoning about the moment
 that made it ask. So the route runs inline and returns the files.
 
-It is cached all the same, by the same key every job uses: the same moment on unchanged
-media is the same JPEG, and a session that grabs a frame twice should pay once.
+It is cached all the same, by the same key every job uses, and cached **per frame** rather
+than per call: a session narrows in on a moment, so the second call is usually the first
+call's times plus one more, and a batch key would decode everything again to add it.
 
 The grabs land on disk rather than coming back inline as bytes. The agent reads the path,
 which costs one image in its context instead of one per poll of a job record — and a grab
@@ -16,7 +17,7 @@ rather than downscaled on the way in.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, NamedTuple
 
 from ..config import Config, get_config
 from ..errors import FrameGrabError, InvalidRequestError
@@ -37,9 +38,18 @@ DEFAULT_MAX_EDGE = 1568
 """The client's image cap: a longer edge is downscaled on arrival, so it buys nothing."""
 
 MIN_MAX_EDGE = 64
+"""Below this a frame is a thumbnail — too small to answer the question that asked for it."""
+
 MAX_TIMES = 12
 """Frames per call. Each one is an image in the agent's context; a request for more than a
 dozen is a scene-cut scan or a render, not a grab."""
+
+
+class _Grab(NamedTuple):
+    """One frame and whether it was already in the cache."""
+
+    frame: dict[str, Any]
+    cached: bool
 
 
 def grab_frames(
@@ -64,40 +74,43 @@ def grab_frames(
     config = config or get_config()
     source = locate(connection, clip, bin, FrameGrabError)
     edge = _readable_edge(max_edge)
-    frames = _requested_frames(times, source, clip)
+    frames = _requested_frames(times, source)
 
-    params = {"clip": clip, "bin": source.bin_path, "frames": frames, "max_edge": edge}
-    key = cache.cache_key(KIND, [cache.fingerprint(source.path)], params)
+    fingerprint = cache.fingerprint(source.path)
+    grabs = [
+        _one_frame(source, frame, edge, fingerprint, refresh, runner, config) for frame in frames
+    ]
 
-    if not refresh:
-        hit = cache.lookup(key, config)
-        if hit is not None:
-            log.info("Answered %d frame grab(s) on %s from cache", len(frames), clip)
-            return {**hit, "cached": True}
-
-    grabbed = [_one_frame(source, clip, frame, edge, key, runner, config) for frame in frames]
-    result = {
-        "clip": clip,
+    hits = sum(1 for one in grabs if one.cached)
+    log.info("Returned %d frame(s) of %s, %d of them from cache", len(grabs), clip, hits)
+    return {
+        "clip": source.name,
         "bin": source.bin_path,
         "source": source.path,
         "max_edge": edge,
-        "frames": grabbed,
+        "frames": [one.frame for one in grabs],
+        "cached": hits == len(grabs),
     }
-    cache.remember(key, KIND, result, [one["path"] for one in grabbed], config)
-    return {**result, "cached": False}
 
 
 def _one_frame(
     source: Source,
-    clip: str,
     frame: int,
     max_edge: int,
-    key: str,
+    fingerprint: dict[str, Any],
+    refresh: bool,
     runner: Runner | None,
     config: Config,
-) -> dict[str, Any]:
+) -> _Grab:
     """One grab, described by what was actually written rather than by what was asked for."""
-    target = config.frame_dir / f"{slug(clip, 'frame')}-{key[:12]}-{frame:08d}.jpg"
+    params = {"clip": source.name, "bin": source.bin_path, "frame": frame, "max_edge": max_edge}
+    key = cache.cache_key(KIND, [fingerprint], params)
+    if not refresh:
+        hit = cache.lookup(key, config)
+        if hit is not None:
+            return _Grab(hit, True)
+
+    target = config.frame_dir / f"{slug(source.name, 'frame')}-{key[:12]}.jpg"
     ffmpeg.grab(
         source.path,
         target,
@@ -106,7 +119,9 @@ def _one_frame(
         runner=runner,
         config=config,
     )
-    return {"time": dual_time(frame, source.fps), **jpeg.describe(target)}
+    grabbed = {"time": dual_time(frame, source.fps), **jpeg.describe(target)}
+    cache.remember(key, KIND, grabbed, (target,), config)
+    return _Grab(grabbed, False)
 
 
 def _readable_edge(max_edge: int) -> int:
@@ -123,7 +138,7 @@ def _readable_edge(max_edge: int) -> int:
     return int(max_edge)
 
 
-def _requested_frames(times: list[Any], source: Source, clip: str) -> list[int]:
+def _requested_frames(times: list[Any], source: Source) -> list[int]:
     """The asked-for moments as this clip's frame numbers: whole, in range, each one once."""
     if not times:
         raise InvalidRequestError(
@@ -132,7 +147,7 @@ def _requested_frames(times: list[Any], source: Source, clip: str) -> list[int]:
                 "Pass at least one time: times=[1024] or "
                 'times=[{"seconds": 17.5, "snap": "floor"}].'
             ),
-            detail={"clip": clip},
+            detail={"clip": source.name},
         )
     if len(times) > MAX_TIMES:
         raise InvalidRequestError(
@@ -141,39 +156,31 @@ def _requested_frames(times: list[Any], source: Source, clip: str) -> list[int]:
                 f"Ask for at most {MAX_TIMES} at a time — each grab is an image you have to "
                 "read. To find where the shots change instead, run detect_scene_cuts."
             ),
-            detail={"clip": clip, "requested": len(times), "maximum": MAX_TIMES},
+            detail={"clip": source.name, "requested": len(times), "maximum": MAX_TIMES},
         )
     if not source.fps:
         raise InvalidRequestError(
-            cause=f"Resolve reports no frame rate for {clip!r}, so a time cannot be seeked to.",
+            cause=(
+                f"Resolve reports no frame rate for {source.name!r}, "
+                "so a time cannot be seeked to."
+            ),
             fix="inspect_clip shows what Resolve knows about the clip; a still has no timeline.",
-            detail={"clip": clip, "file_path": source.path},
+            detail={"clip": source.name, "file_path": source.path},
         )
 
     frames: list[int] = []
     for index, value in enumerate(times):
-        frame = to_frames(value, source.fps, field=f"times[{index}]")
+        field = f"times[{index}]"
+        frame = to_frames(value, source.fps, field=field)
         if frame is None:
-            continue
-        _within_media(frame, source, clip)
+            # Dropping it would return fewer frames than were asked for without saying so.
+            raise InvalidRequestError(
+                cause=f"{field} is empty, so there is no moment to grab.",
+                fix="Every entry in times has to name a moment; remove the empty one.",
+                detail={"clip": source.name, "field": field},
+            )
+        if not source.holds(frame):
+            raise source.outside(frame)
         if frame not in frames:
             frames.append(frame)
     return frames
-
-
-def _within_media(frame: int, source: Source, clip: str) -> None:
-    """A seek past the end exits zero and writes nothing, so the range is checked up front."""
-    out = source.out
-    if frame < source.start or (out is not None and frame >= out):
-        raise InvalidRequestError(
-            cause=f"Frame {frame} is outside the media {clip!r} holds.",
-            fix="inspect_clip reports the clip's own bounds; grabs sit inside them, half-open.",
-            detail={
-                "clip": clip,
-                "requested": dual_time(frame, source.fps),
-                "bounds": {
-                    "in": dual_time(source.start, source.fps),
-                    "out": dual_time(out, source.fps),
-                },
-            },
-        )

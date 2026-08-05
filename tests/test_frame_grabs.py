@@ -28,9 +28,18 @@ from resolve_mcp.video import jpeg
 from resolve_mcp.video.frames import DEFAULT_MAX_EDGE, MAX_TIMES, grab_frames
 
 from .conftest import Attach
-from .fakes import FakeMediaPoolItem, FakeResolve, media_pool, studio, write_jpeg
+from .fakes import (
+    FakeMediaPoolItem,
+    FakeResolve,
+    ffmpeg_absent,
+    ffmpeg_refusing,
+    media_pool,
+    studio,
+    write_jpeg,
+)
 
 CLIP_FPS = 59.94
+REFUSAL = "[mp4 @ 0] moov atom not found\nInvalid data found processing input"
 
 
 @pytest.fixture
@@ -204,6 +213,22 @@ def test_different_times_are_a_different_cache_entry(attach: Attach, fixture_vid
     assert len(calls) == 2
 
 
+def test_a_second_call_only_grabs_the_moment_the_first_one_did_not(
+    attach: Attach,
+    fixture_video: Path,
+) -> None:
+    """A session narrows in: the next call is usually the last one's times plus one more."""
+    attach(_studio_holding(fixture_video))
+    calls: list[Sequence[str]] = []
+    first = grab_frames(get_connection(), "C0012.mp4", [60], runner=_drawing(calls))
+
+    again = grab_frames(get_connection(), "C0012.mp4", [60, 90], runner=_drawing(calls))
+
+    assert len(calls) == 2
+    assert again["cached"] is False
+    assert again["frames"][0] == first["frames"][0]
+
+
 def test_a_grab_whose_jpeg_was_deleted_is_taken_again(attach: Attach, fixture_video: Path) -> None:
     attach(_studio_holding(fixture_video))
     calls: list[Sequence[str]] = []
@@ -262,6 +287,21 @@ def test_asking_for_nothing_or_for_too_much_is_refused(
     assert str(MAX_TIMES) in flooded.value.fix
 
 
+def test_an_empty_entry_in_times_is_refused_rather_than_quietly_dropped(
+    attach: Attach,
+    fixture_video: Path,
+) -> None:
+    """Dropping it would return fewer frames than were asked for without saying which."""
+    attach(_studio_holding(fixture_video))
+    calls: list[Sequence[str]] = []
+
+    with pytest.raises(InvalidRequestError) as raised:
+        grab_frames(get_connection(), "C0012.mp4", [60, None], runner=_drawing(calls))
+
+    assert raised.value.detail["field"] == "times[1]"
+    assert calls == []
+
+
 def test_a_clip_whose_media_is_gone_says_so_before_running_ffmpeg(attach: Attach) -> None:
     attach(_studio_holding(Path("D:/gone/C0012.mp4")))
 
@@ -287,7 +327,7 @@ def test_no_ffmpeg_on_the_machine_is_a_named_failure(attach: Attach, fixture_vid
     attach(_studio_holding(fixture_video))
 
     with pytest.raises(FfmpegUnavailableError) as raised:
-        grab_frames(get_connection(), "C0012.mp4", [60], runner=_absent)
+        grab_frames(get_connection(), "C0012.mp4", [60], runner=ffmpeg_absent)
 
     assert "RESOLVE_MCP_FFMPEG" in raised.value.fix
 
@@ -299,7 +339,7 @@ def test_ffmpegs_own_complaint_travels_back_with_the_failure(
     attach(_studio_holding(fixture_video))
 
     with pytest.raises(FrameGrabError) as raised:
-        grab_frames(get_connection(), "C0012.mp4", [60], runner=_refusing)
+        grab_frames(get_connection(), "C0012.mp4", [60], runner=ffmpeg_refusing(REFUSAL))
 
     assert "Invalid data found" in raised.value.detail["stderr"]
 
@@ -320,7 +360,7 @@ def test_a_failed_grab_leaves_no_cache_entry_behind(attach: Attach, fixture_vide
     attach(_studio_holding(fixture_video))
     calls: list[Sequence[str]] = []
     with pytest.raises(FrameGrabError):
-        grab_frames(get_connection(), "C0012.mp4", [60], runner=_refusing)
+        grab_frames(get_connection(), "C0012.mp4", [60], runner=ffmpeg_refusing(REFUSAL))
 
     reading = grab_frames(get_connection(), "C0012.mp4", [60], runner=_drawing(calls))
 
@@ -406,14 +446,6 @@ def _drawing(calls: list[Sequence[str]], width: int = 1568, height: int = 882) -
         return Completed(0, "")
 
     return runner
-
-
-def _absent(argv: Sequence[str]) -> Completed:
-    raise FileNotFoundError(argv[0])
-
-
-def _refusing(argv: Sequence[str]) -> Completed:
-    return Completed(1, "[mp4 @ 0] moov atom not found\nInvalid data found processing input")
 
 
 def _pretending(argv: Sequence[str]) -> Completed:

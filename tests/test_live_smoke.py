@@ -42,7 +42,7 @@ from resolve_mcp.tools.timeline import (
     list_markers,
     list_timelines,
 )
-from resolve_mcp.tools.video import grab_frames
+from resolve_mcp.tools.video import detect_scene_cuts, grab_frames
 
 from . import otio
 from .text_plus_probe import TEMPLATE_ENV, probe_template_append
@@ -540,6 +540,35 @@ def test_a_real_frame_grab_lands_on_the_moment_resolve_numbers_it_at() -> None:
 
     again = grab_frames(footage["name"], [middle], bin=footage["bin"] or None)
     assert again["cached"] is True, "unchanged media must be a cache hit"
+
+
+def test_a_real_scene_scan_reports_cuts_on_the_clips_own_clock() -> None:
+    """The other half of the clock check: pts_time counts from the file, cuts from the clip.
+
+    Slow — this decodes a whole clip, so it takes the shortest one in the pool. What it is
+    for is the mapping the fakes replay rather than produce: that ffmpeg's reported times
+    become frame numbers inside the bounds ``inspect_clip`` reports for the same clip.
+    """
+    listing = list_media()
+    if not listing["ok"]:
+        pytest.skip("No project open in Resolve")
+    footage = [
+        one for one in listing["clips"] if one["fps"] and not one["offline"] and one["frames"]
+    ]
+    if not footage:
+        pytest.skip("No online clip with a frame rate in the media pool")
+    shortest = min(footage, key=lambda one: one["frames"])
+    bounds = inspect_clip(shortest["name"], bin=shortest["bin"] or None)["bounds"]["media"]
+
+    started = detect_scene_cuts(shortest["name"], bin=shortest["bin"] or None)
+    record = wait_for(started["job_id"], timeout=1800.0)
+
+    assert started["ok"] is True, started.get("error")
+    assert record.state == "completed", record.error
+    assert record.result is not None
+    assert Path(record.result["path"]).exists()
+    for cut in record.result["first_cuts"]:
+        assert bounds["in"]["frames"] < cut["frames"] < bounds["out"]["frames"]
 
 
 def test_snapshot_writes_a_real_drp(tmp_path: Path) -> None:

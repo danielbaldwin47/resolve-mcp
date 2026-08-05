@@ -17,7 +17,7 @@ from pathlib import Path
 
 from ..config import Config, get_config
 from ..errors import AudioExtractionError, InvalidRequestError
-from ..ffmpeg import STDERR_TAIL, Runner, invoke
+from ..ffmpeg import Runner, invoke, refused
 from ..logging_config import get_logger
 
 log = get_logger("audio")
@@ -80,14 +80,7 @@ def extract(
     finished = invoke(argv, runner=runner, config=config)
 
     if finished.returncode != 0:
-        raise AudioExtractionError(
-            cause=f"ffmpeg refused {Path(source).name} (exit {finished.returncode}).",
-            detail={
-                "source": str(source),
-                "exit_code": finished.returncode,
-                "stderr": finished.stderr[-STDERR_TAIL:],
-            },
-        )
+        raise refused(source, finished, AudioExtractionError)
     if not destination.exists():
         raise AudioExtractionError(
             cause=f"ffmpeg reported success but wrote nothing to {destination}.",

@@ -40,6 +40,8 @@ DEFAULT_THRESHOLD = 0.4
 one; lower it for footage that cuts between similar frames, raise it for handheld."""
 
 MIN_THRESHOLD = 0.05
+"""Below this every compressed frame differs from the last one and every frame is a cut."""
+
 INLINE_CUTS = 12
 """How many cuts the gist carries. Enough to see the shape of the clip; the file has the rest."""
 
@@ -65,14 +67,13 @@ def detect_scene_cuts(
     key = cache.cache_key(KIND, [cache.fingerprint(source.path)], params)
 
     def work(progress: Progress) -> JobOutput:
-        return scan_scene_cuts(source, clip, key, params, progress, config, runner)
+        return scan_scene_cuts(source, key, params, progress, config, runner)
 
     return start_job(KIND, params, work, cache_key=key, refresh=refresh, config=config)
 
 
 def scan_scene_cuts(
     source: Source,
-    clip: str,
     key: str,
     params: dict[str, Any],
     progress: Progress,
@@ -89,21 +90,24 @@ def scan_scene_cuts(
     progress(0.9, "cataloguing the cuts")
     cuts = _cut_frames(printed, source)
     shots = _shots(cuts, source)
-    target = config.analysis_dir / f"{slug(clip, 'scenes')}-{key[:12]}.scenes.json"
+    target = config.analysis_dir / f"{slug(source.name, 'scenes')}-{key[:12]}.scenes.json"
     catalog = {
-        "clip": clip,
+        "clip": source.name,
         "bin": source.bin_path,
         "source": source.path,
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "threshold": threshold,
         "fps": source.fps,
+        # The bounds the shots below are cut against. An out of null is why the last shot is
+        # missing: Resolve reported no End for this clip, so where the tail stops is unknown.
+        "bounds": source.bounds,
         "cuts": [dual_time(frame, source.fps) for frame in cuts],
         "shots": shots,
     }
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(catalog, indent=2), encoding="utf-8")
 
-    log.info("Catalogued %d scene cut(s) in %s to %s", len(cuts), clip, target)
+    log.info("Catalogued %d scene cut(s) in %s to %s", len(cuts), source.name, target)
     return JobOutput(_gist(catalog, target, shots), (target,))
 
 
@@ -138,7 +142,7 @@ def _cut_frames(printed: str, source: Source) -> list[int]:
     frames: list[int] = []
     for seconds in ffmpeg.selected_seconds(printed):
         frame = source.start + frames_from_seconds(seconds, source.fps, IN_POINT)
-        if frame <= source.start or (source.out is not None and frame >= source.out):
+        if frame == source.start or not source.holds(frame):
             continue  # the first frame of the file is not a cut, and neither is one past its end
         if not frames or frame != frames[-1]:
             frames.append(frame)
@@ -146,10 +150,16 @@ def _cut_frames(printed: str, source: Source) -> list[int]:
 
 
 def _shots(cuts: list[int], source: Source) -> list[dict[str, Any]]:
-    """The spans between the cuts, head and tail included — what a cut list is actually for."""
-    if source.out is None or not source.fps:
+    """The spans between the cuts, head and tail included — what a cut list is actually for.
+
+    A clip Resolve reports no ``End`` for still has every shot but the last one: the tail
+    runs to an out point nothing knows, so it is left out rather than guessed at, and what
+    is left is a real catalog instead of an empty one.
+    """
+    if not source.fps:
         return []
-    boundaries = [source.start, *cuts, source.out]
+    tail = [source.out] if source.out is not None else []
+    boundaries = [source.start, *cuts, *tail]
     return [
         {
             "in": dual_time(start, source.fps),

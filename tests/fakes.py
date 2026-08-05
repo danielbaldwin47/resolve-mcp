@@ -7,6 +7,10 @@ is exercised with Resolve closed.
 The fakes mimic the real API's shape, including its quirks: getters return ``None``
 rather than raising, ``LoadProject`` returns ``None`` for an unknown name, and settings
 come back as strings.
+
+It also holds the fixtures and stand-ins that go with them: the media files the worker tier
+reads back (``write_wav``, ``write_jpeg``) and the ffmpeg runners every route that shells
+out is tested against (``ffmpeg_absent``, ``ffmpeg_refusing``).
 """
 
 from __future__ import annotations
@@ -17,6 +21,8 @@ import wave
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
+
+from resolve_mcp.ffmpeg import Completed, Runner
 
 
 class DroppedHandleError(RuntimeError):
@@ -1376,6 +1382,20 @@ def write_jpeg(path: Path, width: int = 1568, height: int = 882) -> Path:
         b"\xff\xd8" + b"\xff\xe0" + (2 + len(jfif)).to_bytes(2, "big") + jfif + frame + b"\xff\xd9"
     )
     return path
+
+
+def ffmpeg_absent(argv: Sequence[str]) -> Completed:
+    """A machine with no ffmpeg on it: the runner raises what ``subprocess`` would raise."""
+    raise FileNotFoundError(argv[0])
+
+
+def ffmpeg_refusing(stderr: str) -> Runner:
+    """An ffmpeg that ran and would not have the file, complaining the way it does."""
+
+    def runner(argv: Sequence[str]) -> Completed:
+        return Completed(1, stderr)
+
+    return runner
 
 
 def media_pool(bins: dict[str, list[FakeMediaPoolItem]] | None = None) -> FakeMediaPool:

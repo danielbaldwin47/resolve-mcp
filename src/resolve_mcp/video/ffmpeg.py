@@ -13,7 +13,7 @@ from pathlib import Path
 
 from ..config import Config, get_config
 from ..errors import FrameGrabError, SceneDetectionError
-from ..ffmpeg import STDERR_TAIL, Runner, invoke
+from ..ffmpeg import Runner, invoke, refused
 from ..logging_config import get_logger
 
 log = get_logger("video")
@@ -99,15 +99,7 @@ def grab(
     finished = invoke(argv, runner=runner, config=config)
 
     if finished.returncode != 0:
-        raise FrameGrabError(
-            cause=f"ffmpeg refused {Path(source).name} (exit {finished.returncode}).",
-            detail={
-                "source": str(source),
-                "seconds": seconds,
-                "exit_code": finished.returncode,
-                "stderr": finished.stderr[-STDERR_TAIL:],
-            },
-        )
+        raise refused(source, finished, FrameGrabError, seconds=seconds)
     if not destination.exists():
         raise FrameGrabError(
             cause=f"ffmpeg reported success but wrote nothing to {destination}.",
@@ -133,14 +125,7 @@ def scan(
     finished = invoke(argv, runner=runner, config=config)
 
     if finished.returncode != 0:
-        raise SceneDetectionError(
-            cause=f"ffmpeg refused {Path(source).name} (exit {finished.returncode}).",
-            detail={
-                "source": str(source),
-                "exit_code": finished.returncode,
-                "stderr": finished.stderr[-STDERR_TAIL:],
-            },
-        )
+        raise refused(source, finished, SceneDetectionError, threshold=threshold)
     log.info("Scanned %s for scene cuts at threshold %.2f", source, threshold)
     return finished.stderr
 
@@ -159,10 +144,8 @@ def selected_seconds(log_text: str) -> list[float]:
 
 
 def _leading_number(text: str) -> float | None:
-    digits = text.split()[0] if text.split() else ""
+    fields = text.split()
     try:
-        return float(digits)
+        return float(fields[0]) if fields else None
     except ValueError:
         return None
-
-
