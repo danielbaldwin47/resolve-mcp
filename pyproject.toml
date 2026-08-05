@@ -8,6 +8,14 @@ dependencies = [
     "fastmcp>=3.4,<4",
 ]
 
+[project.optional-dependencies]
+# The analysis backends: heavy, GPU-bound, and imported inside the workers that need them.
+# Kept out of the base install so the server (and CI, which runs the fake tier) does not
+# pull a CUDA runtime to answer get_status.
+analysis = [
+    "faster-whisper>=1.0",
+]
+
 [project.scripts]
 resolve-mcp = "resolve_mcp.__main__:main"
 
@@ -48,3 +56,9 @@ python_version = "3.12"
 files = ["src", "tests"]
 strict = true
 warn_unused_ignores = true
+
+# The analysis extra ships no stubs, and is not installed at all in CI or on a machine that
+# only drives Resolve — so the import is unresolvable rather than untyped.
+[[tool.mypy.overrides]]
+module = ["faster_whisper.*"]
+ignore_missing_imports = true

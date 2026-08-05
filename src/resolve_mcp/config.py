@@ -79,6 +79,16 @@ class Config:
         return self.cache_dir / "audio"
 
     @property
+    def analysis_dir(self) -> Path:
+        """What the analysis jobs read out of the audio: transcripts, and later beat maps.
+
+        Separate from the WAVs they were read off: the audio is a cache of something Resolve
+        or ffmpeg can make again, while these are the files the agent greps and quotes in a
+        review round, and it should be able to tell the two apart at a glance.
+        """
+        return self.cache_dir / "analysis"
+
+    @property
     def interchange_dir(self) -> Path:
         """Where exported timelines (OTIO, FCPXML, DRT) land when no path is given.
 

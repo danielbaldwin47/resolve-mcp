@@ -1,0 +1,77 @@
+"""The default backend: faster-whisper, large-v3, word timestamps on.
+
+External to Resolve on purpose (#10). Resolve's own transcription writes end-user subtitles
+— no per-word confidence, no way to get the words out except as a subtitle track — and
+confidence is the whole reason an agent reads a transcript instead of watching the take.
+
+The import is inside the function because the CUDA runtime behind it costs seconds to load
+and the server must start in the time a tool call takes. It is also the reason this is a
+seam: everything above it is tested with the model substituted, and this module is the only
+thing that faster-whisper's absence can break.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from pathlib import Path
+from typing import Any
+
+from ..errors import TranscriberUnavailableError, TranscriptionError
+from ..logging_config import get_logger
+from .transcript import Transcription, Word
+
+log = get_logger("analysis")
+
+DEFAULT_MODEL = "large-v3"
+DEVICE = "auto"
+COMPUTE_TYPE = "default"
+
+
+def transcribe(audio: Path, params: Mapping[str, Any]) -> Transcription:
+    """Word-level transcription of one WAV. Slow, GPU-bound, and always inside a job."""
+    model_name = str(params.get("model") or DEFAULT_MODEL)
+    language = params.get("language") or None
+    model = _model(model_name)
+
+    log.info("Transcribing %s with %s", audio.name, model_name)
+    try:
+        segments, info = model.transcribe(
+            str(audio),
+            word_timestamps=True,
+            language=str(language) if language else None,
+        )
+        words = tuple(_word(one) for segment in segments for one in (segment.words or ()))
+    except Exception as exc:  # noqa: BLE001 - the backend raises its own unrelated types
+        raise TranscriptionError(
+            cause=f"faster-whisper failed on {audio.name}: {type(exc).__name__}: {exc}",
+            fix="Check the WAV plays, and that the GPU is free; then start the job again.",
+            detail={"path": str(audio), "model": model_name},
+        ) from exc
+
+    return Transcription(words=words, language=_language(info))
+
+
+def _model(name: str) -> Any:
+    try:
+        from faster_whisper import WhisperModel
+    except ImportError as exc:
+        raise TranscriberUnavailableError(
+            cause="faster-whisper is not installed in this environment.",
+            detail={"model": name},
+        ) from exc
+    return WhisperModel(name, device=DEVICE, compute_type=COMPUTE_TYPE)
+
+
+def _word(word: Any) -> Word:
+    """One word as faster-whisper reports it: leading space on the text, probability 0-1."""
+    return Word(
+        text=str(word.word).strip(),
+        start=float(word.start),
+        end=float(word.end),
+        confidence=float(word.probability),
+    )
+
+
+def _language(info: Any) -> str | None:
+    detected = getattr(info, "language", None)
+    return str(detected) if detected else None
