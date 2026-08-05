@@ -63,8 +63,9 @@ def test_imports_a_video_and_a_png_sequence_into_a_named_bin(
 
     assert result["ok"] is True
     assert result["bin"] == "Concert/Titles"
-    assert [clip["name"] for clip in result["imported"]] == ["C0012.mp4", "song_%04d.png"]
+    assert [clip["name"] for clip in result["imported"]] == ["C0012.mp4", "song_0001.png"]
     assert result["imported"][1]["frames"] == 3
+    assert result["not_imported"] == []
     root = pool.GetRootFolder()
     titles = root.GetSubFolderList()[0].GetSubFolderList()[0]
     assert titles.GetName() == "Titles"
@@ -107,6 +108,26 @@ def test_import_reports_the_paths_resolve_refused_and_keeps_the_rest(
 
     assert result["ok"] is True
     assert [clip["name"] for clip in result["imported"]] == ["C0012.mp4"]
+    assert result["not_imported"] == [missing]
+
+
+def test_a_sequence_that_landed_is_never_reported_as_refused(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Resolve names the imported clip, not the %0Nd pattern — matching on it would guess."""
+    for index in range(1, 3):
+        a_file(tmp_path, f"titles/song_{index:04d}.png")
+    attach(studio(pool=media_pool()))
+    missing = str(tmp_path / "gone.mp4")
+
+    result = import_media(
+        paths=[missing],
+        sequences=[
+            {"path": str(tmp_path / "titles" / "song_%04d.png"), "start_index": 1, "end_index": 2}
+        ],
+    )
+
+    assert result["ok"] is True
     assert result["not_imported"] == [missing]
 
 
@@ -196,6 +217,18 @@ def test_list_spills_the_full_listing_to_disk_past_the_cap(attach: Attach, tmp_p
     spilled = Path(result["spilled_to"])
     assert spilled.exists()
     assert len(json.loads(spilled.read_text(encoding="utf-8"))["clips"]) == 5
+
+
+def test_a_bin_really_named_master_is_still_addressable(attach: Attach, tmp_path: Path) -> None:
+    """The root is called Master, so a leading Master is only dropped when it is the root."""
+    pool = media_pool(bins={"Master": [a_clip(a_file(tmp_path, "C0012.mp4"))], "": []})
+    attach(studio(pool=pool))
+
+    result = list_media(bin="Master", recursive=False)
+
+    assert result["ok"] is True
+    assert result["bin"] == "Master"
+    assert [clip["name"] for clip in result["clips"]] == ["C0012.mp4"]
 
 
 def test_list_of_an_unknown_bin_names_the_bins_that_exist(attach: Attach) -> None:
@@ -431,6 +464,7 @@ def test_relink_brings_an_offline_clip_back_from_its_new_folder(
             "ok": True,
             "file_path": str(moved),
             "offline": False,
+            "was_offline": True,
         }
     ]
     assert list_media(offline_only=True)["count"] == 0

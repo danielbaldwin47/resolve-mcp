@@ -6,20 +6,18 @@ above adds the envelope; nothing here knows about FastMCP.
 
 from __future__ import annotations
 
-import re
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from ..config import Config, get_config
 from ..errors import NoProjectOpenError, ProjectNotFoundError, SnapshotFailedError
 from ..logging_config import get_logger
+from ..naming import timestamped_name
 from .connection import ResolveConnection
 
 log = get_logger("session")
 
 FPS_SETTING = "timelineFrameRate"
-UNSAFE_IN_FILENAME = re.compile(r"[^A-Za-z0-9._-]+")
 
 Context = dict[str, Any]
 
@@ -118,7 +116,11 @@ def snapshot_project(
     name = str(project.GetName())
     if not manager.SaveProject():
         log.warning("SaveProject() returned false before snapshotting %s", name)
-    target = Path(path) if path is not None else config.snapshot_dir / _snapshot_filename(name)
+    target = (
+        Path(path)
+        if path is not None
+        else config.snapshot_dir / timestamped_name(name, ".drp", "project")
+    )
     if target.suffix.lower() != ".drp":
         target = target.with_suffix(".drp")
     try:
@@ -132,12 +134,6 @@ def snapshot_project(
         )
     log.info("Snapshotted %s to %s", name, target)
     return target, name
-
-
-def _snapshot_filename(project: str, now: datetime | None = None) -> str:
-    stamp = (now or datetime.now()).strftime("%Y%m%d-%H%M%S")
-    slug = UNSAFE_IN_FILENAME.sub("-", project).strip("-") or "project"
-    return f"{slug}-{stamp}.drp"
 
 
 def _current_project(resolve: Any) -> Any | None:

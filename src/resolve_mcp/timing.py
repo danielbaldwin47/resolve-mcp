@@ -24,7 +24,7 @@ def timecode(frames: int, fps: float) -> str:
     return f"{hours:02d}:{minutes:02d}:{seconds:02d}:{frame:02d}"
 
 
-def dual(frames: int | None, fps: float | None) -> dict[str, Any] | None:
+def dual_time(frames: int | None, fps: float | None) -> dict[str, Any] | None:
     """A position in all four representations, or ``None`` if there is no position.
 
     An unknown fps still yields frames — the authoritative number — rather than nothing.

@@ -22,9 +22,8 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
-from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from ..config import Config, get_config
 from ..errors import (
@@ -39,9 +38,9 @@ from ..errors import (
     RelinkFailedError,
 )
 from ..logging_config import get_logger
-from ..timing import dual
+from ..naming import timestamped_name
+from ..timing import dual_time
 from .connection import ResolveConnection
-from .session import UNSAFE_IN_FILENAME
 
 log = get_logger("media")
 
@@ -62,6 +61,26 @@ RESOLUTION = "Resolution"
 Clip = Any
 Folder = Any
 Pool = Any
+
+
+class LocatedClip(NamedTuple):
+    """A clip and the bin it was found in — the pair every lookup hands back."""
+
+    bin_path: str
+    clip: Clip
+
+
+class LocatedBin(NamedTuple):
+    """A bin, the path walked to reach it, and whether that walk had to create it.
+
+    The path travels with the folder because it cannot be recovered from one: Resolve
+    hands out a fresh proxy object per call, so a folder cannot be recognised by identity
+    on a later walk, and the API has no path getter.
+    """
+
+    path: str
+    folder: Folder
+    created: bool
 
 
 # --- reaching the pool ------------------------------------------------------------------
@@ -85,11 +104,19 @@ def media_pool(connection: ResolveConnection) -> Pool:
 
 
 def _segments(path: str | None, root: Folder) -> list[str]:
+    """Split a bin path into folder names, dropping a leading root name if it is one.
+
+    Resolve calls the root "Master" and the agent may write it or not. A real bin called
+    Master would otherwise become unaddressable, so the leading name is only treated as the
+    root when the root has no child by that name.
+    """
     parts = [part.strip() for part in (path or "").split(BIN_SEPARATOR)]
     parts = [part for part in parts if part]
     root_name = str(root.GetName() or "")
     if parts and root_name and parts[0] == root_name:
-        parts = parts[1:]
+        children = {str(sub.GetName() or "") for sub in _subfolders(root)}
+        if root_name not in children:
+            parts = parts[1:]
     return parts
 
 
@@ -120,84 +147,86 @@ def _walk_bins(folder: Folder, prefix: str = "") -> Iterator[tuple[str, Folder]]
         yield from _walk_bins(sub, f"{prefix}{BIN_SEPARATOR}{name}" if prefix else name)
 
 
-def find_bin(pool: Pool, path: str | None) -> Folder:
+def find_bin(pool: Pool, path: str | None) -> LocatedBin:
     """The bin at ``path``. ``None`` or ``""`` is the root."""
     root = _root(pool)
     folder = root
+    walked: list[str] = []
     for segment in _segments(path, root):
         matches = [sub for sub in _subfolders(folder) if str(sub.GetName() or "") == segment]
         if not matches:
             raise BinNotFoundError(str(path), bin_paths(pool))
         folder = matches[0]
-    return folder
+        walked.append(segment)
+    return LocatedBin(BIN_SEPARATOR.join(walked), folder, created=False)
 
 
-def ensure_bin(pool: Pool, path: str | None) -> tuple[Folder, bool]:
-    """The bin at ``path``, creating it and any missing parents. Returns (bin, created)."""
+def ensure_bin(pool: Pool, path: str | None) -> LocatedBin:
+    """The bin at ``path``, creating it and any missing parents."""
     root = _root(pool)
     folder = root
+    walked: list[str] = []
     created = False
     for segment in _segments(path, root):
         matches = [sub for sub in _subfolders(folder) if str(sub.GetName() or "") == segment]
         if matches:
             folder = matches[0]
-            continue
-        made = pool.AddSubFolder(folder, segment)
-        if made is None:
-            raise MediaOperationError(cause=f"Resolve refused to create the bin {segment!r}.")
-        log.info("Created bin %s", segment)
-        folder = made
-        created = True
-    return folder, created
-
-
-def path_of(pool: Pool, folder: Folder) -> str:
-    """The slash path of a folder, from the root. The root itself is ``""``."""
-    for path, candidate in _walk_bins(_root(pool)):
-        if candidate is folder:
-            return path
-    return ""
+        else:
+            made = pool.AddSubFolder(folder, segment)
+            if made is None:
+                raise MediaOperationError(cause=f"Resolve refused to create the bin {segment!r}.")
+            log.info("Created bin %s", segment)
+            folder = made
+            created = True
+        walked.append(segment)
+    return LocatedBin(BIN_SEPARATOR.join(walked), folder, created)
 
 
 # --- clips ------------------------------------------------------------------------------
 
 
-def _clips_under(pool: Pool, folder: Folder, recursive: bool) -> Iterator[tuple[str, Clip]]:
-    base = path_of(pool, folder)
+def _clips_under(where: LocatedBin, recursive: bool) -> Iterator[LocatedClip]:
+    base = where.path
     if not recursive:
-        for clip in folder.GetClipList() or []:
-            yield base, clip
+        for clip in where.folder.GetClipList() or []:
+            yield LocatedClip(base, clip)
         return
-    for suffix, sub in _walk_bins(folder):
+    for suffix, sub in _walk_bins(where.folder):
         path = f"{base}{BIN_SEPARATOR}{suffix}" if base and suffix else (base or suffix)
         for clip in sub.GetClipList() or []:
-            yield path, clip
+            yield LocatedClip(path, clip)
 
 
-def find_clip(pool: Pool, name: str, bin_path: str | None = None) -> tuple[str, Clip]:
+def find_clip(pool: Pool, name: str, bin_path: str | None = None) -> LocatedClip:
     """One clip by exact name, searched under ``bin_path`` (the whole pool by default)."""
-    folder = find_bin(pool, bin_path)
-    matches = [
-        (path, clip)
-        for path, clip in _clips_under(pool, folder, recursive=True)
-        if str(clip.GetName() or "") == name
-    ]
+    searched = list(_clips_under(find_bin(pool, bin_path), recursive=True))
+    matches = [found for found in searched if str(found.clip.GetName() or "") == name]
     if not matches:
         where = f"the bin {bin_path!r}" if bin_path else "the media pool"
-        available = sorted(
-            {str(clip.GetName() or "") for _path, clip in _clips_under(pool, folder, True)}
-        )
+        available = sorted({str(found.clip.GetName() or "") for found in searched})
         raise ClipNotFoundError(name, where, available)
     if len(matches) > 1:
-        raise AmbiguousClipError(name, [path for path, _clip in matches])
+        raise AmbiguousClipError(name, [found.bin_path for found in matches])
     return matches[0]
 
 
+_logged_property_keys = False
+
+
 def properties(clip: Clip) -> dict[str, str]:
-    """Every clip property Resolve reports, enumerated — key names are never hard-coded."""
+    """Every clip property Resolve reports, enumerated — key names are never hard-coded.
+
+    The key names are undocumented, so the first enumeration of a session is logged: when a
+    reading comes back empty on a live machine, that line is what says whether the key was
+    renamed or the value really was blank.
+    """
     reported = clip.GetClipProperty()
     if not isinstance(reported, dict):
         return {}
+    global _logged_property_keys
+    if not _logged_property_keys:
+        log.info("Clip properties Resolve reports: %s", sorted(str(key) for key in reported))
+        _logged_property_keys = True
     return {str(key): "" if value is None else str(value) for key, value in reported.items()}
 
 
@@ -230,9 +259,9 @@ def is_offline(file_path: str) -> bool:
     return not path.exists()
 
 
-def summarise(bin_path: str, clip: Clip, known: dict[str, str] | None = None) -> dict[str, Any]:
+def summarise(bin_path: str, clip: Clip, reported: dict[str, str] | None = None) -> dict[str, Any]:
     """The one-line view of a clip that list and import both return."""
-    reported = known if known is not None else properties(clip)
+    reported = reported if reported is not None else properties(clip)
     file_path = reported.get(FILE_PATH, "")
     return {
         "name": str(clip.GetName() or ""),
@@ -319,11 +348,10 @@ def import_media(
     """
     pool = media_pool(connection)
     items = _requests(paths, sequences)
-    target, _created = ensure_bin(pool, bin_path)
-    target_path = path_of(pool, target)
+    target = ensure_bin(pool, bin_path)
 
     previous = pool.GetCurrentFolder()
-    pool.SetCurrentFolder(target)
+    pool.SetCurrentFolder(target.folder)
     try:
         imported = list(pool.ImportMedia(items) or [])
     finally:
@@ -336,22 +364,45 @@ def import_media(
         reported = properties(clip)
         landed.add(reported.get(FILE_PATH, ""))
         landed.add(str(clip.GetName() or ""))
-        summary = summarise(target_path, clip, reported)
+        summary = summarise(target.path, clip, reported)
         summary["still_duration_workaround"] = apply_still_workaround(clip, reported)
         summaries.append(summary)
 
-    refused = [
-        _requested_path(item)
-        for item in items
-        if _requested_path(item) not in landed and Path(_requested_path(item)).name not in landed
-    ]
+    refused = _not_imported(items, imported, landed)
     if not summaries:
         raise ImportFailedError(
             cause=f"Resolve imported none of the {len(items)} path(s) requested.",
             detail={"not_imported": refused},
         )
-    log.info("Imported %d clip(s) into %r", len(summaries), target_path or "the root")
-    return {"bin": target_path, "imported": summaries, "not_imported": refused}
+    log.info("Imported %d clip(s) into %r", len(summaries), target.path or "the root")
+    return {"bin": target.path, "imported": summaries, "not_imported": refused}
+
+
+def _not_imported(
+    items: list[str | dict[str, Any]],
+    imported: list[Clip],
+    landed: set[str],
+) -> list[str]:
+    """Which requested paths produced no clip.
+
+    A sequence is matched by the folder it came from, never by name: Resolve names the
+    imported clip itself and nothing on record says what it calls it, so matching the
+    ``%0Nd`` pattern against the result would be a guess. When everything asked for landed,
+    no matching is needed at all.
+    """
+    if len(imported) == len(items):
+        return []
+    folders = {str(Path(path).parent) for path in landed if path}
+    refused = []
+    for item in items:
+        requested = _requested_path(item)
+        if isinstance(item, dict):
+            if str(Path(requested).parent) in folders:
+                continue
+        elif requested in landed or Path(requested).name in landed:
+            continue
+        refused.append(requested)
+    return refused
 
 
 # --- list -------------------------------------------------------------------------------
@@ -368,12 +419,12 @@ def list_media(
 ) -> dict[str, Any]:
     """Summarise the clips in a bin. Past ``limit`` the full listing spills to disk."""
     pool = media_pool(connection)
-    folder = find_bin(pool, bin_path)
+    where = find_bin(pool, bin_path)
     needle = (name_contains or "").lower()
 
     clips: list[dict[str, Any]] = []
-    for path, clip in _clips_under(pool, folder, recursive):
-        summary = summarise(path, clip)
+    for found in _clips_under(where, recursive):
+        summary = summarise(found.bin_path, found.clip)
         if needle and needle not in summary["name"].lower():
             continue
         if offline_only and not summary["offline"]:
@@ -383,7 +434,7 @@ def list_media(
     cap = max(int(limit), 0)
     truncated = len(clips) > cap
     result: dict[str, Any] = {
-        "bin": path_of(pool, folder),
+        "bin": where.path,
         "count": len(clips),
         "clips": clips[:cap] if truncated else clips,
         "truncated": truncated,
@@ -396,9 +447,7 @@ def list_media(
 
 def _spill(bin_path: str, clips: list[dict[str, Any]], config: Config) -> str:
     """Write the whole listing where the agent can grep it, and return the path."""
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    slug = UNSAFE_IN_FILENAME.sub("-", bin_path).strip("-") or "media-pool"
-    target = config.listing_dir / f"{slug}-{stamp}.json"
+    target = config.listing_dir / timestamped_name(bin_path, ".json", "media-pool")
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(
         json.dumps({"bin": bin_path, "count": len(clips), "clips": clips}, indent=2),
@@ -473,15 +522,15 @@ def _bounds(clip: Clip, reported: dict[str, str]) -> dict[str, Any]:
         if not isinstance(bounds, dict):
             continue
         marks[str(kind)] = {
-            "in": dual(bounds.get("in"), fps),
-            "out": dual(bounds.get("out"), fps),
+            "in": dual_time(bounds.get("in"), fps),
+            "out": dual_time(bounds.get("out"), fps),
         }
 
     return {
         "media": {
-            "in": dual(start, fps),
-            "out": dual(out, fps),
-            "duration": dual(duration, fps),
+            "in": dual_time(start, fps),
+            "out": dual_time(out, fps),
+            "duration": dual_time(duration, fps),
         },
         "marks": marks,
     }
@@ -551,21 +600,21 @@ def _apply_fields(pool: Pool, item: dict[str, Any]) -> dict[str, Any]:
             ).payload(),
         }
     try:
-        found_in, clip = find_clip(pool, name, item.get("bin"))
+        located = find_clip(pool, name, item.get("bin"))
     except (ClipNotFoundError, AmbiguousClipError, BinNotFoundError) as exc:
         return {"clip": name, "bin": None, "ok": False, "error": exc.payload()}
 
-    reported = properties(clip)
+    reported = properties(located.clip)
     applied: dict[str, str] = {}
     failed: dict[str, str] = {}
     for key, value in fields.items():
         try:
-            applied[str(key)] = _set_field(clip, str(key), value, reported)
+            applied[str(key)] = _set_field(located.clip, str(key), value, reported)
         except MediaOperationError as exc:
             failed[str(key)] = exc.cause
     return {
         "clip": name,
-        "bin": found_in,
+        "bin": located.bin_path,
         "ok": not failed,
         "applied": applied,
         "failed": failed,
@@ -616,8 +665,8 @@ def _create_bin(pool: Pool, operation: dict[str, Any]) -> dict[str, Any]:
             cause="create_bin needs a bin path.",
             fix='Example: {"op": "create_bin", "bin": "Concert/Angles"}.',
         )
-    folder, created = ensure_bin(pool, str(path))
-    return {"op": "create_bin", "ok": True, "bin": path_of(pool, folder), "created": created}
+    made = ensure_bin(pool, str(path))
+    return {"op": "create_bin", "ok": True, "bin": made.path, "created": made.created}
 
 
 def _move_clips(pool: Pool, operation: dict[str, Any]) -> dict[str, Any]:
@@ -630,14 +679,14 @@ def _move_clips(pool: Pool, operation: dict[str, Any]) -> dict[str, Any]:
         )
     source = operation.get("from_bin")
     found = [find_clip(pool, str(name), source) for name in names]
-    target, _created = ensure_bin(pool, str(target_path))
-    if not pool.MoveClips([clip for _path, clip in found], target):
+    target = ensure_bin(pool, str(target_path))
+    if not pool.MoveClips([located.clip for located in found], target.folder):
         raise MediaOperationError(
             cause=f"Resolve refused to move {len(found)} clip(s) into {target_path!r}.",
         )
-    moved = [str(clip.GetName() or "") for _path, clip in found]
+    moved = [str(located.clip.GetName() or "") for located in found]
     log.info("Moved %d clip(s) into %r", len(moved), target_path)
-    return {"op": "move_clips", "ok": True, "moved": moved, "to_bin": path_of(pool, target)}
+    return {"op": "move_clips", "ok": True, "moved": moved, "to_bin": target.path}
 
 
 # --- relink -----------------------------------------------------------------------------
@@ -666,8 +715,12 @@ def relink_media(
         raise RelinkFailedError(cause=f"Nothing exists at {path!r} on this machine.")
 
     found = [find_clip(pool, str(name), bin_path) for name in clips]
+    was_offline = {
+        str(located.clip.GetName() or ""): is_offline(properties(located.clip).get(FILE_PATH, ""))
+        for located in found
+    }
     if target.is_dir():
-        relinked = bool(pool.RelinkClips([clip for _path, clip in found], str(target)))
+        relinked = bool(pool.RelinkClips([located.clip for located in found], str(target)))
         log.info("Relinked %d clip(s) against %s (Resolve said %s)", len(found), target, relinked)
     else:
         if len(found) != 1:
@@ -675,23 +728,30 @@ def relink_media(
                 cause=f"{len(found)} clips were named but {path!r} is a single file.",
                 fix="Relink one clip per file, or pass the folder the media moved to.",
             )
-        if not found[0][1].ReplaceClip(str(target)):
+        name = str(found[0].clip.GetName() or "")
+        if not was_offline.get(name):
+            # Not an error — repointing a healthy clip is a legitimate thing to ask for —
+            # but it replaces media that was working, so it says so rather than going quiet.
+            log.warning("Replacing the media of %s, which was not offline", name)
+        if not found[0].clip.ReplaceClip(str(target)):
             raise RelinkFailedError(
                 cause=f"Resolve refused to replace the clip media with {path!r}.",
             )
-        log.info("Replaced the media of %s with %s", found[0][1].GetName(), target)
+        log.info("Replaced the media of %s with %s", name, target)
 
     results = []
-    for found_in, clip in found:
-        file_path = properties(clip).get(FILE_PATH, "")
+    for located in found:
+        clip_name = str(located.clip.GetName() or "")
+        file_path = properties(located.clip).get(FILE_PATH, "")
         offline = is_offline(file_path)
         results.append(
             {
-                "clip": str(clip.GetName() or ""),
-                "bin": found_in,
+                "clip": clip_name,
+                "bin": located.bin_path,
                 "ok": not offline,
                 "file_path": file_path,
                 "offline": offline,
+                "was_offline": was_offline.get(clip_name, False),
             }
         )
     return {"results": results}

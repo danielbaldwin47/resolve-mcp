@@ -134,6 +134,9 @@ class FakeFolder:
         self._check()
         return list(self.subfolders)
 
+    def adopt(self, owner: FakeResolve) -> None:
+        self._owner = owner
+
     def _check(self) -> None:
         if self._owner is not None:
             self._owner._check()
@@ -159,6 +162,16 @@ class FakeMediaPool:
         self.calls.append(method)
         if self._owner is not None:
             self._owner._check()
+
+    def adopt(self, owner: FakeResolve) -> None:
+        """Wire the pool and its folders to a handle, so a dropped handle fails here too."""
+        self._owner = owner
+        folders = [self._root]
+        while folders:
+            folder = folders.pop()
+            folder.adopt(owner)
+            folders.extend(folder.subfolders)
+        self.calls.clear()
 
     def GetRootFolder(self) -> FakeFolder:  # noqa: N802
         self._check("GetRootFolder")
@@ -237,7 +250,13 @@ class FakeMediaPool:
 
 
 def _import_one(item: str | dict[str, Any]) -> FakeMediaPoolItem | None:
-    """Mimic ImportMedia: a path that is not there imports nothing."""
+    """Mimic ImportMedia: a path that is not there imports nothing.
+
+    An imported sequence is named and pathed after its first frame rather than after the
+    ``%0Nd`` pattern. Nothing on record says what Resolve really calls it (#18 verified the
+    frame count only), so the fake deliberately does not echo the pattern back — code that
+    matched on it would be relying on an assumption no source supports.
+    """
     if isinstance(item, dict):
         pattern = str(item.get("FilePath", ""))
         start = int(item.get("StartIndex", 0))
@@ -245,9 +264,10 @@ def _import_one(item: str | dict[str, Any]) -> FakeMediaPoolItem | None:
         frames = max(end - start + 1, 0)
         if not _sequence_exists(pattern, start):
             return None
+        first = _first_frame(pattern, start)
         return FakeMediaPoolItem(
-            Path(pattern).name,
-            pattern,
+            Path(first).name,
+            first,
             {"Type": "Image Sequence", "Frames": str(frames), "Start": "0", "End": str(frames - 1)},
         )
 
@@ -262,12 +282,15 @@ def _import_one(item: str | dict[str, Any]) -> FakeMediaPoolItem | None:
     )
 
 
-def _sequence_exists(pattern: str, start: int) -> bool:
+def _first_frame(pattern: str, start: int) -> str:
     try:
-        first = pattern % start
+        return pattern % start
     except (TypeError, ValueError):
-        return Path(pattern).exists()
-    return Path(first).exists()
+        return pattern
+
+
+def _sequence_exists(pattern: str, start: int) -> bool:
+    return Path(_first_frame(pattern, start)).exists()
 
 
 class FakeProject:
@@ -451,16 +474,5 @@ def studio(
         )
     resolve = FakeResolve(projects, current=project)
     if pool is not None:
-        _adopt(pool, resolve)
+        pool.adopt(resolve)
     return resolve
-
-
-def _adopt(pool: FakeMediaPool, owner: FakeResolve) -> None:
-    """Wire the pool to the handle, so a dropped handle fails media calls too."""
-    pool._owner = owner
-    folders = [pool.GetRootFolder()]
-    while folders:
-        folder = folders.pop()
-        folder._owner = owner
-        folders.extend(folder.subfolders)
-    pool.calls.clear()
