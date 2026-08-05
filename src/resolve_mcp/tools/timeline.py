@@ -108,8 +108,9 @@ def set_markers(
 
     Colour must be one Resolve has (Blue, Cyan, Green, Yellow, Red, Pink, Purple, Fuchsia,
     Rose, Lavender, Sky, Mint, Lemon, Sand, Cocoa, Cream). A frame that already carries a
-    marker is refused with that marker in the error — it is usually the director's own note
-    — unless replace is true. Every entry is reported separately; one bad entry never sinks
+    different marker is refused with that marker in the error — it is usually the director's
+    own note — unless replace is true; a frame already carrying this exact marker comes back
+    ok with unchanged: true. Every entry is reported separately; one bad entry never sinks
     the batch.
     """
     connection = get_connection()

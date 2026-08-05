@@ -183,6 +183,10 @@ class FakeTimeline:
         self._owner = owner
         self.marker_writes: list[dict[str, Any]] = []
         self.refuse_markers = False
+        # Refusing one marker by name is how a failed *replacement* is staged: Resolve
+        # takes the delete, refuses the add, and the restore of the displaced marker has
+        # to be free to succeed or the test could not tell a restore from a loss.
+        self.refuse_marker_names: set[str] = set()
 
     def adopt(self, owner: FakeResolve) -> None:
         self._owner = owner
@@ -273,7 +277,9 @@ class FakeTimeline:
     ) -> bool:
         """Add one marker, refusing a frame that already carries one — as Resolve does."""
         self._check()
-        if self.refuse_markers or float(frame) in self._markers:
+        if self.refuse_markers or name in self.refuse_marker_names:
+            return False
+        if float(frame) in self._markers:
             return False
         self.marker_writes.append(
             {

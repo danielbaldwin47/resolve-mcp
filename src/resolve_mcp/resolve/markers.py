@@ -14,7 +14,11 @@ things here are decisions rather than API calls:
 * **An existing marker is not overwritten unless asked.** ``AddMarker`` refuses a frame
   that already carries one, and the marker sitting there is usually the director's own
   note. Reporting the collision (with the marker that caused it) is the useful answer;
-  ``replace`` is the explicit way to say otherwise.
+  ``replace`` is the explicit way to say otherwise, and because a replacement is a delete
+  followed by an add that Resolve can still refuse, the displaced marker is put back if
+  the add does not land. A frame already carrying *the same marker* is neither a collision
+  nor a write: that is what the envelope's reconnect replay of a half-written batch looks
+  like, and calling the agent's own work a collision would be a lie.
 * **Colour and bounds are checked before Resolve sees them.** An unknown colour and a
   frame past the end both come back from Resolve as a bare ``False`` with no reason, which
   in a batch is indistinguishable from a locked timeline. Checking here turns both into a
@@ -33,7 +37,15 @@ from ..spill import spill
 from ..timing import dual_time, to_frames
 from .connection import ResolveConnection
 from .session import frame_rate
-from .timeline import Timeline, find_timeline, open_project, read_frames
+from .timeline import (
+    Reader,
+    Timeline,
+    find_timeline,
+    frame_window,
+    open_project,
+    overlaps,
+    read_frames,
+)
 
 log = get_logger("markers")
 
@@ -69,10 +81,16 @@ _BY_LOWER_NAME = {color.lower(): color for color in MARKER_COLORS}
 MINIMUM_DURATION = 1
 
 
-class Placed:
-    """One timeline's marker plumbing: where it starts, how fast it runs, what it holds."""
+class MarkerClock:
+    """A timeline's marker clock: where it starts, how fast it runs, and both frame numbers.
 
-    def __init__(self, timeline: Timeline, fps: float | None) -> None:
+    Every marker crosses between Resolve's clock and the record clock, and the crossing
+    needs the same three numbers each time — so they are read once, here, and the
+    conversion lives with them rather than at each call site.
+    """
+
+    def __init__(self, connection: ResolveConnection, timeline: Timeline, fps: float | None):
+        self.reader = Reader(connection)
         self.timeline = timeline
         self.fps = fps
         self.name = str(timeline.GetName() or "")
@@ -104,15 +122,15 @@ def _origin(timeline: Timeline) -> int:
 # --- read -------------------------------------------------------------------------------
 
 
-def _marker(relative: int, detail: dict[str, Any], placed: Placed) -> dict[str, Any]:
+def _marker(relative: int, detail: dict[str, Any], clock: MarkerClock) -> dict[str, Any]:
     """One marker in both clocks, with the fields the GUI shows."""
     duration = read_frames(detail.get("duration")) or MINIMUM_DURATION
-    record = placed.record(relative)
+    record = clock.record(relative)
     return {
         "frame": relative,
-        "record": dual_time(record, placed.fps),
-        "end": dual_time(record + duration, placed.fps),
-        "duration": dual_time(duration, placed.fps),
+        "record": dual_time(record, clock.fps),
+        "end": dual_time(record + duration, clock.fps),
+        "duration": dual_time(duration, clock.fps),
         "color": str(detail.get("color", "")),
         "name": str(detail.get("name", "")),
         "note": str(detail.get("note", "")),
@@ -120,13 +138,16 @@ def _marker(relative: int, detail: dict[str, Any], placed: Placed) -> dict[str, 
     }
 
 
-def _reported(timeline: Timeline) -> dict[int, dict[str, Any]]:
+def _reported(clock: MarkerClock) -> dict[int, dict[str, Any]]:
     """Resolve's marker map, keyed by relative frame, with unreadable keys dropped.
 
     A marker whose frame will not parse cannot be placed on either clock — reporting it at
     a made-up position would be worse than leaving it out and saying so in the log.
+
+    The read goes through ``Reader``: a build without ``GetMarkers`` should read as a
+    timeline with no markers, while a handle that died mid-read must still raise.
     """
-    reported = timeline.GetMarkers()
+    reported = clock.reader.optional(clock.timeline, "GetMarkers", None)
     if not isinstance(reported, dict):
         return {}
     markers: dict[int, dict[str, Any]] = {}
@@ -151,23 +172,22 @@ def list_markers(
     """Every marker on a timeline, in record time, narrowed by colour and range."""
     project = open_project(connection)
     timeline = find_timeline(project, name)
-    placed = Placed(timeline, frame_rate(project, timeline))
+    clock = MarkerClock(connection, timeline, frame_rate(project, timeline))
 
     markers = [
-        _marker(relative, detail, placed)
-        for relative, detail in sorted(_reported(timeline).items())
+        _marker(relative, detail, clock) for relative, detail in sorted(_reported(clock).items())
     ]
-    window = _window(start, end, placed.fps)
+    window = frame_window(start, end, clock.fps)
     wanted = [marker for marker in markers if _matches(marker, color) and _touches(marker, window)]
 
     cap = max(int(limit), 0)
     truncated = len(wanted) > cap
     result: dict[str, Any] = {
         "timeline": {
-            "name": placed.name,
-            "fps": placed.fps,
-            "start": dual_time(placed.start, placed.fps),
-            "end": dual_time(placed.end, placed.fps),
+            "name": clock.name,
+            "fps": clock.fps,
+            "start": dual_time(clock.start, clock.fps),
+            "end": dual_time(clock.end, clock.fps),
         },
         "count": len(wanted),
         "markers": wanted[:cap] if truncated else wanted,
@@ -178,32 +198,14 @@ def list_markers(
     if truncated:
         full = {**result, "markers": wanted, "truncated": False, "spilled_to": None}
         result["spilled_to"] = spill(
-            f"{placed.name} markers", full, config or get_config(), fallback="markers"
+            f"{clock.name} markers", full, config or get_config(), fallback="markers"
         )
     return result
 
 
-def _window(start: Any, end: Any, fps: float | None) -> tuple[int | None, int | None]:
-    """The record range to read, half-open ``[start, end)``, open at either end."""
-    first = to_frames(start, fps, field="start")
-    last = to_frames(end, fps, field="end")
-    if first is not None and last is not None and last < first:
-        raise InvalidRequestError(
-            cause=f"The range ends at {last} but starts at {first}.",
-            fix="Ranges are half-open [start, end) and run forwards; swap the two.",
-            detail={"start": first, "end": last},
-        )
-    return first, last
-
-
 def _touches(marker: dict[str, Any], window: tuple[int | None, int | None]) -> bool:
     """Whether a marker overlaps the range — a marker with a length is a span, not a point."""
-    first, last = window
-    record = (marker["record"] or {}).get("frames")
-    finish = (marker["end"] or {}).get("frames")
-    if record is None or finish is None:
-        return True
-    return (last is None or record < last) and (first is None or finish > first)
+    return overlaps(marker["record"]["frames"], marker["end"]["frames"], window)
 
 
 def _matches(marker: dict[str, Any], color: str | None) -> bool:
@@ -230,18 +232,16 @@ def set_markers(
     """Write a batch of markers, each reported on its own. One bad entry sinks only itself."""
     project = open_project(connection)
     timeline = find_timeline(project, name)
-    placed = Placed(timeline, frame_rate(project, timeline))
-    held = _reported(timeline)
+    clock = MarkerClock(connection, timeline, frame_rate(project, timeline))
+    existing = _reported(clock)
 
     results: list[dict[str, Any]] = []
     for entry in markers or []:
-        results.append(_write(placed, entry, held, replace))
+        results.append(_write(clock, entry, existing, replace))
     added = sum(1 for result in results if result["ok"])
-    log.info(
-        "Wrote %d of %d markers to %s", added, len(results), placed.name or "the open timeline"
-    )
+    log.info("Wrote %d of %d markers to %s", added, len(results), clock.name or "the open timeline")
     return {
-        "timeline": placed.name,
+        "timeline": clock.name,
         "results": results,
         "added": added,
         "failed": len(results) - added,
@@ -249,71 +249,160 @@ def set_markers(
 
 
 def _write(
-    placed: Placed,
+    clock: MarkerClock,
     entry: Any,
-    held: dict[int, dict[str, Any]],
+    existing: dict[int, dict[str, Any]],
     replace: bool,
 ) -> dict[str, Any]:
-    """One marker: validated, placed on Resolve's clock, written, and reported."""
+    """One marker: validated, put on Resolve's clock, written, and reported.
+
+    A replacement is a delete followed by an add, and Resolve can refuse the add after
+    taking the delete — so the marker that was there is carried through the write and put
+    back if the add does not land. Losing the director's note to a failed overwrite is the
+    one outcome this path must not have.
+    """
     try:
-        request = _request(placed, entry, held, replace)
+        request = _request(clock, entry)
     except ResolveMcpError as exc:
         return {"ok": False, "record": None, "frame": None, "error": exc.payload()}
 
     relative = request["frame"]
-    replaced = relative in held
-    if replaced and not placed.timeline.DeleteMarkerAtFrame(relative):
+    displaced = existing.get(relative)
+    if displaced is not None:
+        if _same(displaced, request):
+            return _already_there(clock, relative, request)
+        if not replace:
+            return _occupied(clock, relative, displaced)
+    if displaced is not None and not clock.timeline.DeleteMarkerAtFrame(relative):
         return _refused(
-            placed,
+            clock,
             relative,
-            f"Resolve would not delete the marker at record frame {placed.record(relative)}.",
+            f"Resolve would not delete the marker at record frame {clock.record(relative)}.",
         )
-    added = placed.timeline.AddMarker(
-        relative,
-        request["color"],
-        request["name"],
-        request["note"],
-        request["duration"],
-        request["custom_data"],
-    )
-    if not added:
+    if not _add(clock, relative, request):
         return _refused(
-            placed,
+            clock,
             relative,
             f"Resolve refused a {request['color']} marker at record frame "
-            f"{placed.record(relative)}.",
+            f"{clock.record(relative)}."
+            + (_restore(clock, relative, displaced) if displaced is not None else ""),
         )
-    held[relative] = {
+    existing[relative] = _as_reported(request)
+    return {
+        "ok": True,
+        "record": dual_time(clock.record(relative), clock.fps),
+        "frame": relative,
+        "color": request["color"],
+        "name": request["name"],
+        "replaced": displaced is not None,
+        "unchanged": False,
+    }
+
+
+def _add(clock: MarkerClock, relative: int, request: dict[str, Any]) -> bool:
+    return bool(
+        clock.timeline.AddMarker(
+            relative,
+            request["color"],
+            request["name"],
+            request["note"],
+            request["duration"],
+            request["custom_data"],
+        )
+    )
+
+
+def _restore(clock: MarkerClock, relative: int, displaced: dict[str, Any]) -> str:
+    """Put back the marker a refused replacement deleted, and say which way it went.
+
+    A marker Resolve reported without a colour is put back in the default one: a note in
+    the wrong colour is recoverable, a note that is gone is not.
+    """
+    put_back = clock.timeline.AddMarker(
+        relative,
+        str(displaced.get("color") or MARKER_COLORS[0]),
+        str(displaced.get("name") or ""),
+        str(displaced.get("note") or ""),
+        read_frames(displaced.get("duration")) or MINIMUM_DURATION,
+        str(displaced.get("customData") or ""),
+    )
+    if put_back:
+        return " The marker that was there has been put back."
+    log.error("Could not restore the marker at relative frame %d after a refused write", relative)
+    return " The marker that was there was deleted first and could not be put back."
+
+
+def _same(displaced: dict[str, Any], request: dict[str, Any]) -> bool:
+    """Whether the marker already there is the one being asked for, field for field."""
+    return _as_reported(request) == {
+        "color": str(displaced.get("color") or ""),
+        "name": str(displaced.get("name") or ""),
+        "note": str(displaced.get("note") or ""),
+        "duration": read_frames(displaced.get("duration")) or MINIMUM_DURATION,
+        "customData": str(displaced.get("customData") or ""),
+    }
+
+
+def _already_there(clock: MarkerClock, relative: int, request: dict[str, Any]) -> dict[str, Any]:
+    """The marker asked for is already on that frame, to the letter — so nothing to do.
+
+    This is what a batch replayed after a dropped connection looks like: the envelope
+    retries the whole call, and the markers the first attempt landed are still there.
+    Reporting those as collisions would accuse the agent of overwriting the director's
+    notes when they are its own work, unchanged.
+    """
+    return {
+        "ok": True,
+        "record": dual_time(clock.record(relative), clock.fps),
+        "frame": relative,
+        "color": request["color"],
+        "name": request["name"],
+        "replaced": False,
+        "unchanged": True,
+    }
+
+
+def _occupied(clock: MarkerClock, relative: int, displaced: dict[str, Any]) -> dict[str, Any]:
+    """A different marker holds that frame — usually the director's own note."""
+    record = clock.record(relative)
+    return {
+        "ok": False,
+        "record": dual_time(record, clock.fps),
+        "frame": relative,
+        "error": InvalidRequestError(
+            cause=f"A different marker is already on record frame {record}.",
+            fix=(
+                "That marker is probably the director's own note. Pick another frame, or "
+                "pass replace=true to overwrite it deliberately."
+            ),
+            detail={"record": record, "frame": relative, "existing": displaced},
+        ).payload(),
+    }
+
+
+def _as_reported(request: dict[str, Any]) -> dict[str, Any]:
+    """A written marker in the shape ``GetMarkers`` would report it back."""
+    return {
         "color": request["color"],
         "name": request["name"],
         "note": request["note"],
         "duration": request["duration"],
         "customData": request["custom_data"],
     }
-    return {
-        "ok": True,
-        "record": dual_time(placed.record(relative), placed.fps),
-        "frame": relative,
-        "color": request["color"],
-        "name": request["name"],
-        "replaced": replaced,
-    }
 
 
-def _refused(placed: Placed, relative: int, cause: str) -> dict[str, Any]:
+def _refused(clock: MarkerClock, relative: int, cause: str) -> dict[str, Any]:
     return {
         "ok": False,
-        "record": dual_time(placed.record(relative), placed.fps),
+        "record": dual_time(clock.record(relative), clock.fps),
         "frame": relative,
         "error": TimelineOperationError(cause=cause).payload(),
     }
 
 
 def _request(
-    placed: Placed,
+    clock: MarkerClock,
     entry: Any,
-    held: dict[int, dict[str, Any]],
-    replace: bool,
 ) -> dict[str, Any]:
     """A marker request read into the shape ``AddMarker`` takes, or a stated refusal."""
     if not isinstance(entry, dict):
@@ -323,7 +412,7 @@ def _request(
             detail={"entry": repr(entry)},
         )
 
-    record = to_frames(entry.get("frame"), placed.fps, field="frame")
+    record = to_frames(entry.get("frame"), clock.fps, field="frame")
     if record is None:
         raise InvalidRequestError(
             cause="A marker was given without a frame to sit on.",
@@ -333,9 +422,9 @@ def _request(
             ),
             detail={"entry": entry},
         )
-    _within(placed, record)
+    _within(clock, record)
 
-    duration = to_frames(entry.get("duration"), placed.fps, field="duration")
+    duration = to_frames(entry.get("duration"), clock.fps, field="duration")
     duration = MINIMUM_DURATION if duration is None else duration
     if duration < MINIMUM_DURATION:
         raise InvalidRequestError(
@@ -344,19 +433,8 @@ def _request(
             detail={"duration": duration},
         )
 
-    relative = placed.relative(record)
-    if relative in held and not replace:
-        raise InvalidRequestError(
-            cause=f"A marker is already on record frame {record}.",
-            fix=(
-                "That marker is probably the director's own note. Pick another frame, or "
-                "pass replace=true to overwrite it deliberately."
-            ),
-            detail={"record": record, "frame": relative, "existing": held[relative]},
-        )
-
     return {
-        "frame": relative,
+        "frame": clock.relative(record),
         "color": _color(entry.get("color")),
         "name": str(entry.get("name") or ""),
         "note": str(entry.get("note") or ""),
@@ -365,19 +443,18 @@ def _request(
     }
 
 
-def _within(placed: Placed, record: int) -> None:
+def _within(clock: MarkerClock, record: int) -> None:
     """A frame outside the timeline is refused here — Resolve just drops it silently."""
-    if placed.end is None:
+    if clock.end is None:
         return
-    if placed.start <= record < placed.end:
+    if clock.start <= record < clock.end:
         return
     raise InvalidRequestError(
-        cause=f"Record frame {record} is outside {placed.name or 'the timeline'}.",
+        cause=f"Record frame {record} is outside {clock.name or 'the timeline'}.",
         fix=(
-            f"Markers sit inside the timeline's own range, half-open "
-            f"[{placed.start}, {placed.end})."
+            f"Markers sit inside the timeline's own range, half-open [{clock.start}, {clock.end})."
         ),
-        detail={"record": record, "bounds": {"start": placed.start, "end": placed.end}},
+        detail={"record": record, "bounds": {"start": clock.start, "end": clock.end}},
     )
 
 

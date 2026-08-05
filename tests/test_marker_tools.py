@@ -205,6 +205,21 @@ def test_read_skips_a_marker_it_cannot_place_rather_than_inventing_a_frame(
     assert result["markers"][0]["record"]["frames"] == 140
 
 
+def test_read_of_a_build_without_the_marker_getter_is_empty_not_a_failure(
+    attach: Attach,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An old Resolve missing a getter costs that field; only a dead handle stops the read."""
+    cut = a_reviewed_cut()
+    monkeypatch.delattr(type(cut), "GetMarkers")
+    attach(studio(timeline=cut))
+
+    result = list_markers()
+
+    assert result["ok"] is True
+    assert result["count"] == 0
+
+
 def test_read_needs_a_project(attach: Attach) -> None:
     attach(studio(project=None))
 
@@ -232,6 +247,7 @@ def test_set_writes_a_marker_with_colour_name_and_note_at_a_record_frame(
     assert written["ok"] is True
     assert written["record"]["frames"] == 220
     assert written["frame"] == 120
+    assert written["unchanged"] is False
     # The relative frame is what reaches Resolve, and a one-frame default duration is what
     # makes the marker visible in the GUI at all.
     assert cut.marker_writes == [
@@ -386,6 +402,50 @@ def test_set_replaces_an_existing_marker_when_told_to(attach: Attach) -> None:
     assert result["results"][0]["replaced"] is True
     assert cut.GetMarkers()[20.0]["name"] == "mine"
     assert len(cut.GetMarkers()) == 2
+
+
+def test_a_refused_replacement_puts_the_directors_marker_back(attach: Attach) -> None:
+    """A replacement is a delete then an add, and Resolve can refuse the second half."""
+    cut = a_reviewed_cut()
+    attach(studio(timeline=cut))
+    cut.refuse_marker_names = {"mine"}
+
+    result = set_markers([{"frame": 120, "color": "Blue", "name": "mine"}], replace=True)
+
+    assert result["added"] == 0
+    assert result["results"][0]["error"]["code"] == "timeline_operation_failed"
+    assert "has been put back" in result["results"][0]["error"]["cause"]
+    assert cut.GetMarkers()[20.0]["name"] == "cut early"
+    assert cut.GetMarkers()[20.0]["note"] == "come off the wide two bars sooner"
+
+
+def test_writing_the_same_marker_twice_is_not_a_collision_with_the_director(
+    attach: Attach,
+) -> None:
+    """What a batch replayed after a dropped connection looks like: its own work, still there."""
+    cut = a_reviewed_cut(markers={})
+    attach(studio(timeline=cut))
+    entry = {"frame": 220, "color": "Blue", "name": "Encore", "note": "song starts"}
+
+    set_markers([entry])
+    again = set_markers([entry])
+
+    assert again["ok"] is True
+    assert again["added"] == 1
+    assert again["results"][0]["unchanged"] is True
+    assert len(cut.marker_writes) == 1
+    assert len(cut.GetMarkers()) == 1
+
+
+def test_a_different_marker_on_the_same_frame_is_still_a_collision(attach: Attach) -> None:
+    cut = a_reviewed_cut(markers={})
+    attach(studio(timeline=cut))
+    set_markers([{"frame": 220, "color": "Blue", "name": "Encore"}])
+
+    result = set_markers([{"frame": 220, "color": "Blue", "name": "Encore II"}])
+
+    assert result["failed"] == 1
+    assert result["results"][0]["error"]["detail"]["existing"]["name"] == "Encore"
 
 
 def test_set_reports_a_refusal_from_resolve_rather_than_claiming_success(

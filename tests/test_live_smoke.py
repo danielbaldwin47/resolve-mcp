@@ -135,11 +135,16 @@ def test_the_frame_math_holds_on_a_real_timeline() -> None:
 def test_hand_placed_markers_read_back_on_the_clock_the_agent_plans_in() -> None:
     """The one thing no fake can settle: which frame Resolve keys a GUI marker by.
 
-    The wrapper takes ``GetMarkers`` keys as relative to the timeline start and reports a
-    record frame from them. If that assumption is wrong, every marker on a timeline
-    starting at 01:00:00:00 lands an hour away from the shot it is about — and this is
-    where it shows. Add a marker by hand in the GUI over a known shot first; the check is
-    that the record frame lands inside the timeline, next to that shot.
+    The wrapper takes ``GetMarkers`` keys as relative to the timeline start and adds the
+    start frame to reach a record frame. If that assumption is wrong the addition happens
+    twice, and every marker on a timeline starting at 01:00:00:00 lands an hour past the
+    end — which is exactly what the bounds check below catches. On a timeline starting at
+    frame 0 the two clocks coincide and nothing is proved, so that case skips rather than
+    passing emptily.
+
+    Place a marker by hand in the GUI over a known shot first, then read the printed table
+    against what the GUI shows: colour, name and note are the agent's work queue, and only
+    a human at the machine can confirm they came back as typed.
     """
     if get_status()["context"]["timeline"] is None:
         pytest.skip("No timeline open in Resolve")
@@ -150,9 +155,15 @@ def test_hand_placed_markers_read_back_on_the_clock_the_agent_plans_in() -> None
         pytest.skip("No markers on the open timeline — add one in the GUI and rerun")
 
     bounds = result["timeline"]
+    if bounds["start"]["frames"] == 0:
+        pytest.skip("Timeline starts at frame 0, where both marker clocks agree — use 01:00:00:00")
+
     for marker in result["markers"]:
+        print(  # noqa: T201 - the human at the machine compares this against the GUI
+            f"{marker['record']['timecode']} {marker['color']:<10} "
+            f"{marker['name']!r} {marker['note']!r}"
+        )
         assert bounds["start"]["frames"] <= marker["record"]["frames"] < bounds["end"]["frames"]
-        assert marker["record"]["frames"] == bounds["start"]["frames"] + marker["frame"]
         assert marker["end"]["frames"] > marker["record"]["frames"]
         assert marker["color"]
 
