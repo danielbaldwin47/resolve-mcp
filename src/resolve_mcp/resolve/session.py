@@ -68,6 +68,18 @@ def _read(getter: Any) -> str | None:
     return None if value is None else str(value)
 
 
+def current_project(
+    connection: ResolveConnection,
+    cause: str = "No project is open.",
+) -> Any:
+    """The open project, or a failure saying so. ``cause`` names what wanted it."""
+    manager = connection.handle().GetProjectManager()
+    project = manager.GetCurrentProject() if manager is not None else None
+    if project is None:
+        raise NoProjectOpenError(cause=cause)
+    return project
+
+
 def product_name(connection: ResolveConnection) -> str | None:
     """Which Resolve edition is attached. Raises if Resolve is unreachable."""
     resolve = connection.handle()

@@ -32,7 +32,6 @@ from typing import Any, NamedTuple
 from ..config import Config, get_config
 from ..errors import (
     InvalidRequestError,
-    NoProjectOpenError,
     NoTimelineOpenError,
     TimelineNotFoundError,
 )
@@ -40,7 +39,7 @@ from ..logging_config import get_logger
 from ..spill import spill
 from ..timing import dual_time, to_frames
 from .connection import ResolveConnection
-from .session import frame_rate
+from .session import current_project, frame_rate
 
 log = get_logger("timeline")
 
@@ -83,11 +82,7 @@ class Placement(NamedTuple):
 
 
 def _project(connection: ResolveConnection) -> Project:
-    manager = connection.handle().GetProjectManager()
-    project = manager.GetCurrentProject() if manager is not None else None
-    if project is None:
-        raise NoProjectOpenError(cause="No project is open, so there are no timelines to read.")
-    return project
+    return current_project(connection, "No project is open, so there are no timelines to read.")
 
 
 def _timelines(project: Project) -> list[Timeline]:

@@ -196,6 +196,78 @@ class PythonExecutionError(ResolveMcpError):
     )
 
 
+class JobNotFoundError(ResolveMcpError):
+    code = "job_not_found"
+
+    def __init__(self, job_id: str) -> None:
+        super().__init__(
+            cause=f"No job with id {job_id!r}.",
+            fix="list_jobs shows every job this cache directory knows about, newest first.",
+            detail={"requested": job_id},
+        )
+
+
+class JobInterruptedError(ResolveMcpError):
+    """The server restarted while this job was running, so its thread died with it."""
+
+    code = "job_interrupted"
+    default_fix = (
+        "Start the job again. Anything it had already finished is in the result cache, "
+        "so completed work is not paid for twice."
+    )
+
+
+class RenderQueueError(ResolveMcpError):
+    """The render queue refused a job, failed one, or never produced the file."""
+
+    code = "render_queue_failed"
+    default_fix = (
+        "Open the Deliver page and check the render queue for a failed or cancelled job, "
+        "clear it, and retry. A render that reports success but writes nothing usually means "
+        "the target directory is not writable from the machine Resolve runs on."
+    )
+
+
+class AudioExportError(ResolveMcpError):
+    """Resolve's render queue would not produce the timeline mix."""
+
+    code = "audio_export_failed"
+    default_fix = (
+        "Check the render queue in the Deliver page for a stuck or failed job, make sure the "
+        "timeline has audio on it, then retry."
+    )
+
+
+class FfmpegUnavailableError(ResolveMcpError):
+    """ffmpeg is not on PATH — the per-clip extraction route cannot run without it."""
+
+    code = "ffmpeg_unavailable"
+    default_fix = (
+        "Install ffmpeg and put it on PATH, or point RESOLVE_MCP_FFMPEG at the executable. "
+        "The timeline route needs no ffmpeg if you only want the timeline mix."
+    )
+
+
+class AudioExtractionError(ResolveMcpError):
+    """ffmpeg ran and refused the file."""
+
+    code = "audio_extraction_failed"
+    default_fix = (
+        "Check the clip is online and holds an audio stream — inspect_clip reports both. "
+        "ffmpeg's own message is in detail.stderr."
+    )
+
+
+class AudioMappingError(ResolveMcpError):
+    """The clip's audio does not live in the clip's own file, so extracting it would lie."""
+
+    code = "audio_mapping_unsupported"
+    default_fix = (
+        "Acquire this audio from the timeline instead (scope=timeline): only the render "
+        "route captures audio Resolve has linked or offset away from the source file."
+    )
+
+
 class InternalError(ResolveMcpError):
     code = "internal_error"
     default_fix = (

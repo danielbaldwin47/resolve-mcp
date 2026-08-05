@@ -11,6 +11,9 @@ come back as strings.
 
 from __future__ import annotations
 
+import contextlib
+import math
+import wave
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -521,6 +524,15 @@ def _sequence_exists(pattern: str, start: int) -> bool:
 
 
 class FakeProject:
+    """A project, including its render queue.
+
+    The queue models what makes the real one hard to drive: settings live on the project
+    rather than on the job, ``StartRendering`` returns before the render is done, and a job
+    reports a status per poll — so ``render_statuses`` is a sequence handed out one per
+    ``GetRenderJobStatus`` call, the last one repeating. ``render_writes_the_file=False``
+    models the failure the return value hides: every call answers True and nothing lands.
+    """
+
     def __init__(
         self,
         name: str,
@@ -538,6 +550,83 @@ class FakeProject:
             self._timelines = list(timelines)
         else:
             self._timelines = [timeline] if timeline is not None else []
+        self.render_settings: dict[str, Any] = {}
+        self.render_format: tuple[str, str] | None = None
+        self.render_mode: int | None = None
+        self.render_queue: list[str] = []
+        self.render_jobs: list[dict[str, Any]] = []
+        self.render_statuses: list[str] = ["Complete"]
+        self.render_seconds = 2.0
+        self.render_writes_the_file = True
+        self.accepts_format = True
+        self.accepts_settings = True
+        self.accepts_job = True
+        self.starts_rendering = True
+        self.timeline_switches: list[str] = []
+        self._status_calls = 0
+
+    def SetCurrentRenderMode(self, mode: int) -> bool:  # noqa: N802
+        self.render_mode = mode
+        return True
+
+    def SetCurrentRenderFormatAndCodec(self, format_: str, codec: str) -> bool:  # noqa: N802
+        if not self.accepts_format:
+            return False
+        self.render_format = (format_, codec)
+        return True
+
+    def SetRenderSettings(self, settings: dict[str, Any]) -> bool:  # noqa: N802
+        if not self.accepts_settings:
+            return False
+        self.render_settings = dict(settings)
+        return True
+
+    def AddRenderJob(self) -> str | None:  # noqa: N802
+        """Returns the new job's id, or ``None`` when Resolve refuses it."""
+        if not self.accepts_job:
+            return None
+        job_id = f"render-{len(self.render_jobs) + 1}"
+        self.render_jobs.append({"id": job_id, "settings": dict(self.render_settings)})
+        self.render_queue.append(job_id)
+        return job_id
+
+    def StartRendering(self, *job_ids: str) -> bool:  # noqa: N802
+        if not self.starts_rendering:
+            return False
+        if self.render_writes_the_file:
+            self._write_the_render()
+        return True
+
+    def GetRenderJobStatus(self, job_id: str) -> dict[str, Any]:  # noqa: N802
+        """One status per poll, the last one repeating — a render is watched, not awaited."""
+        index = min(self._status_calls, len(self.render_statuses) - 1)
+        self._status_calls += 1
+        status = self.render_statuses[index]
+        return {
+            "JobStatus": status,
+            "CompletionPercentage": 100 if status == "Complete" else index * 10,
+        }
+
+    def DeleteRenderJob(self, job_id: str) -> bool:  # noqa: N802
+        if job_id in self.render_queue:
+            self.render_queue.remove(job_id)
+            return True
+        return False
+
+    def _write_the_render(self) -> None:
+        target = Path(str(self.render_settings.get("TargetDir", "")))
+        name = str(self.render_settings.get("CustomName", "render"))
+        write_wav(
+            target / f"{name}.wav",
+            seconds=self.render_seconds,
+            sample_rate=int(self.render_settings.get("AudioSampleRate", 48000)),
+            bit_depth=int(self.render_settings.get("AudioBitDepth", 24)),
+        )
+
+    def SetCurrentTimeline(self, timeline: FakeTimeline) -> bool:  # noqa: N802
+        self.timeline_switches.append(str(timeline.GetName()))
+        self._timeline = timeline
+        return True
 
     def GetName(self) -> str:  # noqa: N802
         return self._name
@@ -680,6 +769,34 @@ class FakeConnector:
         if not self._handles:
             return None
         return self._handles.pop(0)
+
+
+def write_wav(
+    path: Path,
+    seconds: float = 2.0,
+    sample_rate: int = 48_000,
+    bit_depth: int = 24,
+    channels: int = 2,
+    frequency: float = 440.0,
+) -> Path:
+    """A real WAV of a sine tone — the fixture audio the worker tier is tested on.
+
+    Real audio rather than a stub file, because the workers read the header back: a fake
+    that wrote ``b"RIFF"`` would pass a duration assertion that means nothing.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    width = bit_depth // 8
+    peak = int(2 ** (bit_depth - 1) * 0.3)
+    frames = bytearray()
+    for index in range(int(seconds * sample_rate)):
+        sample = int(peak * math.sin(2 * math.pi * frequency * index / sample_rate))
+        frames.extend(sample.to_bytes(width, "little", signed=True) * channels)
+    with contextlib.closing(wave.open(str(path), "wb")) as handle:
+        handle.setnchannels(channels)
+        handle.setsampwidth(width)
+        handle.setframerate(sample_rate)
+        handle.writeframes(bytes(frames))
+    return path
 
 
 def media_pool(bins: dict[str, list[FakeMediaPoolItem]] | None = None) -> FakeMediaPool:
