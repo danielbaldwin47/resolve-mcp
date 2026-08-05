@@ -78,6 +78,16 @@ class Config:
         """Acquired WAVs. Analysis workers key off the content hash of what lands here."""
         return self.cache_dir / "audio"
 
+    @property
+    def interchange_dir(self) -> Path:
+        """Where exported timelines (OTIO, FCPXML, DRT) land when no path is given.
+
+        Unlike a snapshot these are meant to be opened and edited — an injected dissolve is
+        a hand edit to an exported file — so they keep their own folder rather than sitting
+        among the opaque restore points.
+        """
+        return self.cache_dir / "interchange"
+
 
 _config: Config | None = None
 

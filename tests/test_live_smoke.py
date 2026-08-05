@@ -11,20 +11,53 @@ place the direct-attach path itself is exercised.
 
 from __future__ import annotations
 
+import json
+from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from resolve_mcp.audio.acquire import acquire_timeline_audio
 from resolve_mcp.jobs.runner import wait_for
 from resolve_mcp.resolve.connection import get_connection
+from resolve_mcp.tools.cut import build_timeline, validate_cut
 from resolve_mcp.tools.escape_hatch import run_python
 from resolve_mcp.tools.jobs import get_job, list_jobs
 from resolve_mcp.tools.media import inspect_clip, list_media
 from resolve_mcp.tools.project import get_status, list_projects, snapshot_project
-from resolve_mcp.tools.timeline import inspect_timeline, list_timelines
+from resolve_mcp.tools.timeline import (
+    export_timeline,
+    import_timeline,
+    inspect_timeline,
+    list_markers,
+    list_timelines,
+)
+
+from . import otio
 
 pytestmark = pytest.mark.live
+
+SMOKE_CUT = "resolve-mcp-smoke"
+"""Every build here materialises a new version of this name; delete them when you are done."""
+
+LOCKED_TRACK_PROBE = """
+pool = project.GetMediaPool()
+timeline = pool.CreateEmptyTimeline("resolve-mcp-lock-probe")
+project.SetCurrentTimeline(timeline)
+timeline.SetTrackLock("video", 1, True)
+clips = [c for c in pool.GetRootFolder().GetClipList() if c.GetName() == {name}]
+returned = pool.AppendToTimeline([
+    {{"mediaPoolItem": clips[0], "startFrame": {start}, "endFrame": {end},
+      "mediaType": 1, "trackIndex": 1, "recordFrame": timeline.GetStartFrame()}}
+]) if clips else None
+result = {{
+    "found": bool(clips),
+    "returned_truthy": bool(returned),
+    "items_on_track": len(timeline.GetItemListInTrack("video", 1) or []),
+}}
+"""
+"""Spike #18 (d), reduced to its claim: a locked track reports a placement it did not make."""
 
 
 @pytest.fixture(autouse=True)
@@ -134,6 +167,305 @@ def test_the_frame_math_holds_on_a_real_timeline() -> None:
                     item["sync_offset"]["frames"]
                     == record["in"]["frames"] - item["source"]["in"]["frames"]
                 )
+
+
+def test_hand_placed_markers_read_back_on_the_clock_the_agent_plans_in() -> None:
+    """The one thing no fake can settle: which frame Resolve keys a GUI marker by.
+
+    The wrapper takes ``GetMarkers`` keys as relative to the timeline start and adds the
+    start frame to reach a record frame. If that assumption is wrong the addition happens
+    twice, and every marker on a timeline starting at 01:00:00:00 lands an hour past the
+    end — which is exactly what the bounds check below catches. On a timeline starting at
+    frame 0 the two clocks coincide and nothing is proved, so that case skips rather than
+    passing emptily.
+
+    Place a marker by hand in the GUI over a known shot first, then read the printed table
+    against what the GUI shows: colour, name and note are the agent's work queue, and only
+    a human at the machine can confirm they came back as typed.
+    """
+    if get_status()["context"]["timeline"] is None:
+        pytest.skip("No timeline open in Resolve")
+
+    result = list_markers()
+    assert result["ok"] is True
+    if not result["markers"]:
+        pytest.skip("No markers on the open timeline — add one in the GUI and rerun")
+
+    bounds = result["timeline"]
+    if bounds["start"]["frames"] == 0:
+        pytest.skip("Timeline starts at frame 0, where both marker clocks agree — use 01:00:00:00")
+
+    for marker in result["markers"]:
+        print(  # noqa: T201 - the human at the machine compares this against the GUI
+            f"{marker['record']['timecode']} {marker['color']:<10} "
+            f"{marker['name']!r} {marker['note']!r}"
+        )
+        assert bounds["start"]["frames"] <= marker["record"]["frames"] < bounds["end"]["frames"]
+        assert marker["end"]["frames"] > marker["record"]["frames"]
+        assert marker["color"]
+
+
+# --- interchange ---------------------------------------------------------------------------
+#
+# These two import timelines into the open project, so they leave "resolve-mcp smoke …"
+# timelines behind — delete them after the run. Take a snapshot_project first if the open
+# project is one you care about.
+
+
+def _shape(name: str | None = None) -> dict[str, Any]:
+    """The structure a round trip has to preserve: tracks, and the shots on each."""
+    reading = inspect_timeline(timeline=name, detail="clips")
+    assert reading["ok"] is True, reading.get("error")
+    assert reading["truncated"] is False, "the timeline is too long to compare in one read"
+    return {
+        "duration": reading["timeline"]["duration"]["frames"],
+        "tracks": {
+            f"{track['type']}{track['index']}": [
+                (item["record"]["in"]["frames"], item["record"]["duration"]["frames"])
+                for item in track["items"]
+            ]
+            for track in reading["tracks"]
+        },
+    }
+
+
+def _smoke_name(what: str) -> str:
+    return f"resolve-mcp smoke {what} {datetime.now().strftime('%H%M%S')}"
+
+
+def test_an_otio_round_trip_preserves_the_timeline_structure(tmp_path: Path) -> None:
+    """AC: export to OTIO, import it back, and the cut is the same cut.
+
+    The fakes prove the naming and the error shaping; only Resolve proves that what it
+    wrote is what it reads back, which is the whole basis of the transition route.
+    """
+    if get_status()["context"]["timeline"] is None:
+        pytest.skip("No timeline open in Resolve")
+    before = _shape()
+
+    exported = export_timeline(path=str(tmp_path / "round-trip.otio"))
+    assert exported["ok"] is True, exported.get("error")
+    assert exported["export_type"] == "EXPORT_OTIO"
+
+    imported = import_timeline(exported["path"], name=_smoke_name("round-trip"))
+    assert imported["ok"] is True, imported.get("error")
+
+    after = _shape(imported["timeline"]["name"])
+    assert after["duration"] == before["duration"]
+    for track, shots in before["tracks"].items():
+        assert after["tracks"].get(track) == shots, f"{track} came back differently"
+
+
+def test_a_hand_injected_dissolve_imports_as_a_transition(tmp_path: Path) -> None:
+    """AC: a dissolve edited into an exported OTIO comes back as a real transition.
+
+    Transitions are the wall this route exists to get around, and the scripting API has no
+    getter for them — so what is asserted here is that Resolve accepted the edited document
+    and rebuilt the cut from it. **The dissolve and the fade to black themselves are
+    confirmed by eye in the Resolve GUI on the imported timeline**, and the result goes on
+    the ticket; a run that stops at green here has verified half the AC.
+    """
+    if get_status()["context"]["timeline"] is None:
+        pytest.skip("No timeline open in Resolve")
+
+    exported = export_timeline(path=str(tmp_path / "injected.otio"))
+    assert exported["ok"] is True, exported.get("error")
+    document = json.loads(Path(exported["path"]).read_text(encoding="utf-8"))
+
+    tracks = otio.video_tracks(document)
+    if not tracks:
+        pytest.skip("The open timeline has no video track to inject into")
+    dissolved = any(otio.inject_dissolve(track, frames=6) for track in tracks)
+    faded = otio.inject_fade_to_black(tracks[0], frames=6)
+    if not dissolved:
+        pytest.skip("No cut between two clips long enough to carry a dissolve")
+    Path(exported["path"]).write_text(json.dumps(document, indent=2), encoding="utf-8")
+
+    imported = import_timeline(exported["path"], name=_smoke_name("dissolve"))
+
+    assert imported["ok"] is True, imported.get("error")
+    assert faded, "the fade-to-black half of the AC was not injected — check by eye anyway"
+    landed = _shape(imported["timeline"]["name"])
+    assert landed["tracks"], "the injected document imported as an empty timeline"
+
+
+def test_the_interchange_formats_all_write_a_file(tmp_path: Path) -> None:
+    """AC: export to OTIO, FCPXML and DRT. Read-only — nothing is imported back."""
+    if get_status()["context"]["timeline"] is None:
+        pytest.skip("No timeline open in Resolve")
+
+    for export_format in ("otio", "fcpxml", "drt"):
+        result = export_timeline(format=export_format, path=str(tmp_path / "export"))
+
+        assert result["ok"] is True, result.get("error")
+        assert Path(result["path"]).stat().st_size == result["bytes"] > 0
+# --- build_timeline: the footgun wraps, on the only API that can confirm them --------------
+
+
+def a_source_clip() -> dict[str, Any]:
+    """A pool clip long enough to cut three shots out of, with a rate the cut can declare."""
+    listing = list_media()
+    if not listing["ok"]:
+        pytest.skip("No media pool")
+    for entry in listing["clips"]:
+        clip = inspect_clip(entry["name"], bin=entry["bin"] or None)
+        if not clip["ok"]:
+            continue
+        media = clip["bounds"]["media"]
+        fps = clip["properties"].get("FPS")
+        if media["duration"] is None or media["duration"]["frames"] < 200 or not fps:
+            continue
+        return {
+            "name": entry["name"],
+            "bin": entry["bin"] or None,
+            "fps": float(fps),
+            "start": media["start"]["frames"],
+        }
+    pytest.skip("No pool clip long enough to cut a smoke timeline from")
+
+
+def a_smoke_cut(tmp_path: Path, source: dict[str, Any], durations: tuple[int, ...]) -> str:
+    """A rough-cut shaped file (no master audio) built from one real clip."""
+    at = source["start"]
+    segments = []
+    for index, length in enumerate(durations):
+        segments.append(
+            {
+                "id": f"s{index:03d}",
+                "source": "angle",
+                "in": at,
+                "out": at + length,
+            }
+        )
+        at += length
+    angle = {"clip": source["name"]}
+    if source["bin"] is not None:
+        angle["bin"] = source["bin"]
+    doc = {
+        "schema": 1,
+        "timeline": {"name": SMOKE_CUT, "fps": source["fps"]},
+        "sources": {"angle": angle},
+        "segments": segments,
+    }
+    path = tmp_path / "smoke.cut.json"
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    return str(path)
+
+
+def test_a_real_build_places_every_shot_exactly_where_the_cut_puts_it(tmp_path: Path) -> None:
+    """The one check no fake can make: that Resolve honours the placement we send it.
+
+    Four #18 footguns land here at once — an absolute recordFrame against a one-hour start
+    timecode, mediaType travelling with trackIndex, exact endFrame durations, and no
+    silent relocation — because every one of them shows up as a placement that is off.
+    """
+    if get_status()["context"]["project"] is None:
+        pytest.skip("No project open in Resolve")
+    source = a_source_clip()
+    durations = (48, 24, 36)
+    cut_file = a_smoke_cut(tmp_path, source, durations)
+    assert validate_cut(cut_file)["valid"] is True
+
+    result = build_timeline(cut_file)
+
+    assert result["ok"] is True, result.get("error")
+    assert result["placed"] == {"segments": 3, "audio": False}
+    built = inspect_timeline(result["timeline"]["name"], detail="clips")
+    assert built["ok"] is True
+    video = [track for track in built["tracks"] if track["type"] == "video"][0]
+    starts = [item["record"]["in"]["frames"] for item in video["items"]]
+    timeline_start = built["timeline"]["start"]["frames"]
+    assert [item["record"]["duration"]["frames"] for item in video["items"]] == list(durations)
+    assert starts == [timeline_start, timeline_start + 48, timeline_start + 72]
+
+
+def test_a_rebuild_makes_the_next_version_and_leaves_the_last_one_alone(tmp_path: Path) -> None:
+    if get_status()["context"]["project"] is None:
+        pytest.skip("No project open in Resolve")
+    source = a_source_clip()
+    first = build_timeline(a_smoke_cut(tmp_path, source, (48, 24, 36)))
+    assert first["ok"] is True, first.get("error")
+
+    second = build_timeline(a_smoke_cut(tmp_path, source, (60, 30)))
+
+    assert second["ok"] is True, second.get("error")
+    assert second["timeline"]["version"] == first["timeline"]["version"] + 1
+    earlier = inspect_timeline(first["timeline"]["name"], detail="summary")
+    assert earlier["timeline"]["duration"]["frames"] == 108
+
+
+def test_a_still_lands_at_the_duration_the_cut_asked_for(tmp_path: Path) -> None:
+    """The one-time Out write, end to end: without it every still is 120 frames (#18 (a))."""
+    if get_status()["context"]["project"] is None:
+        pytest.skip("No project open in Resolve")
+    listing = list_media()
+    stills = [
+        entry
+        for entry in listing["clips"]
+        if Path(str(entry.get("file_path") or "")).suffix.lower() in {".png", ".jpg", ".jpeg"}
+    ]
+    if not stills:
+        pytest.skip("No still image in the media pool")
+    still = stills[0]
+    fps = get_status()["context"]["fps"] or 24.0
+    doc = {
+        "schema": 1,
+        "timeline": {"name": SMOKE_CUT, "fps": fps},
+        "sources": {"still": {"clip": still["name"]}},
+        "segments": [{"id": "s000", "source": "still", "in": 0, "out": 90}],
+    }
+    path = tmp_path / "still.cut.json"
+    path.write_text(json.dumps(doc), encoding="utf-8")
+
+    result = build_timeline(str(path))
+
+    assert result["ok"] is True, result.get("error")
+    built = inspect_timeline(result["timeline"]["name"], detail="clips")
+    video = [track for track in built["tracks"] if track["type"] == "video"][0]
+    assert [item["record"]["duration"]["frames"] for item in video["items"]] == [90]
+
+
+def test_the_locked_track_footgun_is_still_real(tmp_path: Path) -> None:
+    """The spike's (d) probe, kept alive: an append onto a locked track reports success.
+
+    build_timeline cannot reach this through its own tools — it always creates a fresh,
+    unlocked timeline — so the guard it carries rests on this API behaviour rather than on
+    anything a fake can prove. If Resolve ever fixes it, this test is where that shows up,
+    and the E11 check can go.
+    """
+    if get_status()["context"]["project"] is None:
+        pytest.skip("No project open in Resolve")
+    source = a_source_clip()
+    probe = run_python(
+        LOCKED_TRACK_PROBE.format(
+            name=repr(source["name"]),
+            start=source["start"],
+            end=source["start"] + 48,
+        )
+    )
+
+    assert probe["ok"] is True, probe.get("error")
+    if not probe["result"]["found"]:
+        pytest.skip("The chosen clip is not in the root folder, so the probe could not run")
+    assert probe["result"]["returned_truthy"] is True
+    assert probe["result"]["items_on_track"] == 0
+
+
+def test_an_invalid_cut_creates_no_timeline_on_a_real_project(tmp_path: Path) -> None:
+    if get_status()["context"]["project"] is None:
+        pytest.skip("No project open in Resolve")
+    source = a_source_clip()
+    cut_file = Path(a_smoke_cut(tmp_path, source, (48, 24, 36)))
+    doc = json.loads(cut_file.read_text(encoding="utf-8"))
+    doc["segments"][1]["out"] = doc["segments"][1]["in"]
+    cut_file.write_text(json.dumps(doc), encoding="utf-8")
+    before = {entry["name"] for entry in list_timelines()["timelines"]}
+
+    result = build_timeline(str(cut_file))
+
+    assert result["ok"] is False
+    assert result["error"]["code"] == "cut_invalid"
+    assert {entry["name"] for entry in list_timelines()["timelines"]} == before
 
 
 def test_the_render_queue_exports_the_real_timeline_mix() -> None:

@@ -11,7 +11,7 @@ from fastmcp import FastMCP
 from . import __version__
 from .config import get_config
 from .logging_config import configure_logging, get_logger
-from .tools import escape_hatch, jobs, media, project, timeline
+from .tools import cut, escape_hatch, jobs, media, project, timeline
 
 log = get_logger("server")
 
@@ -27,6 +27,9 @@ a fix; act on the fix rather than retrying blindly.
 Time is frames-first: every position comes back as frames, seconds, timecode and fps
 together, ranges are half-open [in, out), and a time you give in seconds must say how to
 snap it to a frame ({"seconds": 2.52, "snap": "floor"}).
+
+Editing is declarative: you author a cut file, the server builds it. Call get_cut_schema
+before writing one and validate_cut after every edit — do not guess the format.
 
 Heavy work (renders, analysis) hands back a job_id straight away — carry on working and
 poll it with get_job; list_jobs finds what you started before a restart. Results are cached
@@ -45,6 +48,7 @@ def build_server() -> FastMCP:
         *project.TOOLS,
         *media.TOOLS,
         *timeline.TOOLS,
+        *cut.TOOLS,
         *jobs.TOOLS,
         *escape_hatch.TOOLS,
     ):
