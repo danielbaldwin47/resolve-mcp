@@ -242,7 +242,8 @@ def probe_template_append(
         step = "target the scratch timeline"
         project.SetCurrentTimeline(scratch.timeline)
         current = project.GetCurrentTimeline()
-        if current is None or current.GetUniqueId() != scratch.timeline.GetUniqueId():
+        wanted = _method(scratch.timeline, "GetUniqueId", step, trail)()
+        if current is None or _method(current, "GetUniqueId", step, trail)() != wanted:
             raise failed(
                 step,
                 f"Resolve would not make {timeline_name!r} current — it is still on "
@@ -259,7 +260,9 @@ def probe_template_append(
         if len(returned) != len(asked):
             raise failed(
                 step,
-                f"Asked for {len(asked)} instances of {clip_name!r}, got back {len(returned)}.",
+                f"Asked for {len(asked)} instances of {clip_name!r} at {duration} frames "
+                f"each, got back {len(returned)}. A template shorter than {duration} frames "
+                f"is refused rather than trimmed, so try a shorter duration=.",
             )
         walked(step, f"{len(returned)} instances of {clip_name!r} at {duration}f each")
 
@@ -384,6 +387,13 @@ def _read_each_back(
     asked: Sequence[str],
     trail: Sequence[str],
 ) -> list[Placed]:
+    if len(items) != len(nodes):
+        raise _failure(
+            "read the text back",
+            f"The timeline held {len(nodes)} instances to write to and {len(items)} to read "
+            f"back — something moved them between the two passes.",
+            trail,
+        )
     placed: list[Placed] = []
     for position, (item, node, text) in enumerate(zip(items, nodes, asked, strict=True), start=1):
         fresh = _text_plus_node(item, position, trail)
@@ -435,15 +445,34 @@ def _check_each_kept_its_own(placed: Sequence[Placed], trail: Sequence[str]) -> 
     )
 
 
+def _any_timeline_but(project: Any, scratch: Any) -> Any:
+    """Some cut for Resolve to sit on that is not the one about to be deleted."""
+    try:
+        avoid = scratch.GetUniqueId()
+        for index in range(1, int(project.GetTimelineCount() or 0) + 1):
+            candidate = project.GetTimelineByIndex(index)
+            if candidate is not None and candidate.GetUniqueId() != avoid:
+                return candidate
+    except Exception:  # noqa: BLE001 - a departed Resolve must not mask the finding
+        log.exception("Text+ probe could not look for a timeline to fall back to")
+    log.warning("Text+ probe has no timeline to leave Resolve on; the scratch cut may survive")
+    return None
+
+
 def _clean_up(scratch: _Scratch) -> bool:
     """Put the project back. Never raises — see the module docstring.
 
-    The current timeline is restored before the scratch one is deleted, because Resolve
-    should never be asked to delete the cut it is sitting on.
+    Resolve is moved off the scratch timeline before it is deleted, because it will not
+    delete the cut it is sitting on. A session that had no timeline open when the probe
+    started has nothing to go back to, so any other cut in the project will do; a project
+    whose only timeline is the scratch one leaves it behind, and says so in the report.
     """
     pool, project = scratch.pool, scratch.project
-    was_on, was_in = scratch.previous_timeline, scratch.previous_folder
+    was_in = scratch.previous_folder
     scratch_timeline, scratch_bin = scratch.timeline, scratch.imported
+    was_on = scratch.previous_timeline
+    if was_on is None and scratch_timeline is not None:
+        was_on = _any_timeline_but(project, scratch_timeline)
 
     steps: list[tuple[str, Callable[[], Any]]] = []
     if was_on is not None:
@@ -454,7 +483,8 @@ def _clean_up(scratch: _Scratch) -> bool:
         )
     if scratch_bin is not None:
         steps.append(("delete the scratch bin", lambda: pool.DeleteFolders([scratch_bin])))
-    steps.append(("restore the current folder", lambda: pool.SetCurrentFolder(was_in)))
+    if was_in is not None:
+        steps.append(("restore the current folder", lambda: pool.SetCurrentFolder(was_in)))
 
     tidy = True
     for what, undo in steps:

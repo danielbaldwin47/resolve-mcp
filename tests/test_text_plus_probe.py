@@ -132,6 +132,41 @@ def test_nothing_is_appended_until_the_scratch_timeline_is_confirmed_current(
     assert open_cut.first_video_track().items == []
 
 
+def test_a_resolve_that_does_not_switch_on_create_is_switched_by_hand(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The recovery the check above exists for: creating a timeline need not select it, so
+    the probe selects it, and the run proceeds on the scratch cut rather than the open one."""
+    pool = media_pool()
+    pool.switches_current_timeline = False
+    handle = studio(pool=pool)
+    open_cut = the_open_project(handle).GetCurrentTimeline()
+    attach(handle)
+
+    report = probe_template_append(get_connection(), a_template_file(tmp_path))
+
+    assert report.per_instance_text is True
+    assert open_cut is not None
+    assert open_cut.first_video_track().items == []
+    assert [placed.record_in for placed in report.placed] == [0, 120]
+
+
+def test_two_instances_stacked_on_one_frame_are_not_read_as_two_titles(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """One title placed twice on the same frame would satisfy every later check while
+    proving nothing about per-instance text."""
+    pool = media_pool()
+    pool.append_result = [FakeTimelineItem("Song Title", 0, 120) for _ in range(2)]
+    attach(studio(pool=pool))
+
+    with pytest.raises(ProbeFailed) as raised:
+        probe_template_append(get_connection(), a_template_file(tmp_path))
+
+    assert raised.value.step == "find the placed instances"
+    assert "[0, 0]" in str(raised.value)
+
+
 def test_an_append_the_timeline_does_not_hold_is_not_taken_on_trust(
     attach: Attach, tmp_path: Path
 ) -> None:

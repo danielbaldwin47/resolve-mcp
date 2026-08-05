@@ -762,7 +762,7 @@ def _track_end(timeline: FakeTimeline | None) -> int:
     """Where the next append starts: after everything already on the first video track."""
     if timeline is None:
         return 0
-    placed = timeline.first_video_track().items
+    placed = timeline.GetItemListInTrack("video", 1) or []
     return max((item.GetStart() + item.GetDuration() for item in placed), default=0)
 
 
