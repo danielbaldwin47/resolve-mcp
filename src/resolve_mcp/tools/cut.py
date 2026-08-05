@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..resolve import cut
+from ..resolve import build, cut
 from ..resolve.connection import get_connection
 from .envelope import tool
 
@@ -40,9 +40,31 @@ def validate_cut(
     return cut.validate_cut(connection, cut_file, min_segment_frames)
 
 
+@tool
+def build_timeline(
+    cut_file: str,
+    min_segment_frames: int = cut.MIN_SEGMENT_FRAMES,
+) -> dict[str, Any]:
+    """Build a cut file into a new `<name> v<N>` timeline and report what landed.
+
+    Every build makes a new version and never touches an earlier one, so rebuilding after
+    an edit is always safe. The segments land butt-joined in document order over one
+    continuous master-audio clip; positions are computed, so gaps cannot happen.
+
+    The validate_cut rules run first: a single error aborts before any timeline is created,
+    and comes back with the same per-segment findings. The report echoes the cut file's
+    content hash, which is what ties the timeline back to the exact cut that made it —
+    record it if you note the version anywhere. A failure names what did not land; a
+    partially built version, if one was made, is scrap and can be deleted.
+    """
+    connection = get_connection()
+    return build.build_timeline(connection, cut_file, min_segment_frames)
+
+
 TOOLS: tuple[Any, ...] = (
     get_cut_schema,
     validate_cut,
+    build_timeline,
 )
 
-__all__ = ["TOOLS", "get_cut_schema", "validate_cut"]
+__all__ = ["TOOLS", "build_timeline", "get_cut_schema", "validate_cut"]

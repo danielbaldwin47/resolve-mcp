@@ -33,6 +33,7 @@ def test_registers_the_p1_session_media_timeline_and_cut_tools() -> None:
         "inspect_timeline",
         "get_cut_schema",
         "validate_cut",
+        "build_timeline",
         "run_python",
     }
 

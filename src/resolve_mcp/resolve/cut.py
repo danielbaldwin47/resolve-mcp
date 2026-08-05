@@ -14,7 +14,7 @@ here is a file that will not abort a build on validation.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, NamedTuple
 
 from ..cut.document import LoadedCut, read_cut_file
 from ..cut.schema import ANNOTATED_EXAMPLE, SCHEMA_DOC, SCHEMA_VERSION
@@ -23,6 +23,7 @@ from ..cut.validate import (
     RULE_DESCRIPTIONS,
     ClipFacts,
     Finding,
+    resolve_aliases,
     severity_of,
     total_frames,
     validate_project,
@@ -59,27 +60,78 @@ def get_cut_schema() -> dict[str, Any]:
     }
 
 
+class Preflight(NamedTuple):
+    """One pass of the rules, and the pool reading they were judged against.
+
+    The build needs both halves: the findings to decide whether to start at all, and the
+    clips themselves to place. Handing them back together is what keeps the build from
+    reading the pool a second time and resolving an alias to a different clip than the one
+    the rules passed.
+    """
+
+    loaded: LoadedCut
+    findings: list[Finding]
+    clips: list[media.LocatedClip]
+    facts: list[ClipFacts]
+
+    @property
+    def errors(self) -> list[Finding]:
+        return [finding for finding in self.findings if finding.severity == "error"]
+
+    @property
+    def warnings(self) -> list[Finding]:
+        return [finding for finding in self.findings if finding.severity == "warning"]
+
+
+def preflight(
+    connection: ResolveConnection,
+    cut_file: str,
+    min_segment_frames: int = MIN_SEGMENT_FRAMES,
+) -> Preflight:
+    """Read ``cut_file`` and run every rule on it. The dry run and the build share this."""
+    loaded = read_cut_file(cut_file)
+    if loaded.parse_error is not None:
+        return Preflight(loaded, [loaded.parse_error], [], [])
+
+    findings = validate_structure(loaded.doc, min_segment_frames=min_segment_frames)
+    if any(finding.rule == "E1" for finding in findings):
+        log.info("Cut file %s is not schema-valid; the media pool was not read", loaded.path)
+        return Preflight(loaded, findings, [], [])
+
+    located = _located(connection, loaded.doc)
+    facts = [_facts(found.bin_path, found.clip) for found in located]
+    return Preflight(loaded, [*findings, *validate_project(loaded.doc, facts)], located, facts)
+
+
 def validate_cut(
     connection: ResolveConnection,
     cut_file: str,
     min_segment_frames: int = MIN_SEGMENT_FRAMES,
 ) -> dict[str, Any]:
     """Dry-run ``cut_file``: every rule, every failure, before anything is built."""
-    loaded = read_cut_file(cut_file)
-    if loaded.parse_error is not None:
-        return _report(loaded, None, [loaded.parse_error])
-
-    findings = validate_structure(loaded.doc, min_segment_frames=min_segment_frames)
-    if any(finding.rule == "E1" for finding in findings):
-        log.info("Cut file %s is not schema-valid; the media pool was not read", loaded.path)
-        return _report(loaded, None, findings)
-
-    findings = [*findings, *validate_project(loaded.doc, clip_facts(connection, loaded.doc))]
-    return _report(loaded, loaded.doc, findings)
+    return _report(preflight(connection, cut_file, min_segment_frames))
 
 
 def clip_facts(connection: ResolveConnection, doc: dict[str, Any]) -> list[ClipFacts]:
-    """Read the media pool for the clips this cut names, and nothing else.
+    """Read the media pool for the clips this cut names, and nothing else."""
+    return [_facts(found.bin_path, found.clip) for found in _located(connection, doc)]
+
+
+def clips_by_alias(preflighted: Preflight) -> dict[str, media.LocatedClip]:
+    """Alias -> the pool clip the rules resolved it to, ready to append.
+
+    The pairing runs through the facts rather than a second lookup, so the clip that is
+    placed is the clip E4-E7 passed. Two clips that are alike in every fact are the same
+    clip as far as every rule is concerned, so collapsing them here changes nothing.
+    """
+    doc = preflighted.loaded.doc
+    resolved, _ = resolve_aliases(doc, preflighted.facts)
+    handles = dict(zip(preflighted.facts, preflighted.clips, strict=True))
+    return {alias: handles[fact] for alias, fact in resolved.items()}
+
+
+def _located(connection: ResolveConnection, doc: dict[str, Any]) -> list[media.LocatedClip]:
+    """The pool clips this cut names, and nothing else.
 
     Only the aliased names are looked up: a concert pool holds thousands of clips, and a
     cut references a handful, so properties are read for the handful.
@@ -88,7 +140,7 @@ def clip_facts(connection: ResolveConnection, doc: dict[str, Any]) -> list[ClipF
     wanted = {str(source["clip"]) for source in doc["sources"].values()}
     located = media.clips_named(pool, wanted)
     log.info("Cut validation resolved %d of %d aliased clip names", len(located), len(wanted))
-    return [_facts(found.bin_path, found.clip) for found in located]
+    return located
 
 
 def _facts(bin_path: str, clip: Clip) -> ClipFacts:
@@ -114,21 +166,23 @@ def _facts(bin_path: str, clip: Clip) -> ClipFacts:
     )
 
 
-def _report(
-    loaded: LoadedCut,
-    doc: dict[str, Any] | None,
-    findings: list[Finding],
-) -> dict[str, Any]:
-    errors = [finding for finding in findings if finding.severity == "error"]
-    warnings = [finding for finding in findings if finding.severity == "warning"]
+def _report(checked: Preflight) -> dict[str, Any]:
     return {
-        "cut_file": str(loaded.path),
-        "content_hash": loaded.content_hash,
-        "valid": not errors,
-        "errors": [finding.as_dict() for finding in errors],
-        "warnings": [finding.as_dict() for finding in warnings],
-        "cut": _summary(doc),
+        "cut_file": str(checked.loaded.path),
+        "content_hash": checked.loaded.content_hash,
+        "valid": not checked.errors,
+        "errors": [finding.as_dict() for finding in checked.errors],
+        "warnings": [finding.as_dict() for finding in checked.warnings],
+        "cut": _summary(readable_doc(checked)),
     }
+
+
+def readable_doc(checked: Preflight) -> dict[str, Any] | None:
+    """The document, or ``None`` when E1 fired and nothing about it can be trusted."""
+    if any(finding.rule == "E1" for finding in checked.findings):
+        return None
+    doc: dict[str, Any] = checked.loaded.doc
+    return doc
 
 
 def _summary(doc: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -144,4 +198,13 @@ def _summary(doc: dict[str, Any] | None) -> dict[str, Any] | None:
     }
 
 
-__all__ = ["MIN_SEGMENT_FRAMES", "clip_facts", "get_cut_schema", "validate_cut"]
+__all__ = [
+    "MIN_SEGMENT_FRAMES",
+    "Preflight",
+    "clip_facts",
+    "clips_by_alias",
+    "get_cut_schema",
+    "preflight",
+    "readable_doc",
+    "validate_cut",
+]

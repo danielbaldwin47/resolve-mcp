@@ -257,6 +257,20 @@ class FakeTimeline:
         self._check()
         return dict(self._markers)
 
+    def AddTrack(self, track_type: str, *_: Any) -> bool:  # noqa: N802
+        self._check()
+        tracks = self._tracks.setdefault(track_type, [])
+        tracks.append(FakeTrack(f"{track_type.capitalize()} {len(tracks) + 1}"))
+        return True
+
+    def place(self, track_type: str, index: int, item: FakeTimelineItem) -> None:
+        """Put an item on a track, in start order — the pool's append reaches through here."""
+        track = self._track(track_type, index)
+        if track is None:
+            return
+        track.items.append(item)
+        track.items.sort(key=lambda placed: placed.GetStart())
+
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".exr", ".dpx", ".tga"}
 
@@ -384,6 +398,17 @@ class FakeMediaPool:
         self.relink_result: bool | None = None
         self.move_result = True
         self.calls: list[str] = []
+        self._project: FakeProject | None = None
+        self.create_timeline_result: bool = True
+        self.new_timeline_start = 0
+        self.new_timeline_tracks: tuple[int, int] = (1, 1)
+        self.new_timeline_locked = False
+        self.new_timeline_items: list[FakeTimelineItem] = []
+        self.appends: list[dict[str, Any]] = []
+
+    def attach_project(self, project: FakeProject) -> None:
+        """The project this pool belongs to — appends land on *its* current timeline."""
+        self._project = project
 
     def _check(self, method: str) -> None:
         self.calls.append(method)
@@ -469,11 +494,135 @@ class FakeMediaPool:
                 relinked = True
         return relinked
 
+    def CreateEmptyTimeline(self, name: str) -> FakeTimeline | None:  # noqa: N802
+        """A fresh timeline, added to the project and made current — as Resolve does."""
+        self._check("CreateEmptyTimeline")
+        if not self.create_timeline_result:
+            return None
+        video, audio = self.new_timeline_tracks
+        project_fps = (
+            self._project.GetSetting("timelineFrameRate") if self._project is not None else None
+        )
+        timeline = FakeTimeline(
+            name,
+            fps=project_fps or "59.94",
+            start_frame=self.new_timeline_start,
+            video=[
+                FakeTrack(
+                    f"Video {index + 1}",
+                    list(self.new_timeline_items) if index == 0 else None,
+                    locked=self.new_timeline_locked,
+                )
+                for index in range(video)
+            ],
+            audio=[
+                FakeTrack(f"Audio {index + 1}", locked=self.new_timeline_locked)
+                for index in range(audio)
+            ],
+            owner=self._owner,
+        )
+        if self._project is not None:
+            self._project.add_timeline(timeline)
+            self._project.SetCurrentTimeline(timeline)
+        return timeline
+
+    def AppendToTimeline(  # noqa: N802
+        self,
+        clips: list[dict[str, Any]],
+    ) -> list[FakeTimelineItem]:
+        """Append onto the project's *current* timeline, footguns and all (#18 spike (d)).
+
+        Every confirmed failure mode is modelled, because each one returns a truthy item
+        either way: the caller cannot tell an append that landed from one that vanished
+        without re-reading the track, and that re-read is what the wrapper is for.
+        """
+        self._check("AppendToTimeline")
+        timeline = self._project.GetCurrentTimeline() if self._project is not None else None
+        if timeline is None:
+            return []
+        placed = []
+        for info in clips:
+            self.appends.append(dict(info))
+            placed.append(self._append_one(timeline, info))
+        return placed
+
+    def _append_one(self, timeline: FakeTimeline, info: dict[str, Any]) -> FakeTimelineItem:
+        clip: FakeMediaPoolItem = info["mediaPoolItem"]
+        source_start = int(info.get("startFrame", 0))
+        duration = _appended_duration(clip, source_start, info.get("endFrame"))
+        media_type = info.get("mediaType")
+        track_type = "audio" if media_type == AUDIO_TYPE else "video"
+        index = int(info.get("trackIndex", 1))
+        record = int(info.get("recordFrame", _track_end(timeline, track_type, index)))
+
+        item = FakeTimelineItem(
+            clip.GetName(),
+            record,
+            duration,
+            source_start=source_start,
+            media_item=clip,
+            owner=self._owner,
+        )
+        # An explicit track index without a media type: Resolve reports success and drops it.
+        if media_type is None and "trackIndex" in info:
+            return item
+        count = timeline.GetTrackCount(track_type)
+        if index == count + 1:
+            timeline.AddTrack(track_type)
+        elif index > count + 1:
+            return item  # past the next free track: reported placed, never placed
+        if timeline.GetIsTrackLocked(track_type, index):
+            return item  # the silent one: a locked track swallows the append
+        # No overwrite on overlap — the clip slides to the first free frame after the
+        # blocker, so a placement is only exact if nothing was in the way.
+        for existing in timeline.GetItemListInTrack(track_type, index) or []:
+            if record < existing.GetStart() + existing.GetDuration() and existing.GetStart() < (
+                record + duration
+            ):
+                record = existing.GetStart() + existing.GetDuration()
+                item = FakeTimelineItem(
+                    clip.GetName(),
+                    record,
+                    duration,
+                    source_start=source_start,
+                    media_item=clip,
+                    owner=self._owner,
+                )
+        timeline.place(track_type, index, item)
+        return item
+
     def _walk(self, folder: FakeFolder) -> list[FakeFolder]:
         found = [folder]
         for sub in folder.subfolders:
             found.extend(self._walk(sub))
         return found
+
+
+AUDIO_TYPE = 2
+STILL_DEFAULT_FRAMES = 120
+
+
+def _appended_duration(clip: FakeMediaPoolItem, source_start: int, end_frame: Any) -> int:
+    """``endFrame - startFrame``, except on a still that has never had an out point written.
+
+    That is the (a) spike verbatim: a freshly imported still ignores ``endFrame`` entirely
+    and lands at the default duration until any ``Out`` write unlocks it.
+    """
+    still = Path(str(clip.GetClipProperty("File Path") or "")).suffix.lower() in IMAGE_SUFFIXES
+    unlocked = any(key == "Out" for key, _ in clip.property_writes)
+    if still and not unlocked:
+        return STILL_DEFAULT_FRAMES
+    if end_frame is None:
+        return STILL_DEFAULT_FRAMES if still else 1
+    return max(int(end_frame) - source_start, 1)
+
+
+def _track_end(timeline: FakeTimeline, track_type: str, index: int) -> int:
+    ends = [
+        item.GetStart() + item.GetDuration()
+        for item in timeline.GetItemListInTrack(track_type, index) or []
+    ]
+    return max(ends, default=timeline.GetStartFrame())
 
 
 def _import_one(item: str | dict[str, Any]) -> FakeMediaPoolItem | None:
@@ -538,12 +687,23 @@ class FakeProject:
             self._timelines = list(timelines)
         else:
             self._timelines = [timeline] if timeline is not None else []
+        if media_pool is not None:
+            media_pool.attach_project(self)
 
     def GetName(self) -> str:  # noqa: N802
         return self._name
 
     def GetCurrentTimeline(self) -> FakeTimeline | None:  # noqa: N802
         return self._timeline
+
+    def SetCurrentTimeline(self, timeline: FakeTimeline) -> bool:  # noqa: N802
+        """Resolve only appends to the current timeline, so the build has to set it."""
+        self._timeline = timeline
+        return True
+
+    def add_timeline(self, timeline: FakeTimeline) -> None:
+        """What creating a timeline does to a project — the pool reaches through here."""
+        self._timelines.append(timeline)
 
     def GetTimelineCount(self) -> int:  # noqa: N802
         return len(self._timelines)

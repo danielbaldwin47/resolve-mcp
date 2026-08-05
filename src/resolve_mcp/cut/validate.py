@@ -461,8 +461,13 @@ def _alternate_duration_errors(doc: dict[str, Any]) -> list[Finding]:
     return findings
 
 
-def _positions(doc: dict[str, Any]) -> dict[str, tuple[int, int]]:
-    """Each segment id to its computed ``(start, duration)`` — sequential V1, butt-joined."""
+def positions(doc: dict[str, Any]) -> dict[str, tuple[int, int]]:
+    """Each segment id to its computed ``(start, duration)`` — sequential V1, butt-joined.
+
+    The overlay rules and the build both place against these numbers, and they have to be
+    the same numbers: an offset validated against one layout and built against another
+    would put the overlay somewhere nobody checked.
+    """
     placed: dict[str, tuple[int, int]] = {}
     at = 0
     for segment in _segments(doc):
@@ -479,7 +484,7 @@ def total_frames(doc: dict[str, Any]) -> int:
 
 def _overlay_errors(doc: dict[str, Any]) -> list[Finding]:
     """E9 and E10, both judged on absolute positions resolved from the anchors."""
-    placed = _positions(doc)
+    placed = positions(doc)
     total = total_frames(doc)
     findings: list[Finding] = []
     spans: list[tuple[str, int, int]] = []
@@ -598,7 +603,7 @@ def validate_project(doc: Any, clips: Sequence[ClipFacts]) -> list[Finding]:
     """
     if _shape_is_unreadable(doc):
         return []
-    resolved, findings = _resolve_aliases(doc, clips)
+    resolved, findings = resolve_aliases(doc, clips)
     findings += _bounds_errors(doc, resolved)
     findings += _rate_errors(doc, resolved)
     findings += _audio_errors(doc, resolved)
@@ -609,10 +614,14 @@ def _shape_is_unreadable(doc: Any) -> bool:
     return bool(list(_shape_errors(doc)))
 
 
-def _resolve_aliases(
+def resolve_aliases(
     doc: dict[str, Any], clips: Sequence[ClipFacts]
 ) -> tuple[dict[str, ClipFacts], list[Finding]]:
-    """E4: alias -> exactly one clip. Ambiguity lists the bins the candidates sit in."""
+    """E4: alias -> exactly one clip. Ambiguity lists the bins the candidates sit in.
+
+    Public because the build has to place the same clip the rules passed: resolving the
+    alias a second way is how a cut gets validated against one clip and built from another.
+    """
     resolved: dict[str, ClipFacts] = {}
     findings: list[Finding] = []
     for alias, source in doc["sources"].items():
@@ -751,6 +760,8 @@ __all__ = [
     "Finding",
     "locked_track_finding",
     "parse_failure_finding",
+    "positions",
+    "resolve_aliases",
     "severity_of",
     "total_frames",
     "validate_project",
