@@ -12,6 +12,7 @@ from __future__ import annotations
 import contextlib
 import json
 import wave
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
@@ -65,25 +66,45 @@ def test_every_supported_bit_depth_is_read_as_signed_pcm(tmp_path: Path) -> None
         assert min(measured) > silence.DEFAULT_THRESHOLD_DB, depth
 
 
-def test_a_channel_that_is_silent_alone_does_not_make_the_window_silent(
+@pytest.mark.parametrize(
+    ("loud", "window_seconds"),
+    [
+        # 2048 frames of stereo decimate to a stride of 64, which walks the left channel
+        # only; 0.05s of four-channel to a stride of 150, which walks channels 0 and 2.
+        ((False, True), 2048 / 48_000),
+        ((False, True, False, True), WINDOW),
+    ],
+)
+def test_channels_that_are_silent_alone_do_not_make_the_window_silent(
     tmp_path: Path,
+    loud: tuple[bool, ...],
+    window_seconds: float,
 ) -> None:
-    """The windows are decimated, and a stride that lands on one channel only reads it only."""
-    path = tmp_path / "one-sided.wav"
-    peak = int(2 ** 23 * 0.3)
+    """A decimating stride that is not coprime with the channel count reads a fixed subset.
+
+    Both parameter sets are strides that land that way, so this fails on any reader that
+    walks interleaved samples without accounting for how many channels it is walking.
+    """
+    audio = _write_channels(tmp_path / f"{len(loud)}-channel.wav", loud)
+
+    measured = silence.levels(audio, window_seconds=window_seconds)
+
+    assert min(measured) > silence.DEFAULT_THRESHOLD_DB
+
+
+def _write_channels(path: Path, loud: Sequence[bool], seconds: float = 1.0) -> Path:
+    """A WAV whose channels are individually loud or silent, at 24-bit / 48 kHz."""
+    peak = int(2**23 * 0.3)
     frames = bytearray()
-    for _ in range(48_000):
-        frames.extend(b"\x00\x00\x00")
-        frames.extend(peak.to_bytes(3, "little", signed=True))
+    for _ in range(int(seconds * 48_000)):
+        for playing in loud:
+            frames.extend(peak.to_bytes(3, "little", signed=True) if playing else b"\x00\x00\x00")
     with contextlib.closing(wave.open(str(path), "wb")) as handle:
-        handle.setnchannels(2)
+        handle.setnchannels(len(loud))
         handle.setsampwidth(3)
         handle.setframerate(48_000)
         handle.writeframes(bytes(frames))
-
-    measured = silence.levels(path, window_seconds=WINDOW)
-
-    assert min(measured) > silence.DEFAULT_THRESHOLD_DB
+    return path
 
 
 def test_eight_bit_audio_is_refused_rather_than_read_as_if_it_were_signed(

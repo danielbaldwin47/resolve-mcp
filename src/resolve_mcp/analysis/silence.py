@@ -112,15 +112,18 @@ def _span(
 def _window_db(raw: bytes, width: int, channels: int) -> float:
     """One window's RMS in dBFS, from a decimated read of its samples.
 
-    The stride walks *interleaved* samples, so a stride that divides the channel count
-    would land on the same channel every time and call a stereo file silent because its
-    left channel is — hence the step to the next stride that cannot.
+    The stride walks *interleaved* samples, so it has to be coprime with the channel count
+    or it visits a fixed subset of the channels forever — a stride of 64 on a stereo file
+    reads only the left, and one of 150 on a four-channel file reads only channels 0 and 2.
+    Either would call a file silent because the channels it happened to skip are the ones
+    carrying the band. Stepping up to the next coprime stride costs at most a few samples
+    of the 64 and visits every channel in turn.
     """
     count = len(raw) // width
     if count == 0:
         return SILENT_FLOOR_DB
     stride = max(1, count // MAX_SAMPLES_PER_WINDOW)
-    if channels > 1 and stride % channels == 0:
+    while channels > 1 and math.gcd(stride, channels) != 1:
         stride += 1
     total = 0.0
     taken = 0
