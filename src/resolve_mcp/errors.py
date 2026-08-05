@@ -293,6 +293,37 @@ class RenderQueueError(ResolveMcpError):
     )
 
 
+class RenderPresetNotFoundError(ResolveMcpError):
+    """The render preset asked for is not one this project offers."""
+
+    code = "render_preset_not_found"
+
+    def __init__(self, name: str, available: list[str]) -> None:
+        super().__init__(
+            cause=f"No render preset named {name!r} in this project.",
+            fix=(
+                "list_render_presets names every preset, exactly as it must be spelled. "
+                "Presets are per project and per user — one made on another machine is not here."
+            ),
+            detail={"requested": name, "available": available},
+        )
+
+
+class RenderTargetExistsError(ResolveMcpError):
+    """A file already sits where the render would land, and the caller named that place.
+
+    Resolve does not reliably overwrite: it may write ``name_0.mp4`` beside the old file
+    instead, and the job would then report a path holding yesterday's export.
+    """
+
+    code = "render_target_exists"
+    default_fix = (
+        "Render under a different name, or pass refresh=true to replace what is there. "
+        "Leaving target_dir out puts the file in the server's own render directory, which "
+        "it replaces without asking."
+    )
+
+
 class AudioExportError(ResolveMcpError):
     """Resolve's render queue would not produce the timeline mix."""
 

@@ -9,7 +9,7 @@ Build contract: [issue #22](https://github.com/danielbaldwin47/resolve-mcp/issue
 
 P1 in progress. Shipped so far: the server skeleton, the session/project tools, the media
 pool tools, the timeline read and interchange tools, the background-job infrastructure
-with audio acquisition, and the `run_python` escape hatch.
+with audio acquisition, the render/deliver tools, and the `run_python` escape hatch.
 
 | Tool | What it does |
 | --- | --- |
@@ -27,6 +27,8 @@ with audio acquisition, and the `run_python` escape hatch.
 | `inspect_timeline` | One timeline at a chosen detail and range, in dual time |
 | `export_timeline` | Writes a timeline out as OTIO, FCPXML or DRT |
 | `import_timeline` | Materialises a **new** timeline from such a file — never overwrites one |
+| `list_render_presets` | The project's render presets, spelled the way `render_timeline` needs |
+| `render_timeline` | Renders a timeline or a range of one as a background job |
 | `get_job` | Polls one background job: progress, result, or a structured failure |
 | `list_jobs` | Lists jobs newest first — how a restarted session finds what it started |
 | `run_python` | Escape hatch: runs scripting-API Python in the server process |
@@ -51,6 +53,15 @@ recover after a restart — a job that was still running when the server went do
 timeline is exported through Resolve's render queue (the only route that captures the
 timeline *mix*, 48 kHz/24-bit WAV), a single source clip is extracted with ffmpeg unless its
 audio mapping says the audio is linked or offset away from the file.
+
+Deliverables come off one timeline the same way: `render_timeline` takes a **preset** by
+name — what a preset renders was decided in the Deliver page and saved there, so the server
+overrides only where the file goes and which frames it covers — plus an optional half-open
+`[start, end)` range in the timeline's own frames, the numbers `inspect_timeline` and
+`list_markers` report. That is a per-song file out of a concert set. Without a `target_dir`
+the file lands in the cache's `renders` folder, which the server replaces freely on a
+re-render; a directory you name is yours, and a file already sitting there is refused until
+you pass `refresh`.
 
 ## Requirements
 

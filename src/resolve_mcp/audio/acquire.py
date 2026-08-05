@@ -23,8 +23,6 @@ to force the export again when the director changed something no reading can see
 
 from __future__ import annotations
 
-import contextlib
-import hashlib
 from collections.abc import Iterator
 from pathlib import Path, PureWindowsPath
 from typing import Any
@@ -38,7 +36,12 @@ from ..naming import slug
 from ..resolve import media, render
 from ..resolve.connection import ResolveConnection
 from ..resolve.session import current_project
-from ..resolve.timeline import Reader, find_timeline
+from ..resolve.timeline import (
+    Reader,
+    current_timeline,
+    find_timeline,
+)
+from ..resolve.timeline import fingerprint as timeline_fingerprint
 from . import ffmpeg, wav
 
 log = get_logger("audio")
@@ -63,45 +66,6 @@ OFFSET_HINT = ("offset", "delay")
 
 
 # --- timeline scope: the render queue ----------------------------------------------------
-
-
-def timeline_fingerprint(reader: Reader, timeline: Timeline) -> dict[str, Any]:
-    """A timeline's identity, as far as anything outside Resolve can read it.
-
-    Bounds and track counts alone would call a take swap or a reordered cut "unchanged" —
-    same duration, same stack — and hand back yesterday's mix, so the shots themselves are
-    digested too. What no reading can see is a clip's audio level, which the scripting API
-    does not expose at all; that is what ``refresh`` on the starter is for.
-
-    Nothing here smooths a failure into a default: a field that cannot be read while
-    Resolve is dying must not quietly produce a fingerprint, because every dead-handle
-    reading would collide on one key and serve one concert's audio for another.
-    """
-    return {
-        "name": str(timeline.GetName()),
-        "unique_id": reader.optional(timeline, "GetUniqueId", None),
-        "start": timeline.GetStartFrame(),
-        "end": timeline.GetEndFrame(),
-        "audio_tracks": timeline.GetTrackCount("audio"),
-        "video_tracks": timeline.GetTrackCount("video"),
-        "structure": _structure(reader, timeline),
-    }
-
-
-def _structure(reader: Reader, timeline: Timeline) -> str:
-    """A digest of every shot on the cut: what it is, where it starts, how long it runs."""
-    digest = hashlib.sha256()
-    for track_type in ("video", "audio"):
-        count = int(timeline.GetTrackCount(track_type) or 0)
-        for index in range(1, count + 1):
-            items = reader.optional(timeline, "GetItemListInTrack", [], track_type, index) or []
-            digest.update(f"{track_type}{index}:".encode())
-            for item in items:
-                name = reader.optional(item, "GetName", "")
-                start = reader.optional(item, "GetStart", None)
-                duration = reader.optional(item, "GetDuration", None)
-                digest.update(f"{name}@{start}+{duration};".encode())
-    return digest.hexdigest()
 
 
 def acquire_timeline_audio(
@@ -156,7 +120,7 @@ def export_timeline_mix(
     expecting = target_dir / f"{stem}.wav"
 
     progress(0.05, "queuing the audio export")
-    with _current_timeline(project, timeline):
+    with current_timeline(project, timeline):
         # One file for the whole timeline. The other mode renders a file per clip on it,
         # which for a concert cut is hundreds of fragments instead of the mix.
         project.SetCurrentRenderMode(SINGLE_CLIP)
@@ -189,25 +153,6 @@ def _as_export_failure(exc: RenderQueueError) -> AudioExportError:
     """
     specific = exc.fix if exc.fix != RenderQueueError.default_fix else None
     return AudioExportError(cause=exc.cause, fix=specific, detail=exc.detail)
-
-
-@contextlib.contextmanager
-def _current_timeline(project: Project, timeline: Timeline) -> Iterator[None]:
-    """Render what was asked for, and put the director's timeline back afterwards.
-
-    The render queue renders the *current* timeline, so acquiring audio for any other one
-    means switching. Leaving the switch in place would move the GUI out from under whoever
-    is sitting at it.
-    """
-    previous = project.GetCurrentTimeline()
-    switched = previous is not timeline
-    if switched:
-        project.SetCurrentTimeline(timeline)
-    try:
-        yield
-    finally:
-        if switched and previous is not None:
-            project.SetCurrentTimeline(previous)
 
 
 def _scaled(progress: Progress) -> Progress:

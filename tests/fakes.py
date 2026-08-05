@@ -1067,6 +1067,14 @@ class FakeProject:
         self.render_statuses: list[str] = ["Complete"]
         self.render_seconds = 2.0
         self.render_writes_the_file = True
+        # A preset carries the format and codec with it — loading one is what sets them,
+        # which is why the deliver route never sets a format of its own.
+        self.render_presets: dict[str, tuple[str, str]] = {
+            "H.264 Master": ("mp4", "H.264"),
+            "ProRes 422 HQ": ("mov", "ProRes422HQ"),
+        }
+        self.loaded_presets: list[str] = []
+        self.accepts_preset = True
         self.accepts_format = True
         self.accepts_settings = True
         self.accepts_job = True
@@ -1086,6 +1094,24 @@ class FakeProject:
             return False
         self.render_format = (format_, codec)
         return True
+
+    def GetRenderPresetList(self) -> list[str]:  # noqa: N802
+        return list(self.render_presets)
+
+    def LoadRenderPreset(self, name: str) -> bool:  # noqa: N802
+        """Resolve answers a bare ``False`` for a preset it does not have, and for a refusal."""
+        if not self.accepts_preset or name not in self.render_presets:
+            return False
+        self.loaded_presets.append(name)
+        self.render_format = self.render_presets[name]
+        return True
+
+    def GetCurrentRenderFormatAndCodec(self) -> dict[str, str]:  # noqa: N802
+        """``format`` is the file extension, not the display name — as in the real API."""
+        if self.render_format is None:
+            return {}
+        format_, codec = self.render_format
+        return {"format": format_, "codec": codec}
 
     def SetRenderSettings(self, settings: dict[str, Any]) -> bool:  # noqa: N802
         if not self.accepts_settings:
@@ -1126,14 +1152,20 @@ class FakeProject:
         return False
 
     def _write_the_render(self) -> None:
+        """Whatever the current format says lands: a real WAV, or bytes for a video file."""
         target = Path(str(self.render_settings.get("TargetDir", "")))
         name = str(self.render_settings.get("CustomName", "render"))
-        write_wav(
-            target / f"{name}.wav",
-            seconds=self.render_seconds,
-            sample_rate=int(self.render_settings.get("AudioSampleRate", 48000)),
-            bit_depth=int(self.render_settings.get("AudioBitDepth", 24)),
-        )
+        extension = self.render_format[0] if self.render_format else "wav"
+        if extension == "wav":
+            write_wav(
+                target / f"{name}.wav",
+                seconds=self.render_seconds,
+                sample_rate=int(self.render_settings.get("AudioSampleRate", 48000)),
+                bit_depth=int(self.render_settings.get("AudioBitDepth", 24)),
+            )
+            return
+        target.mkdir(parents=True, exist_ok=True)
+        (target / f"{name}.{extension}").write_bytes(b"\0" * 2048)
 
     def GetName(self) -> str:  # noqa: N802
         return self._name
