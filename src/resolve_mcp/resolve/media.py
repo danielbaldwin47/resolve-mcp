@@ -21,7 +21,7 @@ rather than API calls, and are the reason this file exists at all:
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -57,6 +57,7 @@ END = "End"
 OUT = "Out"
 TYPE = "Type"
 RESOLUTION = "Resolution"
+AUDIO_CHANNELS = "Audio Ch"
 
 Clip = Any
 Folder = Any
@@ -210,6 +211,20 @@ def find_clip(pool: Pool, name: str, bin_path: str | None = None) -> LocatedClip
     return matches[0]
 
 
+def clips_named(pool: Pool, names: Iterable[str]) -> list[LocatedClip]:
+    """Every clip anywhere in the pool whose name is one of ``names``.
+
+    Unlike :func:`find_clip` this reports the duplicates instead of raising on them: a
+    validation pass has to name every ambiguity at once, not stop at the first.
+    """
+    wanted = set(names)
+    return [
+        found
+        for found in _clips_under(find_bin(pool, None), recursive=True)
+        if str(found.clip.GetName() or "") in wanted
+    ]
+
+
 _logged_property_keys = False
 
 
@@ -237,11 +252,40 @@ def _number(reported: dict[str, str], key: str) -> int | None:
         return None
 
 
-def _rate(reported: dict[str, str]) -> float | None:
+def frame_rate(reported: dict[str, str]) -> float | None:
+    """The clip's frame rate, or ``None`` when Resolve does not report one (audio, stills)."""
     try:
         return float(reported.get(FPS, ""))
     except (TypeError, ValueError):
         return None
+
+
+def frame_bounds(reported: dict[str, str]) -> tuple[int | None, int | None]:
+    """Media bounds as half-open ``[start, out)``.
+
+    Resolve reports ``End`` as the last frame; every range in this server is half-open, so
+    the out point is that frame plus one. Frame count is the fallback when ``End`` is
+    missing. The rule lives here so bounds mean the same thing to a listing and to a cut.
+    """
+    start = _number(reported, START)
+    end = _number(reported, END)
+    frames = _number(reported, FRAMES)
+    out = end + 1 if end is not None else (start + frames if start is not None and frames else None)
+    return start, out
+
+
+def audio_channels(reported: dict[str, str]) -> int | None:
+    """How many audio channels the clip carries, or ``None`` when Resolve does not say."""
+    return _number(reported, AUDIO_CHANNELS)
+
+
+def is_still(reported: dict[str, str]) -> bool:
+    """Whether the clip is an image rather than moving footage.
+
+    Judged by file suffix: the ``Type`` property does not separate a still from a
+    sequence, and the suffix is what the still-duration workaround already keys off.
+    """
+    return _looks_like_image(reported.get(FILE_PATH, ""))
 
 
 def is_offline(file_path: str) -> bool:
@@ -269,7 +313,7 @@ def summarise(bin_path: str, clip: Clip, reported: dict[str, str] | None = None)
         "file_path": file_path,
         "type": reported.get(TYPE, ""),
         "frames": _number(reported, FRAMES),
-        "fps": _rate(reported),
+        "fps": frame_rate(reported),
         "resolution": reported.get(RESOLUTION, ""),
         "offline": is_offline(file_path),
     }
@@ -323,7 +367,7 @@ def apply_still_workaround(clip: Clip, reported: dict[str, str]) -> bool:
     lands at the default still duration — until any out point has been written to the clip.
     The value does not matter, only that the write happened.
     """
-    if not _looks_like_image(reported.get(FILE_PATH, "")):
+    if not is_still(reported):
         return False
     end = _number(reported, END)
     if end is None:
@@ -505,12 +549,11 @@ def _bounds(clip: Clip, reported: dict[str, str]) -> dict[str, Any]:
     Resolve reports ``End`` as the last frame; the cut file's convention is half-open, so
     the out point is that frame plus one and ``duration = out - in`` everywhere.
     """
-    fps = _rate(reported)
-    start = _number(reported, START)
-    end = _number(reported, END)
-    frames = _number(reported, FRAMES)
-    out = end + 1 if end is not None else (start + frames if start is not None and frames else None)
-    duration = out - start if out is not None and start is not None else frames
+    fps = frame_rate(reported)
+    start, out = frame_bounds(reported)
+    duration = (
+        out - start if out is not None and start is not None else _number(reported, FRAMES)
+    )
 
     marks: dict[str, Any] = {}
     try:

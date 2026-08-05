@@ -11,7 +11,7 @@ from fastmcp import FastMCP
 from . import __version__
 from .config import get_config
 from .logging_config import configure_logging, get_logger
-from .tools import escape_hatch, media, project
+from .tools import cut, escape_hatch, media, project
 
 log = get_logger("server")
 
@@ -23,6 +23,9 @@ Call get_status first to see what Resolve has open — every result echoes the c
 project, timeline and fps, so watch that context for switches. Take a snapshot_project
 backup before any big or risky operation. Failures come back as ok:false with a cause and
 a fix; act on the fix rather than retrying blindly.
+
+Editing is declarative: you author a cut file, the server builds it. Call get_cut_schema
+before writing one and validate_cut after every edit — do not guess the format.
 """
 
 
@@ -33,7 +36,7 @@ def build_server() -> FastMCP:
         instructions=INSTRUCTIONS,
         version=__version__,
     )
-    for fn in (*project.TOOLS, *media.TOOLS, *escape_hatch.TOOLS):
+    for fn in (*project.TOOLS, *media.TOOLS, *cut.TOOLS, *escape_hatch.TOOLS):
         mcp.tool(fn)
     return mcp
 
