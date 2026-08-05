@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..analysis import silence, transcribe, whisper
+from ..analysis import silence, transcribe, transcript, whisper
 from ..resolve.connection import get_connection
 from .envelope import tool
 
@@ -20,7 +20,7 @@ def transcribe_audio(
     timeline: str | None = None,
     model: str = whisper.DEFAULT_MODEL,
     language: str | None = None,
-    low_confidence: float = transcribe.DEFAULT_LOW_CONFIDENCE,
+    low_confidence: float = transcript.DEFAULT_LOW_CONFIDENCE,
     silence_threshold_db: float = silence.DEFAULT_THRESHOLD_DB,
     min_silence_seconds: float = silence.DEFAULT_MIN_SECONDS,
     refresh: bool = False,

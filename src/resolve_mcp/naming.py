@@ -36,6 +36,20 @@ def timestamped_name(
     return f"{slug(label, fallback)}-{stamp}{suffix}"
 
 
+KEY_IN_NAME = 12
+
+
+def keyed_name(label: str, key: str, suffix: str, fallback: str) -> str:
+    """``<slug>-<key prefix><suffix>`` — the name a cached artifact keeps.
+
+    The opposite rule to ``timestamped_name``: a file whose content is decided entirely by
+    a cache key should be *re*-written by a rerun, not accumulated alongside a dozen dated
+    copies of itself. A stamp here would leave the cache growing with files no lookup will
+    ever name again.
+    """
+    return f"{slug(label, fallback)}-{key[:KEY_IN_NAME]}{suffix}"
+
+
 def write_target(
     path: str | Path | None,
     label: str,

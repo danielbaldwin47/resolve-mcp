@@ -7,13 +7,17 @@ load-bearing decision here:
   (render queue for a timeline, ffmpeg for a clip) is an implementation detail of this job,
   which is what ``tools.jobs`` means by "acquisition is internal to those starters".
 
-* **The cache key is the acquisition's key plus the transcription parameters.** The audio's
-  content hash would be the truer input, but it does not exist until the export has run, and
-  a starter has to return before that. The acquisition key already covers everything that
-  decides those bytes — the clip's fingerprint or the timeline's, sample rate, bit depth —
-  so keying off it says the same thing early enough to be useful. It also means a rerun with
-  a different model pays for the model and not for the export again: that acquisition is
-  itself a cache hit.
+* **The cache key is the acquired audio's content hash plus the transcription parameters**
+  (#22: "workers key off content hash of cached audio + params hash"). Nothing weaker holds:
+  a timeline's fingerprint is blind to a clip's audio level by its own admission, so a
+  ``refresh`` by any other job can put different bytes behind the same acquisition key, and
+  a transcript keyed off that key would answer with the previous mix's words.
+
+  The hash exists only once the audio does, which splits the job in two. When the
+  acquisition came back already cached — the rerun case, the one the cache is for — the hash
+  is in hand before the starter returns, so the transcript answers from cache with no thread
+  at all. When the audio had to be made, there is nothing to hit anyway, and the worker
+  writes the entry itself once it knows what it transcribed.
 
 * A failure below is reported with the *lower* job's advice. "The audio was not acquired" is
   not something an agent can act on; "check the render queue for a stuck job" is.
@@ -27,11 +31,11 @@ from typing import Any
 from ..audio import ffmpeg
 from ..audio.acquire import acquire_clip_audio, acquire_timeline_audio
 from ..config import Config, get_config
-from ..errors import InternalError, InvalidRequestError, TranscriptionError
+from ..errors import InvalidRequestError, TranscriptionError
 from ..jobs import cache, store
 from ..jobs.runner import JobOutput, Progress, start_job, wait_for
 from ..logging_config import get_logger
-from ..naming import slug
+from ..naming import keyed_name
 from ..resolve.connection import ResolveConnection
 from . import silence, transcript, whisper
 from .transcript import Transcriber
@@ -40,7 +44,6 @@ log = get_logger("analysis")
 
 KIND = "transcribe_audio"
 
-DEFAULT_LOW_CONFIDENCE = 0.5
 ACQUIRE_TIMEOUT = 3600.0
 
 ACQUIRING = 0.05
@@ -56,7 +59,7 @@ def transcribe_audio(
     timeline: str | None = None,
     model: str = whisper.DEFAULT_MODEL,
     language: str | None = None,
-    low_confidence: float = DEFAULT_LOW_CONFIDENCE,
+    low_confidence: float = transcript.DEFAULT_LOW_CONFIDENCE,
     silence_threshold_db: float = silence.DEFAULT_THRESHOLD_DB,
     min_silence_seconds: float = silence.DEFAULT_MIN_SECONDS,
     refresh: bool = False,
@@ -91,36 +94,49 @@ def transcribe_audio(
         "silence_threshold_db": silence_threshold_db,
         "min_silence_seconds": min_silence_seconds,
     }
-    key = cache.cache_key(KIND, [{"audio": _key_of(acquisition)}], params)
+    known = _hash_of(acquisition)
+    key = cache_key(known, params) if known is not None else None
 
     def work(progress: Progress) -> JobOutput:
         return transcribe_acquired(
-            acquisition["job_id"], key, params, progress, transcriber, config
+            acquisition["job_id"], params, progress, key, transcriber, config
         )
 
     return start_job(KIND, params, work, cache_key=key, refresh=refresh, config=config)
 
 
+def cache_key(content_sha256: str, params: dict[str, Any]) -> str:
+    """What one transcript is: these bytes of audio, read with these parameters."""
+    return cache.cache_key(KIND, [{"content_sha256": content_sha256}], params)
+
+
 def transcribe_acquired(
     acquisition_job: str,
-    key: str,
     params: dict[str, Any],
     progress: Progress,
+    known_key: str | None = None,
     transcriber: Transcriber | None = None,
     config: Config | None = None,
 ) -> JobOutput:
-    """The worker: wait for the audio, transcribe it, measure it, write the document."""
+    """The worker: wait for the audio, transcribe it, measure it, write the document.
+
+    ``known_key`` is the key the starter already had, which it only has when the audio was
+    already in the cache. ``None`` means this worker is the first to know what it is
+    transcribing, so writing the cache entry is its job — inside the worker, where a write
+    that fails fails the job rather than leaving a result nothing can find again.
+    """
     config = config or get_config()
 
     progress(ACQUIRING, "waiting for the audio")
     audio = _acquired(acquisition_job, config)
+    key = known_key or cache_key(str(audio["content_sha256"]), params)
 
     progress(READING, "transcribing")
     source = Path(str(audio["path"]))
     heard = (transcriber or whisper.transcribe)(source, params)
 
     progress(MEASURING, "measuring the silence")
-    spans = silence.silence(
+    quiet = silence.measure(
         source,
         threshold_db=float(params["silence_threshold_db"]),
         min_seconds=float(params["min_silence_seconds"]),
@@ -131,7 +147,7 @@ def transcribe_acquired(
         audio=audio,
         params=params,
         words=heard.words,
-        silence=spans,
+        silence=quiet,
         language=heard.language,
     )
     target = transcript.write(_target(params, key, config), document)
@@ -140,11 +156,14 @@ def transcribe_acquired(
         "Transcribed %s: %d words, %d silence spans, %d unsure regions -> %s",
         _label(params),
         len(heard.words),
-        len(spans),
+        len(quiet),
         document["stats"]["low_confidence_regions"],
         target,
     )
-    return JobOutput(transcript.gist(document, target), (target,))
+    output = JobOutput(transcript.gist(document, target), (target,))
+    if known_key is None:
+        cache.remember(key, KIND, output.result, output.artifacts, config)
+    return output
 
 
 def _refuse_an_ambiguous_scope(clip: str | None, bin: str | None, timeline: str | None) -> None:  # noqa: A002
@@ -163,19 +182,17 @@ def _refuse_an_ambiguous_scope(clip: str | None, bin: str | None, timeline: str 
         )
 
 
-def _key_of(acquisition: dict[str, Any]) -> str:
-    """The acquisition's cache key, which this job's own key is derived from.
+def _hash_of(acquisition: dict[str, Any]) -> str | None:
+    """The acquired audio's content hash, when the acquisition already has one.
 
-    An acquisition with no key would make every transcript on this machine collide on one
-    entry and serve one concert's words for another, so it is a failure, not a fallback.
+    It does when that job answered from its own cache, which is exactly the rerun this
+    job's cache exists for. Otherwise the audio is still being made and there is no hash to
+    key on yet — and nothing to hit either, so waiting for one would buy nothing.
     """
-    key = acquisition.get("cache_key")
-    if not key:
-        raise InternalError(
-            cause="The audio acquisition job was registered without a cache key.",
-            detail={"acquisition_job_id": acquisition.get("job_id")},
-        )
-    return str(key)
+    if acquisition.get("state") != store.COMPLETED:
+        return None
+    result = acquisition.get("result") or {}
+    return str(result["content_sha256"]) if result.get("content_sha256") else None
 
 
 def _acquired(job_id: str, config: Config) -> dict[str, Any]:
@@ -190,14 +207,23 @@ def _acquired(job_id: str, config: Config) -> dict[str, Any]:
             "The audio to transcribe was not acquired: "
             f"{failure.get('cause') or f'its job is still {record.state}.'}"
         ),
-        fix=failure.get("fix"),
+        fix=failure.get("fix") or _still_going(record.state),
         detail={"acquisition": record.payload()},
     )
 
 
+def _still_going(state: str) -> str | None:
+    """A running acquisition is not a failure to fix — it is one to wait out and re-ask."""
+    if state != store.RUNNING:
+        return None
+    return (
+        "The audio export is still running after an hour. Poll it with get_job, and start "
+        "the transcript again once it has finished — the audio will be a cache hit by then."
+    )
+
+
 def _target(params: dict[str, Any], key: str, config: Config) -> Path:
-    """Deterministic from the cache key, so a rerun overwrites instead of accumulating."""
-    return config.analysis_dir / f"{slug(_label(params), 'transcript')}-{key[:12]}.transcript.json"
+    return config.analysis_dir / keyed_name(_label(params), key, ".transcript.json", "transcript")
 
 
 def _label(params: dict[str, Any]) -> str:

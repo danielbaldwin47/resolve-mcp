@@ -34,7 +34,7 @@ from ..errors import AudioExportError, AudioExtractionError, AudioMappingError, 
 from ..jobs import cache
 from ..jobs.runner import JobOutput, Progress, start_job
 from ..logging_config import get_logger
-from ..naming import slug
+from ..naming import keyed_name
 from ..resolve import media, render
 from ..resolve.connection import ResolveConnection
 from ..resolve.session import current_project
@@ -152,7 +152,7 @@ def export_timeline_mix(
     config = config or get_config()
     target_dir = config.audio_dir
     target_dir.mkdir(parents=True, exist_ok=True)
-    stem = _stem(str(params["timeline"]), key)
+    stem = keyed_name(str(params["timeline"]), key, "", "audio")
     expecting = target_dir / f"{stem}.wav"
 
     progress(0.05, "queuing the audio export")
@@ -282,7 +282,7 @@ def extract_clip_audio(
 ) -> JobOutput:
     """The worker: ffmpeg the clip's audio into the cache as a WAV."""
     config = config or get_config()
-    target = config.audio_dir / f"{_stem(str(params['clip']), key)}.wav"
+    target = config.audio_dir / keyed_name(str(params["clip"]), key, ".wav", "audio")
 
     progress(0.1, "extracting audio with ffmpeg")
     ffmpeg.extract(
@@ -365,8 +365,3 @@ def _result(target: Path, params: dict[str, Any]) -> dict[str, Any]:
         target,
     )
     return reading
-
-
-def _stem(label: str, key: str) -> str:
-    """Deterministic from the cache key, so a rerun overwrites instead of accumulating."""
-    return f"{slug(label, 'audio')}-{key[:12]}"

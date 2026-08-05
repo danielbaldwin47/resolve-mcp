@@ -65,6 +65,27 @@ def test_every_supported_bit_depth_is_read_as_signed_pcm(tmp_path: Path) -> None
         assert min(measured) > silence.DEFAULT_THRESHOLD_DB, depth
 
 
+def test_a_channel_that_is_silent_alone_does_not_make_the_window_silent(
+    tmp_path: Path,
+) -> None:
+    """The windows are decimated, and a stride that lands on one channel only reads it only."""
+    path = tmp_path / "one-sided.wav"
+    peak = int(2 ** 23 * 0.3)
+    frames = bytearray()
+    for _ in range(48_000):
+        frames.extend(b"\x00\x00\x00")
+        frames.extend(peak.to_bytes(3, "little", signed=True))
+    with contextlib.closing(wave.open(str(path), "wb")) as handle:
+        handle.setnchannels(2)
+        handle.setsampwidth(3)
+        handle.setframerate(48_000)
+        handle.writeframes(bytes(frames))
+
+    measured = silence.levels(path, window_seconds=WINDOW)
+
+    assert min(measured) > silence.DEFAULT_THRESHOLD_DB
+
+
 def test_eight_bit_audio_is_refused_rather_than_read_as_if_it_were_signed(
     tmp_path: Path,
 ) -> None:
@@ -84,7 +105,7 @@ def test_eight_bit_audio_is_refused_rather_than_read_as_if_it_were_signed(
 # --- spans out of levels -----------------------------------------------------------------
 
 
-def test_neighbouring_quiet_windows_become_one_span(tmp_path: Path) -> None:
+def test_neighbouring_quiet_windows_become_one_span() -> None:
     levels = [-10.0, -80.0, -80.0, -80.0, -80.0, -10.0]
 
     found = silence.spans(levels, window_seconds=0.1, threshold_db=-40.0, min_seconds=0.2)
@@ -92,7 +113,7 @@ def test_neighbouring_quiet_windows_become_one_span(tmp_path: Path) -> None:
     assert found == [{"start": 0.1, "end": 0.5, "duration": 0.4}]
 
 
-def test_a_gap_shorter_than_the_minimum_is_not_breathing_room(tmp_path: Path) -> None:
+def test_a_gap_shorter_than_the_minimum_is_not_breathing_room() -> None:
     levels = [-10.0, -80.0, -10.0, -80.0, -80.0, -80.0]
 
     found = silence.spans(levels, window_seconds=0.1, threshold_db=-40.0, min_seconds=0.2)
@@ -100,7 +121,7 @@ def test_a_gap_shorter_than_the_minimum_is_not_breathing_room(tmp_path: Path) ->
     assert found == [{"start": 0.3, "end": 0.6, "duration": 0.3}]
 
 
-def test_a_span_running_to_the_end_is_clamped_to_the_audio(tmp_path: Path) -> None:
+def test_a_span_running_to_the_end_is_clamped_to_the_audio() -> None:
     levels = [-10.0, -80.0, -80.0]
 
     found = silence.spans(
@@ -115,7 +136,7 @@ def test_the_whole_route_finds_the_gap_that_was_written_into_the_fixture(
 ) -> None:
     audio = write_wav(tmp_path / "gap.wav", seconds=2.0, silence=[(0.6, 1.4)])
 
-    found = silence.silence(audio, window_seconds=WINDOW, min_seconds=0.35)
+    found = silence.measure(audio, window_seconds=WINDOW, min_seconds=0.35)
 
     assert len(found) == 1
     assert found[0]["start"] == pytest.approx(0.6, abs=TOLERANCE)
@@ -181,6 +202,24 @@ def test_the_gist_stats_answer_what_the_agent_asks_before_reading_the_file() -> 
     assert stats["silence_seconds"] == 2.0
     assert stats["speech_seconds"] == 2.0
     assert stats["mean_confidence"] == pytest.approx(0.633, abs=0.001)
+
+
+def test_a_duration_the_header_did_not_give_up_stays_missing_rather_than_zero() -> None:
+    """Zero seconds of speech reads as a finding; a missing reading has to read as missing."""
+    document = transcript.document(
+        audio={"path": "a.wav", "content_sha256": "abc", "duration_seconds": None},
+        params={"scope": "clip", "clip": "a", "model": "large-v3", "low_confidence": 0.5},
+        words=_words(("one", 0.0, 0.5, 0.9)),
+        silence=[],
+        language="en",
+    )
+
+    stats = document["stats"]
+    assert isinstance(stats, dict)
+    assert stats["duration_seconds"] is None
+    assert stats["speech_seconds"] is None
+    assert stats["words_per_minute"] is None
+    assert stats["word_count"] == 1
 
 
 def test_every_word_carries_its_own_timestamps_and_confidence() -> None:

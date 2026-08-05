@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import shutil
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -24,6 +25,7 @@ import pytest
 from resolve_mcp.analysis import whisper
 from resolve_mcp.analysis.transcribe import transcribe_audio
 from resolve_mcp.analysis.transcript import Transcriber, Transcription, Word
+from resolve_mcp.audio.acquire import acquire_clip_audio
 from resolve_mcp.audio.ffmpeg import Completed, Runner
 from resolve_mcp.config import get_config
 from resolve_mcp.errors import (
@@ -184,6 +186,34 @@ def test_refresh_transcribes_again_even_when_nothing_moved(
 
     assert again.cached is False
     assert again.state == "completed"
+    assert len(calls) == 2
+
+
+def test_audio_refreshed_by_another_job_is_transcribed_again(
+    attach: Attach,
+    tmp_path: Path,
+) -> None:
+    """The reason the key is the audio's content hash and not the acquisition's key.
+
+    An acquisition key is a fingerprint — path, size, mtime for a clip; name, bounds and a
+    digest of the shots for a timeline, which by its own docstring cannot see a clip's audio
+    level. Any job may ``refresh`` that audio and write different bytes under the same key.
+    A transcript keyed off the key would then answer with the previous mix's words.
+    """
+    source = write_wav(tmp_path / "media" / "take-1.wav", seconds=FIXTURE_SECONDS, silence=[GAP])
+    attach(_studio_holding(source))
+    calls: list[Path] = []
+    wait_for(_transcribe(clip="take-1.wav", calls=calls)["job_id"])
+
+    _rerecorded(source)
+    refreshed = acquire_clip_audio(
+        get_connection(), "take-1.wav", refresh=True, runner=_copying()
+    )
+    assert wait_for(refreshed["job_id"]).state == "completed"
+    again = _transcribe(clip="take-1.wav", calls=calls)
+
+    assert again["cached"] is False, "different audio behind the same fingerprint"
+    assert wait_for(again["job_id"]).state == "completed"
     assert len(calls) == 2
 
 
@@ -381,6 +411,18 @@ def _saying(spoken: Sequence[tuple[str, float, float, float]], calls: list[Path]
         return Transcription(words=heard, language="en")
 
     return transcriber
+
+
+def _rerecorded(source: Path) -> None:
+    """Different audio, same size and same mtime — the same fingerprint, other bytes.
+
+    What a director redoing a take does not do, but what an audio level changed in Resolve
+    amounts to: the fingerprint cannot see it, so the acquisition key does not move.
+    """
+    was = source.stat()
+    write_wav(source, seconds=FIXTURE_SECONDS, silence=[GAP], frequency=110.0)
+    assert source.stat().st_size == was.st_size
+    os.utime(source, ns=(was.st_atime_ns, was.st_mtime_ns))
 
 
 def _copying() -> Runner:

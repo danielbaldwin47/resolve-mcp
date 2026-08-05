@@ -28,6 +28,9 @@ PLACES = 3
 SECONDS_PER_MINUTE = 60.0
 PREVIEW_REGIONS = 20
 
+DEFAULT_LOW_CONFIDENCE = 0.5
+"""Below this a word counts as unsure. Lives here because the document is what applies it."""
+
 
 class Word(NamedTuple):
     """One word as the model heard it. ``confidence`` is 0-1, higher is surer."""
@@ -57,7 +60,7 @@ def document(
     language: str | None = None,
 ) -> dict[str, Any]:
     """The whole transcript, ready to write: header, gist stats, then the records."""
-    below = float(params.get("low_confidence", 0.5))
+    below = float(params.get("low_confidence", DEFAULT_LOW_CONFIDENCE))
     unsure = regions(words, below=below)
     return {
         "schema": SCHEMA,
@@ -79,12 +82,18 @@ def stats(
     unsure: Sequence[Mapping[str, Any]],
     below: float,
 ) -> dict[str, Any]:
-    """The numbers worth having before deciding whether to read the file at all."""
-    duration = float(audio.get("duration_seconds") or 0.0)
+    """The numbers worth having before deciding whether to read the file at all.
+
+    A duration the WAV header did not give up stays ``None`` here and takes every stat
+    derived from it with it. Calling it zero would report a transcript of a two-hour set as
+    nought seconds of speech, which reads as a finding rather than as a missing reading.
+    """
+    reported = audio.get("duration_seconds")
+    duration = float(reported) if reported is not None else None
     quiet = sum(float(one["duration"]) for one in silence)
     confidences = [one.confidence for one in words]
     return {
-        "duration_seconds": round(duration, PLACES),
+        "duration_seconds": round(duration, PLACES) if duration is not None else None,
         "word_count": len(words),
         "words_per_minute": (
             round(len(words) / (duration / SECONDS_PER_MINUTE), 1) if duration else None
@@ -97,7 +106,9 @@ def stats(
         "low_confidence_regions": len(unsure),
         "silence_spans": len(silence),
         "silence_seconds": round(quiet, PLACES),
-        "speech_seconds": round(max(duration - quiet, 0.0), PLACES),
+        "speech_seconds": (
+            round(max(duration - quiet, 0.0), PLACES) if duration is not None else None
+        ),
         "longest_silence_seconds": (
             round(max(float(one["duration"]) for one in silence), PLACES) if silence else 0.0
         ),

@@ -515,7 +515,7 @@ def test_the_render_queue_exports_the_real_timeline_mix() -> None:
     importlib.util.find_spec("faster_whisper") is None,
     reason="the analysis extra is not installed (uv sync --extra analysis)",
 )
-def test_faster_whisper_reports_words_in_the_shape_the_worker_reads() -> None:
+def test_faster_whisper_reports_words_in_the_shape_the_worker_reads(tmp_path: Path) -> None:
     """The other AC no seam can check: what a real faster-whisper word object looks like.
 
     The fake tier substitutes the model entirely, so every assertion above it is about
@@ -532,7 +532,7 @@ def test_faster_whisper_reports_words_in_the_shape_the_worker_reads() -> None:
 
     from .fakes import write_wav
 
-    audio = write_wav(Path(os.environ["TEMP"]) / "resolve-mcp-smoke-tone.wav", seconds=2.0)
+    audio = write_wav(tmp_path / "tone.wav", seconds=2.0)
 
     heard = whisper.transcribe(audio, {"model": whisper.DEFAULT_MODEL})
 

@@ -19,11 +19,10 @@ Two implementation constraints shape this module:
 
 from __future__ import annotations
 
-import contextlib
 import math
-import wave
 from pathlib import Path
 
+from ..audio import wav
 from ..errors import AudioExtractionError
 
 DEFAULT_WINDOW_SECONDS = 0.05
@@ -32,58 +31,43 @@ DEFAULT_MIN_SECONDS = 0.35
 
 SILENT_FLOOR_DB = -120.0
 MAX_SAMPLES_PER_WINDOW = 64
-BITS_PER_BYTE = 8
 PLACES = 3
 
 
-def silence(
+def measure(
     path: Path | str,
     threshold_db: float = DEFAULT_THRESHOLD_DB,
     min_seconds: float = DEFAULT_MIN_SECONDS,
     window_seconds: float = DEFAULT_WINDOW_SECONDS,
 ) -> list[dict[str, float]]:
     """The quiet stretches in a WAV, as ``{start, end, duration}`` in seconds."""
-    measured = levels(path, window_seconds=window_seconds)
+    reading = wav.describe(path)
     return spans(
-        measured,
+        levels(path, window_seconds=window_seconds),
         window_seconds=window_seconds,
         threshold_db=threshold_db,
         min_seconds=min_seconds,
-        limit=duration(path),
+        limit=reading["duration_seconds"],
     )
 
 
 def levels(path: Path | str, window_seconds: float = DEFAULT_WINDOW_SECONDS) -> list[float]:
     """RMS per window in dBFS, oldest first — the curve everything else here reads."""
     target = Path(path)
-    try:
-        with contextlib.closing(wave.open(str(target), "rb")) as handle:
-            width = handle.getsampwidth()
-            rate = handle.getframerate()
-            channels = handle.getnchannels()
-            _refuse_unsigned(target, width)
-            per_window = max(1, round(window_seconds * rate))
-            measured: list[float] = []
-            while True:
-                raw = handle.readframes(per_window)
-                if not raw:
-                    return measured
-                measured.append(_window_db(raw, width))
-                if len(raw) < per_window * width * channels:
-                    return measured
-    except (OSError, wave.Error) as exc:
-        raise AudioExtractionError(
-            cause=f"{target.name} is not a readable WAV file ({exc}).",
-            fix="Delete it from the cache directory and run the job again.",
-            detail={"path": str(target)},
-        ) from exc
-
-
-def duration(path: Path | str) -> float | None:
-    """Seconds of audio, or ``None`` when the header does not say."""
-    with contextlib.closing(wave.open(str(Path(path)), "rb")) as handle:
+    with wav.opened(target) as handle:
+        width = handle.getsampwidth()
         rate = handle.getframerate()
-        return handle.getnframes() / rate if rate else None
+        channels = handle.getnchannels()
+        _refuse_unsigned(target, width)
+        per_window = max(1, round(window_seconds * rate))
+        measured: list[float] = []
+        while True:
+            raw = handle.readframes(per_window)
+            if not raw:
+                return measured
+            measured.append(_window_db(raw, width, channels))
+            if len(raw) < per_window * width * channels:
+                return measured
 
 
 def spans(
@@ -125,12 +109,19 @@ def _span(
     }
 
 
-def _window_db(raw: bytes, width: int) -> float:
-    """One window's RMS in dBFS, from a decimated read of its samples."""
+def _window_db(raw: bytes, width: int, channels: int) -> float:
+    """One window's RMS in dBFS, from a decimated read of its samples.
+
+    The stride walks *interleaved* samples, so a stride that divides the channel count
+    would land on the same channel every time and call a stereo file silent because its
+    left channel is — hence the step to the next stride that cannot.
+    """
     count = len(raw) // width
     if count == 0:
         return SILENT_FLOOR_DB
     stride = max(1, count // MAX_SAMPLES_PER_WINDOW)
+    if channels > 1 and stride % channels == 0:
+        stride += 1
     total = 0.0
     taken = 0
     for index in range(0, count, stride):
@@ -138,7 +129,7 @@ def _window_db(raw: bytes, width: int) -> float:
         sample = int.from_bytes(raw[offset : offset + width], "little", signed=True)
         total += float(sample) * float(sample)
         taken += 1
-    full_scale = float(1 << (width * BITS_PER_BYTE - 1))
+    full_scale = float(1 << (width * wav.BITS_PER_BYTE - 1))
     rms = math.sqrt(total / taken) / full_scale
     return SILENT_FLOOR_DB if rms <= 0.0 else max(SILENT_FLOOR_DB, 20.0 * math.log10(rms))
 
@@ -154,5 +145,5 @@ def _refuse_unsigned(target: Path, width: int) -> None:
         raise AudioExtractionError(
             cause=f"{target.name} is 8-bit audio, which this reader does not measure.",
             fix="Re-acquire the audio (the acquisition jobs write 24-bit WAV) and retry.",
-            detail={"path": str(target), "bit_depth": width * BITS_PER_BYTE},
+            detail={"path": str(target), "bit_depth": width * wav.BITS_PER_BYTE},
         )
