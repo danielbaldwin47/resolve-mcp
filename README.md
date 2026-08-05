@@ -8,7 +8,8 @@ Build contract: [issue #22](https://github.com/danielbaldwin47/resolve-mcp/issue
 ## Status
 
 P1 in progress. Shipped so far: the server skeleton, the session/project tools, the media
-pool tools, the timeline read and interchange tools, and the `run_python` escape hatch.
+pool tools, the timeline read and interchange tools, the background-job infrastructure
+with audio acquisition, and the `run_python` escape hatch.
 
 | Tool | What it does |
 | --- | --- |
@@ -26,6 +27,8 @@ pool tools, the timeline read and interchange tools, and the `run_python` escape
 | `inspect_timeline` | One timeline at a chosen detail and range, in dual time |
 | `export_timeline` | Writes a timeline out as OTIO, FCPXML or DRT |
 | `import_timeline` | Materialises a **new** timeline from such a file — never overwrites one |
+| `get_job` | Polls one background job: progress, result, or a structured failure |
+| `list_jobs` | Lists jobs newest first — how a restarted session finds what it started |
 | `run_python` | Escape hatch: runs scripting-API Python in the server process |
 
 Bin paths are slash-separated from the media pool root (`Concert/Angles`) and
@@ -40,6 +43,15 @@ Resolve's own document and accepts no import options at all, so it names its own
 what holds there is the check on the way out. Either way the cut already in the project is
 never the thing that gets written over.
 
+Heavy work runs as a background job: the starter returns a `job_id` immediately, `get_job`
+polls it, and results are cached under the cache root against the media and the parameters,
+so an unchanged rerun is instant. Job records live on disk, which is what lets `list_jobs`
+recover after a restart — a job that was still running when the server went down comes back
+`failed` with code `job_interrupted`. Audio acquisition is internal to the starters: a
+timeline is exported through Resolve's render queue (the only route that captures the
+timeline *mix*, 48 kHz/24-bit WAV), a single source clip is extracted with ffmpeg unless its
+audio mapping says the audio is linked or offset away from the file.
+
 ## Requirements
 
 - Windows 11, DaVinci Resolve **Studio** 21.0.3 (external scripting must be enabled:
@@ -50,6 +62,8 @@ never the thing that gets written over.
   server refuses to attach on one. [uv](https://docs.astral.sh/uv/) still manages the
   venv and the lockfile.
 - Resolve running, with a project open, before the first Resolve-touching tool call
+- **ffmpeg on PATH** for per-clip audio extraction (`RESOLVE_MCP_FFMPEG` points at it
+  elsewhere). Timeline-scope audio goes through Resolve's own render queue and needs none.
 
 ## Install
 
@@ -81,7 +95,8 @@ Zero-config by default; every path has an environment override.
 | --- | --- | --- |
 | `RESOLVE_SCRIPT_API` | `%PROGRAMDATA%\Blackmagic Design\DaVinci Resolve\Support\Developer\Scripting` | Scripting API root (holds `Modules/DaVinciResolveScript.py`) |
 | `RESOLVE_SCRIPT_LIB` | `C:\Program Files\Blackmagic Design\DaVinci Resolve\fusionscript.dll` | Scripting library |
-| `RESOLVE_MCP_CACHE` | `%LOCALAPPDATA%\resolve-mcp` | Cache root: snapshots, analysis artifacts, model weights |
+| `RESOLVE_MCP_CACHE` | `%LOCALAPPDATA%\resolve-mcp` | Cache root: snapshots, job records, cached results, acquired audio, model weights |
+| `RESOLVE_MCP_FFMPEG` | `ffmpeg` (found on PATH) | ffmpeg executable used for per-clip audio extraction |
 | `RESOLVE_MCP_LOG_LEVEL` | `INFO` | Log level for the stderr logger |
 | `RESOLVE_MCP_ALLOW_ANY_PYTHON` | unset | Bypass the interpreter check (see ADR 0001) |
 

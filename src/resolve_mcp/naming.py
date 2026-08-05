@@ -20,6 +20,11 @@ UNSAFE_IN_FILENAME = re.compile(r"[^A-Za-z0-9._-]+")
 STAMP_FORMAT = "%Y%m%d-%H%M%S"
 
 
+def slug(label: str, fallback: str) -> str:
+    """A filename-safe version of something the director named, or ``fallback``."""
+    return UNSAFE_IN_FILENAME.sub("-", label).strip("-") or fallback
+
+
 def timestamped_name(
     label: str,
     suffix: str,
@@ -28,8 +33,7 @@ def timestamped_name(
 ) -> str:
     """``<slug>-<yyyymmdd-hhmmss><suffix>``, falling back when the label slugs to nothing."""
     stamp = (now or datetime.now()).strftime(STAMP_FORMAT)
-    slug = UNSAFE_IN_FILENAME.sub("-", label).strip("-") or fallback
-    return f"{slug}-{stamp}{suffix}"
+    return f"{slug(label, fallback)}-{stamp}{suffix}"
 
 
 def write_target(

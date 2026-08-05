@@ -18,8 +18,12 @@ from typing import Any
 
 import pytest
 
+from resolve_mcp.audio.acquire import acquire_timeline_audio
+from resolve_mcp.jobs.runner import wait_for
+from resolve_mcp.resolve.connection import get_connection
 from resolve_mcp.tools.cut import build_timeline, validate_cut
 from resolve_mcp.tools.escape_hatch import run_python
+from resolve_mcp.tools.jobs import get_job, list_jobs
 from resolve_mcp.tools.media import inspect_clip, list_media
 from resolve_mcp.tools.project import get_status, list_projects, snapshot_project
 from resolve_mcp.tools.timeline import (
@@ -462,6 +466,38 @@ def test_an_invalid_cut_creates_no_timeline_on_a_real_project(tmp_path: Path) ->
     assert result["ok"] is False
     assert result["error"]["code"] == "cut_invalid"
     assert {entry["name"] for entry in list_timelines()["timelines"]} == before
+
+
+def test_the_render_queue_exports_the_real_timeline_mix() -> None:
+    """The AC no seam can check: that these render-settings keys are the ones Resolve takes.
+
+    The fakes prove the job machinery, the caching and the failure shaping. Whether
+    ``SetRenderSettings`` accepts ``ExportVideo``/``AudioBitDepth``/``AudioSampleRate`` under
+    those names, and whether an audio-only wav/lpcm job renders at all, is only answerable
+    here. Slow: this renders the open timeline's audio in full.
+    """
+    if get_status()["context"]["timeline"] is None:
+        pytest.skip("No timeline open in Resolve")
+
+    started = acquire_timeline_audio(get_connection())
+    record = wait_for(started["job_id"], timeout=1800.0)
+
+    assert record.state == "completed", record.error
+    assert record.result is not None
+    exported = Path(record.result["path"])
+    assert exported.exists()
+    assert exported.stat().st_size > 0
+    assert record.result["sample_rate"] == 48_000
+    assert record.result["bit_depth"] == 24
+    assert (record.result["duration_seconds"] or 0) > 0
+
+    polled = get_job(started["job_id"])
+    assert polled["ok"] is True
+    assert polled["job"]["state"] == "completed"
+    assert started["job_id"] in [one["job_id"] for one in list_jobs()["jobs"]]
+
+    again = acquire_timeline_audio(get_connection())
+    assert again["cached"] is True, "an unchanged timeline must be a cache hit"
 
 
 def test_snapshot_writes_a_real_drp(tmp_path: Path) -> None:

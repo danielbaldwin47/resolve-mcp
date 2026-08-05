@@ -529,7 +529,7 @@ def _markers(clip: Clip) -> list[dict[str, Any]]:
     return sorted(markers, key=lambda marker: marker["frame"])
 
 
-def _audio_mapping(clip: Clip) -> dict[str, Any] | None:
+def audio_mapping(clip: Clip) -> dict[str, Any] | None:
     """``GetAudioMapping`` returns a JSON *string* — or nothing, on clips without audio."""
     try:
         reported = clip.GetAudioMapping()
@@ -602,7 +602,7 @@ def inspect_clip(
             if isinstance(metadata, dict)
             else {}
         ),
-        "audio_mapping": _audio_mapping(clip),
+        "audio_mapping": audio_mapping(clip),
         "markers": _markers(clip),
         "bounds": _bounds(clip, reported),
     }
