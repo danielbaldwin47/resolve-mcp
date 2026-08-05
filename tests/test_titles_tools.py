@@ -318,7 +318,7 @@ def test_the_same_file_lands_on_a_rebuilt_version_at_its_own_markers(
         SONG_ONE + 960,
         SONG_TWO + 120,
     ]
-    # night-ferry is 800 frames earlier on v4, and its title moved with it.
+    # night-ferry is marked 1200 frames earlier on v4, and its title moved with it.
     assert [item.GetStart() for item in titles_on(v4)] == [
         SONG_ONE + 240,
         SONG_ONE + 960,
@@ -429,6 +429,19 @@ def test_a_fade_out_only_holds_full_opacity_from_the_first_frame(
     apply_titles(a_titles_file(tmp_path, one_event(fade={"out": 36})))
 
     assert keyframes_of(titles_on(timeline)[0]) == {0.0: 1.0, 443.0: 1.0, 479.0: 0.0}
+
+
+def test_a_title_that_fades_almost_its_whole_length_still_ends_clear(
+    attach: Attach,
+    tmp_path: Path,
+) -> None:
+    """The degenerate fade T4 still permits: an in-ramp that would land on the last frame
+    takes the frame the out-ramp has to end clear on, so it is pulled back one."""
+    timeline = a_session(attach)
+    apply_titles(a_titles_file(tmp_path, one_event(out=250, fade={"in": 9, "out": 1})))
+
+    # The instance is 10 frames, so its comp renders 0-9.
+    assert keyframes_of(titles_on(timeline)[0]) == {0.0: 0.0, 8.0: 1.0, 9.0: 0.0}
 
 
 def test_a_build_that_cannot_animate_still_places_the_title(

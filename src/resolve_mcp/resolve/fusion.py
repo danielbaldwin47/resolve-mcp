@@ -237,8 +237,14 @@ def _keyframes(start: int, end: int, fade_in: int, fade_out: int) -> tuple[tuple
 
     When the two ramps meet — the file asked for a fade the whole length of the title —
     the held section collapses to one frame at full rather than inverting the keyframes.
+    A title that fades both ways always keeps both of its clear ends: an in-ramp long
+    enough to reach the last frame is pulled back one, because a ramp that landed *on*
+    the last frame would take the frame the out-ramp has to end clear on, and the title
+    would finish at full opacity while the report still said it faded out.
     """
     up_at = start + fade_in
+    if fade_in and fade_out:
+        up_at = min(up_at, end - 1)
     down_at = max(end - fade_out, up_at)
     # Keyed by frame, because the ramps can collapse onto one another and a repeated
     # frame written twice is a keyframe whose value depends on write order.
