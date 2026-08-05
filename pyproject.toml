@@ -38,6 +38,7 @@ markers = [
 [tool.ruff]
 line-length = 100
 src = ["src", "tests"]
+extend-exclude = [".claude"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
