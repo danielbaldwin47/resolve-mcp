@@ -59,6 +59,12 @@ parent branch reads MERGED while its commits never reach main.
 Close the ticket with the PR link when the work is complete; name any unrun
 live ACs in the close comment.
 
+Every implementation comment on a ticket (close or status) ends with a
+`## Needs from you` section as its **last** section, listing each item that
+requires the human — decisions to make, live ACs to run, installs — even when
+already discussed above. If nothing is needed, omit the section; its absence
+is the signal that the ticket asks nothing of you.
+
 CI (`.github/workflows/ci.yml`) runs the fake tier, mypy strict, and ruff on
 every PR; `review-gate.yml` blocks merge until the PR body's `Review:` line
 reads clean. Both are required status checks on `main`.
