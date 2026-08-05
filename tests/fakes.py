@@ -717,12 +717,21 @@ class FakeMediaPool:
         return placed
 
     def DeleteTimelines(self, timelines: list[FakeTimeline]) -> bool:  # noqa: N802
+        """Delete cuts, refusing the whole call if one of them is the cut now open.
+
+        Resolve will not delete the timeline it is sitting on, and says so only by
+        returning ``False`` — so a caller that deleted a scratch timeline without moving
+        off it first would leave it behind and never hear why.
+        """
         self._check("DeleteTimelines")
         self.deleted_timelines.extend(timelines)
         project = self._owner.current_project if self._owner is not None else None
-        if project is not None:
-            for timeline in timelines:
-                project.remove_timeline(timeline)
+        if project is None:
+            return True
+        if any(timeline is project.GetCurrentTimeline() for timeline in timelines):
+            return False
+        for timeline in timelines:
+            project.remove_timeline(timeline)
         return True
 
     def DeleteFolders(self, folders: list[FakeFolder]) -> bool:  # noqa: N802

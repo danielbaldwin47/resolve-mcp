@@ -258,11 +258,16 @@ def probe_template_append(
         ]
         returned = list(pool.AppendToTimeline(placements) or [])
         if len(returned) != len(asked):
+            short = (
+                " A template shorter than the span asked for is refused rather than "
+                "trimmed, so try a smaller duration=."
+                if len(returned) < len(asked)
+                else ""
+            )
             raise failed(
                 step,
                 f"Asked for {len(asked)} instances of {clip_name!r} at {duration} frames "
-                f"each, got back {len(returned)}. A template shorter than {duration} frames "
-                f"is refused rather than trimmed, so try a shorter duration=.",
+                f"each, got back {len(returned)}.{short}",
             )
         walked(step, f"{len(returned)} instances of {clip_name!r} at {duration}f each")
 
@@ -387,11 +392,11 @@ def _read_each_back(
     asked: Sequence[str],
     trail: Sequence[str],
 ) -> list[Placed]:
-    if len(items) != len(nodes):
+    if not len(items) == len(nodes) == len(asked):
         raise _failure(
             "read the text back",
-            f"The timeline held {len(nodes)} instances to write to and {len(items)} to read "
-            f"back — something moved them between the two passes.",
+            f"{len(asked)} titles were asked for and {len(nodes)} written, but the timeline "
+            f"holds {len(items)} to read back — something moved them between the passes.",
             trail,
         )
     placed: list[Placed] = []

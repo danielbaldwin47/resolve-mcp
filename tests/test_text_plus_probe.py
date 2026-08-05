@@ -26,6 +26,7 @@ from .fakes import (
     FakeMediaPoolItem,
     FakeProject,
     FakeResolve,
+    FakeTimeline,
     FakeTimelineItem,
     media_pool,
     studio,
@@ -336,6 +337,38 @@ def test_the_scratch_bin_is_removed_when_the_timeline_was_never_created(
     assert [folder.GetName() for folder in pool.deleted_folders] == ["Titles"]
     assert pool.deleted_timelines == []
     assert pool.GetRootFolder().GetSubFolderList() == []
+
+
+def test_a_session_with_no_cut_open_is_moved_off_the_scratch_one_before_it_is_deleted(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Resolve will not delete the timeline it is sitting on, and says so only by returning
+    False. With nothing open to go back to, the scratch cut *is* the one it is sitting on —
+    so any other cut in the project will do."""
+    pool = media_pool()
+    somewhere_else = FakeTimeline("sunset-set v3")
+    attach(studio(pool=pool, timeline=None, timelines=[somewhere_else]))
+
+    report = probe_template_append(get_connection(), a_template_file(tmp_path))
+
+    assert report.per_instance_text is True
+    assert report.cleaned_up is True
+    assert [timeline.GetName() for timeline in pool.deleted_timelines] == [report.timeline_name]
+
+
+def test_a_project_whose_only_cut_is_the_scratch_one_says_what_it_left_behind(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Nothing to move to, so Resolve refuses the delete. The run still reports its finding
+    — losing the answer over the tidying is the one thing cleanup must not do."""
+    pool = media_pool()
+    attach(studio(pool=pool, timeline=None, timelines=[]))
+
+    report = probe_template_append(get_connection(), a_template_file(tmp_path))
+
+    assert report.per_instance_text is True
+    assert report.cleaned_up is False
+    assert "left behind" in report.render()
 
 
 def test_a_failed_cleanup_is_recorded_rather_than_raised(attach: Attach, tmp_path: Path) -> None:
