@@ -41,6 +41,8 @@ class ResolveConnection:
     def invalidate(self) -> None:
         """Drop the handle; the next call reconnects."""
         with self._lock:
+            if self._handle is not None:
+                log.info("Resolve handle invalidated; next call reconnects")
             self._handle = None
 
     def dropped(self) -> bool:
@@ -55,15 +57,18 @@ class ResolveConnection:
     def handle(self) -> Any:
         """Return a live Resolve handle, reconnecting once if the held one has died."""
         with self._lock:
+            reconnecting = False
             if self._handle is not None:
                 if self._probe(self._handle):
                     return self._handle
                 log.info("Resolve handle went stale; reconnecting once")
                 self._handle = None
+                reconnecting = True
 
             handle, failure = self._connect_once()
             if handle is not None and self._probe(handle):
                 self._handle = handle
+                log.info("Resolve %s", "reconnected" if reconnecting else "attached")
                 return handle
 
             self._handle = None

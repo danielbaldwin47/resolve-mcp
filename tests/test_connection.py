@@ -94,6 +94,28 @@ def test_a_failed_connect_does_not_poison_the_next_call(attach: Attach) -> None:
     assert connector.attempts == 2
 
 
+def test_every_connection_state_change_logs_a_line(
+    attach: Attach, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Attach, reconnect, handle death, invalidate: each leaves a log line, because a
+    live failure on a machine no one is at gets diagnosed from the log or not at all."""
+    dead, alive = studio(), studio()
+    attach(dead, alive)
+    conn = connection_module.get_connection()
+
+    with caplog.at_level("INFO", logger=connection_module.log.name):
+        conn.handle()
+        dead.drop()
+        conn.handle()
+        conn.invalidate()
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert "Resolve attached" in messages
+    assert "Resolve handle went stale; reconnecting once" in messages
+    assert "Resolve reconnected" in messages
+    assert "Resolve handle invalidated; next call reconnects" in messages
+
+
 def test_reports_whether_it_currently_holds_a_handle(attach: Attach) -> None:
     fake = studio()
     attach(fake)
