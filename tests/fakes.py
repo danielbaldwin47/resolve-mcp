@@ -1726,6 +1726,37 @@ def write_clicks(
     return _write_samples(path, samples, sample_rate, bit_depth, channels)
 
 
+def write_hits(
+    path: Path,
+    times: Sequence[float],
+    seconds: float = 2.0,
+    sample_rate: int = 48_000,
+    bit_depth: int = 24,
+    channels: int = 2,
+    decay_seconds: float = 0.03,
+    amplitude: float = 0.5,
+    frequency: float = 2_000.0,
+) -> Path:
+    """A drum stem: decaying hits at exactly the times asked for, silence in between.
+
+    ``write_clicks`` puts a click on every beat, which is what a beat fixture wants and the
+    opposite of what a stem is — a kick stem is mostly nothing, and where its hits fall is
+    the thing under test. Passing no times writes the silence a stem the band did not play
+    would hold.
+    """
+    peak = 2 ** (bit_depth - 1) * amplitude
+    total = int(seconds * sample_rate)
+    decay = max(int(decay_seconds * sample_rate), 1)
+    samples = [0] * total
+    for when in times:
+        start = int(when * sample_rate)
+        for offset in range(min(decay, max(total - start, 0))):
+            envelope = 1.0 - offset / decay
+            wobble = math.sin(2 * math.pi * frequency * offset / sample_rate)
+            samples[start + offset] = int(peak * envelope * envelope * wobble)
+    return _write_samples(path, samples, sample_rate, bit_depth, channels)
+
+
 def _write_samples(
     path: Path,
     samples: list[int],

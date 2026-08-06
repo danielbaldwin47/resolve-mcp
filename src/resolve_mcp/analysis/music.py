@@ -132,13 +132,34 @@ def _sane_windows(window_seconds: float, hop_seconds: float) -> None:
 
 def _identity(source: Path, config: Config) -> dict[str, Any]:
     """Hash what this server wrote; fingerprint what the director handed over."""
-    if _inside(source, config.audio_dir):
-        return {"sha256": cache.content_hash(source)}
-    return cache.fingerprint(source)
+    return cache.identity(source, config.audio_dir)
 
 
-def _inside(source: Path, directory: Path) -> bool:
-    return source.resolve().is_relative_to(directory.resolve())
+def beats_half(
+    source: Path,
+    described: dict[str, Any] | None = None,
+    identity: dict[str, Any] | None = None,
+    detector: beats_module.Detector | None = None,
+    refresh: bool = False,
+    config: Config | None = None,
+) -> dict[str, Any]:
+    """The beats half on its own terms — the entry every job that needs a grid shares.
+
+    Drum-fill detection (#39) reports against this grid and must not pay for the beat model
+    a second time on audio music analysis already ran over, so the half is callable on its
+    own and the key stays exactly the one ``analyze`` writes.
+    """
+    config = config or get_config()
+    shape = described if described is not None else wav.describe(source)
+    known = identity if identity is not None else _identity(source, config)
+    return _half(
+        BEATS,
+        cache.cache_key(f"{KIND}:{BEATS}", [known], {}),
+        lambda path: _beats(source, path, shape, detector),
+        source,
+        refresh,
+        config,
+    )
 
 
 def analyze(
@@ -163,14 +184,7 @@ def analyze(
 
     if settings[BEATS]:
         progress(0.1, "finding beats and downbeats")
-        result[BEATS] = _half(
-            BEATS,
-            cache.cache_key(f"{KIND}:{BEATS}", [identity], {}),
-            lambda path: _beats(source, path, described, detector),
-            source,
-            refresh,
-            config,
-        )
+        result[BEATS] = beats_half(source, described, identity, detector, refresh, config)
         artifacts.append(Path(result[BEATS]["path"]))
 
     if settings[ENERGY]:
