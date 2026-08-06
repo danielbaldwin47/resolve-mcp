@@ -82,6 +82,56 @@ def test_a_queue_that_never_finishes_times_out_pointing_at_the_gui(tmp_path: Pat
     assert project.render_queue == []
 
 
+def test_a_job_that_never_leaves_the_queue_fails_at_the_start_deadline(tmp_path: Path) -> None:
+    """#92, live on 21.0.3.7: a wedged render engine holds every job it is given at
+    "Ready for background render" at 0% forever, and deleting the queue does not clear it —
+    only restarting Resolve does. Waiting the render timeout out on that spends an hour on a
+    state that is knowable in seconds, so a job that never starts is refused on its own,
+    much shorter deadline. The clock here holds three readings: exhausting it would raise
+    StopIteration, so a loop that waited the hour out could not pass this.
+    """
+    project = FakeProject("sunset-set")
+    project.render_statuses = ["Ready for background render"]
+    clock = iter([0.0, 0.0, 61.0])
+    job_id = render.submit(project, {"TargetDir": str(tmp_path)}, ("wav", "lpcm"))
+
+    with pytest.raises(RenderQueueError) as raised:
+        render.render(
+            project,
+            job_id,
+            tmp_path / "mix.wav",
+            now=lambda: next(clock),
+            sleep=_no_sleep,
+        )
+
+    assert "never started" in raised.value.cause
+    assert "Ready for background render" in raised.value.cause
+    assert "Restart Resolve" in raised.value.fix
+    assert raised.value.detail["start_timeout_seconds"] == render.START_TIMEOUT
+    assert project.render_queue == []
+
+
+def test_a_job_that_does_start_keeps_the_full_render_timeout(tmp_path: Path) -> None:
+    """The start deadline is about starting, not about finishing: once the job leaves the
+    queue it gets the whole hour, because a genuinely long render is not a wedge."""
+    project = FakeProject("sunset-set")
+    project.render_statuses = ["Ready for background render", "Rendering"]
+    clock = iter([0.0, 0.0, 100.0, 5_000.0])
+    job_id = render.submit(project, {"TargetDir": str(tmp_path)}, ("wav", "lpcm"))
+
+    with pytest.raises(RenderQueueError) as raised:
+        render.render(
+            project,
+            job_id,
+            tmp_path / "mix.wav",
+            now=lambda: next(clock),
+            sleep=_no_sleep,
+        )
+
+    assert "still Rendering" in raised.value.cause
+    assert "never started" not in raised.value.cause
+
+
 def test_progress_comes_from_the_jobs_own_percentage(tmp_path: Path) -> None:
     project = FakeProject("sunset-set")
     project.render_statuses = ["Rendering", "Rendering", "Complete"]
