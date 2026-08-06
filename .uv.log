@@ -1,9 +1,0 @@
-[2mResolved [1m96 packages[0m [2min 0.57ms[0m[0m
-   [36m[1mBuilding[0m[39m resolve-mcp[2m @ file:///C:/Users/Daniel/repos/resolve-mcp/.claude/worktrees/merge-train[0m
-      [32m[1mBuilt[0m[39m resolve-mcp[2m @ file:///C:/Users/Daniel/repos/resolve-mcp/.claude/worktrees/merge-train[0m
-[2mPrepared [1m1 package[0m [2min 560ms[0m[0m
-[2mUninstalled [1m1 package[0m [2min 1ms[0m[0m
-[2mInstalled [1m3 packages[0m [2min 351ms[0m[0m
- [32m+[39m [1mnumpy[0m[2m==2.5.1[0m
- [33m~[39m [1mresolve-mcp[0m[2m==0.1.0 (from file:///C:/Users/Daniel/repos/resolve-mcp/.claude/worktrees/merge-train)[0m
- [32m+[39m [1mscipy[0m[2m==1.18.0[0m
