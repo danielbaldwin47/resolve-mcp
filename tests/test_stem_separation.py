@@ -44,6 +44,7 @@ from .fakes import (
     FakeTimeline,
     media_pool,
     studio,
+    with_a_mix,
     write_wav,
 )
 
@@ -70,7 +71,7 @@ def test_four_stems_land_on_disk_keyed_by_content_hash_and_params(
     attach: Attach,
     separating: FakeSeparator,
 ) -> None:
-    attach(studio(timeline=FakeTimeline("sunset-set v3", "59.94")))
+    attach(studio(timeline=with_a_mix(FakeTimeline("sunset-set v3", "59.94"))))
 
     record = wait_for(separate_stems(get_connection(), runner=separating)["job_id"])
 
@@ -94,7 +95,7 @@ def test_the_drum_stem_is_what_the_second_pass_decomposes(
     attach: Attach,
     separating: FakeSeparator,
 ) -> None:
-    attach(studio(timeline=FakeTimeline("sunset-set v3", "59.94")))
+    attach(studio(timeline=with_a_mix(FakeTimeline("sunset-set v3", "59.94"))))
 
     record = wait_for(separate_stems(get_connection(), runner=separating)["job_id"])
 
@@ -105,7 +106,7 @@ def test_the_drum_stem_is_what_the_second_pass_decomposes(
 
 
 def test_each_pass_runs_its_own_model(attach: Attach, separating: FakeSeparator) -> None:
-    attach(studio(timeline=FakeTimeline("sunset-set v3", "59.94")))
+    attach(studio(timeline=with_a_mix(FakeTimeline("sunset-set v3", "59.94"))))
     config = get_config()
 
     record = wait_for(separate_stems(get_connection(), runner=separating)["job_id"])
@@ -122,7 +123,7 @@ def test_the_stems_of_both_passes_are_kept_apart_on_disk(
     separating: FakeSeparator,
 ) -> None:
     """One directory per pass, or the drum decomposition overwrites the drum stem it read."""
-    attach(studio(timeline=FakeTimeline("sunset-set v3", "59.94")))
+    attach(studio(timeline=with_a_mix(FakeTimeline("sunset-set v3", "59.94"))))
 
     record = wait_for(separate_stems(get_connection(), runner=separating)["job_id"])
 
@@ -179,7 +180,7 @@ def test_the_model_downloads_own_bar_is_not_this_passs_progress(tmp_path: Path) 
 
 def test_the_acquisition_is_reported_as_the_first_quarter_of_the_job(attach: Attach) -> None:
     """The export runs inside this job, so its own progress has to be visible from here."""
-    attach(studio(timeline=FakeTimeline("sunset-set v3", "59.94")))
+    attach(studio(timeline=with_a_mix(FakeTimeline("sunset-set v3", "59.94"))))
     steps: list[tuple[float, str]] = []
     source = audio_source(get_connection())
 
@@ -197,7 +198,7 @@ def test_a_rerun_on_an_unchanged_timeline_never_separates_again(
     attach: Attach,
     separating: FakeSeparator,
 ) -> None:
-    attach(studio(timeline=FakeTimeline("sunset-set v3", "59.94")))
+    attach(studio(timeline=with_a_mix(FakeTimeline("sunset-set v3", "59.94"))))
     first = wait_for(separate_stems(get_connection(), runner=separating)["job_id"])
 
     again = separate_stems(get_connection(), runner=separating)
@@ -209,7 +210,7 @@ def test_a_rerun_on_an_unchanged_timeline_never_separates_again(
 
 
 def test_refresh_separates_again(attach: Attach, separating: FakeSeparator) -> None:
-    attach(studio(timeline=FakeTimeline("sunset-set v3", "59.94")))
+    attach(studio(timeline=with_a_mix(FakeTimeline("sunset-set v3", "59.94"))))
     wait_for(separate_stems(get_connection(), runner=separating)["job_id"])
 
     again = wait_for(separate_stems(get_connection(), runner=separating, refresh=True)["job_id"])
@@ -276,7 +277,7 @@ def test_the_stems_a_job_owns_are_what_its_cache_entry_verifies(
     separating: FakeSeparator,
 ) -> None:
     """Delete a stem and the next run redoes the work rather than pointing at a gone file."""
-    attach(studio(timeline=FakeTimeline("sunset-set v3", "59.94")))
+    attach(studio(timeline=with_a_mix(FakeTimeline("sunset-set v3", "59.94"))))
     first = wait_for(separate_stems(get_connection(), runner=separating)["job_id"])
     assert first.result is not None
     Path(first.result["drums"]["kick"]).unlink()
@@ -293,7 +294,7 @@ def test_the_stems_a_job_owns_are_what_its_cache_entry_verifies(
 
 
 def test_no_separator_on_the_machine_is_a_named_failure(attach: Attach) -> None:
-    attach(studio(timeline=FakeTimeline("sunset-set v3", "59.94")))
+    attach(studio(timeline=with_a_mix(FakeTimeline("sunset-set v3", "59.94"))))
 
     record = wait_for(separate_stems(get_connection(), runner=_absent)["job_id"])
 
@@ -304,7 +305,7 @@ def test_no_separator_on_the_machine_is_a_named_failure(attach: Attach) -> None:
 
 
 def test_the_separators_own_complaint_travels_back_with_the_failure(attach: Attach) -> None:
-    attach(studio(timeline=FakeTimeline("sunset-set v3", "59.94")))
+    attach(studio(timeline=with_a_mix(FakeTimeline("sunset-set v3", "59.94"))))
     refusing = FakeSeparator(FOUR_STEMS, returncode=1, output=("No such model: htdemucs_ft.yaml",))
 
     record = wait_for(separate_stems(get_connection(), runner=refusing)["job_id"])
@@ -316,7 +317,7 @@ def test_the_separators_own_complaint_travels_back_with_the_failure(attach: Atta
 
 
 def test_a_model_that_leaves_a_stem_out_fails_naming_it(attach: Attach) -> None:
-    attach(studio(timeline=FakeTimeline("sunset-set v3", "59.94")))
+    attach(studio(timeline=with_a_mix(FakeTimeline("sunset-set v3", "59.94"))))
     partial = FakeSeparator(FOUR_STEMS, ("kick", "snare"))
 
     record = wait_for(separate_stems(get_connection(), runner=partial)["job_id"])
@@ -333,7 +334,7 @@ def test_a_failed_export_fails_the_stem_job_with_the_exports_own_advice(
     separating: FakeSeparator,
 ) -> None:
     """The acquisition runs inside this job, so its failure has to arrive as this job's."""
-    resolve = studio(timeline=FakeTimeline("sunset-set v3", "59.94"))
+    resolve = studio(timeline=with_a_mix(FakeTimeline("sunset-set v3", "59.94")))
     project = resolve.current_project
     assert project is not None
     project.accepts_job = False
@@ -376,7 +377,7 @@ def test_a_source_clip_is_extracted_then_separated(
 
 
 def test_a_clip_scope_with_no_clip_named_is_refused_before_a_job_starts(attach: Attach) -> None:
-    attach(studio(timeline=FakeTimeline("sunset-set v3", "59.94")))
+    attach(studio(timeline=with_a_mix(FakeTimeline("sunset-set v3", "59.94"))))
 
     with pytest.raises(InvalidRequestError) as raised:
         separate_stems(get_connection(), scope="clip")
@@ -385,7 +386,7 @@ def test_a_clip_scope_with_no_clip_named_is_refused_before_a_job_starts(attach: 
 
 
 def test_an_unknown_scope_says_which_two_there_are(attach: Attach) -> None:
-    attach(studio(timeline=FakeTimeline("sunset-set v3", "59.94")))
+    attach(studio(timeline=with_a_mix(FakeTimeline("sunset-set v3", "59.94"))))
 
     with pytest.raises(InvalidRequestError) as raised:
         separate_stems(get_connection(), scope="project")

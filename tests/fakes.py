@@ -1924,6 +1924,25 @@ def sync_reference(
     return FakeTimeline(name, fps, start_frame=start_frame, video=video)
 
 
+def with_a_mix(
+    timeline: FakeTimeline,
+    name: str = "Board mix.wav",
+    duration: int = 500,
+) -> FakeTimeline:
+    """Put a board recording on the timeline's first audio track, and hand it back.
+
+    A ``FakeTimeline`` is built with no tracks at all, which is the one timeline Resolve
+    will not export: an audio-only render of a cut with nothing on its audio tracks is
+    queued and then never run (#88). Any fake standing in for a timeline whose mix comes
+    off the render queue therefore has to carry audio, or the test is exercising the
+    refusal rather than the export it means to.
+    """
+    timeline._tracks["audio"].append(
+        FakeTrack("Audio 1", [FakeTimelineItem(name, timeline.GetStartFrame(), duration)])
+    )
+    return timeline
+
+
 def studio(
     project: str | None = "sunset-set",
     timeline: str | FakeTimeline | None = "sunset-set v3",

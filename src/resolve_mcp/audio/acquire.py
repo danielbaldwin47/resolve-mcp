@@ -88,6 +88,7 @@ def acquire_timeline_audio(
     project = current_project(connection, "No project is open, so there is no timeline to export.")
     found = find_timeline(project, timeline)
     name = str(found.GetName() or "timeline")
+    refuse_a_silent_mix(found, name)
     params = _timeline_params(name, sample_rate, bit_depth)
     identity = fingerprint(Reader(connection), found)
     key = cache.cache_key(TIMELINE_KIND, [identity], params)
@@ -154,6 +155,41 @@ def export_timeline_mix(
 
     progress(0.95, "hashing the export")
     return JobOutput(_result(expecting, params), (expecting,))
+
+
+def refuse_a_silent_mix(timeline: Timeline, name: str) -> None:
+    """Refuse to export a timeline with nothing on its audio tracks, before anything queues.
+
+    Resolve takes such a render and never runs it: the job sits at "Ready for background
+    render" at 0%, ``IsRenderingInProgress()`` reports ``True``, no dialog opens, and there
+    is no error and no timeout — only ``DeleteAllRenderJobs()`` clears it, and the next one
+    wedges the same way (#88, live on Studio 21.0.3.7). A hang is the one failure nothing
+    downstream can recover from or explain, so the precondition is checked here rather than
+    left to the queue.
+
+    The counts are read straight off the timeline rather than through ``Reader.optional``:
+    a getter that fails has to raise, because degrading it to an empty list would let a
+    dying handle read as "no audio" and refuse a timeline that has a mix on it. Reading
+    them off a timeline that is not the current one is sound — verified live on 21.0.3.7,
+    where ``GetItemListInTrack`` agreed exactly with the current-timeline reading, unlike
+    ``GetTakesCount`` and ``GetIsTrackEnabled`` (#84).
+    """
+    tracks = int(timeline.GetTrackCount("audio") or 0)
+    items = sum(
+        len(timeline.GetItemListInTrack("audio", index) or []) for index in range(1, tracks + 1)
+    )
+    if items:
+        return
+    log.info("Refusing a mix export of %r: %d audio tracks, no items on them", name, tracks)
+    raise AudioExportError(
+        cause=f"Timeline {name!r} has no audio items, so there is no mix to export.",
+        fix=(
+            "Check you targeted the timeline you meant — list_timelines names them, and "
+            "inspect_timeline reports what sits on each track. Resolve queues an audio-only "
+            "render of a silent timeline and never runs it, so this refuses instead."
+        ),
+        detail={"timeline": name, "audio_tracks": tracks, "audio_items": 0},
+    )
 
 
 def _as_export_failure(exc: RenderQueueError) -> AudioExportError:
@@ -316,6 +352,7 @@ def audio_source(
         project = current_project(connection, "No project is open, so there is no timeline.")
         found = find_timeline(project, timeline)
         name = str(found.GetName() or "timeline")
+        refuse_a_silent_mix(found, name)
         return Source(
             fingerprint(Reader(connection), found),
             _timeline_params(name, sample_rate, bit_depth),

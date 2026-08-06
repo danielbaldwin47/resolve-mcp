@@ -19,10 +19,16 @@ from resolve_mcp.audio.acquire import (
     _as_export_failure,
     acquire_clip_audio,
     acquire_timeline_audio,
+    audio_source,
     mapping_conflict,
 )
 from resolve_mcp.config import get_config
-from resolve_mcp.errors import AudioExtractionError, AudioMappingError, RenderQueueError
+from resolve_mcp.errors import (
+    AudioExportError,
+    AudioExtractionError,
+    AudioMappingError,
+    RenderQueueError,
+)
 from resolve_mcp.ffmpeg import Completed, Runner
 from resolve_mcp.jobs.runner import wait_for
 from resolve_mcp.resolve.connection import get_connection
@@ -33,11 +39,13 @@ from .fakes import (
     FakeProject,
     FakeResolve,
     FakeTimeline,
+    FakeTimelineItem,
     ffmpeg_absent,
     ffmpeg_refusing,
     media_pool,
     studio,
     sync_reference,
+    with_a_mix,
     write_wav,
 )
 
@@ -55,7 +63,7 @@ def fixture_audio(tmp_path: Path) -> Path:
 
 
 def test_the_timeline_mix_comes_off_the_render_queue_as_a_48k_24bit_wav(attach: Attach) -> None:
-    resolve = studio(timeline=FakeTimeline("sunset-set v3", "59.94"))
+    resolve = studio(timeline=with_a_mix(FakeTimeline("sunset-set v3", "59.94")))
     attach(resolve)
 
     record = wait_for(acquire_timeline_audio(get_connection())["job_id"])
@@ -77,8 +85,8 @@ def test_the_timeline_mix_comes_off_the_render_queue_as_a_48k_24bit_wav(attach: 
 
 
 def test_exporting_another_timeline_puts_the_directors_timeline_back(attach: Attach) -> None:
-    open_now = FakeTimeline("sunset-set v3", "59.94")
-    other = FakeTimeline("sunset-set v2", "59.94")
+    open_now = with_a_mix(FakeTimeline("sunset-set v3", "59.94"))
+    other = with_a_mix(FakeTimeline("sunset-set v2", "59.94"))
     resolve = studio(timeline=open_now, timelines=[open_now, other])
     attach(resolve)
 
@@ -88,7 +96,7 @@ def test_exporting_another_timeline_puts_the_directors_timeline_back(attach: Att
 
 
 def test_a_rerun_with_an_unchanged_timeline_is_an_instant_cache_hit(attach: Attach) -> None:
-    resolve = studio(timeline=FakeTimeline("sunset-set v3", "59.94"))
+    resolve = studio(timeline=with_a_mix(FakeTimeline("sunset-set v3", "59.94")))
     attach(resolve)
     first = wait_for(acquire_timeline_audio(get_connection())["job_id"])
 
@@ -101,7 +109,7 @@ def test_a_rerun_with_an_unchanged_timeline_is_an_instant_cache_hit(attach: Atta
 
 
 def test_refresh_exports_again_even_when_the_timeline_looks_unchanged(attach: Attach) -> None:
-    resolve = studio(timeline=FakeTimeline("sunset-set v3", "59.94"))
+    resolve = studio(timeline=with_a_mix(FakeTimeline("sunset-set v3", "59.94")))
     attach(resolve)
     wait_for(acquire_timeline_audio(get_connection())["job_id"])
 
@@ -114,7 +122,7 @@ def test_refresh_exports_again_even_when_the_timeline_looks_unchanged(attach: At
 
 def test_an_edited_timeline_is_a_different_key_and_exports_again(attach: Attach) -> None:
     """The fingerprint has to move when the cut does, or analysis reads yesterday's mix."""
-    timeline = FakeTimeline("sunset-set v3", "59.94")
+    timeline = with_a_mix(FakeTimeline("sunset-set v3", "59.94"))
     resolve = studio(timeline=timeline)
     attach(resolve)
     first = wait_for(acquire_timeline_audio(get_connection())["job_id"])
@@ -130,7 +138,7 @@ def test_an_edited_timeline_is_a_different_key_and_exports_again(attach: Attach)
 
 def test_a_take_swap_that_keeps_the_duration_still_exports_again(attach: Attach) -> None:
     """Bounds and track counts alone would call a recut timeline unchanged."""
-    timeline = sync_reference()
+    timeline = with_a_mix(sync_reference())
     resolve = studio(timeline=timeline)
     attach(resolve)
     first = wait_for(acquire_timeline_audio(get_connection())["job_id"])
@@ -147,7 +155,7 @@ def test_a_take_swap_that_keeps_the_duration_still_exports_again(attach: Attach)
 
 def test_the_export_renders_one_file_for_the_whole_timeline(attach: Attach) -> None:
     """The other render mode writes a file per clip — hundreds of fragments, not the mix."""
-    resolve = studio(timeline=FakeTimeline("sunset-set v3", "59.94"))
+    resolve = studio(timeline=with_a_mix(FakeTimeline("sunset-set v3", "59.94")))
     attach(resolve)
 
     wait_for(acquire_timeline_audio(get_connection())["job_id"])
@@ -162,7 +170,7 @@ def test_the_mix_still_exports_on_a_build_that_refuses_the_wav_pair(attach: Atta
     so the worker names it as the fallback. Without this test the worker could stop passing
     it and every other test here would stay green.
     """
-    resolve = studio(timeline=FakeTimeline("sunset-set v3", "59.94"))
+    resolve = studio(timeline=with_a_mix(FakeTimeline("sunset-set v3", "59.94")))
     project = _project(resolve)
     project.accepts_format = False
     project.render_presets["Audio Only"] = ("wav", "lpcm")
@@ -182,7 +190,7 @@ def test_the_mix_still_exports_on_a_build_that_refuses_the_wav_pair(attach: Atta
 def test_a_build_with_no_wav_route_at_all_fails_the_job_naming_both(attach: Attach) -> None:
     """The pair refused and no usable fallback: the reply has to name the preset too,
     or the machine that cannot render audio looks identical to one missing a codec."""
-    resolve = studio(timeline=FakeTimeline("sunset-set v3", "59.94"))
+    resolve = studio(timeline=with_a_mix(FakeTimeline("sunset-set v3", "59.94")))
     _project(resolve).accepts_format = False  # and no "Audio Only" among the presets
     attach(resolve)
 
@@ -195,7 +203,7 @@ def test_a_build_with_no_wav_route_at_all_fails_the_job_naming_both(attach: Atta
 
 
 def test_a_queue_that_refuses_the_job_fails_the_job_not_the_server(attach: Attach) -> None:
-    resolve = studio(timeline=FakeTimeline("sunset-set v3", "59.94"))
+    resolve = studio(timeline=with_a_mix(FakeTimeline("sunset-set v3", "59.94")))
     _project(resolve).accepts_job = False
     attach(resolve)
 
@@ -205,6 +213,54 @@ def test_a_queue_that_refuses_the_job_fails_the_job_not_the_server(attach: Attac
     assert record.error is not None
     assert record.error["code"] == "audio_export_failed"
     assert "audio on it" in record.error["fix"]
+
+
+def test_a_timeline_with_no_audio_items_is_refused_before_anything_is_queued(
+    attach: Attach,
+) -> None:
+    """#88, live on 21.0.3.7: Resolve queues this render and never runs it.
+
+    The job sits at "Ready for background render" at 0% with ``IsRenderingInProgress()``
+    reporting True and no dialog open, and the caller's wait blocks until its own timeout.
+    Nothing downstream can recover from that or explain it, so the queue must never see it.
+    """
+    resolve = studio(timeline=FakeTimeline("sunset-set v3", "59.94", video=[[_shot()]]))
+    attach(resolve)
+
+    with pytest.raises(AudioExportError) as raised:
+        acquire_timeline_audio(get_connection())
+
+    assert "no audio items" in raised.value.cause
+    assert "sunset-set v3" in raised.value.cause
+    assert _project(resolve).render_jobs == []
+
+
+def test_an_analysis_of_a_timeline_with_no_audio_declines_up_front_too(attach: Attach) -> None:
+    """``audio_source`` promises the route's refusals before a job starts, not inside one."""
+    attach(studio(timeline=FakeTimeline("sunset-set v3", "59.94", video=[[_shot()]])))
+
+    with pytest.raises(AudioExportError):
+        audio_source(get_connection())
+
+
+def test_a_timeline_with_audio_on_a_later_track_is_still_exportable(attach: Attach) -> None:
+    """The count is across every audio track: an empty A1 says nothing about the mix."""
+    timeline = FakeTimeline(
+        "sunset-set v3",
+        "59.94",
+        video=[[_shot()]],
+        audio=[[], [FakeTimelineItem("Board mix.wav", 0, 500)]],
+    )
+    attach(studio(timeline=timeline))
+
+    record = wait_for(acquire_timeline_audio(get_connection())["job_id"])
+
+    assert record.state == "completed", record.error
+
+
+def _shot() -> FakeTimelineItem:
+    """One video item, so the refusal is about the audio and not about an empty timeline."""
+    return FakeTimelineItem("Cam A.mp4", 0, 500)
 
 
 # --- clip scope --------------------------------------------------------------------------
