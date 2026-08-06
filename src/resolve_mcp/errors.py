@@ -228,16 +228,6 @@ class CutInvalidError(ResolveMcpError):
     )
 
 
-class UnsupportedCutFeatureError(ResolveMcpError):
-    """The cut is valid but describes something this build cannot place yet.
-
-    Refused rather than partially built: a timeline missing a part of the cut that made it
-    is the half-built outcome the pre-flight exists to prevent.
-    """
-
-    code = "unsupported_cut_feature"
-
-
 class BuildFailedError(ResolveMcpError):
     """Resolve would not build the cut — creation refused, a locked track, a clip astray.
 
@@ -291,6 +281,37 @@ class RenderQueueError(ResolveMcpError):
         "Open the Deliver page and check the render queue for a failed or cancelled job, "
         "clear it, and retry. A render that reports success but writes nothing usually means "
         "the target directory is not writable from the machine Resolve runs on."
+    )
+
+
+class RenderPresetNotFoundError(ResolveMcpError):
+    """The render preset asked for is not one this project offers."""
+
+    code = "render_preset_not_found"
+
+    def __init__(self, name: str, available: list[str]) -> None:
+        super().__init__(
+            cause=f"No render preset named {name!r} in this project.",
+            fix=(
+                "list_render_presets names every preset, exactly as it must be spelled. "
+                "Presets are per project and per user — one made on another machine is not here."
+            ),
+            detail={"requested": name, "available": available},
+        )
+
+
+class RenderTargetExistsError(ResolveMcpError):
+    """A file already sits where the render would land, and the caller named that place.
+
+    Resolve does not reliably overwrite: it may write ``name_0.mp4`` beside the old file
+    instead, and the job would then report a path holding yesterday's export.
+    """
+
+    code = "render_target_exists"
+    default_fix = (
+        "Render under a different name, or pass refresh=true to replace what is there. "
+        "Leaving target_dir out puts the file in the server's own render directory, which "
+        "it replaces without asking."
     )
 
 
@@ -376,6 +397,47 @@ class ChainedJobError(ResolveMcpError):
         code = error.get("code")
         if code:
             self.code = str(code)
+
+
+class TranscriberUnavailableError(ResolveMcpError):
+    """faster-whisper is not installed in this venv, so nothing can be transcribed."""
+
+    code = "transcriber_unavailable"
+    default_fix = (
+        "Install the transcription extra with `uv sync --extra analysis`, which pulls "
+        "faster-whisper and its CUDA runtime. The first run also downloads the model, "
+        "which takes a while and needs the disk space."
+    )
+
+
+class TranscriptionError(ResolveMcpError):
+    """The transcription job could not produce a transcript."""
+
+    code = "transcription_failed"
+    default_fix = (
+        "Check the audio the transcript was to be made from — get_job on the acquisition "
+        "job named in detail reports what happened to it — then start the job again."
+    )
+
+
+class FrameGrabError(ResolveMcpError):
+    """ffmpeg would not give up a frame of this clip."""
+
+    code = "frame_grab_failed"
+    default_fix = (
+        "Check the clip is online and holds video — inspect_clip reports both — and that the "
+        "time asked for is inside its bounds. ffmpeg's own message is in detail.stderr."
+    )
+
+
+class SceneDetectionError(ResolveMcpError):
+    """ffmpeg would not decode this clip looking for scene cuts."""
+
+    code = "scene_detection_failed"
+    default_fix = (
+        "Check the clip is online and holds video — inspect_clip reports both. "
+        "ffmpeg's own message is in detail.stderr."
+    )
 
 
 class InternalError(ResolveMcpError):

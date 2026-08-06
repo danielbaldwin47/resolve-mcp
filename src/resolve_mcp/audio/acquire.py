@@ -23,8 +23,6 @@ to force the export again when the director changed something no reading can see
 
 from __future__ import annotations
 
-import contextlib
-import hashlib
 from collections.abc import Callable, Iterator
 from pathlib import Path, PureWindowsPath
 from typing import Any, NamedTuple
@@ -37,14 +35,15 @@ from ..errors import (
     InvalidRequestError,
     RenderQueueError,
 )
+from ..ffmpeg import Runner
 from ..jobs import cache
-from ..jobs.runner import JobOutput, Progress, start_job
+from ..jobs.runner import JobOutput, Progress, band, start_job
 from ..logging_config import get_logger
-from ..naming import slug
+from ..naming import keyed_name
 from ..resolve import media, render
 from ..resolve.connection import ResolveConnection
 from ..resolve.session import current_project
-from ..resolve.timeline import Reader, find_timeline
+from ..resolve.timeline import Reader, current_timeline, find_timeline, fingerprint
 from . import ffmpeg, wav
 
 log = get_logger("audio")
@@ -64,7 +63,6 @@ SCOPES = (TIMELINE_SCOPE, CLIP_SCOPE)
 
 RENDER_FORMAT = "wav"
 RENDER_CODEC = "lpcm"
-SINGLE_CLIP = 1
 
 EXPORT_FLOOR = 0.1
 EXPORT_CEILING = 0.9
@@ -73,45 +71,6 @@ OFFSET_HINT = ("offset", "delay")
 
 
 # --- timeline scope: the render queue ----------------------------------------------------
-
-
-def timeline_fingerprint(reader: Reader, timeline: Timeline) -> dict[str, Any]:
-    """A timeline's identity, as far as anything outside Resolve can read it.
-
-    Bounds and track counts alone would call a take swap or a reordered cut "unchanged" —
-    same duration, same stack — and hand back yesterday's mix, so the shots themselves are
-    digested too. What no reading can see is a clip's audio level, which the scripting API
-    does not expose at all; that is what ``refresh`` on the starter is for.
-
-    Nothing here smooths a failure into a default: a field that cannot be read while
-    Resolve is dying must not quietly produce a fingerprint, because every dead-handle
-    reading would collide on one key and serve one concert's audio for another.
-    """
-    return {
-        "name": str(timeline.GetName()),
-        "unique_id": reader.optional(timeline, "GetUniqueId", None),
-        "start": timeline.GetStartFrame(),
-        "end": timeline.GetEndFrame(),
-        "audio_tracks": timeline.GetTrackCount("audio"),
-        "video_tracks": timeline.GetTrackCount("video"),
-        "structure": _structure(reader, timeline),
-    }
-
-
-def _structure(reader: Reader, timeline: Timeline) -> str:
-    """A digest of every shot on the cut: what it is, where it starts, how long it runs."""
-    digest = hashlib.sha256()
-    for track_type in ("video", "audio"):
-        count = int(timeline.GetTrackCount(track_type) or 0)
-        for index in range(1, count + 1):
-            items = reader.optional(timeline, "GetItemListInTrack", [], track_type, index) or []
-            digest.update(f"{track_type}{index}:".encode())
-            for item in items:
-                name = reader.optional(item, "GetName", "")
-                start = reader.optional(item, "GetStart", None)
-                duration = reader.optional(item, "GetDuration", None)
-                digest.update(f"{name}@{start}+{duration};".encode())
-    return digest.hexdigest()
 
 
 def acquire_timeline_audio(
@@ -128,8 +87,8 @@ def acquire_timeline_audio(
     found = find_timeline(project, timeline)
     name = str(found.GetName() or "timeline")
     params = _timeline_params(name, sample_rate, bit_depth)
-    fingerprint = timeline_fingerprint(Reader(connection), found)
-    key = cache.cache_key(TIMELINE_KIND, [fingerprint], params)
+    identity = fingerprint(Reader(connection), found)
+    key = cache.cache_key(TIMELINE_KIND, [identity], params)
 
     def work(progress: Progress) -> JobOutput:
         return export_timeline_mix(project, found, key, params, progress, config)
@@ -157,14 +116,14 @@ def export_timeline_mix(
     config = config or get_config()
     target_dir = config.audio_dir
     target_dir.mkdir(parents=True, exist_ok=True)
-    stem = _stem(str(params["timeline"]), key)
+    stem = keyed_name(str(params["timeline"]), key, "", "audio")
     expecting = target_dir / f"{stem}.wav"
 
     progress(0.05, "queuing the audio export")
-    with _current_timeline(project, timeline):
+    with current_timeline(project, timeline):
         # One file for the whole timeline. The other mode renders a file per clip on it,
         # which for a concert cut is hundreds of fragments instead of the mix.
-        project.SetCurrentRenderMode(SINGLE_CLIP)
+        project.SetCurrentRenderMode(render.SINGLE_CLIP)
         settings = {
             "SelectAllFrames": True,
             "TargetDir": str(target_dir),
@@ -176,8 +135,13 @@ def export_timeline_mix(
             "AudioSampleRate": int(params["sample_rate"]),
         }
         try:
-            job_id = render.submit(project, settings, RENDER_FORMAT, RENDER_CODEC)
-            render.render(project, job_id, expecting, _scaled(progress))
+            job_id = render.submit(project, settings, (RENDER_FORMAT, RENDER_CODEC))
+            render.render(
+                project,
+                job_id,
+                expecting,
+                band(progress, EXPORT_FLOOR, EXPORT_CEILING),
+            )
         except RenderQueueError as exc:
             raise _as_export_failure(exc) from exc
 
@@ -196,35 +160,6 @@ def _as_export_failure(exc: RenderQueueError) -> AudioExportError:
     return AudioExportError(cause=exc.cause, fix=specific, detail=exc.detail)
 
 
-@contextlib.contextmanager
-def _current_timeline(project: Project, timeline: Timeline) -> Iterator[None]:
-    """Render what was asked for, and put the director's timeline back afterwards.
-
-    The render queue renders the *current* timeline, so acquiring audio for any other one
-    means switching. Leaving the switch in place would move the GUI out from under whoever
-    is sitting at it.
-    """
-    previous = project.GetCurrentTimeline()
-    switched = previous is not timeline
-    if switched:
-        project.SetCurrentTimeline(timeline)
-    try:
-        yield
-    finally:
-        if switched and previous is not None:
-            project.SetCurrentTimeline(previous)
-
-
-def _scaled(progress: Progress) -> Progress:
-    """Map the render's own 0-1 onto the part of the job the render actually is."""
-    span = EXPORT_CEILING - EXPORT_FLOOR
-
-    def scaled(fraction: float, step: str) -> None:
-        progress(EXPORT_FLOOR + span * fraction, step)
-
-    return scaled
-
-
 # --- clip scope: ffmpeg ------------------------------------------------------------------
 
 
@@ -235,7 +170,7 @@ def acquire_clip_audio(
     sample_rate: int = DEFAULT_SAMPLE_RATE,
     bit_depth: int = DEFAULT_BIT_DEPTH,
     refresh: bool = False,
-    runner: ffmpeg.Runner | None = None,
+    runner: Runner | None = None,
     config: Config | None = None,
 ) -> dict[str, Any]:
     """Start a job that extracts one source clip's audio. Returns the job record.
@@ -260,11 +195,11 @@ def extract_clip_audio(
     params: dict[str, Any],
     progress: Progress,
     config: Config | None = None,
-    runner: ffmpeg.Runner | None = None,
+    runner: Runner | None = None,
 ) -> JobOutput:
     """The worker: ffmpeg the clip's audio into the cache as a WAV."""
     config = config or get_config()
-    target = config.audio_dir / f"{_stem(str(params['clip']), key)}.wav"
+    target = config.audio_dir / keyed_name(str(params["clip"]), key, ".wav", "audio")
 
     progress(0.1, "extracting audio with ffmpeg")
     ffmpeg.extract(
@@ -360,7 +295,7 @@ def audio_source(
     sample_rate: int = DEFAULT_SAMPLE_RATE,
     bit_depth: int = DEFAULT_BIT_DEPTH,
     refresh: bool = False,
-    runner: ffmpeg.Runner | None = None,
+    runner: Runner | None = None,
     config: Config | None = None,
 ) -> Source:
     """Resolve a scope now; hand back the fingerprint, the params, and how to acquire it.
@@ -375,7 +310,7 @@ def audio_source(
         found = find_timeline(project, timeline)
         name = str(found.GetName() or "timeline")
         return Source(
-            timeline_fingerprint(Reader(connection), found),
+            fingerprint(Reader(connection), found),
             _timeline_params(name, sample_rate, bit_depth),
             lambda: acquire_timeline_audio(
                 connection,
@@ -477,8 +412,3 @@ def _result(target: Path, params: dict[str, Any]) -> dict[str, Any]:
         target,
     )
     return reading
-
-
-def _stem(label: str, key: str) -> str:
-    """Deterministic from the cache key, so a rerun overwrites instead of accumulating."""
-    return f"{slug(label, 'audio')}-{key[:12]}"

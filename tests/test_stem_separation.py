@@ -19,8 +19,6 @@ import pytest
 
 from resolve_mcp.audio import separator
 from resolve_mcp.audio.acquire import audio_source
-from resolve_mcp.audio.ffmpeg import Completed as FfmpegCompleted
-from resolve_mcp.audio.ffmpeg import Runner as FfmpegRunner
 from resolve_mcp.audio.stems import (
     DRUM_STEMS,
     FOUR_STEMS,
@@ -33,6 +31,8 @@ from resolve_mcp.audio.stems import (
 )
 from resolve_mcp.config import Config, get_config, set_config
 from resolve_mcp.errors import InvalidRequestError, StemSeparationError
+from resolve_mcp.ffmpeg import Completed as FfmpegCompleted
+from resolve_mcp.ffmpeg import Runner as FfmpegRunner
 from resolve_mcp.jobs import cache
 from resolve_mcp.jobs.runner import Progress, wait_for
 from resolve_mcp.resolve.connection import get_connection

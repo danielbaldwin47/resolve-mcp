@@ -26,8 +26,11 @@ rather than API calls, and are the reason this file exists at all:
 
 from __future__ import annotations
 
+import contextlib
+import hashlib
 import re
-from typing import Any, NamedTuple
+from collections.abc import Iterator
+from typing import Any, Final, NamedTuple
 
 from ..config import Config, get_config
 from ..errors import (
@@ -147,6 +150,28 @@ def version_of(name: str) -> tuple[str, int | None]:
     return match.group("base"), int(match.group("number"))
 
 
+FIRST_TRACK: Final = 1
+"""A sequential V1 cut is one video track and one audio track: both the first of their kind.
+
+Where the build places and where a swap looks have to be the same track, so the index is
+named once rather than written as a literal 1 in each of them.
+"""
+
+
+def start_frame(timeline: Timeline) -> int:
+    """The timeline's own first frame — an hour of timecode on a normal project.
+
+    Every absolute position counts from here, because ``recordFrame`` is *not* clamped to
+    the timeline's span (#18 (d)): a cut frame of 0 sent raw would land before it begins.
+    An unreadable answer counts from 0 rather than stopping, and says so in the log.
+    """
+    frames = read_frames(timeline.GetStartFrame())
+    if frames is None:
+        log.warning("Resolve gave an unreadable start frame; counting from 0")
+        return 0
+    return frames
+
+
 def next_free_name(requested: str, existing: set[str]) -> str:
     """A name no timeline in the project answers to, following ``<base> v<N>``.
 
@@ -162,6 +187,68 @@ def next_free_name(requested: str, existing: set[str]) -> str:
     while f"{base} v{number}" in existing:
         number += 1
     return f"{base} v{number}"
+
+
+@contextlib.contextmanager
+def current_timeline(project: Project, timeline: Timeline) -> Iterator[None]:
+    """Work on the timeline that was asked for, and put the director's back afterwards.
+
+    The render queue renders the *current* timeline, so exporting any other one means
+    switching. Leaving the switch in place would move the GUI out from under whoever is
+    sitting at it.
+    """
+    previous = project.GetCurrentTimeline()
+    switched = previous is not timeline
+    if switched:
+        project.SetCurrentTimeline(timeline)
+    try:
+        yield
+    finally:
+        if switched and previous is not None:
+            project.SetCurrentTimeline(previous)
+
+
+def fingerprint(reader: Reader, timeline: Timeline) -> dict[str, Any]:
+    """A timeline's identity, as far as anything outside Resolve can read it.
+
+    Every job that takes a whole timeline as its input — an audio export, a render — keys
+    its cache off this, so it lives with the other timeline reads rather than with either
+    caller.
+
+    Bounds and track counts alone would call a take swap or a reordered cut "unchanged" —
+    same duration, same stack — and hand back yesterday's output, so the shots themselves
+    are digested too. What no reading can see is a clip's audio level, which the scripting
+    API does not expose at all; that is what ``refresh`` on the starters is for.
+
+    Nothing here smooths a failure into a default: a field that cannot be read while
+    Resolve is dying must not quietly produce a fingerprint, because every dead-handle
+    reading would collide on one key and serve one concert's output for another.
+    """
+    return {
+        "name": str(timeline.GetName()),
+        "unique_id": reader.optional(timeline, "GetUniqueId", None),
+        "start": timeline.GetStartFrame(),
+        "end": timeline.GetEndFrame(),
+        "audio_tracks": timeline.GetTrackCount("audio"),
+        "video_tracks": timeline.GetTrackCount("video"),
+        "structure": _structure(reader, timeline),
+    }
+
+
+def _structure(reader: Reader, timeline: Timeline) -> str:
+    """A digest of every shot on the cut: what it is, where it starts, how long it runs."""
+    digest = hashlib.sha256()
+    for track_type in ("video", "audio"):
+        count = int(timeline.GetTrackCount(track_type) or 0)
+        for index in range(1, count + 1):
+            items = reader.optional(timeline, "GetItemListInTrack", [], track_type, index) or []
+            digest.update(f"{track_type}{index}:".encode())
+            for item in items:
+                name = reader.optional(item, "GetName", "")
+                start = reader.optional(item, "GetStart", None)
+                duration = reader.optional(item, "GetDuration", None)
+                digest.update(f"{name}@{start}+{duration};".encode())
+    return digest.hexdigest()
 
 
 # --- shape ---------------------------------------------------------------------------------
@@ -523,7 +610,10 @@ def read_item(
         "sync_offset": dual_time(offset, fps),
         "clip": _clip_name(reader, item),
         "enabled": bool(reader.optional(item, "GetClipEnabled", True)),
-        "takes": int(reader.optional(item, "GetTakeCount", 0) or 0),
+        # ``GetTakesCount``, not ``GetTakeCount``: the plural is the method the scripting
+        # README actually declares (line 523), and fusionscript answers an unknown name
+        # with ``None`` rather than raising — so the singular read as zero takes forever.
+        "takes": int(reader.optional(item, "GetTakesCount", 0) or 0),
     }
 
 

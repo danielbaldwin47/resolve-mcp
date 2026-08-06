@@ -93,6 +93,32 @@ class Config:
         return self.cache_dir / "stems"
 
     @property
+    def frame_dir(self) -> Path:
+        """Grabbed JPEGs. The agent opens these by path, so they outlive the call that made them."""
+        return self.cache_dir / "frames"
+
+    @property
+    def analysis_dir(self) -> Path:
+        """What the analysis jobs write: transcripts, scene-cut catalogs, later beat maps.
+
+        Separate from the WAVs they were read off: the audio is a cache of something Resolve
+        or ffmpeg can make again, while these are the files the agent greps and quotes in a
+        review round, and it should be able to tell the two apart at a glance.
+        """
+        return self.cache_dir / "analysis"
+
+    @property
+    def render_dir(self) -> Path:
+        """Deliverables rendered without a target directory of their own.
+
+        Its own folder rather than the audio one because these are files a human opens and
+        hands on, and because everything under it is the server's to replace: a re-render
+        after a review round overwrites in place, which is only safe where nothing the
+        director put there can be sitting.
+        """
+        return self.cache_dir / "renders"
+
+    @property
     def interchange_dir(self) -> Path:
         """Where exported timelines (OTIO, FCPXML, DRT) land when no path is given.
 

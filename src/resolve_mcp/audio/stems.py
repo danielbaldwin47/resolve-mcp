@@ -36,6 +36,7 @@ from typing import Any
 
 from ..config import Config, get_config
 from ..errors import InternalError
+from ..ffmpeg import Runner
 from ..jobs import cache
 from ..jobs import runner as job_runner
 from ..jobs.runner import JobOutput, Progress, start_job
@@ -43,7 +44,7 @@ from ..jobs.store import JobRecord
 from ..logging_config import get_logger
 from ..naming import slug
 from ..resolve.connection import ResolveConnection
-from . import acquire, ffmpeg, separator
+from . import acquire, separator
 
 log = get_logger("audio")
 
@@ -77,7 +78,7 @@ def separate_stems(
     bin: str | None = None,  # noqa: A002 - "bin" is the Resolve term the agent uses
     refresh: bool = False,
     runner: separator.Runner | None = None,
-    ffmpeg_runner: ffmpeg.Runner | None = None,
+    ffmpeg_runner: Runner | None = None,
     config: Config | None = None,
 ) -> dict[str, Any]:
     """Start a two-pass separation job. Returns the job record, not the stems.

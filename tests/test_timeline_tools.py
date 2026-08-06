@@ -280,7 +280,7 @@ def test_one_title_that_refuses_a_getter_costs_a_field_not_the_inspection(
         "Title 01",
         0,
         60,
-        refuses={"GetSourceStartFrame", "GetMediaPoolItem", "GetTakeCount"},
+        refuses={"GetSourceStartFrame", "GetMediaPoolItem", "GetTakesCount"},
     )
     shot = FakeTimelineItem("C0012.mp4", 60, 40, source_start=1000)
     attach(studio(timeline=FakeTimeline("cut v1", video=[FakeTrack("Video 1", [title, shot])])))

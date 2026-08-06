@@ -477,23 +477,65 @@ def positions(doc: dict[str, Any]) -> dict[str, tuple[int, int]]:
     return placed
 
 
+def placements(doc: dict[str, Any], start: int) -> dict[str, tuple[int, int]]:
+    """Each segment id to its ``(record frame, duration)`` on a timeline starting at ``start``.
+
+    The one place a cut's own offsets become absolute frames. A build sends these as
+    ``recordFrame`` and a swap finds a shot by them, so a second derivation of the same sum
+    somewhere else is a swap that quietly reads the wrong shot — there is only this one.
+    """
+    return {
+        id: (start + offset, duration) for id, (offset, duration) in positions(doc).items()
+    }
+
+
 def total_frames(doc: dict[str, Any]) -> int:
     """The V1 span: sequential segments, so the sum of their durations."""
     return sum(duration_frames(s["in"], s["out"]) for s in _segments(doc))
 
 
+def overlay_positions(doc: dict[str, Any]) -> dict[str, tuple[int, int]]:
+    """Each overlay id to its computed ``(start, duration)`` on V2 — start measured from
+    the cut's first frame, exactly as :func:`positions` measures a segment's.
+
+    An overlay names no absolute frame: its position is its anchor segment's computed
+    start plus the offset, which is what makes it ride the content it covers through a
+    tightening pass. E9 judges these numbers and the build places against them, from this
+    one function — a position validated one way and built another is exactly the drift
+    anchoring exists to prevent. An overlay whose anchor does not exist has no position
+    and is absent here; E9 has already refused that document.
+    """
+    return {str(overlay["id"]): at for overlay, at in _anchored(doc) if at is not None}
+
+
+def _anchored(doc: dict[str, Any]) -> Iterator[tuple[dict[str, Any], tuple[int, int] | None]]:
+    """Every overlay with its resolved span, or ``None`` when its anchor is not a segment."""
+    placed = positions(doc)
+    for overlay in _overlays(doc):
+        anchor = placed.get(str(overlay["over"]["segment"]))
+        yield (
+            overlay,
+            None
+            if anchor is None
+            else (
+                anchor[0] + int(overlay["over"]["offset"]),
+                duration_frames(overlay["in"], overlay["out"]),
+            ),
+        )
+
+
 def _overlay_errors(doc: dict[str, Any]) -> list[Finding]:
-    """E9 and E10, both judged on absolute positions resolved from the anchors."""
+    """E9 and E10, both judged on the absolute positions resolved from the anchors."""
     placed = positions(doc)
     total = total_frames(doc)
     findings: list[Finding] = []
     spans: list[tuple[str, int, int]] = []
 
-    for overlay in _overlays(doc):
+    for overlay, resolved in _anchored(doc):
         id = str(overlay["id"])
         anchor = str(overlay["over"]["segment"])
         offset = int(overlay["over"]["offset"])
-        if anchor not in placed:
+        if resolved is None:
             findings.append(
                 _finding(
                     "E9",
@@ -502,7 +544,7 @@ def _overlay_errors(doc: dict[str, Any]) -> list[Finding]:
                 )
             )
             continue
-        start, anchor_duration = placed[anchor]
+        _, anchor_duration = placed[anchor]
         if not 0 <= offset < anchor_duration:
             findings.append(
                 _finding(
@@ -513,8 +555,7 @@ def _overlay_errors(doc: dict[str, Any]) -> list[Finding]:
                 )
             )
             continue
-        duration = duration_frames(overlay["in"], overlay["out"])
-        at = start + offset
+        at, duration = resolved
         if at + duration > total:
             findings.append(
                 _finding(
@@ -759,7 +800,9 @@ __all__ = [
     "ClipFacts",
     "Finding",
     "locked_track_finding",
+    "overlay_positions",
     "parse_failure_finding",
+    "placements",
     "positions",
     "resolve_aliases",
     "severity_of",
