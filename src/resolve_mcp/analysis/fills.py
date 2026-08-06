@@ -42,9 +42,12 @@ from ..config import Config, get_config
 from ..errors import InvalidRequestError
 from ..jobs import cache
 from ..jobs.runner import JobOutput, Progress, start_job
+from ..logging_config import get_logger
 from ..naming import slug
 from . import beats as beats_module
 from . import drums, music, records
+
+log = get_logger("analysis")
 
 KIND = "detect_drum_fills"
 FILLS = "fills"
@@ -110,7 +113,7 @@ class Reading(NamedTuple):
     them, so they travel as one thing rather than as five arguments in the same order.
     """
 
-    beats: Sequence[Mapping[str, Any]]
+    grid: Sequence[Mapping[str, Any]]
     edges: Sequence[float]
     tallies: Sequence[Counter[str]]
     times: Sequence[float]
@@ -146,7 +149,7 @@ def candidates(
         return Detection((), 0, 0, 0.0)
 
     reading = Reading(
-        beats=beats,
+        grid=beats,
         edges=edges,
         tallies=tallies,
         times=sorted(hit.seconds for hit in hits),
@@ -223,7 +226,7 @@ def _weighed(reading: Reading, first: int, last: int) -> Candidate:
     length = last - first + 1
     density = total / (end - start)
 
-    into = reading.beats[last + 1] if last + 1 < len(reading.beats) else None
+    into = reading.grid[last + 1] if last + 1 < len(reading.grid) else None
     tolerance = RESOLUTION_BEATS * (end - start) / length
     factors = {
         "density": _clamp((density / reading.baseline - 1.0) / (STRONG_MULTIPLE - 1.0)),
@@ -235,9 +238,9 @@ def _weighed(reading: Reading, first: int, last: int) -> Candidate:
         start=round(start, PLACES),
         end=round(end, PLACES),
         beats=length,
-        beat=int(reading.beats[first]["beat"]),
-        bar=int(reading.beats[first]["bar"]),
-        in_bar=int(reading.beats[first]["in_bar"]),
+        beat=int(reading.grid[first]["beat"]),
+        bar=int(reading.grid[first]["bar"]),
+        in_bar=int(reading.grid[first]["in_bar"]),
         hits=total,
         counts={stem: counts[stem] for stem in sorted(counts)},
         density=round(density, PLACES),
@@ -386,6 +389,15 @@ def _stems(stems: Mapping[str, str | Path] | str | Path) -> dict[str, Path]:
             str(label): Path(path) for label, path in stems.items() if str(label) in DRUM_STEMS
         }
         _all_on_disk(found)
+    if found and len(found) < len(DRUM_STEMS):
+        # Not refused: some stems beat none. But a kit missing its toms scores every
+        # candidate with a tom factor of zero, and that is worth a line in the log rather
+        # than a mysteriously timid confidence read off a document weeks later.
+        log.warning(
+            "Looking for fills in %s only — %s missing, so confidence will read low",
+            ", ".join(sorted(found)),
+            ", ".join(one for one in DRUM_STEMS if one not in found),
+        )
     if not found:
         raise InvalidRequestError(
             cause="None of the drum stems were named, so there is nothing to look for fills in.",

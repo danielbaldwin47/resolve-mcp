@@ -21,7 +21,7 @@ import pytest
 from resolve_mcp.analysis import drums, fills, music
 from resolve_mcp.analysis.beats import BeatGrid, Detector, numbered
 from resolve_mcp.analysis.drums import Hit
-from resolve_mcp.audio.stems import DRUM_PASS, DRUM_STEMS
+from resolve_mcp.audio.stems import DRUM_PASS, DRUM_STEMS, MIX_PASS
 from resolve_mcp.config import get_config
 from resolve_mcp.errors import AnalysisFailedError, InvalidRequestError
 from resolve_mcp.jobs.runner import JobOutput, wait_for
@@ -41,7 +41,7 @@ def master(tmp_path: Path) -> Path:
 def separation(tmp_path: Path) -> Path:
     """A separation directory as ``separate_stems`` leaves it: two passes, one parent."""
     directory = tmp_path / "stems" / "concert-abc123def456"
-    write_hits(directory / "mix" / "concert_(Drums)_model.wav", times=(), seconds=4.0)
+    write_hits(directory / MIX_PASS / "concert_(Drums)_model.wav", times=(), seconds=4.0)
     for label in DRUM_STEMS:
         write_hits(
             directory / DRUM_PASS / f"concert_({label.title()})_model.wav",
@@ -327,9 +327,34 @@ def test_the_four_stem_pass_is_not_mistaken_for_the_drum_stems(
     separation: Path,
 ) -> None:
     with pytest.raises(InvalidRequestError) as raised:
-        fills.detect_drum_fills(separation / "mix", master)
+        fills.detect_drum_fills(separation / MIX_PASS, master)
 
     assert raised.value.detail["wanted"] == list(DRUM_STEMS)
+
+
+def test_a_drum_pass_holding_nothing_labelled_falls_back_to_the_directory(
+    master: Path,
+    tmp_path: Path,
+) -> None:
+    """The drum pass is looked in first, but an empty one must not end the search."""
+    directory = tmp_path / "stems" / "hand-copied"
+    write_hits(directory / DRUM_PASS / "unlabelled.wav", times=(), seconds=1.0)
+    for label in DRUM_STEMS:
+        write_hits(directory / f"concert_({label.title()})_model.wav", times=(), seconds=4.0)
+
+    result = _ran(directory, master, _grid())
+
+    assert result["stems"] == list(DRUM_STEMS)
+
+
+def test_a_kit_missing_a_stem_is_read_rather_than_refused(
+    master: Path,
+    stems: dict[str, Path],
+) -> None:
+    """Some stems beat none — the gist names what was read, so a timid score is explainable."""
+    result = _ran({"kick": stems["kick"], "snare": stems["snare"]}, master, _grid())
+
+    assert result["stems"] == ["kick", "snare"]
 
 
 # --- the cache ----------------------------------------------------------------------
