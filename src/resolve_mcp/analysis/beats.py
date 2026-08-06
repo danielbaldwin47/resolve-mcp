@@ -125,8 +125,9 @@ def nearest(beats: Sequence[float], seconds: float) -> int | None:
     """Index of the beat — or downbeat — closest to a time, or ``None`` if there is no grid.
 
     Public because snapping to the grid is not only this module's business: a solo change
-    measured off an energy curve is called on the bar it lands nearest (#38), and one bisect
-    over a sorted list is the whole of that operation.
+    measured off an energy curve is called on the bar it lands nearest (#38), correlation
+    measures every cut against it (#40), and one bisect over a sorted list is the whole of
+    that operation.
     """
     if not beats:
         return None

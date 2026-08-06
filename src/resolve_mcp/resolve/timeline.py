@@ -511,7 +511,7 @@ def _read_track(
     in_range = [
         (item, placement)
         for item, placement in (
-            (item, _placement(item)) for item in _items_in_track(timeline, track_type, index)
+            (item, _placement(item)) for item in items_in_track(timeline, track_type, index)
         )
         if _touches(placement, window)
     ]
@@ -570,7 +570,7 @@ def _touches(placement: Placement, window: tuple[int, int]) -> bool:
     return overlaps(placement.start, placement.end, window)
 
 
-def _items_in_track(timeline: Timeline, track_type: str, index: int) -> list[TimelineItem]:
+def items_in_track(timeline: Timeline, track_type: str, index: int) -> list[TimelineItem]:
     """The shots on one track. An empty track answers ``None`` rather than an empty list."""
     return list(timeline.GetItemListInTrack(track_type, index) or [])
 
@@ -596,7 +596,7 @@ def read_item(
     """One shot: where it sits, where it came from, and the offset between the two."""
     record_in, duration = placement.start, placement.duration
     record_out = placement.end
-    source_in, source_out = _source_bounds(reader, item, duration)
+    source_in, source_out = source_bounds(reader, item, duration)
     offset = record_in - source_in if record_in is not None and source_in is not None else None
     return {
         "name": str(item.GetName() or ""),
@@ -608,7 +608,7 @@ def read_item(
         },
         "source": {"in": dual_time(source_in, fps), "out": dual_time(source_out, fps)},
         "sync_offset": dual_time(offset, fps),
-        "clip": _clip_name(reader, item),
+        "clip": clip_name(reader, item),
         "enabled": bool(reader.optional(item, "GetClipEnabled", True)),
         # ``GetTakesCount``, not ``GetTakeCount``: the plural is the method the scripting
         # README actually declares (line 523), and fusionscript answers an unknown name
@@ -617,7 +617,7 @@ def read_item(
     }
 
 
-def _source_bounds(
+def source_bounds(
     reader: Reader,
     item: TimelineItem,
     duration: int | None,
@@ -647,7 +647,7 @@ def _source_bounds(
     return offset, (offset + duration if duration is not None else None)
 
 
-def _clip_name(reader: Reader, item: TimelineItem) -> str | None:
+def clip_name(reader: Reader, item: TimelineItem) -> str | None:
     """The media pool clip a shot came from — a generator or title has none."""
     clip = reader.optional(item, "GetMediaPoolItem", None)
     if clip is None:
