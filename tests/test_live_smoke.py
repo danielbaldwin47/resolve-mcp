@@ -30,7 +30,7 @@ import pytest
 from resolve_mcp.audio.acquire import acquire_timeline_audio
 from resolve_mcp.jobs.runner import wait_for
 from resolve_mcp.resolve.connection import get_connection
-from resolve_mcp.tools.cut import build_timeline, validate_cut
+from resolve_mcp.tools.cut import build_timeline, swap_take, validate_cut
 from resolve_mcp.tools.escape_hatch import run_python
 from resolve_mcp.tools.jobs import get_job, list_jobs
 from resolve_mcp.tools.media import inspect_clip, list_media
@@ -335,19 +335,31 @@ def a_source_clip() -> dict[str, Any]:
     pytest.skip("No pool clip long enough to cut a smoke timeline from")
 
 
-def a_smoke_cut(tmp_path: Path, source: dict[str, Any], durations: tuple[int, ...]) -> str:
-    """A rough-cut shaped file (no master audio) built from one real clip."""
+def a_smoke_cut(
+    tmp_path: Path,
+    source: dict[str, Any],
+    durations: tuple[int, ...],
+    alternate_at: int | None = None,
+) -> str:
+    """A rough-cut shaped file (no master audio) built from one real clip.
+
+    ``alternate_at`` gives every segment one equal-duration alternate starting there — the
+    same clip is a legitimate alternate source, and one clip is all a smoke run can count on.
+    """
     at = source["start"]
-    segments = []
+    segments: list[dict[str, Any]] = []
     for index, length in enumerate(durations):
-        segments.append(
-            {
-                "id": f"s{index:03d}",
-                "source": "angle",
-                "in": at,
-                "out": at + length,
-            }
-        )
+        segment: dict[str, Any] = {
+            "id": f"s{index:03d}",
+            "source": "angle",
+            "in": at,
+            "out": at + length,
+        }
+        if alternate_at is not None:
+            segment["alternates"] = [
+                {"source": "angle", "in": alternate_at, "out": alternate_at + length}
+            ]
+        segments.append(segment)
         at += length
     angle = {"clip": source["name"]}
     if source["bin"] is not None:
@@ -380,7 +392,7 @@ def test_a_real_build_places_every_shot_exactly_where_the_cut_puts_it(tmp_path: 
     result = build_timeline(cut_file)
 
     assert result["ok"] is True, result.get("error")
-    assert result["placed"] == {"segments": 3, "audio": False}
+    assert result["placed"] == {"segments": 3, "audio": False, "selectors": 0}
     built = inspect_timeline(result["timeline"]["name"], detail="clips")
     assert built["ok"] is True
     video = [track for track in built["tracks"] if track["type"] == "video"][0]
@@ -388,6 +400,57 @@ def test_a_real_build_places_every_shot_exactly_where_the_cut_puts_it(tmp_path: 
     timeline_start = built["timeline"]["start"]["frames"]
     assert [item["record"]["duration"]["frames"] for item in video["items"]] == list(durations)
     assert starts == [timeline_start, timeline_start + 48, timeline_start + 72]
+
+
+def test_a_real_take_selector_swaps_the_angle_without_moving_the_shot(tmp_path: Path) -> None:
+    """The take path end to end, and the three things no fake can settle about it.
+
+    (a) whether ``AddTake`` reads ``endFrame`` half-open the way ``AppendToTimeline`` does —
+    a selector whose takes are all the same length is the only thing making an in-place swap
+    legal, so an off-by-one here is the whole feature; (b) where Resolve leaves the selection
+    after an add, which the build refuses to assume and sets to the main take explicitly; and
+    (c) whether the swapped shot really plays the alternate's frames while keeping its own
+    position and length.
+    """
+    if get_status()["context"]["project"] is None:
+        pytest.skip("No project open in Resolve")
+    source = a_source_clip()
+    durations = (48, 24, 36)
+    alternate_at = source["start"] + sum(durations)
+    cut_file = a_smoke_cut(tmp_path, source, durations, alternate_at=alternate_at)
+    assert validate_cut(cut_file)["valid"] is True
+
+    result = build_timeline(cut_file)
+
+    assert result["ok"] is True, result.get("error")
+    assert result["placed"] == {"segments": 3, "audio": False, "selectors": 3}
+    name = result["timeline"]["name"]
+    before = _video_items(name)
+    assert [item["takes"] for item in before] == [2, 2, 2]
+    assert [item["source"]["in"]["frames"] for item in before][0] == source["start"]
+
+    swapped = swap_take(cut_file, "s000", 2, timeline=name)
+
+    assert swapped["ok"] is True, swapped.get("error")
+    assert swapped["changed"] is True
+    assert swapped["sync"]["in"] == alternate_at
+    after = _video_items(name)
+    assert after[0]["source"]["in"]["frames"] == alternate_at
+    assert [item["record"]["in"]["frames"] for item in after] == [
+        item["record"]["in"]["frames"] for item in before
+    ]
+    assert [item["record"]["duration"]["frames"] for item in after] == list(durations)
+
+    assert swap_take(cut_file, "s000", 1, timeline=name)["ok"] is True
+    assert _video_items(name)[0]["source"]["in"]["frames"] == source["start"]
+
+
+def _video_items(name: str) -> list[dict[str, Any]]:
+    read = inspect_timeline(name, detail="clips")
+    assert read["ok"] is True, read.get("error")
+    video = [track for track in read["tracks"] if track["type"] == "video"][0]
+    items: list[dict[str, Any]] = video["items"]
+    return items
 
 
 def test_a_rebuild_makes_the_next_version_and_leaves_the_last_one_alone(tmp_path: Path) -> None:

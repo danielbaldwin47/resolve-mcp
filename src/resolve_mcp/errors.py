@@ -227,16 +227,6 @@ class CutInvalidError(ResolveMcpError):
     )
 
 
-class UnsupportedCutFeatureError(ResolveMcpError):
-    """The cut is valid but describes something this build cannot place yet.
-
-    Refused rather than partially built: a timeline missing a part of the cut that made it
-    is the half-built outcome the pre-flight exists to prevent.
-    """
-
-    code = "unsupported_cut_feature"
-
-
 class BuildFailedError(ResolveMcpError):
     """Resolve would not build the cut — creation refused, a locked track, a clip astray.
 
