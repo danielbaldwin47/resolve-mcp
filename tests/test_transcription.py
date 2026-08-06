@@ -45,6 +45,7 @@ from .fakes import (
     FakeTimeline,
     media_pool,
     studio,
+    with_a_mix,
     write_wav,
 )
 
@@ -240,7 +241,7 @@ def test_the_transcript_is_keyed_on_the_audio_rather_than_on_the_clips_name(
 
 
 def test_the_timeline_mix_is_transcribed_through_the_render_queue(attach: Attach) -> None:
-    resolve = studio(timeline=FakeTimeline("sunset-set v3", "59.94"))
+    resolve = studio(timeline=with_a_mix(FakeTimeline("sunset-set v3", "59.94")))
     attach(resolve)
 
     record = wait_for(_transcribe()["job_id"])
@@ -258,7 +259,7 @@ def test_a_second_transcript_of_one_timeline_does_not_export_the_mix_twice(
     attach: Attach,
 ) -> None:
     """The acquisition it chains onto has its own cache; a reworded run reuses the WAV."""
-    resolve = studio(timeline=FakeTimeline("sunset-set v3", "59.94"))
+    resolve = studio(timeline=with_a_mix(FakeTimeline("sunset-set v3", "59.94")))
     attach(resolve)
     wait_for(_transcribe()["job_id"])
 
@@ -284,7 +285,7 @@ def test_an_acquisition_that_fails_in_its_thread_fails_the_transcript_with_its_a
     attach: Attach,
 ) -> None:
     """The agent needs the render queue's fix, not "the audio was not acquired"."""
-    resolve = studio(timeline=FakeTimeline("sunset-set v3", "59.94"))
+    resolve = studio(timeline=with_a_mix(FakeTimeline("sunset-set v3", "59.94")))
     _project(resolve).accepts_job = False
     attach(resolve)
 
@@ -360,7 +361,7 @@ def test_the_tool_starts_a_job_and_returns_its_record(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The timeline route, so the only substituted thing is the model itself."""
-    attach(studio(timeline=FakeTimeline("sunset-set v3", "59.94")))
+    attach(studio(timeline=with_a_mix(FakeTimeline("sunset-set v3", "59.94"))))
     monkeypatch.setattr(whisper, "transcribe", _saying(SPOKEN, []))
 
     reply = analysis_tools.transcribe_audio()
