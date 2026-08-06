@@ -135,8 +135,22 @@ def submit(
                         f"Resolve would not render {format_}/{codec}, and the "
                         f"{fallback_preset!r} preset it falls back on is unusable: {exc.cause}"
                     ),
-                    fix=exc.fix,
-                    detail={"format": format_, "codec": codec, "preset": fallback_preset},
+                    # Not exc.fix: that one tells the caller to re-spell the preset, and
+                    # the caller never chose this name — the worker hardcodes it. What is
+                    # actually wrong is the install.
+                    fix=(
+                        f"Restore the stock {fallback_preset!r} preset in this Resolve — "
+                        "it is the only route to this format on builds that refuse the "
+                        "format/codec pair directly."
+                    ),
+                    # exc.detail carries what presets do exist, which is the one fact that
+                    # identifies a renamed or localised install.
+                    detail={
+                        **exc.detail,
+                        "format": format_,
+                        "codec": codec,
+                        "preset": fallback_preset,
+                    },
                 ) from exc
             log.info(
                 "Resolve refused %s/%s — rendering through the %r preset instead",

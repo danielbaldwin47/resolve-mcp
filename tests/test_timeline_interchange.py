@@ -222,6 +222,71 @@ def test_export_reports_every_type_it_tried_when_none_of_them_writes(
     assert not target.exists()
 
 
+def test_settling_never_aims_two_candidates_at_the_same_scratch_name(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """A candidate that fails poisons the path it touched, so reusing the name would test
+    the poisoning rather than the next constant — and would find the whole ladder broken on
+    a build that writes perfectly well one version down."""
+    cut = a_cut()
+    fake = studio(timeline=cut, export_types=("EXPORT_FCPXML_1_9", "EXPORT_FCPXML_1_10"))
+    cut.export_types_that_write_nothing = {fake.EXPORT_FCPXML_1_10}  # type: ignore[attr-defined]
+    attach(fake)
+    target = tmp_path / "cut.fcpxml"
+
+    result = export_timeline(format="fcpxml", path=str(target))
+
+    assert result["ok"] is True
+    scratch_paths = [file_name for file_name, _, _ in cut.exports if Path(file_name) != target]
+    assert len(scratch_paths) == len(set(scratch_paths)), "a scratch name was used twice"
+
+
+def test_a_build_where_nothing_writes_is_only_discovered_once_per_attach(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Failure is as expensive to learn as success and is remembered the same way.
+
+    Every candidate walked past strands a file Resolve will not release, so a build whose
+    whole ladder is broken would leak one scratch directory per call if only the successes
+    were kept.
+    """
+    cut = a_cut()
+    fake = studio(timeline=cut, export_types=("EXPORT_FCPXML_1_9", "EXPORT_FCPXML_1_10"))
+    cut.export_types_that_write_nothing = {
+        fake.EXPORT_FCPXML_1_10,  # type: ignore[attr-defined]
+        fake.EXPORT_FCPXML_1_9,  # type: ignore[attr-defined]
+    }
+    attach(fake)
+
+    for index in range(3):
+        assert export_timeline(format="fcpxml", path=str(tmp_path / f"cut{index}"))["ok"] is False
+
+    assert len(cut.exports) == 2, "the dead ladder was walked again after it was settled"
+
+
+def test_a_single_candidate_fcpxml_build_is_still_settled_on_a_scratch_file(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """One candidate is not evidence that candidate writes.
+
+    fcpxml is the format the destructive failure was found on, so a build defining exactly
+    one FCPXML constant is settled like any other — otherwise the one constant goes
+    straight at the caller's target and spends that path for the life of the process.
+    """
+    cut = a_cut()
+    fake = studio(timeline=cut, export_types=("EXPORT_FCPXML_1_9",))
+    cut.export_types_that_write_nothing = {fake.EXPORT_FCPXML_1_9}  # type: ignore[attr-defined]
+    attach(fake)
+    target = tmp_path / "cut.fcpxml"
+
+    result = export_timeline(format="fcpxml", path=str(target))
+
+    assert result["ok"] is False
+    assert result["error"]["code"] == "timeline_export_failed"
+    assert [file_name for file_name, _, _ in cut.exports if Path(file_name) == target] == []
+    assert not target.exists()
+
+
 def test_export_uses_a_type_whose_value_is_zero(attach: Attach) -> None:
     """The constants are plain numbers, and the first of them is 0.
 

@@ -16,9 +16,10 @@ Five things are decisions rather than API calls:
   21.0.3 defines ``EXPORT_FCPXML_1_10``, answers True for it, writes a zero-byte file, and
   then holds that file open — so the path it touched can never be exported to or deleted
   again (#26, live). Picking on definedness alone therefore fails *and* destroys the
-  caller's target. A format with more than one candidate is settled on a scratch file
-  first and only the winner is aimed at the target; the answer is remembered for the life
-  of the attach, because a probe that walks past a broken constant strands a file.
+  caller's target. A format whose ladder holds more than one constant is settled on a
+  scratch file first and only the winner is aimed at the target; the answer — including
+  "nothing here writes" — is remembered for the life of the attach, because settling walks
+  past broken constants and each one it walks past strands a file.
 * **The export is confirmed on disk, not by the return value.** ``Export`` answers a bool,
   and a path in a successful reply that has nothing behind it is worse than a failure: the
   agent's next move is to open that file.
@@ -143,8 +144,10 @@ def export_timeline(
                 f"nothing to {target}."
             ),
             fix=(
-                "Check the path is writable from the machine Resolve runs on, and that no "
-                "dialog in the Resolve GUI is holding the export. Then retry."
+                "Retry to a different path, not this one: Resolve holds a file it wrote "
+                "nothing to open for the life of the process, so this path will keep "
+                "failing until Resolve restarts. Check too that no dialog in the Resolve "
+                "GUI is holding the export."
             ),
             detail={"timeline": timeline_name, "format": spec.key, "path": str(target)},
         )
@@ -189,6 +192,18 @@ def _defined_types(resolve: Any, spec: Format) -> list[tuple[Any, str]]:
     return defined
 
 
+class _Probed(NamedTuple):
+    """What settling found for one format on one attach.
+
+    ``constant`` is the name of the export type that wrote, or ``None`` when every
+    candidate was walked past — a failure worth remembering, because finding it out again
+    costs another stranded file per broken constant.
+    """
+
+    constant: str | None
+    attempts: list[dict[str, Any]]
+
+
 def _export_type(
     resolve: Any, spec: Format, timeline: Any, notes: dict[str, Any]
 ) -> tuple[Any, str]:
@@ -200,67 +215,111 @@ def _export_type(
     ladder that picks on definedness alone therefore both fails and takes the caller's
     target down with it.
 
-    So a format with more than one candidate is settled on a scratch file first, and only
-    the winner is ever pointed at the target. Two consequences worth stating:
+    So a format whose ladder holds more than one constant is settled on a scratch file
+    first, and only the winner is ever pointed at the target. Three consequences worth
+    stating:
 
-    * **A single-candidate format is not probed.** otio and drt each define one constant,
-      and a probe could only confirm what there is no alternative to. They go straight at
-      the target, and a build that cannot write them fails on the post-export byte check
-      as before.
-    * **The answer is remembered for the attach, not the call.** A probe that has to walk
-      past a broken constant strands a file Resolve will not release, so probing per export
-      would leak one directory per export. ``notes`` is emptied whenever a handle is
-      attached, so a reconnect re-probes rather than trusting the last build's answer.
+    * **The test is on the ladder, not on what this build happens to define.** A build
+      that defines exactly one FCPXML constant still gets settled, because one candidate
+      is no evidence that candidate writes — and fcpxml is the format the destructive
+      failure was found on. Only otio and drt skip it: their ladders hold a single
+      constant, so there is no choice to make, and a build that cannot write them fails on
+      the post-export byte check with the caller's target spent. That is the residual
+      exposure, and it is accepted only because no build has ever failed those two.
+    * **The answer is remembered for the attach, not the call** — and that includes the
+      answer "nothing here writes". Settling walks past broken constants, and each one it
+      walks past strands a file Resolve will not release, so a build where every candidate
+      is broken would leak a directory per call if only successes were remembered.
+      ``notes`` is emptied whenever a handle is attached, so a reconnect settles afresh
+      rather than trusting the last build's answer.
+    * **A remembered constant is not re-validated.** Notes are cleared on attach, so a
+      constant that has stopped existing means the notes outlived their handle; that is a
+      bug in the caching, not a build quirk, and it says so rather than quietly settling
+      again.
     """
     candidates = _defined_types(resolve, spec)
-    if len(candidates) == 1:
+    if len(spec.export_types) == 1:
         return candidates[0]
 
     note = f"export_type:{spec.key}"
-    remembered = notes.get(note)
-    if remembered is not None:
-        value = getattr(resolve, remembered, None)
-        if value is not None:
-            return value, str(remembered)
+    settled = notes.get(note)
+    if not isinstance(settled, _Probed):
+        settled = _first_writable_type(timeline, spec, candidates)
+        notes[note] = settled
 
-    winner, attempts = _probe(timeline, spec, candidates)
-    if winner is None:
+    if settled.constant is None:
         raise TimelineExportFailedError(
             cause=f"No export type this Resolve defines for {spec.key} writes a file.",
             fix=(
                 "Export in another format — otio and drt are written by every build this "
                 "server attaches to — or update Resolve."
             ),
-            detail={"format": spec.key, "attempts": attempts},
+            detail={"format": spec.key, "attempts": settled.attempts},
         )
-    notes[note] = winner[1]
-    return winner
+
+    value = getattr(resolve, settled.constant, None)
+    if value is None:
+        raise TimelineExportFailedError(
+            cause=(
+                f"This Resolve no longer defines {settled.constant}, which it wrote "
+                f"{spec.key} through earlier on this connection."
+            ),
+            fix="Reconnect: what a build was found to write through is dropped on attach.",
+            detail={"format": spec.key, "export_type": settled.constant},
+        )
+    return value, settled.constant
 
 
-def _probe(
+def _first_writable_type(
     timeline: Any, spec: Format, candidates: list[tuple[Any, str]]
-) -> tuple[tuple[Any, str] | None, list[dict[str, Any]]]:
+) -> _Probed:
     """Export to a throwaway file per candidate, newest first, and report the first that lands.
 
-    One file per candidate, never reused: a constant that fails leaves its path unusable.
-    Removing the directory afterwards is best effort and *expected to fail whenever a
-    candidate was walked past* — Resolve holds the zero-byte file it wrote open for the
-    life of the process, so that scratch directory outlives the server. It is a few KB of
-    XML, and the caller remembers the answer so this happens once per attach.
+    One file per candidate, never reused: a constant that fails leaves its path unusable,
+    so aiming the next candidate at the same name would test the poisoning rather than the
+    constant. Removing the directory afterwards is best effort and *expected to fail
+    whenever a candidate was walked past* — Resolve holds the zero-byte file it wrote open
+    for the life of the process, so that scratch directory outlives the server. What is
+    stranded is one empty file per broken constant; the caller remembers the answer, so it
+    happens once per attach rather than once per export.
+
+    The directory is logged before anything is written to it. It is the only record of
+    where those files went, and on the machine this runs on nobody is watching the screen.
     """
     attempts: list[dict[str, Any]] = []
-    scratch = Path(tempfile.mkdtemp(prefix="resolve-mcp-export-probe-"))
-    for export_type, constant in candidates:
-        scratch_target = scratch / f"{constant}{spec.suffix}"
-        returned, written = _export_once(timeline, scratch_target, export_type)
-        if returned and written:
-            log.info("This build writes %s through %s", spec.key, constant)
-            _discard(scratch)
-            return (export_type, constant), attempts
-        attempts.append({"export_type": constant, "returned": returned, "bytes": written})
-        log.warning("This build defines %s but writes nothing through it", constant)
-    _discard(scratch)
-    return None, attempts
+    try:
+        scratch = Path(tempfile.mkdtemp(prefix="resolve-mcp-export-probe-"))
+    except OSError as exc:
+        raise TimelineExportFailedError(
+            cause=f"Could not make a scratch directory to settle {spec.key} on: {exc}",
+            fix=(
+                "Free space in the system temp directory, or point TEMP at somewhere "
+                "writable from the account Resolve runs under."
+            ),
+            detail={"format": spec.key},
+        ) from exc
+
+    log.info("Settling which export type writes %s, on %s", spec.key, scratch)
+    try:
+        for export_type, constant in candidates:
+            scratch_target = scratch / f"{constant}{spec.suffix}"
+            returned, written = _export_once(timeline, scratch_target, export_type)
+            if returned and written:
+                log.info("This build writes %s through %s", spec.key, constant)
+                return _Probed(constant, attempts)
+            attempts.append({"export_type": constant, "returned": returned, "bytes": written})
+            if returned:
+                log.warning(
+                    "This build defines %s and answers True for it but wrote nothing; "
+                    "%s is now held open and cannot be reused",
+                    constant,
+                    scratch_target,
+                )
+            else:
+                log.warning("This build defines %s but refused to export through it", constant)
+    finally:
+        _discard(scratch)
+    return _Probed(None, attempts)
 
 
 def _export_once(timeline: Any, target: Path, export_type: Any) -> tuple[bool, int]:

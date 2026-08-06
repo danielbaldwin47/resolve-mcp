@@ -122,11 +122,19 @@ def test_lists_the_real_media_pool() -> None:
 
 
 def test_inspects_a_real_clip_with_the_property_keys_the_wrappers_assume() -> None:
-    """The one live check the fakes cannot make: that these key names exist at all."""
+    """The one live check the fakes cannot make: that these key names exist at all.
+
+    Filtered, because the assertions below are about a clip with a file behind it, and the
+    first pool entry is a build timeline on any project this suite has run once — which
+    has no ``File Path`` and would fail this for a reason that is not the one it tests.
+    """
     listing = list_media()
-    if not listing["ok"] or not listing["clips"]:
-        pytest.skip("No clips in the media pool")
-    first = listing["clips"][0]
+    if not listing["ok"]:
+        pytest.skip("No media pool")
+    decodable = _decodable(listing["clips"])
+    if not decodable:
+        pytest.skip("No clips with media behind them in the media pool")
+    first = decodable[0]
 
     result = inspect_clip(first["name"], bin=first["bin"] or None)
 
@@ -331,11 +339,22 @@ def _decodable(clips: list[dict[str, Any]]) -> list[dict[str, Any]]:
     offline — and every build test here leaves one behind, so on a project the suite has
     run once the shortest "clip" in the pool is a timeline with no file on disk (#34,
     live).
+
+    The test that matters is therefore **a file path**, not the type name. Compound clips,
+    multicams, Fusion compositions and generators are all pathless in exactly the same
+    way, all report a rate and a frame count, and none of them is typed ``Timeline``; and
+    a pathless entry is reported as *pathless rather than offline*, so the offline flag
+    does not catch them either. Requiring a path covers every one of them, and covers
+    timelines as a side effect rather than by naming a string this build happens to use.
     """
     return [
         one
         for one in clips
-        if one["fps"] and one["frames"] and not one["offline"] and one["type"] != "Timeline"
+        if one["fps"]
+        and one["frames"]
+        and not one["offline"]
+        and one["file_path"]
+        and one["type"] != "Timeline"
     ]
 
 
