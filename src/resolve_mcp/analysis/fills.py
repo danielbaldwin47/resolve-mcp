@@ -45,7 +45,7 @@ from ..jobs.runner import JobOutput, Progress, start_job
 from ..logging_config import get_logger
 from ..naming import slug
 from . import beats as beats_module
-from . import drums, music, records
+from . import drums, halves, music, records
 
 log = get_logger("analysis")
 
@@ -366,7 +366,7 @@ def detect_drum_fills(
 
 
 def _readable(audio: str | Path) -> Path:
-    return music.readable_audio(
+    return halves.readable(
         audio,
         "Pass the master mix the stems were separated from — the beat grid comes from it, "
         "and fills are reported against that grid.",

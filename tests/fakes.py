@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import contextlib
 import math
+import random
 import wave
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -523,6 +524,12 @@ class FakeTimeline(AnswersNone):
         self.exports: list[tuple[str, Any, tuple[Any, ...]]] = []
         self.export_result = True
         self.export_writes_the_file = True
+        # Export type *values* that answer True and write a zero-byte file — Resolve 21.0.3
+        # does exactly this for EXPORT_FCPXML_1_10 (#26, live).
+        self.export_types_that_write_nothing: set[Any] = set()
+        # Paths one of those types has touched. Resolve keeps the handle for the life of
+        # the process, so the name is spent whatever type asks for it next (#26, live).
+        self.export_paths_held_open: set[str] = set()
         self.add_track_result = True
         self.set_track_name_result = True
         # A clear that answers True and leaves the clips standing is the failure a caller
@@ -662,12 +669,24 @@ class FakeTimeline(AnswersNone):
         """Write an interchange file. The subtype is variadic because Resolve's is optional.
 
         ``export_writes_the_file=False`` models the failure the return value hides: Resolve
-        answers True and nothing lands on disk.
+        answers True and nothing lands on disk. ``export_types_that_write_nothing`` models
+        the same failure for one export type only, which is the real shape of it.
+
+        A type that writes nothing also *poisons the path it touched*, exactly as the real
+        one does: Resolve holds that zero-byte file open for the life of the process, so
+        every later export to the same name fails no matter which type is asked for. That
+        is why the real ladder never reuses a scratch filename, and modelling it here is
+        what makes reuse fail a test instead of only failing on the machine.
         """
         self._check()
         self.exports.append((file_name, export_type, subtype))
         if not self.export_result:
             return False
+        if file_name in self.export_paths_held_open:
+            return False
+        if export_type in self.export_types_that_write_nothing:
+            self.export_paths_held_open.add(file_name)
+            return True
         if self.export_writes_the_file:
             target = Path(file_name)
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -1367,11 +1386,18 @@ class FakeProject:
         return list(self.render_presets)
 
     def LoadRenderPreset(self, name: str) -> bool:  # noqa: N802
-        """Resolve answers a bare ``False`` for a preset it does not have, and for a refusal."""
+        """Resolve answers a bare ``False`` for a preset it does not have, and for a refusal.
+
+        Loading a preset also **replaces the render settings**, which is why the caller
+        applies its own after this and not before. Modelling the clobber is what makes
+        that ordering testable: get it backwards and the caller's target directory is the
+        preset's, not the one that was asked for.
+        """
         if not self.accepts_preset or name not in self.render_presets:
             return False
         self.loaded_presets.append(name)
         self.render_format = self.render_presets[name]
+        self.render_settings = {"TargetDir": "C:/preset-default", "CustomName": "preset-default"}
         return True
 
     def GetCurrentRenderFormatAndCodec(self) -> dict[str, str]:  # noqa: N802
@@ -1754,6 +1780,37 @@ def write_hits(
             envelope = 1.0 - offset / decay
             wobble = math.sin(2 * math.pi * frequency * offset / sample_rate)
             samples[start + offset] = int(peak * envelope * envelope * wobble)
+    return _write_samples(path, samples, sample_rate, bit_depth, channels)
+
+
+def write_sections(
+    path: Path,
+    sections: Sequence[tuple[str, float]],
+    sample_rate: int = 8_000,
+    bit_depth: int = 24,
+    channels: int = 2,
+    frequency: float = 440.0,
+    amplitude: float = 0.3,
+    seed: int = 7,
+) -> Path:
+    """A concert-shaped WAV: ``("tone" | "noise" | "silence", seconds)`` laid end to end.
+
+    The applause half of structure analysis reads a tagger, not the waveform, so what this
+    fixture has to be right about is its *shape* — where the music stops, how long the room
+    goes on for, and how long the whole file is, since the last tune ends where the file
+    does. The noise is seeded so a boundary assertion means the same thing on every run.
+    """
+    noise = random.Random(seed)
+    peak = 2 ** (bit_depth - 1) * amplitude
+    samples: list[int] = []
+    for kind, seconds in sections:
+        for index in range(int(seconds * sample_rate)):
+            if kind == "silence":
+                samples.append(0)
+            elif kind == "noise":
+                samples.append(int(peak * noise.uniform(-1.0, 1.0)))
+            else:
+                samples.append(int(peak * math.sin(2 * math.pi * frequency * index / sample_rate)))
     return _write_samples(path, samples, sample_rate, bit_depth, channels)
 
 

@@ -23,7 +23,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from ..errors import RenderPresetNotFoundError, RenderQueueError
+from ..errors import RenderPresetNotFoundError, RenderQueueError, ResolveMcpError
 from ..logging_config import get_logger
 
 log = get_logger("render")
@@ -95,6 +95,7 @@ def submit(
     project: Project,
     settings: dict[str, Any],
     format_and_codec: tuple[str, str] | None = None,
+    fallback_preset: str | None = None,
 ) -> str:
     """Push one job onto the queue and return its id.
 
@@ -102,13 +103,60 @@ def submit(
     immediately before the job is added so that the job captures them. The pair travels as
     one because Resolve takes it as one, and it is optional because a loaded preset has
     already set both — setting them again would overwrite the rest of what the preset chose.
+
+    ``fallback_preset`` is the way past a build that refuses the pair outright: Resolve
+    21.0.3 lists Wave among its render formats, returns an empty codec map for it, and
+    refuses every ("wav", …) pair, so audio can only be reached through the stock preset
+    that already selects it (#32, live). The settings are applied after the preset either
+    way, so the caller's target directory and name still win.
+
+    What the fallback deliberately does *not* do is confirm the preset selected the format
+    that was asked for. On the build this exists for, ``GetCurrentRenderFormatAndCodec``
+    answers ``{"format": "unknown"}`` after ``Audio Only`` loads and still renders a WAV —
+    so a check against the requested format would reject the one route that works. The
+    file the job writes is what settles it, and ``render`` already refuses a job that
+    produced nothing.
     """
     if format_and_codec is not None:
         format_, codec = format_and_codec
         if not project.SetCurrentRenderFormatAndCodec(format_, codec):
-            raise RenderQueueError(
-                cause=f"Resolve would not render {format_}/{codec}.",
-                detail={"format": format_, "codec": codec},
+            if fallback_preset is None:
+                raise RenderQueueError(
+                    cause=f"Resolve would not render {format_}/{codec}.",
+                    detail={"format": format_, "codec": codec, "preset": None},
+                )
+            # load_preset, not LoadRenderPreset: a bare False means both "no such preset"
+            # and "will not load", and the two want different answers from the caller.
+            try:
+                load_preset(project, fallback_preset)
+            except ResolveMcpError as exc:
+                raise RenderQueueError(
+                    cause=(
+                        f"Resolve would not render {format_}/{codec}, and the "
+                        f"{fallback_preset!r} preset it falls back on is unusable: {exc.cause}"
+                    ),
+                    # Not exc.fix: that one tells the caller to re-spell the preset, and
+                    # the caller never chose this name — the worker hardcodes it. What is
+                    # actually wrong is the install.
+                    fix=(
+                        f"Restore the stock {fallback_preset!r} preset in this Resolve — "
+                        "it is the only route to this format on builds that refuse the "
+                        "format/codec pair directly."
+                    ),
+                    # exc.detail carries what presets do exist, which is the one fact that
+                    # identifies a renamed or localised install.
+                    detail={
+                        **exc.detail,
+                        "format": format_,
+                        "codec": codec,
+                        "preset": fallback_preset,
+                    },
+                ) from exc
+            log.info(
+                "Resolve refused %s/%s — rendering through the %r preset instead",
+                format_,
+                codec,
+                fallback_preset,
             )
     if not project.SetRenderSettings(settings):
         raise RenderQueueError(

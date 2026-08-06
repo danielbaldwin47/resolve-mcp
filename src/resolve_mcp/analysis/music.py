@@ -10,23 +10,15 @@ master mix — no stems, no Resolve. Three consequences worth stating:
   and seven thousand energy windows; what a tool result can carry is "120 bpm, in four,
   loudest at 41:12, here are the two paths".
 
-* **Each half is cached on its own terms.** The job is keyed on everything it was asked
-  for, which is right for the job and wrong for its halves: asking again with a finer
-  energy hop must not re-run a beat model over an hour of concert (#22, story 26 — analysis
-  is paid for once per media state). So beats and energy are each their own cache entry,
-  keyed on the audio and only the settings that shape them.
-
-How the audio is identified follows ``jobs.cache``'s rule rather than inventing one: audio
-this server wrote is hashed, because it is the substrate later analysis keys off and a
-false hit there would attribute one concert's beats to another; a master the director
-handed over is fingerprinted, because it is tens of gigabytes that sit unchanged for months
-and reading all of it would stall the starter that is supposed to return a job id at once.
+* **Each half is cached on its own terms** — see ``halves``, which also owns how the audio
+  is identified and what a half's file looks like. Beats and energy are each their own
+  cache entry, keyed on the audio and only the settings that shape them, so asking again
+  with a finer energy hop does not re-run a beat model over an hour of concert.
 """
 
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -35,9 +27,8 @@ from ..config import Config, get_config
 from ..errors import InvalidRequestError
 from ..jobs import cache
 from ..jobs.runner import JobOutput, Progress, start_job
-from ..naming import slug
 from . import beats as beats_module
-from . import records
+from . import halves
 
 if TYPE_CHECKING:  # pragma: no cover - the worker imports these when it runs
     from .energy import Measurement
@@ -62,7 +53,7 @@ def analyze_music(
 ) -> dict[str, Any]:
     """Start the analysis job. Returns the job record, not the analysis."""
     config = config or get_config()
-    source = _readable(audio)
+    source = halves.readable(audio)
     _asked_for_something(beats, energy)
     _sane_windows(window_seconds, hop_seconds)
 
@@ -72,7 +63,7 @@ def analyze_music(
         "window_seconds": float(window_seconds),
         "hop_seconds": float(hop_seconds),
     }
-    identity = _identity(source, config)
+    identity = halves.identity(source, config)
     key = cache.cache_key(KIND, [identity], settings)
 
     def work(progress: Progress) -> JobOutput:
@@ -98,14 +89,6 @@ def analyze_music(
     )
 
 
-def _readable(audio: str | Path) -> Path:
-    return readable_audio(
-        audio,
-        "Pass the path to the master mix, or the path an acquire_timeline_audio job "
-        "returned. Analysis reads WAV.",
-    )
-
-
 def _asked_for_something(beats: bool, energy: bool) -> None:
     if not beats and not energy:
         raise InvalidRequestError(
@@ -125,32 +108,28 @@ def _sane_windows(window_seconds: float, hop_seconds: float) -> None:
         )
 
 
-def _identity(source: Path, config: Config) -> dict[str, Any]:
-    """Hash what this server wrote; fingerprint what the director handed over."""
-    return cache.identity(source, config.audio_dir)
-
-
-def beats_half(
+def beats_of(
     source: Path,
     described: dict[str, Any],
     identity: dict[str, Any],
-    detector: beats_module.Detector | None,
-    refresh: bool,
-    config: Config,
+    detector: beats_module.Detector | None = None,
+    refresh: bool = False,
+    config: Config | None = None,
 ) -> dict[str, Any]:
-    """The beats half on its own terms — the entry every job that needs a grid shares.
+    """The beat grid for this audio, computed or reused — the entry every job shares.
 
-    Drum-fill detection (#39) reports against this grid and must not pay for the beat model
-    a second time on audio music analysis already ran over, so the half is callable on its
-    own and the key stays exactly the one ``analyze`` writes.
+    Public because it is shared: structure analysis snaps solo changes to downbeats, and
+    calling this is how it gets them without running the beat model a second time. The key
+    and the kind stay here together rather than being rebuilt by each caller, because a
+    caller that assembled one of them differently would quietly get its own cache entry.
     """
-    return _half(
-        BEATS,
+    return halves.cached(
+        f"{KIND}:{BEATS}",
         cache.cache_key(f"{KIND}:{BEATS}", [identity], {}),
-        lambda path: _beats(source, path, described, detector),
+        lambda path: beats_half(source, path, described, detector),
         source,
         refresh,
-        config,
+        config or get_config(),
     )
 
 
@@ -162,31 +141,17 @@ def numbered_beats(
     refresh: bool,
     config: Config,
 ) -> list[dict[str, Any]]:
-    """The beat records themselves, from the half above — computed or read back from disk.
+    """The beat records themselves, from ``beats_of`` — computed or read back from disk.
 
     The document is the interchange format, so a caller that wants the grid rather than a
     path reads it the way an agent would. Reading it here rather than at the caller keeps
-    the file's layout the business of the module that writes it.
+    the file's layout the business of the module that writes it. Drum-fill detection (#39)
+    reports against this grid and must not pay for the beat model a second time on audio
+    music analysis already ran over.
     """
-    document = beats_half(source, described, identity, detector, refresh, config)
+    document = beats_of(source, described, identity, detector, refresh, config)
     written = json.loads(Path(document["path"]).read_text(encoding="utf-8"))
     return list(written[BEATS])
-
-
-def readable_audio(audio: str | Path, fix: str) -> Path:
-    """The path, if there is a file at it — the check every audio starter makes first.
-
-    The ``fix`` differs per job because the advice does: a fill job wants the master the
-    stems came from, and music analysis wants any master at all.
-    """
-    source = Path(audio)
-    if not source.is_file():
-        raise InvalidRequestError(
-            cause=f"There is no file at {source}.",
-            fix=fix,
-            detail={"requested": str(source)},
-        )
-    return source
 
 
 def analyze(
@@ -202,23 +167,23 @@ def analyze(
     config = config or get_config()
     target = config.analysis_dir
     target.mkdir(parents=True, exist_ok=True)
-    identity = identity or _identity(source, config)
+    identity = identity or halves.identity(source, config)
 
     progress(0.05, "reading the audio")
     described = wav.describe(source)
-    result: dict[str, Any] = {"audio": _audio_gist(described)}
+    result: dict[str, Any] = {"audio": halves.audio_gist(described)}
     artifacts: list[Path] = []
 
     if settings[BEATS]:
         progress(0.1, "finding beats and downbeats")
-        result[BEATS] = beats_half(source, described, identity, detector, refresh, config)
+        result[BEATS] = beats_of(source, described, identity, detector, refresh, config)
         artifacts.append(Path(result[BEATS]["path"]))
 
     if settings[ENERGY]:
         progress(0.6, "measuring loudness and onset density")
         shape = {name: settings[name] for name in ("window_seconds", "hop_seconds")}
-        result[ENERGY] = _half(
-            ENERGY,
+        result[ENERGY] = halves.cached(
+            f"{KIND}:{ENERGY}",
             cache.cache_key(f"{KIND}:{ENERGY}", [identity], shape),
             lambda path: _energy(source, path, described, shape),
             source,
@@ -231,47 +196,16 @@ def analyze(
     return JobOutput(result, tuple(artifacts))
 
 
-def _half(
-    kind: str,
-    key: str,
-    build: Callable[[Path], dict[str, Any]],
-    source: Path,
-    refresh: bool,
-    config: Config,
-) -> dict[str, Any]:
-    """This half of the analysis, computed or reused, and its file named after its own key.
-
-    Named after the key rather than the job's, so the same half asked for twice under
-    different job settings is one file rather than two identical ones.
-    """
-    if not refresh:
-        hit = cache.lookup(key, config)
-        if hit is not None:
-            return hit
-    target = config.analysis_dir / f"{slug(source.stem, 'analysis')}-{key[:12]}-{kind}.json"
-    result = build(target)
-    cache.remember(key, f"{KIND}:{kind}", result, [Path(result["path"])], config)
-    return result
-
-
-def _audio_gist(described: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "path": described["path"],
-        "duration_seconds": described["duration_seconds"],
-        "sample_rate": described["sample_rate"],
-        "channels": described["channels"],
-    }
-
-
-def _beats(
+def beats_half(
     source: Path,
     target: Path,
     described: dict[str, Any],
     detector: beats_module.Detector | None,
 ) -> dict[str, Any]:
+    """The beat grid for this audio, written out. Shared with structure analysis."""
     grid = beats_module.detect(source, detector)
     rows = beats_module.numbered(grid)
-    return _written(target, BEATS, described, beats_module.gist(grid, rows), list(rows))
+    return halves.written(target, BEATS, described, beats_module.gist(grid, rows), list(rows))
 
 
 def _energy(
@@ -296,7 +230,7 @@ def _energy(
         }
         for point in measured.points
     ]
-    return _written(target, ENERGY, described, _energy_gist(measured, window, hop), rows)
+    return halves.written(target, ENERGY, described, _energy_gist(measured, window, hop), rows)
 
 
 def _energy_gist(measured: Measurement, window: float, hop: float) -> dict[str, Any]:
@@ -316,19 +250,3 @@ def _energy_gist(measured: Measurement, window: float, hop: float) -> dict[str, 
     }
 
 
-def _written(
-    target: Path,
-    kind: str,
-    described: dict[str, Any],
-    gist: dict[str, Any],
-    rows: list[dict[str, Any]],
-) -> dict[str, Any]:
-    """One file per half: a header of gist stats, then one record per line."""
-    header = {
-        "kind": kind,
-        "audio": described["path"],
-        "duration_seconds": described["duration_seconds"],
-        **gist,
-    }
-    records.write(target, header, kind, rows)
-    return {"path": str(target), **gist}
