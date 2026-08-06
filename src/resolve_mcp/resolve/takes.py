@@ -29,7 +29,6 @@ from typing import Any, Final
 from ..cut.document import read_cut_file
 from ..cut.validate import placements, validate_structure
 from ..document import LoadedDocument
-from ..findings import Finding
 from ..errors import (
     BuildFailedError,
     CutInvalidError,
@@ -37,6 +36,7 @@ from ..errors import (
     ResolveMcpError,
     TimelineOperationError,
 )
+from ..findings import Finding
 from ..logging_config import get_logger
 from ..timing import dual_time
 from . import timeline as timeline_read
