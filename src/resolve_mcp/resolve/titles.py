@@ -20,15 +20,19 @@ from typing import Any
 from ..document import LoadedDocument
 from ..findings import Finding, severity_of
 from ..logging_config import get_logger
+from ..titles.assets import Asset
 from ..titles.document import read_titles_file
 from ..titles.schema import ANNOTATED_EXAMPLE, SCHEMA_DOC, SCHEMA_VERSION
 from ..titles.validate import (
     ANCHOR_COLOR,
+    PNG,
     RULE_DESCRIPTIONS,
     Event,
     TemplateFacts,
     plan,
+    route_of,
     template_of,
+    validate_assets,
     validate_project,
     validate_structure,
 )
@@ -72,6 +76,7 @@ class Preflight:
     timeline: Timeline | None = None
     fps: float | None = None
     templates: dict[str, media.LocatedClip] = field(default_factory=dict)
+    assets: dict[str, Asset] = field(default_factory=dict)
     events: list[Event] = field(default_factory=list)
 
     @property
@@ -95,6 +100,11 @@ def preflight(connection: ResolveConnection, titles_file: str) -> Preflight:
         return Preflight(loaded, findings)
 
     doc: dict[str, Any] = loaded.doc
+    # The cards are judged before the connection is opened: a card that was never exported
+    # is worth saying so on a machine that cannot reach Resolve at all.
+    asset_findings, assets = validate_assets(doc, base=loaded.path.parent)
+    findings = [*findings, *asset_findings]
+
     project = timeline_read.open_project(connection)
     timeline = timeline_read.find_timeline(project, doc.get("timeline"))
     fps = frame_rate(project, timeline)
@@ -103,17 +113,20 @@ def preflight(connection: ResolveConnection, titles_file: str) -> Preflight:
     facts, located = _templates(pool, doc)
     anchors = markers.markers_by_name(connection, timeline, fps, ANCHOR_COLOR)
     log.info(
-        "Titling %r: %d %s marker(s), %d template(s) declared",
+        "Titling %r: %d %s marker(s), %d template(s) declared, %d png card(s)",
         timeline_read.name_of(timeline),
         len(anchors),
         ANCHOR_COLOR.lower(),
         len(facts),
+        len(assets),
     )
     findings = [
         *findings,
         *validate_project(doc, anchors=anchors, templates=facts, span=_span(timeline)),
     ]
-    return Preflight(loaded, findings, project, timeline, fps, located, plan(doc, anchors))
+    return Preflight(
+        loaded, findings, project, timeline, fps, located, assets, plan(doc, anchors)
+    )
 
 
 def _span(timeline: Timeline) -> tuple[int, int]:
@@ -136,8 +149,13 @@ def _templates(
     template at once — and the resolved handles come back beside them so the apply places
     the very clips the rules were judged against.
     """
-    used = {template_of(event) for song in doc["songs"] for event in song["events"]}
-    declared = {name: one for name, one in doc["templates"].items() if name in used}
+    used = {
+        template_of(event)
+        for song in doc["songs"]
+        for event in song["events"]
+        if route_of(event) != PNG
+    }
+    declared = {name: one for name, one in doc.get("templates", {}).items() if name in used}
     found = media.clips_named(pool, {str(one["clip"]) for one in declared.values()})
 
     facts: list[TemplateFacts] = []

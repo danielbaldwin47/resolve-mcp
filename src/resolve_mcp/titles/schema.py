@@ -31,10 +31,13 @@ KINDS: Final = ("title", "personnel", "custom")
 """What an event is for. ``kind`` picks the template unless ``template`` overrides it."""
 
 ROUTES: Final = ("textplus", "png")
-"""How an event is rendered. Only ``textplus`` is placed today; ``png`` is the PNG route."""
+"""How an event is rendered: a Text+ template instance, or a designed PNG card."""
 
-SUPPORTED_ROUTES: Final = ("textplus",)
-"""The routes this build can place. A declared-but-unsupported route is a T6 error."""
+DEFAULT_ROUTE: Final = ROUTES[0]
+"""The route an event that names none is placed by — Text+, the cheapest to iterate on."""
+
+ASSET_BIN: Final = "04_Assets/Text"
+"""Where a PNG card lands unless the event names a bin: ``04_Assets/Text/<song key>`` (#57)."""
 
 ANNOTATED_EXAMPLE: Final = """\
 {
@@ -42,7 +45,8 @@ ANNOTATED_EXAMPLE: Final = """\
   "timeline": "sunset-set v4",       // optional; default = the current timeline
 
   // GUI-authored Text+ templates, already in the media pool. Identity = clip name
-  // + optional bin, resolved to exactly one media-pool clip at apply.
+  // + optional bin, resolved to exactly one media-pool clip at apply. Omit the whole
+  // block in a file whose events are all PNG.
   "templates": {
     "title":     { "clip": "Song Title", "bin": "Titles/Templates" },
     "personnel": { "clip": "Personnel" }
@@ -55,12 +59,22 @@ ANNOTATED_EXAMPLE: Final = """\
         {
           "id": "t01",               // required, unique across the whole file
           "kind": "title",           // title | personnel | custom
-          "route": "textplus",       // textplus (png = the PNG route, not this one)
-          "template": "title",       // optional; default = kind
-          "text": "Sunset Boulevard",     // the final string, verbatim; \\n for a line break
+          "route": "textplus",       // optional; textplus | png, default textplus
+          "template": "title",       // textplus only; optional, default = kind
+          "text": "Sunset Boulevard",     // textplus only; the final string, verbatim
           "in": 240, "out": 720,     // frames from the song's marker, half-open [in, out)
           "fade": { "in": 24, "out": 36 },  // optional; frames of opacity ramp (§3)
           "note": "let four bars play"      // free text; server ignores; feeds the report
+        },
+        {
+          "id": "t02",
+          "kind": "personnel",
+          "route": "png",            // a designed card, exported to frames (§6)
+          "asset": "cards/sunset-boulevard/personnel_%04d.png",  // png only; relative to
+                                     // this file. A %0Nd run, or one still image.
+          "bin": "04_Assets/Text/sunset-boulevard",  // optional; this is also the default
+          "in": 960, "out": 1440,
+          "fade": { "in": 24, "out": 24 }   // describes the ramp already in the frames
         }
       ]
     }
@@ -93,18 +107,24 @@ song is reported as a warning, never an error — a set list is often titled a s
 at a time."""
 
 _FADES: Final = """\
-## 3. Fades are Fusion opacity keyframes
+## 3. Fades never use the clip's fade handles
 
 Resolve's clip-level fade handles are not reachable from the scripting API at
-all, so a fade is written *inside* the placed instance's Fusion comp: a
-BezierSpline on the Text+ node's `Opacity1`, keyframed 0 -> 1 over `fade.in` at
-the head and 1 -> 0 over `fade.out` at the tail. Omit `fade` for a hard cut on
-and off. `fade.in + fade.out` must fit inside the event's duration (T4).
+all, so each route fades some other way, and `fade` means the same thing to
+both: frames of opacity ramp at the head and at the tail. Omit it for a hard cut
+on and off. `fade.in + fade.out` must fit inside the event's duration (T4).
+
+* **Text+** — a BezierSpline on the placed instance's `Opacity1`, keyframed
+  0 -> 1 over `fade.in` and 1 -> 0 over `fade.out`. Written per instance, so a
+  re-fade is one re-apply. The report says per event whether the written spline
+  read back, because a Resolve build that will not answer for an animated input
+  is the one thing here no test can check.
+* **PNG** — already in the pixels (§6). Nothing is written at apply, and `fade`
+  is a record of what the exporter baked. A one-image card is held by freezing
+  that image, which no ramp can survive, so a fade on one is a T11 error.
 
 Fade timing is a judgement call, not a default: fast tune roughly 0.5-1 s,
-ballad roughly 2-4 s. The report says per event whether the written spline read
-back, because a Resolve build that will not answer for an animated input is the
-one thing here no test can check."""
+ballad roughly 2-4 s."""
 
 _TIME: Final = """\
 ## Time
@@ -131,10 +151,38 @@ keep."""
 _RULES: Final = """\
 ## 5. Validation
 
-9 hard errors (T1-T9) block an apply; 2 warnings (W1-W2) never do. A single
+11 hard errors (T1-T11) block an apply; 2 warnings (W1-W2) never do. A single
 error aborts before the Titles track is touched, so a refused apply always
 leaves the timeline exactly as it was. Every finding is
 `{rule, id, message, fix_hint}` — see the `rules` field of this result."""
+
+_PNG: Final = """\
+## 6. The PNG route
+
+A `route: "png"` event carries `asset` instead of `text` and `template`: a path
+to a designed card, exported to frames with an alpha channel at the timeline's
+resolution and frame rate. Relative paths are relative to the titles file, so a
+project folder moves in one piece. Two forms:
+
+* **A `%0Nd` frame run** — `cards/<song>/personnel_%04d.png`. This is the full
+  event: the fade-in ramp at the head, the hold in the middle, the fade-out ramp
+  at the tail, all baked. Its frame count must equal `out - in` exactly (T11).
+  Trimming it would cut the fade-out off, and Resolve cannot stretch a clip past
+  its own media, so the length is the exporter's job and re-timing an event means
+  re-baking the card.
+* **One still image** — `cards/<song>/title.png`. Freeze-extended to whatever
+  duration the event asks for, so it retimes freely, but it carries no ramp: its
+  fades must be zero (T11).
+
+Cards are consumed, never generated: designing one and baking its ramps happen
+outside this server. A designated card that is not on disk is a T10 error, named
+before Resolve is touched at all.
+
+The card is imported once per apply into `04_Assets/Text/<song key>`, or into the
+event's own `bin`, and a card already in that bin is reused rather than imported
+twice. Every imported image gets a one-time out-point write, which is what makes
+`endFrame` respected: without it Resolve ignores the requested length and lands
+every image at the project's default still duration."""
 
 SCHEMA_DOC: Final = "\n\n".join(
     [
@@ -146,6 +194,7 @@ SCHEMA_DOC: Final = "\n\n".join(
         _FADES,
         _RERUN,
         _RULES,
+        _PNG,
     ]
 )
 """The full schema document: prose contract with the annotated example embedded."""

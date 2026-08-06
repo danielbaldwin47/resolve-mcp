@@ -27,6 +27,7 @@ from resolve_mcp.tools.titles import apply_titles, get_titles_schema, validate_t
 
 from .conftest import Attach
 from .fakes import (
+    STILL_DEFAULT_FRAMES,
     FakeFusionComp,
     FakeFusionTool,
     FakeMediaPool,
@@ -170,6 +171,85 @@ def text_of(item: FakeTimelineItem) -> Any:
 def keyframes_of(item: FakeTimelineItem) -> dict[float, float]:
     spline = item.comps[0].tools[0].animated.get("Opacity1")
     return {} if spline is None else spline.keyframes
+
+
+CARD = "cards/sunset-boulevard/personnel_%04d.png"
+"""A designed card, relative to the titles file — which is what makes a project portable."""
+
+
+def bake(base: Path, pattern: str, indices: range) -> None:
+    """Export a card's frames. Only the names are ever read; the bytes are a formality."""
+    for index in indices:
+        frame = base / (pattern % index)
+        frame.parent.mkdir(parents=True, exist_ok=True)
+        frame.write_bytes(b"\x89PNG")
+
+
+def a_card(**overrides: Any) -> dict[str, Any]:
+    event: dict[str, Any] = {
+        "id": "p01",
+        "kind": "personnel",
+        "route": "png",
+        "asset": CARD,
+        "in": 240,
+        "out": 720,
+    }
+    event.update(overrides)
+    return event
+
+
+def one_card(**overrides: Any) -> dict[str, Any]:
+    """One song, one PNG card — the smallest file the PNG route places."""
+    return valid_doc(songs=[{"key": "sunset-boulevard", "events": [a_card(**overrides)]}])
+
+
+def mixed_doc() -> dict[str, Any]:
+    """A Text+ title and a PNG personnel card on one song, in one pass."""
+    return valid_doc(
+        songs=[
+            {
+                "key": "sunset-boulevard",
+                "events": [
+                    {
+                        "id": "t01",
+                        "kind": "title",
+                        "text": "Sunset Boulevard",
+                        "in": 240,
+                        "out": 720,
+                    },
+                    a_card(id="p01", **{"in": 960, "out": 1320}),
+                ],
+            }
+        ]
+    )
+
+
+def cards_in(pool: FakeMediaPool) -> list[tuple[str, FakeMediaPoolItem]]:
+    """Every clip in the pool that came off disk, with its bin path.
+
+    The Text+ templates are pathless generators, so a file path is what separates an
+    imported card from the fixtures the session was seeded with.
+    """
+    found: list[tuple[str, FakeMediaPoolItem]] = []
+
+    def walk(folder: Any, prefix: str) -> None:
+        for clip in folder.GetClipList() or []:
+            if clip.GetClipProperty("File Path"):
+                found.append((prefix, clip))
+        for sub in folder.GetSubFolderList() or []:
+            name = str(sub.GetName() or "")
+            walk(sub, f"{prefix}/{name}" if prefix else name)
+
+    walk(pool.GetRootFolder(), "")
+    return found
+
+
+def imported_cards(pool: FakeMediaPool) -> list[FakeMediaPoolItem]:
+    return [clip for _, clip in cards_in(pool)]
+
+
+def bins_of(pool: FakeMediaPool) -> list[str]:
+    return [path for path, _ in cards_in(pool)]
 
 
 # --- the happy path ---------------------------------------------------------------------
@@ -524,6 +604,191 @@ def test_a_comp_that_will_not_say_its_range_fades_over_the_instance_instead(
     apply_titles(a_titles_file(tmp_path, one_event(fade={"in": 24, "out": 24})))
 
     assert keyframes_of(titles_on(timeline)[0]) == {0.0: 0.0, 24.0: 1.0, 455.0: 1.0, 479.0: 0.0}
+
+
+# --- the png route ------------------------------------------------------------------------
+
+
+def test_a_png_card_is_imported_and_placed_at_the_frames_the_file_asks_for(
+    attach: Attach,
+    tmp_path: Path,
+) -> None:
+    timeline = a_session(attach)
+    bake(tmp_path, CARD, range(1, 481))
+    apply_titles(a_titles_file(tmp_path, one_card()))
+
+    assert [(item.GetStart(), item.GetDuration()) for item in titles_on(timeline)] == [
+        (SONG_ONE + 240, 480)
+    ]
+
+
+def test_the_out_point_is_written_so_the_requested_duration_is_honoured(
+    attach: Attach,
+    tmp_path: Path,
+) -> None:
+    """Resolve ignores ``endFrame`` on an image clip that has never had an out point
+    written, landing every card at the default still duration instead (#18 (a)). The
+    one-time write is the whole reason a PNG title can be the length the file asks for."""
+    pool = a_pool()
+    timeline = a_session(attach, pool=pool)
+    bake(tmp_path, CARD, range(1, 481))
+    apply_titles(a_titles_file(tmp_path, one_card()))
+
+    card = imported_cards(pool)[0]
+    assert [key for key, _ in card.property_writes] == ["Out"]
+    assert titles_on(timeline)[0].GetDuration() == 480 != STILL_DEFAULT_FRAMES
+
+
+def test_a_still_card_is_freeze_extended_to_whatever_the_event_asks_for(
+    attach: Attach,
+    tmp_path: Path,
+) -> None:
+    timeline = a_session(attach)
+    (tmp_path / "cards").mkdir()
+    (tmp_path / "cards" / "title.png").write_bytes(b"\x89PNG")
+    apply_titles(a_titles_file(tmp_path, one_card(asset="cards/title.png", out=3600)))
+
+    assert titles_on(timeline)[0].GetDuration() == 3360
+
+
+def test_a_png_fade_is_reported_as_baked_and_nothing_is_written_into_the_clip(
+    attach: Attach,
+    tmp_path: Path,
+) -> None:
+    timeline = a_session(attach)
+    bake(tmp_path, CARD, range(1, 481))
+    placed = apply_titles(a_titles_file(tmp_path, one_card(fade={"in": 24, "out": 36})))["placed"]
+
+    assert placed[0]["fade"] == {
+        "in": 24,
+        "out": 36,
+        "keyframes": [],
+        "verified": True,
+        "detail": "baked into the exported frames",
+    }
+    assert titles_on(timeline)[0].comps == []
+
+
+def test_text_plus_and_png_titles_coexist_in_one_pass(attach: Attach, tmp_path: Path) -> None:
+    """One append for the whole file, whatever mix of routes is in it — the routes differ
+    only in where the source clip comes from."""
+    pool = a_pool()
+    timeline = a_session(attach, pool=pool)
+    bake(tmp_path, CARD, range(1, 361))
+    apply_titles(a_titles_file(tmp_path, mixed_doc()))
+
+    assert len(pool.append_calls) == 1
+    landed = titles_on(timeline)
+    assert [(item.GetStart(), item.GetDuration()) for item in landed] == [
+        (SONG_ONE + 240, 480),
+        (SONG_ONE + 960, 360),
+    ]
+    assert text_of(landed[0]) == "Sunset Boulevard"
+    assert landed[1].comps == []
+
+
+def test_the_report_names_a_cards_asset_and_bin_rather_than_a_template(
+    attach: Attach,
+    tmp_path: Path,
+) -> None:
+    a_session(attach)
+    bake(tmp_path, CARD, range(1, 361))
+    placed = apply_titles(a_titles_file(tmp_path, mixed_doc()))["placed"]
+
+    assert placed[0]["route"] == "textplus"
+    assert placed[0]["template"] == "title" and "asset" not in placed[0]
+    assert placed[1]["route"] == "png"
+    assert placed[1]["asset"] == CARD
+    assert placed[1]["bin"] == "04_Assets/Text/sunset-boulevard"
+    assert placed[1]["frames"] == 360
+    assert "template" not in placed[1] and "node" not in placed[1]
+
+
+def test_a_card_lands_in_the_song_bin_by_convention(attach: Attach, tmp_path: Path) -> None:
+    pool = a_pool()
+    a_session(attach, pool=pool)
+    bake(tmp_path, CARD, range(1, 481))
+    apply_titles(a_titles_file(tmp_path, one_card()))
+
+    assert bins_of(pool) == ["04_Assets/Text/sunset-boulevard"]
+
+
+def test_an_explicit_bin_on_the_event_wins(attach: Attach, tmp_path: Path) -> None:
+    pool = a_pool()
+    a_session(attach, pool=pool)
+    bake(tmp_path, CARD, range(1, 481))
+    apply_titles(a_titles_file(tmp_path, one_card(bin="Concert/Cards")))
+
+    assert bins_of(pool) == ["Concert/Cards"]
+
+
+def test_re_applying_reuses_the_card_already_in_the_pool(attach: Attach, tmp_path: Path) -> None:
+    """A declarative apply is run over and over; importing afresh each time would grow the
+    operator's media pool by a copy of every card on every run."""
+    pool = a_pool()
+    timeline = a_session(attach, pool=pool)
+    bake(tmp_path, CARD, range(1, 481))
+    file = a_titles_file(tmp_path, one_card())
+
+    apply_titles(file)
+    apply_titles(file)
+
+    assert pool.calls.count("ImportMedia") == 1
+    assert len(imported_cards(pool)) == 1
+    assert len(titles_on(timeline)) == 1
+
+
+def test_one_card_shared_by_two_events_is_imported_once(attach: Attach, tmp_path: Path) -> None:
+    pool = a_pool()
+    a_session(attach, pool=pool)
+    bake(tmp_path, CARD, range(1, 481))
+    doc = valid_doc(
+        templates={},
+        songs=[
+            {
+                "key": "sunset-boulevard",
+                "events": [
+                    a_card(id="p01", **{"in": 240, "out": 720}),
+                    a_card(id="p02", **{"in": 960, "out": 1440}),
+                ],
+            }
+        ],
+    )
+    apply_titles(a_titles_file(tmp_path, doc))
+
+    assert pool.calls.count("ImportMedia") == 1
+
+
+def test_a_card_that_was_never_exported_refuses_before_the_track_is_touched(
+    attach: Attach,
+    tmp_path: Path,
+) -> None:
+    timeline = a_session(attach)
+    result = apply_titles(a_titles_file(tmp_path, one_card()))
+
+    assert result["ok"] is False
+    assert result["error"]["code"] == "titles_invalid"
+    assert [finding["rule"] for finding in result["error"]["detail"]["errors"]] == ["T10"]
+    assert timeline.GetTrackCount("video") == 1
+
+
+def test_a_card_the_wrong_length_for_its_event_refuses(attach: Attach, tmp_path: Path) -> None:
+    a_session(attach)
+    bake(tmp_path, CARD, range(1, 100))
+    result = apply_titles(a_titles_file(tmp_path, one_card()))
+
+    assert [finding["rule"] for finding in result["error"]["detail"]["errors"]] == ["T11"]
+
+
+def test_a_png_only_file_needs_no_templates_block(attach: Attach, tmp_path: Path) -> None:
+    timeline = a_session(attach)
+    bake(tmp_path, CARD, range(1, 481))
+    doc = one_card()
+    doc.pop("templates")
+    result = apply_titles(a_titles_file(tmp_path, doc))
+
+    assert result["ok"] is True
+    assert len(titles_on(timeline)) == 1
 
 
 # --- what never starts --------------------------------------------------------------------

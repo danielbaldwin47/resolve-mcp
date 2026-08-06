@@ -229,6 +229,22 @@ def find_clip(pool: Pool, name: str, bin_path: str | None = None) -> LocatedClip
     return matches[0]
 
 
+def clip_at_path(pool: Pool, bin_path: str, file_path: str) -> LocatedClip | None:
+    """The clip in ``bin_path`` that already stands for ``file_path``, if one does.
+
+    Identity is the first frame on disk rather than the reported path or the clip name,
+    because Resolve renames and re-paths an imported sequence into a folded label
+    (:func:`first_frame_of`). ``None`` — rather than a raise — because "not imported yet"
+    is the ordinary answer on a first run, not a failure.
+    """
+    wanted = Path(first_frame_of(file_path))
+    for found in _clips_under(find_bin(pool, bin_path), recursive=True):
+        standing = properties(found.clip).get(FILE_PATH, "")
+        if standing and Path(first_frame_of(standing)) == wanted:
+            return found
+    return None
+
+
 def clips_named(pool: Pool, names: Iterable[str]) -> list[LocatedClip]:
     """Every clip anywhere in the pool whose name is one of ``names``.
 
@@ -306,6 +322,22 @@ def is_still(reported: dict[str, str]) -> bool:
     return _looks_like_image(reported.get(FILE_PATH, ""))
 
 
+def first_frame_of(file_path: str) -> str:
+    """The one file a clip's path really stands for, sequence labels unfolded.
+
+    Resolve reports an imported sequence as ``shot_[0001-0024].png`` (#85) — a label, not
+    a path — so the first frame is the only form of a sequence's address that is a real
+    file both before the import (where the caller has a ``%0Nd`` pattern) and after it.
+    That makes it the identity a re-run can recognise an already-imported card by.
+    Anything that is not a folded range comes back unchanged.
+    """
+    folded = SEQUENCE_RANGE.search(Path(file_path).name)
+    if folded is None:
+        return file_path
+    path = Path(file_path)
+    return str(path.with_name(SEQUENCE_RANGE.sub(folded.group(1), path.name, count=1)))
+
+
 def is_offline(file_path: str) -> bool:
     """Whether the media behind a clip has moved away.
 
@@ -322,10 +354,9 @@ def is_offline(file_path: str) -> bool:
         return False
     if SEQUENCE_TOKEN in path.name:
         return not path.parent.exists()
-    folded = SEQUENCE_RANGE.search(path.name)
-    if folded:
-        first = path.with_name(SEQUENCE_RANGE.sub(folded.group(1), path.name, count=1))
-        return not first.exists()
+    first = first_frame_of(file_path)
+    if first != file_path:
+        return not Path(first).exists()
     return True
 
 
@@ -405,28 +436,33 @@ def apply_still_workaround(clip: Clip, reported: dict[str, str]) -> bool:
     return True
 
 
+def import_into(pool: Pool, items: list[str | dict[str, Any]], target: LocatedBin) -> list[Clip]:
+    """``ImportMedia`` into one bin, and leave the pool where it was found.
+
+    Imports land in the media pool's *current* folder, so the current folder is moved for
+    the call and put back afterwards — a tool must not leave the GUI somewhere else. Every
+    route that imports goes through here so no route can forget the second half.
+    """
+    previous = pool.GetCurrentFolder()
+    pool.SetCurrentFolder(target.folder)
+    try:
+        return list(pool.ImportMedia(items) or [])
+    finally:
+        if previous is not None:
+            pool.SetCurrentFolder(previous)
+
+
 def import_media(
     connection: ResolveConnection,
     paths: list[str] | None = None,
     bin_path: str | None = None,
     sequences: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Import media into ``bin_path``, creating the bin if needed.
-
-    Imports land in the media pool's *current* folder, so the current folder is moved for
-    the call and put back afterwards — a tool must not leave the GUI somewhere else.
-    """
+    """Import media into ``bin_path``, creating the bin if needed."""
     pool = media_pool(connection)
     items = _requests(paths, sequences)
     target = ensure_bin(pool, bin_path)
-
-    previous = pool.GetCurrentFolder()
-    pool.SetCurrentFolder(target.folder)
-    try:
-        imported = list(pool.ImportMedia(items) or [])
-    finally:
-        if previous is not None:
-            pool.SetCurrentFolder(previous)
+    imported = import_into(pool, items, target)
 
     summaries: list[dict[str, Any]] = []
     landed: set[str] = set()
