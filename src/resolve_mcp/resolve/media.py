@@ -22,6 +22,7 @@ rather than API calls, and are the reason this file exists at all:
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any, NamedTuple
@@ -49,6 +50,9 @@ BIN_SEPARATOR = "/"
 DEFAULT_LIST_LIMIT = 200
 IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".tif", ".tiff", ".exr", ".dpx", ".tga"})
 SEQUENCE_TOKEN = "%"
+# Resolve paths an imported image sequence by folding the index range into the name —
+# shot_[0001-0024].png — a label, not a file (#85, Resolve Studio 21.0.3.7).
+SEQUENCE_RANGE = re.compile(r"\[(\d+)-\d+\]")
 
 FILE_PATH = "File Path"
 FRAMES = "Frames"
@@ -304,15 +308,23 @@ def is_offline(file_path: str) -> bool:
     """Whether the media behind a clip has moved away.
 
     Resolve exposes no offline flag, so this is a disk check. A clip with no path at all
-    (multicam, compound) is pathless rather than offline. A sequence pattern is judged by
-    its folder, since the pattern itself is never a file on disk.
+    (multicam, compound) is pathless rather than offline. Sequence paths are never files on
+    disk, so they get judged by what stands behind them: a ``%0Nd`` pattern by its folder
+    (the range is unknown), a bracketed range — the form Resolve reports for an imported
+    sequence (#85) — by its first frame, which the range makes constructible.
     """
     if not file_path:
         return False
     path = Path(file_path)
+    if path.exists():
+        return False
     if SEQUENCE_TOKEN in path.name:
         return not path.parent.exists()
-    return not path.exists()
+    folded = SEQUENCE_RANGE.search(path.name)
+    if folded:
+        first = path.with_name(SEQUENCE_RANGE.sub(folded.group(1), path.name, count=1))
+        return not first.exists()
+    return True
 
 
 def summarise(bin_path: str, clip: Clip, reported: dict[str, str] | None = None) -> dict[str, Any]:
@@ -759,7 +771,9 @@ def relink_media(
 
     A folder relinks every named clip through ``RelinkClips`` — Resolve matches by file
     name inside it. A file replaces one clip's media outright, which is the route for media
-    that moved *and* was renamed.
+    that moved *and* was renamed. ``ReplaceClip`` also renames the pool clip after the new
+    file (#85), so ``was_offline`` is captured per position before the call — afterwards
+    the clip no longer answers to the name the caller used.
     """
     pool = media_pool(connection)
     if not clips:
@@ -772,10 +786,9 @@ def relink_media(
         raise RelinkFailedError(cause=f"Nothing exists at {path!r} on this machine.")
 
     found = [find_clip(pool, str(name), bin_path) for name in clips]
-    was_offline = {
-        str(located.clip.GetName() or ""): is_offline(properties(located.clip).get(FILE_PATH, ""))
-        for located in found
-    }
+    was_offline = [
+        is_offline(properties(located.clip).get(FILE_PATH, "")) for located in found
+    ]
     if target.is_dir():
         relinked = bool(pool.RelinkClips([located.clip for located in found], str(target)))
         log.info("Relinked %d clip(s) against %s (Resolve said %s)", len(found), target, relinked)
@@ -786,7 +799,7 @@ def relink_media(
                 fix="Relink one clip per file, or pass the folder the media moved to.",
             )
         name = str(found[0].clip.GetName() or "")
-        if not was_offline.get(name):
+        if not was_offline[0]:
             # Not an error — repointing a healthy clip is a legitimate thing to ask for —
             # but it replaces media that was working, so it says so rather than going quiet.
             log.warning("Replacing the media of %s, which was not offline", name)
@@ -797,7 +810,7 @@ def relink_media(
         log.info("Replaced the media of %s with %s", name, target)
 
     results = []
-    for located in found:
+    for located, before in zip(found, was_offline, strict=True):
         clip_name = str(located.clip.GetName() or "")
         file_path = properties(located.clip).get(FILE_PATH, "")
         offline = is_offline(file_path)
@@ -808,7 +821,7 @@ def relink_media(
                 "ok": not offline,
                 "file_path": file_path,
                 "offline": offline,
-                "was_offline": was_offline.get(clip_name, False),
+                "was_offline": before,
             }
         )
     return {"results": results}

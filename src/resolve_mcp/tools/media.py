@@ -114,6 +114,9 @@ def relink_media(
     Give a folder to relink several clips at once — Resolve matches them by file name
     inside it. Give a file to replace one clip's media outright, which is the route for
     media that moved and was renamed. Each result says whether that clip is still offline.
+    The file route also renames the pool clip after the new file — Resolve's behaviour,
+    not ours — so follow-up calls must use the name the result reports, not the one
+    passed in.
     """
     connection = get_connection()
     return media.relink_media(connection, clips, path, bin_path=bin)
