@@ -605,6 +605,37 @@ def test_a_locked_titles_track_is_refused_before_the_clear(
     assert len(titles_on(timeline)) == 1
 
 
+def test_the_lock_check_runs_after_the_switch_not_before_it(
+    attach: Attach,
+    tmp_path: Path,
+) -> None:
+    """#84: ``GetIsTrackLocked`` reads False on every track of a non-current timeline.
+
+    So the lock guard is only truthful once the apply has made its timeline current. Run it
+    a moment earlier and it waves a locked track through — and Resolve then reports every
+    title as placed and places none, which is the exact failure the guard exists to catch.
+    The fake tells that lie here on purpose, so moving the check back turns this red rather
+    than the live machine.
+    """
+    open_now = a_timeline("sunset-set v3")
+    target = a_timeline(
+        "sunset-set v4",
+        video=[
+            FakeTrack("Video 1"),
+            FakeTrack("Titles", [FakeTimelineItem("old title", SONG_ONE, 100)], locked=True),
+        ],
+    )
+    target.getters_need_current = True
+    a_session(attach, timeline=open_now, timelines=[open_now, target])
+
+    result = apply_titles(a_titles_file(tmp_path, valid_doc(timeline="sunset-set v4")))
+
+    assert result["ok"] is False
+    assert result["error"]["code"] == "titles_apply_failed"
+    assert "locked" in result["error"]["cause"]
+    assert len(titles_on(target)) == 1
+
+
 def test_a_build_without_delete_clips_says_so_rather_than_doubling_the_titles(
     attach: Attach,
     tmp_path: Path,

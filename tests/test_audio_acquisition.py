@@ -309,7 +309,7 @@ def test_the_track_check_runs_after_the_switch_not_before_it(attach: Attach) -> 
     """
     open_now = with_a_mix(FakeTimeline("sunset-set v3", "59.94"))
     other = with_a_mix(FakeTimeline("sunset-set v2", "59.94"))
-    other.track_flags_need_current = True
+    other.getters_need_current = True
     attach(studio(timeline=open_now, timelines=[open_now, other]))
 
     record = wait_for(acquire_timeline_audio(get_connection(), timeline="sunset-set v2")["job_id"])

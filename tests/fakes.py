@@ -317,6 +317,7 @@ class FakeTimelineItem(AnswersNone):
         self.comps: list[FakeFusionComp] = list(comps or ())
         self._missing = set(missing or ()) | FakeTimelineItem.NOT_API_METHODS
         self._owner = owner
+        self._timeline: FakeTimeline | None = None
 
     SOURCE_GETTERS = ("GetSourceStartFrame", "GetSourceEndFrame")
 
@@ -337,6 +338,22 @@ class FakeTimelineItem(AnswersNone):
         self._owner = owner
         for comp in self.comps:
             comp.adopt(owner)
+
+    def held_by(self, timeline: FakeTimeline) -> None:
+        """Remember which timeline this shot sits on — #84 is a fact about that timeline."""
+        self._timeline = timeline
+
+    def _reads_current(self) -> bool:
+        """Whether a getter on this item would be answered truthfully (see #84).
+
+        An item nothing has claimed reads truthfully: a test that never went through a
+        timeline is not testing currency, and defaulting the other way would make every
+        unrelated take assertion depend on project state it never set up.
+        """
+        timeline = self._timeline
+        if timeline is None or not timeline.getters_need_current:
+            return True
+        return timeline._is_current()
 
     def _check(self, method: str = "") -> None:
         if method and method in self._refuses:
@@ -423,8 +440,15 @@ class FakeTimelineItem(AnswersNone):
         return True
 
     def GetTakesCount(self) -> int:  # noqa: N802
-        """Zero for a clip that is not a take selector — not one for its own media."""
+        """Zero for a clip that is not a take selector — not one for its own media.
+
+        Also zero, whatever the selector holds, when the holding timeline is not current
+        and models #84 — the reading that cost the live pass a wrong conclusion about
+        whether a take selector had survived a swap.
+        """
         self._check("GetTakesCount")
+        if not self._reads_current():
+            return 0
         return len(self._selector)
 
     def GetTakeByIndex(self, index: int) -> dict[str, Any] | None:  # noqa: N802
@@ -434,8 +458,14 @@ class FakeTimelineItem(AnswersNone):
         return None
 
     def GetSelectedTakeIndex(self) -> int:  # noqa: N802
-        """Zero when the clip is not a take selector, else the 1-based selection."""
+        """Zero when the clip is not a take selector, else the 1-based selection.
+
+        Also zero off the current timeline, the same #84 lie ``GetTakesCount`` tells — the
+        sweep measured this one drifting ``1 -> 0``, and zero is not a take at all.
+        """
         self._check("GetSelectedTakeIndex")
+        if not self._reads_current():
+            return 0
         return self._selected
 
     def SelectTakeByIndex(self, index: int) -> bool:  # noqa: N802
@@ -516,8 +546,8 @@ class FakeTimeline(AnswersNone):
         }
         self._markers = dict(markers or {})
         self._owner = owner
-        #: #84's defect, opt-in: track flags read as off unless this timeline is current.
-        self.track_flags_need_current = False
+        #: #84's defect, opt-in — see :meth:`GetIsTrackEnabled` for what it models.
+        self.getters_need_current = False
         self.marker_writes: list[dict[str, Any]] = []
         self.refuse_markers = False
         # Refusing one marker by name is how a failed *replacement* is staged: Resolve
@@ -546,6 +576,10 @@ class FakeTimeline(AnswersNone):
             for track in tracks:
                 for item in track.items:
                     item.adopt(owner)
+                    # Belt and braces with ``GetItemListInTrack``: a path that reaches an
+                    # item some other way still finds it knowing its timeline, so #84 is
+                    # modelled there too rather than silently reading truthful.
+                    item.held_by(self)
 
     def _check(self) -> None:
         if self._owner is not None:
@@ -613,21 +647,46 @@ class FakeTimeline(AnswersNone):
     ) -> list[FakeTimelineItem] | None:
         self._check()
         track = self._track(track_type, index)
-        return list(track.items) if track else None
+        if track is None:
+            return None
+        # The only route the read path takes to an item, so the cheapest place to tell each
+        # one which timeline holds it — and the only one that also catches items a build
+        # appended after ``adopt``. An item needs that link to model #84 (see
+        # ``GetIsTrackEnabled``): whether ``GetTakesCount`` lies is a fact about its
+        # timeline, not about the item.
+        for item in track.items:
+            item.held_by(self)
+        return list(track.items)
 
     def GetIsTrackEnabled(self, track_type: str, index: int) -> bool:  # noqa: N802
         """Whether the track is on — and, opted into, the lie Resolve tells about that.
 
-        ``track_flags_need_current`` models #84: on Studio 21.0.3.7 this getter answers
-        ``False`` for *every* track of a timeline that is not the project's current one,
-        with no error and no ``None`` to distinguish "off" from "you did not ask the
-        current timeline". It is off by default because the read path documents the
-        defect rather than working around it; a caller whose correctness depends on
-        having switched first turns it on, and then a check that runs before the switch
-        reads every track as off.
+        ``getters_need_current`` models #84: on Studio 21.0.3.7 a handful of getters answer
+        the *falsy value of their own type* for a timeline that is not the project's
+        current one — no error, no ``None`` to distinguish "genuinely off" from "you did
+        not ask the current timeline". The #84 sweep read every Timeline and TimelineItem
+        getter on a non-current timeline and again while current; exactly three of the ones
+        this repo reads drift, and they share this knob because they share one cause:
+
+        ========================  =============  ============
+        getter                    non-current    current
+        ========================  =============  ============
+        ``GetIsTrackEnabled``     ``False``      true state
+        ``GetIsTrackLocked``      ``False``      true state
+        ``GetTakesCount``         ``0``          true count
+        ========================  =============  ============
+
+        The other 90 getters — frames, names, source bounds, ``GetClipEnabled``,
+        ``GetMarkers`` — were read with non-falsy true values and did not drift, so they
+        are proven safe rather than merely untested.
+
+        Off by default because most tests are not about this. A test that turns it on is
+        saying "this timeline is being read the way an agent surveying several timelines
+        reads it", and then a wrapper that trusts the number goes red here rather than on
+        the live machine.
         """
         self._check()
-        if self.track_flags_need_current and not self._is_current():
+        if self.getters_need_current and not self._is_current():
             return False
         track = self._track(track_type, index)
         return bool(track and track.enabled)
@@ -638,6 +697,8 @@ class FakeTimeline(AnswersNone):
 
     def GetIsTrackLocked(self, track_type: str, index: int) -> bool:  # noqa: N802
         self._check()
+        if self.getters_need_current and not self._is_current():
+            return False
         track = self._track(track_type, index)
         return bool(track and track.locked)
 

@@ -352,3 +352,31 @@ def test_a_timeline_with_no_video_track_is_refused(attach: Attach, tmp_path: Pat
 
     assert result["ok"] is False
     assert result["error"]["code"] == "invalid_request"
+
+
+def test_a_swap_works_on_a_timeline_the_project_does_not_have_open(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """#84: both take getters answer only for the current timeline.
+
+    Off it, ``GetTakesCount`` reads 0 and the drift check refuses the swap with "holds 0
+    take(s)" — sending the operator away to rebuild a cut file that was never wrong — and
+    ``GetSelectedTakeIndex`` reads 0, which is no take at all. A swap is a write, so making
+    its timeline current is what the operation means, and the operator's timeline goes
+    back afterwards. Every other test here swaps on the timeline the build left open, so
+    this is the only one that would notice the switch going missing.
+    """
+    resolve, cut_file = a_built_cut(attach, tmp_path)
+    timeline = built(resolve, "sunset-set v1")
+    timeline.getters_need_current = True
+    project = resolve.GetProjectManager().GetCurrentProject()
+    elsewhere = FakeTimeline("the one the operator is looking at")
+    project.SetCurrentTimeline(elsewhere)
+
+    result = swap_take(cut_file, "s001", 2, timeline="sunset-set v1")
+
+    assert result["ok"] is True, result.get("error")
+    assert result["changed"] is True
+    assert project.GetCurrentTimeline() is elsewhere
+    project.SetCurrentTimeline(timeline)
+    assert selected(resolve, 0) == 2

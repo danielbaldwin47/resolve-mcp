@@ -171,14 +171,24 @@ def swap_take(
     target = timeline_read.find_timeline(project, timeline)
     name = timeline_read.name_of(target)
     record, duration = placements(doc, timeline_read.start_frame(target))[segment]
-    item = _shot_at(target, record, duration, segment, name)
-    _refuse_drift(item, segment, listed, name)
 
-    previous = _selected_take(item)
-    changed = previous != take
-    if changed:
-        _select(item, take, _swap_failure(segment, take, name))
-        log.info("Swapped segment %s of %s from take %d to take %d", segment, name, previous, take)
+    # Both take getters answer for the current timeline only (#84): off it,
+    # ``GetTakesCount`` reads 0 — so the drift check below would refuse every swap with
+    # "holds 0 take(s)" and send the operator off to rebuild a cut file that is perfectly
+    # fine — and ``GetSelectedTakeIndex`` reads 0, which is no take at all. A swap is a
+    # write, so making its timeline current is what the operation means rather than a side
+    # effect of it; the switch is put back either way.
+    with timeline_read.current_timeline(project, target):
+        item = _shot_at(target, record, duration, segment, name)
+        _refuse_drift(item, segment, listed, name)
+
+        previous = _selected_take(item)
+        changed = previous != take
+        if changed:
+            _select(item, take, _swap_failure(segment, take, name))
+            log.info(
+                "Swapped segment %s of %s from take %d to take %d", segment, name, previous, take
+            )
 
     fps = float(doc["timeline"]["fps"])
     return {
