@@ -24,6 +24,7 @@ import importlib.util
 import json
 import os
 import shutil
+import zlib
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -37,7 +38,14 @@ from resolve_mcp.jobs import cache
 from resolve_mcp.jobs.runner import wait_for
 from resolve_mcp.naming import timestamped_name
 from resolve_mcp.resolve.connection import get_connection
-from resolve_mcp.resolve.media import find_clip, media_pool
+from resolve_mcp.resolve.media import (
+    apply_still_workaround,
+    ensure_bin,
+    find_clip,
+    import_into,
+    media_pool,
+    properties,
+)
 from resolve_mcp.tools.analysis import correlate_timeline
 from resolve_mcp.tools.cut import build_timeline, swap_take, validate_cut
 from resolve_mcp.tools.escape_hatch import run_python
@@ -1268,6 +1276,197 @@ def _smoke_titles(timeline: str, template: str) -> dict[str, Any]:
             for position, key in enumerate(SMOKE_SONGS, start=1)
         ],
     }
+
+
+PNG_SONG = "smoke-png-song"
+PNG_SEQUENCE_FRAMES = 60
+"""What the card is baked to, and therefore exactly what its event may ask for (T11)."""
+
+PNG_STILL_FRAMES = 45
+"""What the one-image card is freeze-extended to — a length it does not have on disk."""
+
+
+def _write_png(path: Path, size: int = 64) -> None:
+    """A real RGBA PNG, built here so the live tier needs no image library and no fixture.
+
+    Hand-rolled rather than a checked-in blob because the sequence needs *many* files and
+    Resolve has to read them as an image sequence: a wrong byte would look like a Resolve
+    refusal, which is the one failure this test must not be able to fake.
+    """
+    raw = b"".join(b"\x00" + b"\x00\x00\x00\xff" * size for _ in range(size))
+
+    def chunk(kind: bytes, body: bytes) -> bytes:
+        return (
+            len(body).to_bytes(4, "big")
+            + kind
+            + body
+            + zlib.crc32(kind + body).to_bytes(4, "big")
+        )
+
+    side = size.to_bytes(4, "big")
+    header = side + side + b"\x08\x06\x00\x00\x00"  # 8-bit RGBA, no interlace
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", header)
+        + chunk(b"IDAT", zlib.compress(raw))
+        + chunk(b"IEND", b"")
+    )
+
+
+def test_apply_titles_places_png_cards_at_the_exact_duration_asked_for(tmp_path: Path) -> None:
+    """#44 ACs 1-4: the one thing no fake can answer — does Resolve honour ``endFrame`` on
+    a freshly imported image once the out point has been written?
+
+    Everything else about the PNG route is a decision and verifies against the fake. This
+    is the API behaviour the whole route rests on: without the one-time ``Out`` write both
+    cards land at the project's default still duration instead of the length the file asks
+    for, and nothing in the return value says so — the durations read back off the track
+    are the only evidence. The sequence and the one-image card are both here because they
+    reach that behaviour differently: the sequence is placed whole, the still is frozen to
+    a length it does not have on disk.
+
+    It needs no Text+ template and no media of yours: the cards are written into a temp
+    folder and the scratch timeline is created, marked, titled and deleted again.
+
+    Paste the printed report onto the ticket — that is the record the ticket asks for.
+    """
+    if get_status()["context"]["project"] is None:
+        pytest.skip("No project open in Resolve")
+
+    cards = tmp_path / "cards" / PNG_SONG
+    for index in range(1, PNG_SEQUENCE_FRAMES + 1):
+        _write_png(cards / f"card_{index:04d}.png")
+    _write_png(cards / "still.png")
+
+    connection = get_connection()
+    pool = media_pool(connection)
+    project = connection.handle().GetProjectManager().GetCurrentProject()
+    was_on = project.GetCurrentTimeline()
+
+    name = timestamped_name("apply-png-smoke", "", "apply-png-smoke")
+    scratch = pool.CreateEmptyTimeline(name)
+    assert scratch is not None, f"Resolve created no timeline called {name!r}"
+    try:
+        assert project.SetCurrentTimeline(scratch), f"Resolve would not open {name!r}"
+        start = int(scratch.GetStartFrame())
+        # Something on V1 so the timeline has a span for the titles to land inside. The
+        # filler is the sequence itself, which is also the first proof that Resolve reads
+        # these frames as an image sequence at all.
+        cards_bin = ensure_bin(pool, "04_Assets/Text/" + PNG_SONG)
+        imported = import_into(
+            pool,
+            [
+                {
+                    "FilePath": str(cards / "card_%04d.png"),
+                    "StartIndex": 1,
+                    "EndIndex": PNG_SEQUENCE_FRAMES,
+                }
+            ],
+            cards_bin,
+        )
+        assert imported, "Resolve imported nothing for the baked card sequence"
+        landed = imported[0]
+        apply_still_workaround(landed, properties(landed))
+        # Twice over, so V1 spans past the last title: T9 refuses an event that would land
+        # outside the timeline, and the timeline is only as long as what is on it.
+        assert pool.AppendToTimeline(
+            [
+                {
+                    "mediaPoolItem": landed,
+                    "startFrame": 0,
+                    "endFrame": PNG_SEQUENCE_FRAMES,
+                    "mediaType": 1,
+                    "trackIndex": 1,
+                    "recordFrame": start + offset,
+                }
+                for offset in (0, PNG_SEQUENCE_FRAMES)
+            ]
+        ), "the imported sequence would not append — Resolve did not read it as a sequence"
+        assert scratch.AddMarker(0, "Blue", PNG_SONG, "png smoke", 1), (
+            "Resolve refused the blue marker the song is anchored to"
+        )
+
+        file = tmp_path / "titles.json"
+        file.write_text(json.dumps(_smoke_png_titles(name, cards)), encoding="utf-8")
+
+        result = apply_titles(str(file))
+        again = apply_titles(str(file))
+
+        print("\n" + _render_png_titles(result, again))
+        assert result["ok"] is True, result.get("error")
+        assert [one["route"] for one in result["placed"]] == ["png", "png"]
+        assert result["placed"][0]["fade"]["detail"] == "baked into the exported frames"
+        # The claim itself: what the file asked for is what stands on the track.
+        placed = inspect_timeline(name, detail="clips")
+        titles = [track for track in placed["tracks"] if track["name"] == "Titles"][0]
+        assert [item["record"]["duration"]["frames"] for item in titles["items"]] == [
+            PNG_SEQUENCE_FRAMES,
+            PNG_STILL_FRAMES,
+        ]
+        assert again["ok"] is True, again.get("error")
+        assert again["cleared"] == 2, "a second apply must replace the cards, not stack them"
+    finally:
+        if was_on is not None:
+            project.SetCurrentTimeline(was_on)
+        pool.DeleteTimelines([scratch])
+        # The cards go too. They are a temp folder's worth of 64-pixel squares, and a bin
+        # left behind would make the *next* run of this test ambiguous rather than failing.
+        pool.DeleteFolders([ensure_bin(pool, "04_Assets/Text/" + PNG_SONG).folder])
+
+
+def _smoke_png_titles(timeline: str, cards: Path) -> dict[str, Any]:
+    """A PNG-only titles file: the sequence card, then the one-image card held after it."""
+    return {
+        "schema": 1,
+        "timeline": timeline,
+        "songs": [
+            {
+                "key": PNG_SONG,
+                "events": [
+                    {
+                        "id": "png-01",
+                        "kind": "title",
+                        "route": "png",
+                        "asset": str(cards / "card_%04d.png"),
+                        "in": 0,
+                        "out": PNG_SEQUENCE_FRAMES,
+                        # Baked, not written: the ramps are in the frames the exporter made,
+                        # so this only has to fit inside the card and be reported as such.
+                        "fade": {"in": FADE_FRAMES, "out": FADE_FRAMES},
+                    },
+                    {
+                        "id": "png-02",
+                        "kind": "personnel",
+                        "route": "png",
+                        "asset": str(cards / "still.png"),
+                        "in": PNG_SEQUENCE_FRAMES,
+                        "out": PNG_SEQUENCE_FRAMES + PNG_STILL_FRAMES,
+                    },
+                ],
+            }
+        ],
+    }
+
+
+def _render_png_titles(first: dict[str, Any], second: dict[str, Any]) -> str:
+    """The report the ticket asks for: what landed, at what length, out of which bin."""
+    if not first["ok"]:
+        return f"apply failed: {first['error']['cause']}\nfix: {first['error']['fix']}"
+    lines = [
+        f"timeline:      {first['timeline']['name']}",
+        f"track:         {first['track']['name']} "
+        f"(video {first['track']['index']}, created={first['track']['created']})",
+        f"second apply:  cleared {second.get('cleared')}, ok={second['ok']}",
+    ]
+    for one in first["placed"]:
+        lines.append(
+            f"  {one['id']}: {Path(one['asset']).name} @ {one['record']['frames']} for "
+            f"{one['duration']['frames']}f — {one['frames']} frame(s) on disk, bin "
+            f"{one['bin']!r}, fade {one['fade']['in']}/{one['fade']['out']} "
+            f"({one['fade']['detail']})"
+        )
+    return "\n".join(lines)
 
 
 def _render_titles(first: dict[str, Any], second: dict[str, Any]) -> str:
