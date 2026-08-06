@@ -115,13 +115,14 @@ def _downbeat_flags(grid: BeatGrid) -> tuple[bool, ...]:
     """Match each downbeat to the nearest beat rather than trusting float equality."""
     flags = [False] * len(grid.beats)
     for downbeat in grid.downbeats:
-        nearest = _nearest(grid.beats, downbeat)
-        if nearest is not None and abs(grid.beats[nearest] - downbeat) <= DOWNBEAT_TOLERANCE:
-            flags[nearest] = True
+        closest = nearest(grid.beats, downbeat)
+        if closest is not None and abs(grid.beats[closest] - downbeat) <= DOWNBEAT_TOLERANCE:
+            flags[closest] = True
     return tuple(flags)
 
 
-def _nearest(beats: Sequence[float], seconds: float) -> int | None:
+def nearest(beats: Sequence[float], seconds: float) -> int | None:
+    """Which of ``beats`` sits closest to ``seconds`` — the lookup every correlation makes."""
     if not beats:
         return None
     after = bisect.bisect_left(beats, seconds)

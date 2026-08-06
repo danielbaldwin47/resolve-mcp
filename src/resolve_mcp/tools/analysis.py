@@ -8,8 +8,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..analysis import music, silence, transcribe, transcript, whisper
+from ..analysis import correlate, music, silence, transcribe, transcript, whisper
 from ..resolve.connection import get_connection
+from ..resolve.timeline import FIRST_TRACK
 from .envelope import tool
 
 
@@ -97,6 +98,58 @@ def transcribe_audio(
     }
 
 
-TOOLS: tuple[Any, ...] = (transcribe_audio, analyze_music)
+@tool
+def correlate_timeline(
+    beats: str,
+    timeline: str | None = None,
+    audio: str | None = None,
+    tunes: str | None = None,
+    solos: str | None = None,
+    angles: dict[str, Any] | None = None,
+    track: int = FIRST_TRACK,
+    refresh: bool = False,
+) -> dict[str, Any]:
+    """Measure a cut against the music it was cut to. Returns a job to poll, not the measurement.
 
-__all__ = ["TOOLS", "analyze_music", "transcribe_audio"]
+    This is how style is learned from your own past edits, and how a cut you just built gets
+    reviewed before anyone watches it: for every shot, how far its start sits from the
+    nearest beat and from the nearest transient (signed — negative is early, positive is
+    late), where in the bar that lands, which tune it happens in, who was out front, how
+    long the shot runs and which angle it came from.
+
+    beats is the beats file analyze_music wrote. audio is the same master mix it analysed,
+    and naming it is what makes the transient column real — onsets are not stored by any
+    other job, so they are measured here. tunes and solos are the structure job's files.
+    angles is the angle labels themselves, not a path: {"C0012.mp4": {"role": "drums"}}, or
+    just {"C0012.mp4": "drums"} — you keep the sidecar, you read it, you pass what it says.
+    Each of these is optional, and each one absent means that column reads null rather than
+    a guess.
+
+    timeline names the cut, defaulting to the open one; track is the video track it sits on.
+    The result names a JSON file of one record per shot — grep it, or read a slice with sed
+    — and returns the reading inline: offset statistics with early and late counted apart, a
+    histogram of where in the bar the cuts land, shot-duration stats, and how much of the
+    cut each angle and role holds.
+
+    Nothing here judges the edit. Two frames late is reported as two frames late; what
+    counts as musical belongs in your style profile, not in this server.
+    """
+    connection = get_connection()
+    return {
+        "job": correlate.correlate_timeline(
+            connection,
+            beats=beats,
+            timeline=timeline,
+            audio=audio,
+            tunes=tunes,
+            solos=solos,
+            angles=angles,
+            track=track,
+            refresh=refresh,
+        )
+    }
+
+
+TOOLS: tuple[Any, ...] = (transcribe_audio, analyze_music, correlate_timeline)
+
+__all__ = ["TOOLS", "analyze_music", "correlate_timeline", "transcribe_audio"]

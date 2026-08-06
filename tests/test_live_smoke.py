@@ -37,6 +37,7 @@ from resolve_mcp.jobs.runner import wait_for
 from resolve_mcp.naming import timestamped_name
 from resolve_mcp.resolve.connection import get_connection
 from resolve_mcp.resolve.media import find_clip, media_pool
+from resolve_mcp.tools.analysis import correlate_timeline
 from resolve_mcp.tools.cut import build_timeline, swap_take, validate_cut
 from resolve_mcp.tools.escape_hatch import run_python
 from resolve_mcp.tools.jobs import get_job, list_jobs
@@ -58,6 +59,11 @@ from .fakes import write_wav
 from .text_plus_probe import TEMPLATE_ENV, probe_template_append
 
 pytestmark = pytest.mark.live
+
+CORRELATE_BEATS_ENV = "RESOLVE_MCP_CORRELATE_BEATS"
+CORRELATE_TIMELINE_ENV = "RESOLVE_MCP_CORRELATE_TIMELINE"
+CORRELATE_AUDIO_ENV = "RESOLVE_MCP_CORRELATE_AUDIO"
+"""Opt-in for #40's live AC: a real beats file, and the hand-edited cut to measure with it."""
 
 SMOKE_CUT = "resolve-mcp-smoke"
 """Every build here materialises a new version of this name; delete them when you are done."""
@@ -898,6 +904,65 @@ def test_apply_titles_places_text_plus_instances_with_their_own_text_and_fades(
         if was_on is not None:
             project.SetCurrentTimeline(was_on)
         pool.DeleteTimelines([scratch])
+
+
+def test_correlate_measures_a_real_hand_edited_timeline() -> None:
+    """#40's live AC: the measurement survives a cut a person made, not one a build made.
+
+    A hand-edited concert timeline is where the reading is actually hard — titles and
+    generators with no media pool item, shots that were trimmed rather than placed, an audio
+    track that may or may not be the mix the analysis ran on. Opt in by pointing the two
+    variables at a real cut and a real beats file, in PowerShell on the Resolve machine:
+
+        $env:RESOLVE_MCP_CORRELATE_BEATS = 'C:\\cache\\analysis\\gig-beats.json'
+        $env:RESOLVE_MCP_CORRELATE_TIMELINE = 'Sunset set 2024'   # optional; open one by default
+        $env:RESOLVE_MCP_CORRELATE_AUDIO = 'C:\\audio\\gig.wav'   # optional; adds transients
+        uv run pytest -m live -k correlate -s
+    """
+    beats = os.environ.get(CORRELATE_BEATS_ENV)
+    if not beats:
+        pytest.skip(f"Set {CORRELATE_BEATS_ENV} to a beats file from a real analysis")
+
+    named = os.environ.get(CORRELATE_TIMELINE_ENV)
+    envelope = correlate_timeline(
+        beats=beats,
+        timeline=named,
+        audio=os.environ.get(CORRELATE_AUDIO_ENV),
+        refresh=True,
+    )
+    assert envelope["ok"] is True, envelope.get("error")
+
+    record = wait_for(envelope["job"]["job_id"], timeout=300.0)
+    assert record.state == "completed", record.error
+    assert record.result is not None
+    result = record.result
+
+    written = json.loads(Path(result["path"]).read_text(encoding="utf-8"))
+    tracks = inspect_timeline(timeline=named, detail="clips")["tracks"]
+    on_video_one = next(
+        track for track in tracks if track["type"] == "video" and track["index"] == 1
+    )
+
+    assert len(written["cuts"]) == on_video_one["item_count"]
+    assert [one["t"] for one in written["cuts"]] == sorted(one["t"] for one in written["cuts"])
+    assert result["beat_offsets"] is not None, "no cut measured against the grid"
+    print(_render_correlation(result))
+
+
+def _render_correlation(result: dict[str, Any]) -> str:
+    """The reading a human puts on the ticket: is this cut on the grid, and how far off?"""
+    return "\n".join(
+        [
+            f"file:      {result['path']}",
+            f"alignment: {result['alignment']}",
+            f"cuts:      {result['cuts']} ({result['openings']} opening)",
+            f"beats:     {result['beat_offsets']}",
+            f"transients:{result['transient_offsets']}",
+            f"bars:      {result['bars']}",
+            f"shots:     {result['shot_seconds']}",
+            f"clips:     {result['clips']}",
+        ]
+    )
 
 
 def _smoke_titles(timeline: str, template: str) -> dict[str, Any]:
