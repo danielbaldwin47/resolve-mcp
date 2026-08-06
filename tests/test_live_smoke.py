@@ -768,6 +768,11 @@ def test_a_real_scene_scan_reports_cuts_on_the_clips_own_clock() -> None:
         )
     for cut in record.result["first_cuts"]:
         assert bounds["in"]["frames"] < cut["frames"] < bounds["out"]["frames"]
+    if not record.result["first_cuts"]:
+        pytest.skip(
+            f"scan completed but {chosen['name']!r} has no cuts — the mapping went "
+            f"unexercised; set {SCENE_SCAN_CLIP_ENV} to a pool clip with hard cuts"
+        )
 
 def test_the_preset_list_is_the_one_in_the_deliver_page() -> None:
     """#33: whether ``GetRenderPresetList`` answers at all, and with what spelling.
