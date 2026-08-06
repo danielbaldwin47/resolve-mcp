@@ -49,40 +49,51 @@ once.
 
 Work from ticket #N happens on branch `issue-<N>`; non-ticket changes (doc
 tweaks, tooling fixes) take a branch named for the change (e.g.
-`fix-context-guard`). Push the branch after the first commit — pushed work
-survives a lost session — but do **not** open a PR yet: a pre-review PR has
-no valid `Review:` line, so it is born gate-red and forces a second full
-review after fixes land just to satisfy the check. The review happens on the
-branch, before the PR exists. Review weight follows what the diff touches,
-not how simple it looks (a three-line log fix here hid a mislabelled
-recovery path that only the review caught):
+`fix-context-guard`). Background sessions inherit whatever branch the
+launcher was on — verify or create the right branch before the first write.
+(And launcher-side: a background launch that shows no assistant output
+produced no work; relaunch rather than assume.)
 
-- **Anything executable** — `src/`, `tests/`, `.claude/hooks/`, workflow
-  YAML — gets `/code-review` (the two-axis mattpocock skill — Standards and
-  Spec as parallel sub-agents). Hooks and workflows count: they are config
-  that executes, and a broken gate fails silently for weeks.
-- **Pure prose** — docs, README, CLAUDE.md — gets one lightweight inline
-  pass, and the line reads `Review: clean — prose only, single-pass`.
+1. **Push the branch after the first commit** — pushed work survives a lost
+   session. Done when the branch exists on origin. Do not open a PR yet: a
+   pre-review PR has no valid `Review:` line, so it is born gate-red and
+   forces a second full review after fixes land just to satisfy the check.
+2. **Review on the branch, before the PR exists.** Review weight follows
+   what the diff touches, not how simple it looks (a three-line log fix
+   here hid a mislabelled recovery path that only the review caught):
+   - **Anything executable** — `src/`, `tests/`, `.claude/hooks/`, workflow
+     YAML — gets `/code-review` (the two-axis mattpocock skill — Standards
+     and Spec as parallel sub-agents). Hooks and workflows count: they are
+     config that executes, and a broken gate fails silently for weeks.
+   - **Pure prose** — docs, README, CLAUDE.md — gets one lightweight inline
+     pass, and the line reads `Review: clean — prose only, single-pass`.
+3. **Fix findings; re-check the fix diff only** — a focused pass over what
+   changed, not a second full review. One full review per PR is the
+   default; a fresh full pass is only for fixes large enough to be a new
+   diff.
+4. **Open the PR with the review record already in the body**: findings and
+   their resolutions (if any) first, ending with the `Review:` line. The
+   gate reads only the **last** `Review:` line in the body and passes only
+   `Review: clean` (optionally followed by a summary) — any other last line
+   blocks merge — so a PR opened this way is green from its first gate run.
+   If a PR gains commits after opening (human feedback, CI failures),
+   re-review the new diff and append a fresh `Review:` line; the earlier
+   lines stay above it as the record.
+5. **Merge through the PR** — everything reaches `main` through a PR, never
+   a direct commit.
+6. **After a stacked PR merges, verify its head is an ancestor of
+   `origin/main`** — one plain `git merge-base --is-ancestor <head-sha>
+   origin/main` per branch (no loops or `$(...)`; the worktree guard
+   refuses compound commands). A PR that merges into a just-consumed parent
+   branch reads MERGED while its commits never reach main.
+7. **Close the ticket with the PR link**; name any unrun live ACs in the
+   close comment.
 
-If the review finds issues, fix them and re-check the fix diff — a focused
-pass over what changed, not a second full review. One full review per PR is
-the default; a fresh full pass is only for fixes large enough to be a new
-diff. Then open the PR with the review record already in the body: findings
-and their resolutions (if any) first, ending with the `Review:` line. The
-gate reads only the **last** `Review:` line in the body and passes only
-`Review: clean` (optionally followed by a summary) — any other last line
-blocks merge — so a PR opened this way is green from its first gate run. If
-a PR gains commits after opening (human feedback, CI failures), re-review
-the new diff and append a fresh `Review:` line; the earlier lines stay
-above it as the record.
-Everything reaches `main` through a PR — never commit to `main` directly.
-
-- After a stacked PR merges, verify its head is an ancestor of
-  `origin/main` (`git merge-base --is-ancestor`) — a PR that merges into a
-  just-consumed parent branch reads MERGED while its commits never reach
-  main.
-- Close the ticket with the PR link when the work is complete; name any
-  unrun live ACs in the close comment.
+When resolving merge conflicts, grep every conflicted file for `<<<<<<<`
+before committing — especially markdown: CI never reads it, and a leftover
+marker has reached `main` that way. mypy strict forbids implicit re-export:
+import a symbol from its defining module (`from resolve_mcp.ffmpeg import
+Runner`), never as `sibling.Runner` through a module that merely imports it.
 
 Every implementation comment on a ticket (close or status) ends with a
 `## Needs from you` section as its **last** section, listing each item that
@@ -98,12 +109,15 @@ reads clean. Both are required status checks on `main`.
 
 One rule: nothing enters the session unless the session is about to act on
 it. Noisy commands (`pytest`, `mypy`, `ruff`) redirect to a scratch file and
-grep the decisive line back — via the Bash tool; this snippet is bash, not
-PowerShell:
+the decisive line comes back via the Grep tool. Two plain calls — the
+worktree guard refuses compound commands (`;`-chains, `$(...)`, env-var
+paths), so the redirect is one bare command to a gitignored repo-local log:
 
-    log=$(mktemp); uv run pytest -m 'not live' >"$log" 2>&1; grep -E 'FAILED|passed|error' "$log"
+    uv run pytest -m 'not live' > pytest.scratch.log 2>&1
 
-Never `| tail` — a tail caps one run and runs repeat. Delegate exploration to
+then Grep `FAILED|passed|error` in `pytest.scratch.log` (`*.scratch.log` is
+gitignored; never commit a log). Never `| tail` — a tail caps one run and
+runs repeat. Delegate exploration to
 a read-only subagent; Read only what you will edit, ranged (grep first) on
 big files; do not re-read a file after editing it. The hooks in
 `.claude/hooks/` enforce the cat/tail rules and whole-file re-reads — a block
@@ -113,7 +127,9 @@ from them is the rule firing, not an obstacle to route around.
 
 ### Issue tracker
 
-Issues live as GitHub issues on `danielbaldwin47/resolve-mcp`, driven via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+Issues live as GitHub issues on `danielbaldwin47/resolve-mcp`, driven via
+the `gh` CLI. For issue CRUD **and the wayfinder map operations** — frontier
+query, claim, blocking edges, resolve — see `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
