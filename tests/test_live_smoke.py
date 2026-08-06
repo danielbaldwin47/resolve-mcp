@@ -19,6 +19,7 @@ in PowerShell, which is the shell on the machine this runs on:
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 from datetime import datetime
@@ -573,6 +574,38 @@ def test_the_render_queue_exports_the_real_timeline_mix() -> None:
 
     again = acquire_timeline_audio(get_connection())
     assert again["cached"] is True, "an unchanged timeline must be a cache hit"
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec("faster_whisper") is None,
+    reason="the analysis extra is not installed (uv sync --extra analysis)",
+)
+def test_faster_whisper_reports_words_in_the_shape_the_worker_reads(tmp_path: Path) -> None:
+    """The other AC no seam can check: what a real faster-whisper word object looks like.
+
+    The fake tier substitutes the model entirely, so every assertion above it is about
+    ``Word``, a shape this repo made up. That ``segment.words`` is populated at all with
+    ``word_timestamps=True``, and that each one carries ``word``/``start``/``end``/
+    ``probability``, is only answerable with the real model loaded. Slow on first run: it
+    downloads large-v3 and needs a GPU to be quick about it.
+
+    Two seconds of tone is deliberately not speech — the claim under test is the shape of
+    the reply, not what was heard, and a model that hears nothing still has to return
+    cleanly rather than raise.
+    """
+    from resolve_mcp.analysis import whisper
+
+    from .fakes import write_wav
+
+    audio = write_wav(tmp_path / "tone.wav", seconds=2.0)
+
+    heard = whisper.transcribe(audio, {"model": whisper.DEFAULT_MODEL})
+
+    assert isinstance(heard.words, tuple)
+    for word in heard.words:
+        assert word.text
+        assert 0.0 <= word.start <= word.end
+        assert 0.0 <= word.confidence <= 1.0
 
 
 def test_a_real_frame_grab_lands_on_the_moment_resolve_numbers_it_at() -> None:

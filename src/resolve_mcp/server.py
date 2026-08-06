@@ -11,7 +11,7 @@ from fastmcp import FastMCP
 from . import __version__
 from .config import get_config
 from .logging_config import configure_logging, get_logger
-from .tools import cut, escape_hatch, jobs, media, project, render, timeline, video
+from .tools import analysis, cut, escape_hatch, jobs, media, project, render, timeline, video
 
 log = get_logger("server")
 
@@ -56,6 +56,7 @@ def build_server() -> FastMCP:
         *timeline.TOOLS,
         *cut.TOOLS,
         *video.TOOLS,
+        *analysis.TOOLS,
         *render.TOOLS,
         *jobs.TOOLS,
         *escape_hatch.TOOLS,

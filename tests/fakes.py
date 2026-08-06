@@ -1451,17 +1451,26 @@ def write_wav(
     bit_depth: int = 24,
     channels: int = 2,
     frequency: float = 440.0,
+    silence: Sequence[tuple[float, float]] = (),
 ) -> Path:
     """A real WAV of a sine tone — the fixture audio the worker tier is tested on.
 
     Real audio rather than a stub file, because the workers read the header back: a fake
     that wrote ``b"RIFF"`` would pass a duration assertion that means nothing.
+
+    ``silence`` zeroes the given ``(start, end)`` second-ranges, which is what makes this
+    fixture usable by the analysis tier: a tone that never stops has no breathing room to
+    find, so a silence detector run over it can only ever be asserted to find nothing.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     width = bit_depth // 8
     peak = int(2 ** (bit_depth - 1) * 0.3)
+    quiet = [(start * sample_rate, end * sample_rate) for start, end in silence]
     frames = bytearray()
     for index in range(int(seconds * sample_rate)):
+        if any(start <= index < end for start, end in quiet):
+            frames.extend(b"\x00" * width * channels)
+            continue
         sample = int(peak * math.sin(2 * math.pi * frequency * index / sample_rate))
         frames.extend(sample.to_bytes(width, "little", signed=True) * channels)
     with contextlib.closing(wave.open(str(path), "wb")) as handle:

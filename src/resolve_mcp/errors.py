@@ -354,6 +354,27 @@ class AudioMappingError(ResolveMcpError):
     )
 
 
+class TranscriberUnavailableError(ResolveMcpError):
+    """faster-whisper is not installed in this venv, so nothing can be transcribed."""
+
+    code = "transcriber_unavailable"
+    default_fix = (
+        "Install the transcription extra with `uv sync --extra analysis`, which pulls "
+        "faster-whisper and its CUDA runtime. The first run also downloads the model, "
+        "which takes a while and needs the disk space."
+    )
+
+
+class TranscriptionError(ResolveMcpError):
+    """The transcription job could not produce a transcript."""
+
+    code = "transcription_failed"
+    default_fix = (
+        "Check the audio the transcript was to be made from — get_job on the acquisition "
+        "job named in detail reports what happened to it — then start the job again."
+    )
+
+
 class FrameGrabError(ResolveMcpError):
     """ffmpeg would not give up a frame of this clip."""
 

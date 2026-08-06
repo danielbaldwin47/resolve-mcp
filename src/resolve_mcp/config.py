@@ -85,7 +85,12 @@ class Config:
 
     @property
     def analysis_dir(self) -> Path:
-        """Analysis catalogs — scene cuts today — written whole and returned as a gist."""
+        """What the analysis jobs write: transcripts, scene-cut catalogs, later beat maps.
+
+        Separate from the WAVs they were read off: the audio is a cache of something Resolve
+        or ffmpeg can make again, while these are the files the agent greps and quotes in a
+        review round, and it should be able to tell the two apart at a glance.
+        """
         return self.cache_dir / "analysis"
 
     @property

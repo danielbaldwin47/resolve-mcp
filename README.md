@@ -57,14 +57,13 @@ timeline is exported through Resolve's render queue (the only route that capture
 timeline *mix*, 48 kHz/24-bit WAV), a single source clip is extracted with ffmpeg unless its
 audio mapping says the audio is linked or offset away from the file.
 
-<<<<<<< HEAD
 Seeing the picture takes two routes, both reading the file on disk rather than rendering
 anything. `grab_frames` is not a job — a seek and one frame is faster than a poll would be,
 so it runs inline and hands back JPEG paths at or under the client's 1568px image cap, cached
 against the media all the same. `detect_scene_cuts` decodes the whole clip, so it is a job:
 the catalog of every cut and shot goes to the cache in dual-time JSON and only a gist (how
 many cuts, the shot lengths, the first few times, the path) comes back inline.
-=======
+
 Deliverables come off one timeline the same way: `render_timeline` takes a **preset** by
 name — what a preset renders was decided in the Deliver page and saved there, so the server
 overrides only where the file goes and which frames it covers — plus an optional half-open
@@ -73,7 +72,6 @@ overrides only where the file goes and which frames it covers — plus an option
 the file lands in the cache's `renders` folder, which the server replaces freely on a
 re-render; a directory you name is yours, and a file already sitting there is refused until
 you pass `refresh`.
->>>>>>> origin/main
 
 ## Requirements
 
