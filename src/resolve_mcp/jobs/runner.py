@@ -65,6 +65,20 @@ Progress = Callable[[float, str], None]
 Work = Callable[[Progress], JobOutput]
 
 
+def band(progress: Progress, floor: float, ceiling: float) -> Progress:
+    """Map a sub-task's own 0-1 onto the part of the job that sub-task actually is.
+
+    A render reports its own percentage and knows nothing about the hashing either side of
+    it; without this the job would jump to 100% and then sit there.
+    """
+    span = ceiling - floor
+
+    def scaled(fraction: float, step: str) -> None:
+        progress(floor + span * fraction, step)
+
+    return scaled
+
+
 def start_job(
     kind: str,
     params: dict[str, Any],

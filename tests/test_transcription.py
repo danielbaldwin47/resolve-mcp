@@ -26,13 +26,13 @@ from resolve_mcp.analysis import whisper
 from resolve_mcp.analysis.transcribe import transcribe_audio
 from resolve_mcp.analysis.transcript import Transcriber, Transcription, Word
 from resolve_mcp.audio.acquire import acquire_clip_audio
-from resolve_mcp.audio.ffmpeg import Completed, Runner
 from resolve_mcp.config import get_config
 from resolve_mcp.errors import (
     AudioExtractionError,
     InvalidRequestError,
     TranscriberUnavailableError,
 )
+from resolve_mcp.ffmpeg import Completed, Runner
 from resolve_mcp.jobs.runner import wait_for
 from resolve_mcp.resolve.connection import get_connection
 from resolve_mcp.tools import analysis as analysis_tools

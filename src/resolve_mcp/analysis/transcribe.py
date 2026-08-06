@@ -28,7 +28,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from ..audio import ffmpeg
+from .. import ffmpeg
 from ..audio.acquire import acquire_clip_audio, acquire_timeline_audio
 from ..config import Config, get_config
 from ..errors import InvalidRequestError, TranscriptionError
