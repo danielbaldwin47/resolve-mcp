@@ -560,7 +560,9 @@ def test_an_edit_a_shared_comp_spread_is_put_back_before_the_refusal(attach: Att
     ]
 
 
-def test_a_restore_that_will_not_take_is_reported_rather_than_claimed(attach: Attach) -> None:
+def test_a_write_the_shared_comp_refuses_is_caught_before_the_neighbour_check(
+    attach: Attach,
+) -> None:
     shared = FakeFusionComp(
         [FakeFusionTool(inputs={"StyledText": "Sunset Boulevar"}, refuses={"StyledText"})]
     )

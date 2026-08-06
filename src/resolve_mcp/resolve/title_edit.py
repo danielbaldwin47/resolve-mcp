@@ -75,7 +75,7 @@ class Placed:
 
     @property
     def where(self) -> str:
-        return where_of(self.position)
+        return _where_of(self.position)
 
     def as_dict(self, fps: float | None, params: fusion.Params | None) -> dict[str, Any]:
         return {
@@ -188,7 +188,7 @@ def _standing(timeline: Timeline, track: apply.OwnedTrack) -> list[Placed]:
     return [_read_one(item, position) for position, item in enumerate(ordered, start=1)]
 
 
-def where_of(position: int) -> str:
+def _where_of(position: int) -> str:
     """How a title is named in every message about it: by where it is, not by what it says.
 
     Its words are the thing being changed, so they cannot also be the thing that identifies
@@ -200,7 +200,7 @@ def where_of(position: int) -> str:
 def _read_one(item: Item, position: int) -> Placed:
     record_in = timeline_read.read_frames(item.GetStart())
     duration = timeline_read.read_frames(item.GetDuration())
-    where = where_of(position)
+    where = _where_of(position)
     try:
         node = fusion.title_node(item, where)
     except TitleTemplateError as exc:
@@ -477,27 +477,31 @@ def _put_back(
     not turn the diagnosis into a different exception — the caller is owed the finding
     about the shared comp far more than it is owed this.
     """
-    by_position = {placed.position: placed for placed in standing}
-    disturbed = []
-    for position in sorted({int(entry["position"]) for entry in moved}):
-        placed = by_position.get(position)
-        if placed is None or placed.node is None:
-            return False
-        disturbed.append((placed.node, before[position]))
-
+    touched = {int(entry["position"]) for entry in moved}
+    disturbed = [placed for placed in standing if placed.position in touched]
     try:
-        for node, was in disturbed:
+        # Walked afresh from the timeline item, never through the handle the damage was
+        # done with: this module's whole rule is that a Fusion handle can go on answering
+        # for a comp the timeline has replaced, and a restore verified through the
+        # remembered comp would report success at exactly the moment it was not true.
+        nodes = [
+            (fusion.title_node(placed.item, placed.where), before[placed.position])
+            for placed in disturbed
+        ]
+        for node, was in nodes:
             for key, old in was.items():
                 if key == fusion.STYLED_TEXT:
                     fusion.set_text(node, "" if old is None else str(old))
                 else:
                     fusion.set_input(node, key, old)
-        # Read back, for the same reason every other write here is read back.
-        for node, was in disturbed:
-            now = _values_of(node, was)
+        for placed in disturbed:
+            was = before[placed.position]
+            now = _values_of(fusion.title_node(placed.item, placed.where), was)
             if any(not fusion.same_value(old, now.get(key)) for key, old in was.items()):
                 return False
     except Exception:
+        # Including a comp that has stopped answering: the caller is owed the finding
+        # about the shared comp far more than it is owed this, so it is logged and told.
         log.warning("Could not put back the title(s) the edit disturbed", exc_info=True)
         return False
     return True
