@@ -1,14 +1,15 @@
-"""The cut-file tools: the contract, and the dry run that holds you to it.
+"""The cut-file tools: the contract, the dry run, the build, and the one in-place edit.
 
-A cut file is yours — you author it, the server never writes it. These two tools are how
-you find out what it must contain and whether the one you wrote will build.
+A cut file is yours — you author it, the server never writes it. These tools are how you
+find out what it must contain, whether the one you wrote will build, what happened when it
+did, and how to flip a shot's angle on a built version without starting over.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from ..resolve import build, cut
+from ..resolve import build, cut, takes
 from ..resolve.connection import get_connection
 from .envelope import tool
 
@@ -61,10 +62,39 @@ def build_timeline(
     return build.build_timeline(connection, cut_file, min_segment_frames)
 
 
+@tool
+def swap_take(
+    cut_file: str,
+    segment: str,
+    take: int,
+    timeline: str | None = None,
+) -> dict[str, Any]:
+    """Switch which take a built segment shows, in place, without rebuilding the timeline.
+
+    This is the one edit that does not go through a rebuild, and it only works because
+    alternates are the same length as the take they replace. `take` is the 1-based slot in
+    the selector the cut file describes: 1 is the segment's own `source`, 2 onwards are its
+    `alternates` in order. The report lists the whole selector, so the numbers never have to
+    be guessed, and names the version it touched — `timeline` defaults to the open one.
+
+    Afterwards the timeline and the cut file disagree, and only you can fix that: `sync`
+    holds the exact segment fields to write — the chosen alternate promoted to main, the
+    old main demoted into its slot — so a later rebuild reproduces what is on screen now.
+
+    A shot is found by the position and length this cut file computes for the segment, and
+    its selector must be the size the file describes; anything else is refused as drift with
+    a fix rather than swapped on a guess. That is a shape check, not proof of provenance —
+    if it matters which version you are on, compare `content_hash` against the build report.
+    """
+    connection = get_connection()
+    return takes.swap_take(connection, cut_file, segment, take, timeline)
+
+
 TOOLS: tuple[Any, ...] = (
     get_cut_schema,
     validate_cut,
     build_timeline,
+    swap_take,
 )
 
-__all__ = ["TOOLS", "build_timeline", "get_cut_schema", "validate_cut"]
+__all__ = ["TOOLS", "build_timeline", "get_cut_schema", "swap_take", "validate_cut"]

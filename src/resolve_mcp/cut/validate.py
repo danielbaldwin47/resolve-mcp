@@ -477,6 +477,18 @@ def positions(doc: dict[str, Any]) -> dict[str, tuple[int, int]]:
     return placed
 
 
+def placements(doc: dict[str, Any], start: int) -> dict[str, tuple[int, int]]:
+    """Each segment id to its ``(record frame, duration)`` on a timeline starting at ``start``.
+
+    The one place a cut's own offsets become absolute frames. A build sends these as
+    ``recordFrame`` and a swap finds a shot by them, so a second derivation of the same sum
+    somewhere else is a swap that quietly reads the wrong shot — there is only this one.
+    """
+    return {
+        id: (start + offset, duration) for id, (offset, duration) in positions(doc).items()
+    }
+
+
 def total_frames(doc: dict[str, Any]) -> int:
     """The V1 span: sequential segments, so the sum of their durations."""
     return sum(duration_frames(s["in"], s["out"]) for s in _segments(doc))
@@ -760,6 +772,7 @@ __all__ = [
     "Finding",
     "locked_track_finding",
     "parse_failure_finding",
+    "placements",
     "positions",
     "resolve_aliases",
     "severity_of",

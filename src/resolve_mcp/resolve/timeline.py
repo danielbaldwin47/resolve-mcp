@@ -27,7 +27,7 @@ rather than API calls, and are the reason this file exists at all:
 from __future__ import annotations
 
 import re
-from typing import Any, NamedTuple
+from typing import Any, Final, NamedTuple
 
 from ..config import Config, get_config
 from ..errors import (
@@ -145,6 +145,28 @@ def version_of(name: str) -> tuple[str, int | None]:
     if match is None:
         return name, None
     return match.group("base"), int(match.group("number"))
+
+
+FIRST_TRACK: Final = 1
+"""A sequential V1 cut is one video track and one audio track: both the first of their kind.
+
+Where the build places and where a swap looks have to be the same track, so the index is
+named once rather than written as a literal 1 in each of them.
+"""
+
+
+def start_frame(timeline: Timeline) -> int:
+    """The timeline's own first frame — an hour of timecode on a normal project.
+
+    Every absolute position counts from here, because ``recordFrame`` is *not* clamped to
+    the timeline's span (#18 (d)): a cut frame of 0 sent raw would land before it begins.
+    An unreadable answer counts from 0 rather than stopping, and says so in the log.
+    """
+    frames = read_frames(timeline.GetStartFrame())
+    if frames is None:
+        log.warning("Resolve gave an unreadable start frame; counting from 0")
+        return 0
+    return frames
 
 
 def next_free_name(requested: str, existing: set[str]) -> str:
@@ -523,7 +545,10 @@ def read_item(
         "sync_offset": dual_time(offset, fps),
         "clip": _clip_name(reader, item),
         "enabled": bool(reader.optional(item, "GetClipEnabled", True)),
-        "takes": int(reader.optional(item, "GetTakeCount", 0) or 0),
+        # ``GetTakesCount``, not ``GetTakeCount``: the plural is the method the scripting
+        # README actually declares (line 523), and fusionscript answers an unknown name
+        # with ``None`` rather than raising — so the singular read as zero takes forever.
+        "takes": int(reader.optional(item, "GetTakesCount", 0) or 0),
     }
 
 
