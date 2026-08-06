@@ -47,6 +47,26 @@ STYLED_TEXT: Final = "StyledText"
 OPACITY: Final = "Opacity1"
 """Shading element 1's opacity: the Text+ input a fade is written on (#5)."""
 
+INPUT_ID: Final = "INPS_ID"
+"""``GetInputList`` hands back Input *objects*; this attribute is the id ``GetInput`` takes.
+
+The display name (``INPS_Name``) is not it — "Size" on screen can be ``Size`` or
+``StyleSize`` underneath, and only the id round-trips through ``SetInput``.
+"""
+
+EXTERNAL: Final = "INPB_External"
+"""Whether an input is a control at all, as against Fusion's own internal plumbing.
+
+A live Text+ on Studio 21.0.3.7 lists **309** inputs, of which 194 are external and the
+rest are nests, separators and layout furniture that no titler would ever set.
+"""
+
+NUMBER_DEFAULT: Final = "INPN_Default"
+"""A numeric input's stock value. There is no ``INPS_Default``: text declares none."""
+
+PARAM_LIMIT: Final = 40
+"""A hard cap on a params listing, so no template can flood a tool result."""
+
 CLEAR: Final = 0.0
 FULL: Final = 1.0
 
@@ -93,6 +113,23 @@ class Fade:
 
 NO_FADE = Fade(0, 0, (), True, "no fade asked for")
 """A hard cut on and off — the file said nothing about a fade, so nothing was written."""
+
+
+@dataclass(frozen=True)
+class Params:
+    """The exposed inputs of one placed title's Text+ node, and whether they could be read.
+
+    Reported the same way a :class:`Fade` is: a build that will not enumerate its inputs
+    yields empty ``values`` with the reason in ``detail`` rather than an error, because the
+    listing is a convenience — every input can still be *written* by id without it.
+    """
+
+    values: dict[str, Any]
+    read: bool
+    detail: str
+
+    def as_dict(self) -> dict[str, Any]:
+        return {"values": dict(self.values), "read": self.read, "detail": self.detail}
 
 
 def _callable(obj: Any, name: str) -> Any | None:
@@ -163,6 +200,140 @@ def read_text(node: TitleNode) -> str | None:
     """What the node says its text is now — the only evidence a write landed."""
     value = node.tool.GetInput(STYLED_TEXT)
     return None if value is None else str(value)
+
+
+def set_input(node: TitleNode, key: str, value: Any) -> None:
+    """Write any one exposed input by its id. Reports nothing, like ``set_text``."""
+    node.tool.SetInput(key, value)
+
+
+def read_input(node: TitleNode, key: str) -> Any:
+    """The current value of one exposed input, or ``None`` for one this node has not got."""
+    return node.tool.GetInput(key)
+
+
+def read_params(node: TitleNode) -> Params:
+    """The inputs this template *sets*, by id, so the agent can see what makes it itself.
+
+    Enumerating everything is not the answer, and the live listing is why: a plain Text+
+    reports 309 inputs, 194 of them external and nearly all sitting at their stock value.
+    A tool result carrying all 194 tells the reader nothing and costs them the context to
+    read it. What identifies a title template is the handful its author moved — on the
+    stock Text+ that is exactly ``Font``, ``Style``, ``Size``, the two justifications and
+    ``Wrap`` — so an input is listed when its value differs from the default this build
+    declares for it, or when it is a string with anything in it.
+
+    That is a listing rule, never a permission: ``edit_title`` will write *any* id, listed
+    or not, and proves the write by reading it back. ``detail`` says how many were passed
+    over so the reader knows the listing is a summary, and :func:`editable_ids` gives the
+    full set — which is what a refused write reports, so an id that this rule passed over
+    is always reachable at the moment someone needs it.
+
+    Never raises: a build that does not enumerate its inputs still takes every write by id,
+    so an unusable listing is reported and the edit route stays open. Only scalars are kept
+    — image, mask and gradient inputs answer with objects that mean nothing here — and
+    ``StyledText`` is left out because the words have their own field everywhere else, and
+    two places to write one value is how they drift apart.
+    """
+    lister = _callable(node.tool, "GetInputList")
+    if lister is None:
+        return Params({}, False, f"this build's {TEXT_PLUS} node has no GetInputList")
+    try:
+        listed = dict(lister() or {})
+    except (TypeError, ValueError) as exc:
+        return Params({}, False, f"GetInputList would not answer: {exc}")
+
+    editable = 0
+    values: dict[str, Any] = {}
+    for entry in listed.values():
+        attrs = _attrs_of(entry)
+        if attrs is None or not attrs.get(EXTERNAL):
+            continue
+        found = attrs.get(INPUT_ID)
+        if found is None or str(found) == STYLED_TEXT:
+            continue
+        value = read_input(node, str(found))
+        if not isinstance(value, str | int | float):
+            continue
+        editable += 1
+        if _is_set(value, attrs):
+            values[str(found)] = value
+
+    shown = dict(sorted(values.items())[:PARAM_LIMIT])
+    detail = (
+        f"{len(values)} input(s) this template sets, of {editable} editable "
+        f"of {len(listed)} listed"
+    )
+    if len(shown) < len(values):
+        detail += f"; showing the first {len(shown)} by id"
+    return Params(shown, True, detail)
+
+
+def editable_ids(node: TitleNode) -> list[str]:
+    """Every input id this node will take a write on, in full and unfiltered.
+
+    :func:`read_params` reports what the template *sets*, which is the useful summary and
+    is deliberately a fraction of what exists. This is the other half of that bargain: an
+    id the summary passed over is still writable, so a write refused for an unknown id
+    reports this list and the caller can see what they should have asked for. Kept off the
+    happy path on purpose — nearly two hundred ids on a stock Text+ is a diagnosis, not a
+    listing.
+    """
+    lister = _callable(node.tool, "GetInputList")
+    if lister is None:
+        return []
+    try:
+        listed = dict(lister() or {})
+    except (TypeError, ValueError):
+        return []
+    found = set()
+    for entry in listed.values():
+        attrs = _attrs_of(entry)
+        if attrs is None or not attrs.get(EXTERNAL):
+            continue
+        key = attrs.get(INPUT_ID)
+        if key is not None:
+            found.add(str(key))
+    return sorted(found)
+
+
+def _attrs_of(entry: Any) -> dict[str, Any] | None:
+    attrs = _callable(entry, "GetAttrs")
+    if attrs is None:
+        return None
+    reported = attrs()
+    return reported if isinstance(reported, dict) else None
+
+
+def _is_set(value: Any, attrs: dict[str, Any]) -> bool:
+    """Whether this input carries a choice rather than the value it shipped with.
+
+    A number whose build declares no default is passed over rather than guessed at: it
+    would otherwise list every slider on the node, which is the outcome this rule exists
+    to avoid.
+    """
+    if isinstance(value, str):
+        return bool(value)
+    default = attrs.get(NUMBER_DEFAULT)
+    if isinstance(value, int | float) and isinstance(default, int | float):
+        return abs(float(value) - float(default)) > _TOLERANCE
+    return False
+
+
+def same_value(written: Any, read: Any) -> bool:
+    """Whether an input reads back as what was written, allowing for the C bridge.
+
+    A number written from Python comes back as a float, so an exact comparison would call
+    a landed write a failure; anything else has to match outright, because a *different*
+    value read back is the shared-comp symptom this check exists to catch.
+    """
+    if written == read:
+        return True
+    if isinstance(written, bool) or isinstance(read, bool):
+        return False
+    if isinstance(written, int | float) and isinstance(read, int | float):
+        return abs(float(read) - float(written)) <= _TOLERANCE
+    return False
 
 
 def write_fade(node: TitleNode, *, duration: int, fade_in: int, fade_out: int) -> Fade:
@@ -280,13 +451,23 @@ def _as_opacity(value: Any) -> float | None:
 
 __all__ = [
     "CLEAR",
+    "EXTERNAL",
     "FULL",
+    "INPUT_ID",
+    "NUMBER_DEFAULT",
     "OPACITY",
+    "PARAM_LIMIT",
     "STYLED_TEXT",
     "TEXT_PLUS",
     "Fade",
+    "Params",
     "TitleNode",
+    "editable_ids",
+    "read_input",
+    "read_params",
     "read_text",
+    "same_value",
+    "set_input",
     "set_text",
     "title_node",
     "write_fade",

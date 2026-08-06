@@ -37,6 +37,8 @@ detection, the render/deliver tools, and the `run_python` escape hatch.
 | `get_titles_schema` | The titles-file contract, its annotated example and the validation rules |
 | `validate_titles` | Dry-runs a titles file before the Titles track is touched |
 | `apply_titles` | Places Text+ titles from `titles.json` onto an owned Titles track, fades and all |
+| `list_titles` | Reads the Titles track back: what each placed title says and which inputs it exposes |
+| `edit_title` | Fixes one placed title in place — its words or its exposed params, neighbours untouched |
 | `grab_frames` | Grabs chosen moments on a clip as JPEGs (≤1568px) the agent reads off disk |
 | `detect_scene_cuts` | Job: catalogs where a clip changes shot, gist inline and the full list on disk |
 | `separate_stems` | Two-pass GPU stem separation: mix → 4 stems, drums → kick/snare/toms |
@@ -75,6 +77,14 @@ file always produces the same track. Title positions are offsets from the *blue 
 naming their song rather than timeline frames, which is what lets one titles file be
 re-applied unchanged to every rebuild. Fades are Fusion opacity keyframes inside each
 placed instance, because Resolve exposes no clip-level fade to the scripting API at all.
+
+A typo is the exception to all of that. `edit_title` writes new words or new exposed
+params straight into one already-placed Text+ instance — no clear, no append, no rebuild —
+and proves it reached only that one by reading every other title on the track before and
+after the write. `list_titles` is how you find the title and see which Fusion input ids it
+exposes, since a media-pool template has no comp to ask. The edit changes the *timeline*
+and not `titles.json`, so the next `apply_titles` puts the old wording back: fix the file
+too whenever the change is one worth keeping.
 
 Heavy work runs as a background job: the starter returns a `job_id` immediately, `get_job`
 polls it, and results are cached under the cache root against the media and the parameters,

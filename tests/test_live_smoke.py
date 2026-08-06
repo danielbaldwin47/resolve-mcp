@@ -52,7 +52,7 @@ from resolve_mcp.tools.timeline import (
     list_markers,
     list_timelines,
 )
-from resolve_mcp.tools.titles import apply_titles
+from resolve_mcp.tools.titles import apply_titles, edit_title, list_titles
 from resolve_mcp.tools.video import detect_scene_cuts, grab_frames
 
 from . import otio
@@ -1044,6 +1044,147 @@ def test_apply_titles_places_text_plus_instances_with_their_own_text_and_fades(
         if was_on is not None:
             project.SetCurrentTimeline(was_on)
         pool.DeleteTimelines([scratch])
+
+
+SMOKE_TITLE = "Text+"
+"""Resolve's own stock Fusion title, which every Studio install has in its Effects library."""
+
+
+def test_edit_title_fixes_one_placed_title_and_leaves_the_other_alone() -> None:
+    """#43's three ACs against real Text+ instances: text in place, params in place, alone.
+
+    Everything here is a claim only a real comp can settle, and each one had a surprise in
+    it. `GetInputList` on a live Text+ answers with **309** inputs, 194 of them external —
+    which is why `list_titles` reports the handful the template *sets* rather than the lot.
+    Whether `SetInput` on an input other than `StyledText` takes on a *placed* instance is
+    the same open question the fade had. And whether editing one instance leaves its
+    neighbour alone is the shared-comp finding #41 went looking for, asked the only way
+    that answers it — by reading the neighbour back off the timeline afterwards.
+
+    Unlike #41 and #42 this needs **no fixture and no environment variable**:
+    `InsertFusionTitleIntoTimeline` places Resolve's own stock Text+ straight onto a
+    timeline, so the whole run is built and torn down by the API. It works on a scratch
+    timeline it creates and deletes again, so it never touches a cut anyone is reviewing.
+
+        uv run pytest -m live -s -k edit_title
+
+    Paste the printed report onto the ticket.
+    """
+    if get_status()["context"]["project"] is None:
+        pytest.skip("No project open in Resolve")
+
+    connection = get_connection()
+    pool = media_pool(connection)
+    project = connection.handle().GetProjectManager().GetCurrentProject()
+    was_on = project.GetCurrentTimeline()
+
+    name = timestamped_name("edit-title-smoke", "", "edit-title-smoke")
+    scratch = pool.CreateEmptyTimeline(name)
+    assert scratch is not None, f"Resolve created no timeline called {name!r}"
+    try:
+        assert project.SetCurrentTimeline(scratch), f"Resolve would not open {name!r}"
+        # The tool owns the track called Titles; a fresh timeline's only video track is V1.
+        assert scratch.SetTrackName("video", 1, "Titles"), "Resolve would not name video 1"
+        inserter = getattr(scratch, "InsertFusionTitleIntoTimeline", None)
+        assert callable(inserter), "this build cannot insert a Fusion title"
+        for timecode in ("01:00:00:00", "01:00:10:00"):
+            assert scratch.SetCurrentTimecode(timecode), f"playhead would not go to {timecode}"
+            assert inserter(SMOKE_TITLE) is not None, f"Resolve inserted no {SMOKE_TITLE!r}"
+
+        listed = list_titles(timeline=name)
+        assert listed["ok"] is True, listed.get("error")
+        assert len(listed["titles"]) == 2, "two Text+ did not land on the Titles track"
+        first, second = (one["record"]["frames"] for one in listed["titles"])
+
+        # Both instances start life saying the same thing, so they are named by frame.
+        fixed = edit_title(at=first, text="Live smoke fixed", timeline=name)
+        param = _a_writable_param(listed["titles"][0]["params"])
+        with_param = (
+            None
+            if param is None
+            else edit_title(at=first, params={param[0]: param[1]}, timeline=name)
+        )
+        after = list_titles(timeline=name)
+
+        print("\n" + _render_edit(listed, fixed, with_param, after))
+        assert fixed["ok"] is True, fixed.get("error")
+        assert fixed["other_titles_unchanged"] == 1, (
+            "the neighbour was not re-read, or the two instances share one Fusion comp"
+        )
+        assert [one["text"] for one in after["titles"]] == ["Live smoke fixed", "Custom Title"]
+        assert [one["record"]["frames"] for one in after["titles"]] == [first, second]
+        if param is not None and with_param is not None:
+            assert with_param["ok"] is True, with_param.get("error")
+            assert with_param["title"]["params"]["values"][param[0]] == param[1]
+    finally:
+        if was_on is not None:
+            project.SetCurrentTimeline(was_on)
+        pool.DeleteTimelines([scratch])
+
+
+def _a_writable_param(exposed: dict[str, Any] | None) -> tuple[str, float] | None:
+    """A numeric input that is safe to nudge and read back, or nothing.
+
+    Only ``Size``: it is a plain continuous slider, so a value near its own is taken
+    verbatim. The other numbers a stock Text+ sets are enumerations wearing numbers — the
+    two justifications, ``Wrap`` — and Fusion clamping one of those to a legal value would
+    read back as a failed write when nothing had gone wrong.
+    """
+    if exposed is None or not exposed["read"]:
+        return None
+    value = exposed["values"].get("Size")
+    if not isinstance(value, int | float) or isinstance(value, bool):
+        return None
+    return ("Size", round(float(value) + 0.01, 4))
+
+
+def _render_edit(
+    listed: dict[str, Any],
+    fixed: dict[str, Any],
+    with_param: dict[str, Any] | None,
+    after: dict[str, Any],
+) -> str:
+    """The report the ticket asks for: what was exposed, what was written, what moved."""
+    if not listed["ok"]:
+        return f"list_titles failed: {listed['error']['cause']}"
+    lines = [f"timeline:      {listed['timeline']}", f"track:         {listed['track']}"]
+    for one in listed["titles"]:
+        params = one["params"]
+        node = one["node"]
+        lines.append(
+            f"  before: {one['text']!r} @ {one['record']['frames']} for "
+            f"{one['duration']['frames']}f — node {node and node['name']!r}, "
+            f"{node and node['text_plus_in_comp']} Text+ in comp"
+        )
+        lines.append(
+            f"          params read={params and params['read']}: {params and params['detail']}"
+        )
+        if params and params["values"]:
+            lines.append(f"          sets: {params['values']}")
+    if fixed["ok"]:
+        lines.append(
+            f"text edit:     {fixed['was']['text']!r} -> {fixed['title']['text']!r}, "
+            f"edited={fixed['edited']}, others unchanged={fixed['other_titles_unchanged']}"
+        )
+    else:
+        lines.append(
+            f"text edit:     FAILED {fixed['error']['cause']}\n  fix: {fixed['error']['fix']}"
+        )
+    if with_param is None:
+        lines.append("param edit:    skipped — this template set no plain numeric input")
+    elif with_param["ok"]:
+        lines.append(
+            f"param edit:    edited={with_param['edited']}, "
+            f"now={with_param['title']['params']['values']}"
+        )
+    else:
+        lines.append(
+            f"param edit:    FAILED {with_param['error']['cause']}\n"
+            f"  fix: {with_param['error']['fix']}"
+        )
+    for one in after["titles"]:
+        lines.append(f"  after:  {one['text']!r} @ {one['record']['frames']}")
+    return "\n".join(lines)
 
 
 def test_correlate_measures_a_real_hand_edited_timeline() -> None:

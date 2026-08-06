@@ -74,7 +74,54 @@ class FakeSpline:
         return self.keyframes.get(float(frame))
 
 
-class FakeFusionTool:
+class FakeFusionInput:
+    """One entry of ``tool.GetInputList()``: an Input *object*, not an id and not a value.
+
+    Modelled off the real thing, read live on Studio 21.0.3.7: a stock Text+ lists **309**
+    inputs, and the three attributes that make that number usable are all here.
+
+    The display name is deliberately not the id — Fusion's "Size" on screen is ``Size`` or
+    ``StyleSize`` underneath, and only the id round-trips through ``GetInput``/``SetInput``.
+    A fake whose two names agreed would let a wrapper reading ``INPS_Name`` pass here and
+    then write to an input that does not exist on a real Text+.
+
+    ``INPB_External`` is false for Fusion's own nests, separators and layout furniture —
+    115 of that 309 — and ``INPN_Default`` is the stock value a *number* shipped with.
+    There is deliberately no ``INPS_Default``: text inputs declare none live, so a fake
+    that invented one would hide the branch that has to cope without it.
+    """
+
+    def __init__(
+        self,
+        input_id: str,
+        name: str | None = None,
+        owner: FakeResolve | None = None,
+        external: bool = True,
+        default: Any = None,
+    ):
+        self.input_id = input_id
+        self.display_name = name if name is not None else input_id.upper()
+        self.external = external
+        self.default = default
+        self._owner = owner
+
+    def _check(self) -> None:
+        if self._owner is not None:
+            self._owner._check()
+
+    def GetAttrs(self, key: str | None = None) -> Any:  # noqa: N802
+        self._check()
+        attrs: dict[str, Any] = {
+            "INPS_ID": self.input_id,
+            "INPS_Name": self.display_name,
+            "INPB_External": self.external,
+        }
+        if isinstance(self.default, int | float) and not isinstance(self.default, bool):
+            attrs["INPN_Default"] = self.default
+        return attrs if key is None else attrs.get(key)
+
+
+class FakeFusionTool(AnswersNone):
     """One node inside a Fusion comp; for titling only the Text+ node matters.
 
     ``SetInput`` returns ``None`` in the real API — it reports nothing, so the only way to
@@ -90,6 +137,16 @@ class FakeFusionTool:
     accepted, nothing is connected, and the attribute still reads back as ``None``.
     ``reads_at_a_time=False`` models a build whose ``GetInput`` takes no time argument, so
     an animated value cannot be read back at a keyframe.
+
+    ``refuses`` is the write that lies: ``SetInput`` returns ``None`` whether it wrote or
+    not, so a named input here takes the call, keeps its old value and says nothing —
+    which is what a locked track and a read-only input both look like from Python.
+    ``missing`` hides a *method* the way fusionscript does, answering ``None`` rather than
+    raising, so a build with no ``GetInputList`` is modelled as ``missing={"GetInputList"}``.
+
+    ``defaults`` is the stock value each *number* shipped with and ``internal`` is the set
+    that is not a control at all — both are what a real listing is filtered by, and a fake
+    without them would make a 194-input dump look like a reasonable answer.
     """
 
     def __init__(
@@ -100,17 +157,25 @@ class FakeFusionTool:
         owner: FakeResolve | None = None,
         animatable: bool = True,
         reads_at_a_time: bool = True,
+        refuses: frozenset[str] | set[str] | None = None,
+        missing: frozenset[str] | set[str] | None = None,
+        defaults: dict[str, Any] | None = None,
+        internal: frozenset[str] | set[str] | None = None,
     ) -> None:
         # Every field is set while the node is still being built, so nothing here can be
         # mistaken for an input connection — and no list of field names has to be kept in
         # step with this signature for that to hold.
         object.__setattr__(self, "_built", False)
+        object.__setattr__(self, "_missing", set(missing or ()))
         self.tool_id = tool_id
         self.name = name
         self.inputs: dict[str, Any] = dict(inputs or {"StyledText": "TEMPLATE"})
         self.animated: dict[str, FakeSpline] = {}
         self.animatable = animatable
         self.reads_at_a_time = reads_at_a_time
+        self.refuses = set(refuses or ())
+        self.defaults: dict[str, Any] = dict(defaults or {})
+        self.internal = set(internal or ())
         self._owner = owner
         object.__setattr__(self, "_built", True)
 
@@ -139,6 +204,10 @@ class FakeFusionTool:
             self._owner,
             self.animatable,
             self.reads_at_a_time,
+            set(self.refuses),
+            set(self._missing),
+            dict(self.defaults),
+            set(self.internal),
         )
 
     def adopt(self, owner: FakeResolve) -> None:
@@ -155,8 +224,30 @@ class FakeFusionTool:
         return attrs if key is None else attrs.get(key)
 
     def SetInput(self, key: str, value: Any) -> None:  # noqa: N802
+        """A write lands only on an input this node actually has.
+
+        A Fusion node's inputs are fixed by its type: ``SetInput`` with an id the node
+        does not carry is ignored, and ``GetInput`` then answers ``None``. Nothing in the
+        return value says so — it is ``None`` either way — so a fake that grew a new input
+        on demand would let a typo'd id read back as a clean write and pass.
+        """
         self._check()
+        if key in self.refuses or key not in self.inputs:
+            return  # taken and dropped: the API reports nothing either way
         self.inputs[key] = value
+
+    def GetInputList(self) -> dict[int, FakeFusionInput]:  # noqa: N802
+        """A *one-based dict of Input objects*, the way GetToolList answers with tools."""
+        self._check()
+        return {
+            index: FakeFusionInput(
+                key,
+                owner=self._owner,
+                external=key not in self.internal,
+                default=self.defaults.get(key),
+            )
+            for index, key in enumerate(self.inputs, start=1)
+        }
 
     def GetInput(self, key: str, time: Any = None) -> Any:  # noqa: N802
         """The input's value, at a time when one is asked for and the build answers for it."""
