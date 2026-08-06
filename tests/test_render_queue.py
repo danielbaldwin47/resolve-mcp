@@ -132,6 +132,54 @@ def test_a_job_that_does_start_keeps_the_full_render_timeout(tmp_path: Path) -> 
     assert "never started" not in raised.value.cause
 
 
+def test_a_status_that_does_not_read_is_never_refused_as_wedged(tmp_path: Path) -> None:
+    """Only a reading that succeeded may refuse. An unreported status is how this API says
+    "not on this build" and how a dying handle reads, and a running render behind one would
+    be thrown away by a start deadline that treated it as queued — the false refusal is the
+    worse trade, because the wedge at least announces itself by never finishing.
+    """
+    project = FakeProject("sunset-set")
+    project.render_statuses = [""]
+    clock = iter([0.0, 0.0, 100.0, 5_000.0])
+    job_id = render.submit(project, {"TargetDir": str(tmp_path)}, ("wav", "lpcm"))
+
+    with pytest.raises(RenderQueueError) as raised:
+        render.render(
+            project,
+            job_id,
+            tmp_path / "mix.wav",
+            now=lambda: next(clock),
+            sleep=_no_sleep,
+        )
+
+    assert "still unreported" in raised.value.cause
+    assert "never started" not in raised.value.cause
+
+
+def test_a_render_timeout_that_lands_first_still_gives_the_wedge_advice(tmp_path: Path) -> None:
+    """The two deadlines are both the caller's to set, so the render timeout can land on a
+    job that never started. What it says then has to follow the job, not the deadline."""
+    project = FakeProject("sunset-set")
+    project.render_statuses = ["Ready for background render"]
+    clock = iter([0.0, 0.0, 61.0])
+    job_id = render.submit(project, {"TargetDir": str(tmp_path)}, ("wav", "lpcm"))
+
+    with pytest.raises(RenderQueueError) as raised:
+        render.render(
+            project,
+            job_id,
+            tmp_path / "mix.wav",
+            timeout=30.0,
+            start_timeout=600.0,
+            now=lambda: next(clock),
+            sleep=_no_sleep,
+        )
+
+    assert "still Ready for background render" in raised.value.cause
+    assert raised.value.fix == render.WEDGED_FIX
+    assert raised.value.detail["started"] is False
+
+
 def test_progress_comes_from_the_jobs_own_percentage(tmp_path: Path) -> None:
     project = FakeProject("sunset-set")
     project.render_statuses = ["Rendering", "Rendering", "Complete"]
