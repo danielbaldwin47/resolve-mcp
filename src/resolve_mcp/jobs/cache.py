@@ -54,6 +54,18 @@ def content_hash(path: Path | str) -> str:
     return digest.hexdigest()
 
 
+def identity(path: Path | str, written_under: Path) -> dict[str, Any]:
+    """Hash what this server wrote under ``written_under``; fingerprint anything else.
+
+    The rule at the top of this module, as one call — so two jobs keying off the same
+    master agree about what it is, rather than each deciding for itself.
+    """
+    resolved = Path(path)
+    if resolved.resolve().is_relative_to(written_under.resolve()):
+        return {"sha256": content_hash(resolved)}
+    return fingerprint(resolved)
+
+
 def cache_key(
     kind: str,
     inputs: Sequence[Mapping[str, Any]],
