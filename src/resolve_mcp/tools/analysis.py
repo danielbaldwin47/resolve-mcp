@@ -59,6 +59,7 @@ def analyze_structure(
     threshold: float = applause.DEFAULT_THRESHOLD,
     tune_seconds: float = applause.DEFAULT_TUNE_SECONDS,
     solo_seconds: float = solos.DEFAULT_MINIMUM_SECONDS,
+    snap_seconds: float = solos.DEFAULT_SNAP_SECONDS,
     refresh: bool = False,
 ) -> dict[str, Any]:
     """Start tune-boundary and solo-change analysis of a concert. Returns a job to poll.
@@ -82,7 +83,9 @@ def analyze_structure(
     is measured is that the front changed and when. threshold moves how sure the tagger has
     to be that it is hearing a room; tune_seconds is how much music has to sit between two
     bursts before it is a tune rather than an announcement; solo_seconds is the same idea
-    for a stretch out front. Reruns on unchanged audio come back from cache immediately.
+    for a stretch out front; snap_seconds is how far a change may reach for a downbeat
+    before it is called where it was measured instead. Reruns on unchanged audio come back
+    from cache immediately.
     """
     return {
         "job": structure.analyze_structure(
@@ -93,6 +96,7 @@ def analyze_structure(
             threshold=threshold,
             tune_seconds=tune_seconds,
             solo_seconds=solo_seconds,
+            snap_seconds=snap_seconds,
             refresh=refresh,
         )
     }

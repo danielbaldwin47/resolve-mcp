@@ -20,7 +20,7 @@ import pytest
 
 from resolve_mcp.analysis import applause as applause_module
 from resolve_mcp.analysis import beats as beats_module
-from resolve_mcp.analysis import music, structure
+from resolve_mcp.analysis import decode, music, structure
 from resolve_mcp.analysis import solos as solos_module
 from resolve_mcp.analysis.beats import BeatGrid
 from resolve_mcp.config import get_config
@@ -288,6 +288,23 @@ def test_refresh_tags_the_room_again(concert: Path) -> None:
 
     record = _finished(started)
     assert record.state == "failed"
+
+
+def test_a_rerun_does_not_read_the_stems_again(
+    solo_audio: Path,
+    stems: Path,
+    monkeypatch: Any,
+) -> None:
+    """Separated stems are gigabytes of WAV; a second answer comes off the cache entry."""
+    first = _result(_solos(solo_audio, stems))
+
+    def must_not_run(path: Path | str) -> Any:
+        raise AssertionError("the stems were decoded again for a set already analysed")
+
+    monkeypatch.setattr(decode, "read", must_not_run)
+    second = _result(_solos(solo_audio, stems))
+
+    assert second["solos"] == first["solos"]
 
 
 def test_solo_changes_reuse_the_beat_grid_music_analysis_already_wrote(

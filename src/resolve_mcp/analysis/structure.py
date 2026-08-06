@@ -46,7 +46,15 @@ TUNES = "tunes"
 SOLOS = "solos"
 
 APPLAUSE_SHAPE = ("threshold", "burst_seconds", "gap_seconds", "tune_seconds")
-SOLO_SHAPE = ("window_seconds", "hop_seconds", "solo_seconds", "margin_db", "semitones")
+SOLO_SHAPE = (
+    "window_seconds",
+    "hop_seconds",
+    "solo_seconds",
+    "margin_db",
+    "semitones",
+    "snap_seconds",
+)
+"""Every setting that changes what the solo half says — and so what it is keyed on."""
 
 
 def analyze_structure(
@@ -91,7 +99,8 @@ def analyze_structure(
         "snap_seconds": float(snap_seconds),
     }
     identity = halves.identity(source, config)
-    key = cache.cache_key(KIND, [identity, _stem_identity(found, config)], settings)
+    stem_identity = _stem_identity(found, config)
+    key = cache.cache_key(KIND, [identity, stem_identity], settings)
 
     def work(progress: Progress) -> JobOutput:
         return analyze(
@@ -100,6 +109,7 @@ def analyze_structure(
             progress,
             identity=identity,
             stems=found,
+            stem_identity=stem_identity,
             tagger=tagger,
             detector=detector,
             refresh=refresh,
@@ -159,6 +169,7 @@ def _stems(stems: str | Path | None, solos: bool) -> dict[str, Path]:
                 "Run separate_stems first and pass the directory from its result as stems, "
                 "or ask for solos=false."
             ),
+            detail={SOLOS: solos, "stems": None},
         )
     directory = Path(stems)
     inner = directory / stems_module.MIX_PASS
@@ -198,12 +209,18 @@ def analyze(
     progress: Progress,
     identity: dict[str, Any] | None = None,
     stems: Mapping[str, Path] | None = None,
+    stem_identity: Mapping[str, Any] | None = None,
     tagger: applause_module.Tagger | None = None,
     detector: beats_module.Detector | None = None,
     refresh: bool = False,
     config: Config | None = None,
 ) -> JobOutput:
-    """The worker: find the boundaries that were asked for, write them out, return the gist."""
+    """The worker: find the boundaries that were asked for, write them out, return the gist.
+
+    ``identity`` and ``stem_identity`` come from the starter, which already worked them out
+    to key the job — fingerprinting the same stems a second time here would read a gigabyte
+    of WAV to learn what the caller is holding.
+    """
     from ..audio import wav
 
     config = config or get_config()
@@ -232,19 +249,18 @@ def analyze(
     if settings[SOLOS]:
         progress(0.6, "measuring the stems")
         shape = {name: settings[name] for name in SOLO_SHAPE}
-        stem_shape = {**shape, "snap_seconds": settings["snap_seconds"]}
         result[SOLOS] = halves.cached(
             f"{KIND}:{SOLOS}",
             cache.cache_key(
                 f"{KIND}:{SOLOS}",
-                [identity, _stem_identity(stems, config)],
-                stem_shape,
+                [identity, stem_identity or _stem_identity(stems, config)],
+                shape,
             ),
             lambda path: _solos(
                 source,
                 path,
                 described,
-                stem_shape,
+                shape,
                 stems,
                 identity,
                 detector,
@@ -351,13 +367,6 @@ def _downbeats(
     to learn what is already on disk is the cost that keying halves separately exists to
     avoid.
     """
-    half = halves.cached(
-        f"{music.KIND}:{music.BEATS}",
-        music.beats_key(dict(identity)),
-        lambda path: music.beats_half(source, path, dict(described), detector),
-        source,
-        refresh,
-        config,
-    )
+    half = music.beats_of(source, dict(described), dict(identity), detector, refresh, config)
     rows: Sequence[Mapping[str, Any]] = records.read(Path(half["path"]))[music.BEATS]
     return tuple(float(row["t"]) for row in rows if row["downbeat"])

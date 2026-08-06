@@ -107,13 +107,29 @@ def _sane_windows(window_seconds: float, hop_seconds: float) -> None:
         )
 
 
-def beats_key(identity: dict[str, Any]) -> str:
-    """What the beat grid for this audio is cached under, wherever it is asked for.
+def beats_of(
+    source: Path,
+    described: dict[str, Any],
+    identity: dict[str, Any],
+    detector: beats_module.Detector | None = None,
+    refresh: bool = False,
+    config: Config | None = None,
+) -> dict[str, Any]:
+    """The beat grid for this audio, computed or reused — the entry every job shares.
 
     Public because it is shared: structure analysis snaps solo changes to downbeats, and
-    reading this half is how it gets them without running the beat model a second time.
+    calling this is how it gets them without running the beat model a second time. The key
+    and the kind stay here together rather than being rebuilt by each caller, because a
+    caller that assembled one of them differently would quietly get its own cache entry.
     """
-    return cache.cache_key(f"{KIND}:{BEATS}", [identity], {})
+    return halves.cached(
+        f"{KIND}:{BEATS}",
+        cache.cache_key(f"{KIND}:{BEATS}", [identity], {}),
+        lambda path: beats_half(source, path, described, detector),
+        source,
+        refresh,
+        config or get_config(),
+    )
 
 
 def analyze(
@@ -138,14 +154,7 @@ def analyze(
 
     if settings[BEATS]:
         progress(0.1, "finding beats and downbeats")
-        result[BEATS] = halves.cached(
-            f"{KIND}:{BEATS}",
-            beats_key(identity),
-            lambda path: beats_half(source, path, described, detector),
-            source,
-            refresh,
-            config,
-        )
+        result[BEATS] = beats_of(source, described, identity, detector, refresh, config)
         artifacts.append(Path(result[BEATS]["path"]))
 
     if settings[ENERGY]:

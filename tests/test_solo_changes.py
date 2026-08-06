@@ -171,6 +171,19 @@ def test_a_timbre_step_at_the_same_moment_as_a_handover_is_one_change() -> None:
     assert [one.signal for one in found] == [solos.LEAD]
 
 
+def test_two_timbre_steps_close_together_are_both_reported() -> None:
+    """A timbre step is suppressed by a lead change, never by another timbre step.
+
+    ``steps`` has already decided how close two handovers inside the residual may be; a
+    second rule here would silently drop the piano coming in after the tenor went out.
+    """
+    stepped = (solos.Step(20.0, 600.0, 1500.0), solos.Step(22.0, 1500.0, 600.0))
+
+    found = solos.changes((), stepped, together_seconds=4.0)
+
+    assert [one.seconds for one in found] == [20.0, 22.0]
+
+
 def test_change_records_name_what_left_and_what_took_over() -> None:
     runs = _runs(
         _voice("other", (-18.0, 12.0), (-30.0, 12.0)),

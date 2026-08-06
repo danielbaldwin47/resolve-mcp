@@ -358,6 +358,8 @@ def changes(
     A stem taking the front and the residual's timbre stepping at the same moment is one
     event seen twice — the horn leaving ``other`` is why the vocal is now clear of it — so
     the timbre reading is dropped when a lead change is already within ``together_seconds``.
+    Only against the lead changes: two timbre steps close together are two handovers inside
+    the residual, and ``steps`` has already decided how close two of those may be.
     """
     found = [
         Change(
@@ -372,6 +374,7 @@ def changes(
         for index, one in enumerate(built)
         if one.start > opened
     ]
+    leads = tuple(found)
     found.extend(
         Change(
             seconds=one.seconds,
@@ -383,7 +386,7 @@ def changes(
             detail=one.semitones,
         )
         for one in stepped
-        if all(abs(one.seconds - lead.measured) >= together_seconds for lead in found)
+        if all(abs(one.seconds - lead.measured) >= together_seconds for lead in leads)
     )
     return tuple(sorted(found, key=lambda one: one.measured))
 
@@ -401,9 +404,9 @@ def snapped(
     """
     called: list[Change] = []
     for one in found:
-        nearest = beats_module.nearest(downbeats, one.measured)
-        near = nearest is not None and abs(downbeats[nearest] - one.measured) <= tolerance
-        when = round(downbeats[nearest], 3) if near and nearest is not None else one.measured
+        index = beats_module.nearest(downbeats, one.measured)
+        near = index is not None and abs(downbeats[index] - one.measured) <= tolerance
+        when = round(downbeats[index], 3) if near and index is not None else one.measured
         called.append(one._replace(seconds=when, downbeat=near))
     return tuple(called)
 

@@ -53,6 +53,7 @@ def identity(source: Path, config: Config) -> dict[str, Any]:
 
 
 def inside(source: Path, directory: Path) -> bool:
+    """Whether this path is one of ours — under a directory this server writes into."""
     return source.resolve().is_relative_to(directory.resolve())
 
 
@@ -81,6 +82,7 @@ def cached(
 
 
 def audio_gist(described: Mapping[str, Any]) -> dict[str, Any]:
+    """What every analysis result says about the file it read, before any measurement."""
     return {
         "path": described["path"],
         "duration_seconds": described["duration_seconds"],
