@@ -19,13 +19,16 @@ Pure functions (validation, time math) and workers on fixture audio live here
 too. Tools are called directly, never over stdio.
 
 **2. Live smoke — `uv run pytest -m live`.**
-The only place the direct-attach path is real: needs Resolve Studio running on
-the Windows 11 box with a python.org interpreter; an autouse fixture skips
-when unreachable. Any AC marked "(live smoke)" lands here — on the machine
-agents do not develop on. So a ticket with live ACs closes when the fake-tier
-work is done, with a comment naming exactly which ACs are unrun and why; the
-live pass happens when a human is at that machine, and its result goes on the
-ticket (hardware, interpreter, outcome), because an unrecorded pass gets re-run.
+The only place the direct-attach path is real: needs Resolve Studio running
+with a python.org interpreter; an autouse fixture skips every live test when
+Resolve is unreachable. Sessions run on the live Windows 11 box with Resolve
+Studio up, so run this tier yourself: an AC marked "(live smoke)" is yours to
+execute, and a live pass means the tests **ran** — a run that skipped means
+Resolve was unreachable, not that the tier passed. Record the result on the
+ticket (hardware, interpreter, outcome); an unrecorded pass gets re-run. ACs
+that need the human's hands — a specific project open, media only they have,
+a click in the UI — go to the human: flag them **before opening the PR** so
+they can run first, and list them under the ticket's `## Needs from you`.
 
 **What no seam covers, and why it is the dangerous part:** whether
 fusionscript accepts the attach on a given interpreter at all. ADR 0001: on a
@@ -37,8 +40,8 @@ the test runner is invisible to the test runner. Treat "all fakes green" as
 proof of decisions, never of the attach.
 
 **Log a line for every connection state change** (attach, reconnect, handle
-death) — a live failure on a machine you are not at gets diagnosed from the
-log or not at all. (forest-shell #81: a silent lifecycle left a
+death) — a live failure outside your session (a human-run AC, real MCP use)
+gets diagnosed from the log or not at all. (forest-shell #81: a silent lifecycle left a
 cannot-unlock bug with two candidate causes for a week.)
 
 Why the seam rule exists: forest-shell ran seven tickets green against its
