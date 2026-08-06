@@ -36,6 +36,27 @@ class ResolveConnection:
         # stale handle is left to observe.
         self._ever_attached = False
         self._lock = threading.RLock()
+        self._build_notes: dict[str, Any] = {}
+
+    @property
+    def build_notes(self) -> dict[str, Any]:
+        """Facts about the attached build that cost a real call to learn.
+
+        Replaced with an empty dict whenever a handle is attached, so nothing learned
+        about one Resolve is believed about the next. What goes here is what cannot change
+        while the same Resolve is attached and is expensive to ask twice — the interchange
+        layer keeps the export type this build actually writes through, which costs a
+        whole export to discover (#26).
+
+        Replaced rather than emptied, and that is the whole safety property. Learning a
+        fact can take seconds (an export is a real one), so a caller holds this dict
+        across a window in which the handle can die and reattach. Clearing in place would
+        let that caller write what it learned about the old build into the notes now
+        belonging to the new one — the exact belief this is meant to rule out. Writing
+        into a dict that has been swapped out is harmless: it is unreachable, and the new
+        build starts empty and learns for itself.
+        """
+        return self._build_notes
 
     @property
     def connected(self) -> bool:
@@ -70,6 +91,10 @@ class ResolveConnection:
             handle, failure = self._connect_once()
             if handle is not None and self._probe(handle):
                 self._handle = handle
+                # A new handle may be a different Resolve; nothing learned about the last
+                # one survives into it. Swapped, not cleared, so a probe still running
+                # against the old handle cannot write its answer in here (see build_notes).
+                self._build_notes = {}
                 log.info("Resolve %s", "reconnected" if self._ever_attached else "attached")
                 self._ever_attached = True
                 return handle

@@ -46,6 +46,7 @@ def test_registers_the_p1_session_media_timeline_cut_titling_render_and_job_tool
         "detect_scene_cuts",
         "transcribe_audio",
         "analyze_music",
+        "analyze_structure",
         "correlate_timeline",
         "separate_stems",
         "list_render_presets",

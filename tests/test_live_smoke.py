@@ -19,6 +19,7 @@ in PowerShell, which is the shell on the machine this runs on:
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import json
 import os
@@ -127,11 +128,19 @@ def test_lists_the_real_media_pool() -> None:
 
 
 def test_inspects_a_real_clip_with_the_property_keys_the_wrappers_assume() -> None:
-    """The one live check the fakes cannot make: that these key names exist at all."""
+    """The one live check the fakes cannot make: that these key names exist at all.
+
+    Filtered, because the assertions below are about a clip with a file behind it, and the
+    first pool entry is a build timeline on any project this suite has run once — which
+    has no ``File Path`` and would fail this for a reason that is not the one it tests.
+    """
     listing = list_media()
-    if not listing["ok"] or not listing["clips"]:
-        pytest.skip("No clips in the media pool")
-    first = listing["clips"][0]
+    if not listing["ok"]:
+        pytest.skip("No media pool")
+    decodable = _decodable(listing["clips"])
+    if not decodable:
+        pytest.skip("No clips with media behind them in the media pool")
+    first = decodable[0]
 
     result = inspect_clip(first["name"], bin=first["bin"] or None)
 
@@ -329,12 +338,43 @@ def test_the_interchange_formats_all_write_a_file(tmp_path: Path) -> None:
 # --- build_timeline: the footgun wraps, on the only API that can confirm them --------------
 
 
+def _decodable(clips: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Pool entries with media behind them that ffmpeg can open.
+
+    A timeline is a pool clip too — it reports a frame count and a rate and is never
+    offline — and every build test here leaves one behind, so on a project the suite has
+    run once the shortest "clip" in the pool is a timeline with no file on disk (#34,
+    live).
+
+    The test that matters is therefore **a file path**, not the type name. Compound clips,
+    multicams, Fusion compositions and generators are all pathless in exactly the same
+    way, all report a rate and a frame count, and none of them is typed ``Timeline``; and
+    a pathless entry is reported as *pathless rather than offline*, so the offline flag
+    does not catch them either. Requiring a path covers every one of them, and covers
+    timelines as a side effect rather than by naming a string this build happens to use.
+    """
+    return [
+        one
+        for one in clips
+        if one["fps"]
+        and one["frames"]
+        and not one["offline"]
+        and one["file_path"]
+        and one["type"] != "Timeline"
+    ]
+
+
 def a_source_clip() -> dict[str, Any]:
-    """A pool clip long enough to cut three shots out of, with a rate the cut can declare."""
+    """A pool clip long enough to cut three shots out of, with a rate the cut can declare.
+
+    Timelines are excluded for the same reason the video tests exclude them: every build
+    here leaves one in the pool, and a timeline reports a frame count and a rate while
+    having no media behind it to cut from (#34, live).
+    """
     listing = list_media()
     if not listing["ok"]:
         pytest.skip("No media pool")
-    for entry in listing["clips"]:
+    for entry in _decodable(listing["clips"]):
         clip = inspect_clip(entry["name"], bin=entry["bin"] or None)
         if not clip["ok"]:
             continue
@@ -346,7 +386,8 @@ def a_source_clip() -> dict[str, Any]:
             "name": entry["name"],
             "bin": entry["bin"] or None,
             "fps": float(fps),
-            "start": media["start"]["frames"],
+            # inspect_clip reports media bounds as in/out/duration — there is no "start".
+            "start": media["in"]["frames"],
         }
     pytest.skip("No pool clip long enough to cut a smoke timeline from")
 
@@ -408,7 +449,7 @@ def test_a_real_build_places_every_shot_exactly_where_the_cut_puts_it(tmp_path: 
     result = build_timeline(cut_file)
 
     assert result["ok"] is True, result.get("error")
-    assert result["placed"] == {"segments": 3, "audio": False, "selectors": 0}
+    assert result["placed"] == {"segments": 3, "overlays": 0, "audio": False, "selectors": 0}
     built = inspect_timeline(result["timeline"]["name"], detail="clips")
     assert built["ok"] is True
     video = [track for track in built["tracks"] if track["type"] == "video"][0]
@@ -439,7 +480,7 @@ def test_a_real_take_selector_swaps_the_angle_without_moving_the_shot(tmp_path: 
     result = build_timeline(cut_file)
 
     assert result["ok"] is True, result.get("error")
-    assert result["placed"] == {"segments": 3, "audio": False, "selectors": 3}
+    assert result["placed"] == {"segments": 3, "overlays": 0, "audio": False, "selectors": 3}
     name = result["timeline"]["name"]
     before = _video_items(name)
     assert [item["takes"] for item in before] == [2, 2, 2]
@@ -535,10 +576,12 @@ def test_the_locked_track_footgun_is_still_real(tmp_path: Path) -> None:
     )
 
     assert probe["ok"] is True, probe.get("error")
-    if not probe["result"]["found"]:
+    # run_python renders its value with repr, so the probe's dict comes back as source text.
+    reported = ast.literal_eval(probe["result"])
+    if not reported["found"]:
         pytest.skip("The chosen clip is not in the root folder, so the probe could not run")
-    assert probe["result"]["returned_truthy"] is True
-    assert probe["result"]["items_on_track"] == 0
+    assert reported["returned_truthy"] is True
+    assert reported["items_on_track"] == 0
 
 
 def test_an_invalid_cut_creates_no_timeline_on_a_real_project(tmp_path: Path) -> None:
@@ -663,10 +706,7 @@ def test_a_real_frame_grab_lands_on_the_moment_resolve_numbers_it_at() -> None:
     listing = list_media()
     if not listing["ok"]:
         pytest.skip("No project open in Resolve")
-    footage = next(
-        (one for one in listing["clips"] if one["fps"] and not one["offline"] and one["frames"]),
-        None,
-    )
+    footage = next(iter(_decodable(listing["clips"])), None)
     if footage is None:
         pytest.skip("No online clip with a frame rate in the media pool")
     bounds = inspect_clip(footage["name"], bin=footage["bin"] or None)["bounds"]["media"]
@@ -694,9 +734,7 @@ def test_a_real_scene_scan_reports_cuts_on_the_clips_own_clock() -> None:
     listing = list_media()
     if not listing["ok"]:
         pytest.skip("No project open in Resolve")
-    footage = [
-        one for one in listing["clips"] if one["fps"] and not one["offline"] and one["frames"]
-    ]
+    footage = _decodable(listing["clips"])
     if not footage:
         pytest.skip("No online clip with a frame rate in the media pool")
     shortest = min(footage, key=lambda one: one["frames"])
