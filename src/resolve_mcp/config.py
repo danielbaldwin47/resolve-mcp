@@ -19,7 +19,9 @@ CACHE_DIR_NAME = "resolve-mcp"
 DEFAULT_FFMPEG = "ffmpeg"
 DEFAULT_AUDIO_SEPARATOR = "audio-separator"
 DEFAULT_STEM_MODEL = "htdemucs_ft.yaml"
-DEFAULT_DRUM_MODEL = "MDX23C-DrumSep-6stem-FT.ckpt"
+# The name audio-separator 0.44.5 lists for the six-stem MDX23C drum model; the
+# "MDX23C-DrumSep-6stem-FT.ckpt" spelling is not in its catalog and fails to load.
+DEFAULT_DRUM_MODEL = "MDX23C-DrumSep-aufr33-jarredou.ckpt"
 
 
 TRUTHY = {"1", "true", "yes", "on"}

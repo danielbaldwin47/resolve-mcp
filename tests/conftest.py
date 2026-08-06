@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Protocol
@@ -19,10 +20,21 @@ class Attach(Protocol):
 
 
 @pytest.fixture(autouse=True)
-def _clean_globals(tmp_path: Path) -> Iterator[None]:
-    """Keep the connection and config singletons from leaking between tests."""
+def _clean_globals(request: pytest.FixtureRequest, tmp_path: Path) -> Iterator[None]:
+    """Keep the connection and config singletons from leaking between tests.
+
+    The fake tier gets a hermetic config — machine-local ``RESOLVE_MCP_*`` variables
+    must not change what a unit test asserts. Live tests get the real process env:
+    the documented overrides (``RESOLVE_MCP_AUDIO_SEPARATOR``, ``RESOLVE_MCP_DRUM_MODEL``,
+    …) exist precisely so a live run can point at the machine's installs, and a
+    conftest that erased them made those knobs silently dead in the live tier.
+    Both tiers still get their cache redirected into ``tmp_path``.
+    """
     connection_module.reset_connection()
-    config_module.set_config(Config.from_env({"RESOLVE_MCP_CACHE": str(tmp_path / "cache")}))
+    base = dict(os.environ) if request.node.get_closest_marker("live") else {}
+    config_module.set_config(
+        Config.from_env({**base, "RESOLVE_MCP_CACHE": str(tmp_path / "cache")})
+    )
     yield
     connection_module.reset_connection()
     config_module.reset_config()

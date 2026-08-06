@@ -66,6 +66,9 @@ CORRELATE_TIMELINE_ENV = "RESOLVE_MCP_CORRELATE_TIMELINE"
 CORRELATE_AUDIO_ENV = "RESOLVE_MCP_CORRELATE_AUDIO"
 """Opt-in for #40's live AC: a real beats file, and the hand-edited cut to measure with it."""
 
+SCENE_SCAN_CLIP_ENV = "RESOLVE_MCP_SCENE_SCAN_CLIP"
+"""Opt-in for #34's live AC: a pool clip with hard cuts, so the scan has cuts to map."""
+
 SMOKE_CUT = "resolve-mcp-smoke"
 """Every build here materialises a new version of this name; delete them when you are done."""
 
@@ -730,6 +733,11 @@ def test_a_real_scene_scan_reports_cuts_on_the_clips_own_clock() -> None:
     Slow — this decodes a whole clip, so it takes the shortest one in the pool. What it is
     for is the mapping the fakes replay rather than produce: that ffmpeg's reported times
     become frame numbers inside the bounds ``inspect_clip`` reports for the same clip.
+
+    The shortest pool clip is usually a continuous take (or a still), and a clip with no
+    cuts passes the mapping loop vacuously — the half of #34 this test exists for goes
+    unchecked. ``RESOLVE_MCP_SCENE_SCAN_CLIP`` names a pool clip known to contain hard
+    cuts; when set, that clip is scanned instead and the scan must find at least one cut.
     """
     listing = list_media()
     if not listing["ok"]:
@@ -737,16 +745,27 @@ def test_a_real_scene_scan_reports_cuts_on_the_clips_own_clock() -> None:
     footage = _decodable(listing["clips"])
     if not footage:
         pytest.skip("No online clip with a frame rate in the media pool")
-    shortest = min(footage, key=lambda one: one["frames"])
-    bounds = inspect_clip(shortest["name"], bin=shortest["bin"] or None)["bounds"]["media"]
+    named = os.environ.get(SCENE_SCAN_CLIP_ENV, "").strip()
+    if named:
+        matches = [one for one in footage if one["name"] == named]
+        assert matches, f"{SCENE_SCAN_CLIP_ENV}={named!r} names no decodable pool clip"
+        chosen = matches[0]
+    else:
+        chosen = min(footage, key=lambda one: one["frames"])
+    bounds = inspect_clip(chosen["name"], bin=chosen["bin"] or None)["bounds"]["media"]
 
-    started = detect_scene_cuts(shortest["name"], bin=shortest["bin"] or None)
+    started = detect_scene_cuts(chosen["name"], bin=chosen["bin"] or None)
     record = wait_for(started["job_id"], timeout=1800.0)
 
     assert started["ok"] is True, started.get("error")
     assert record.state == "completed", record.error
     assert record.result is not None
     assert Path(record.result["path"]).exists()
+    if named:
+        assert record.result["first_cuts"], (
+            f"{named!r} was named as a clip with hard cuts, but the scan found none — "
+            "the clip-clock mapping went unexercised"
+        )
     for cut in record.result["first_cuts"]:
         assert bounds["in"]["frames"] < cut["frames"] < bounds["out"]["frames"]
 
