@@ -39,6 +39,8 @@ def test_registers_the_p1_session_media_timeline_cut_render_and_job_tools() -> N
         "validate_cut",
         "build_timeline",
         "swap_take",
+        "grab_frames",
+        "detect_scene_cuts",
         "list_render_presets",
         "render_timeline",
         "get_job",

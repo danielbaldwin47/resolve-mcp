@@ -29,6 +29,7 @@ from typing import Any
 
 from ..config import Config, get_config
 from ..errors import AudioExportError, AudioExtractionError, AudioMappingError, RenderQueueError
+from ..ffmpeg import Runner
 from ..jobs import cache
 from ..jobs.runner import JobOutput, Progress, band, start_job
 from ..logging_config import get_logger
@@ -164,7 +165,7 @@ def acquire_clip_audio(
     sample_rate: int = DEFAULT_SAMPLE_RATE,
     bit_depth: int = DEFAULT_BIT_DEPTH,
     refresh: bool = False,
-    runner: ffmpeg.Runner | None = None,
+    runner: Runner | None = None,
     config: Config | None = None,
 ) -> dict[str, Any]:
     """Start a job that extracts one source clip's audio. Returns the job record.
@@ -212,7 +213,7 @@ def extract_clip_audio(
     params: dict[str, Any],
     progress: Progress,
     config: Config | None = None,
-    runner: ffmpeg.Runner | None = None,
+    runner: Runner | None = None,
 ) -> JobOutput:
     """The worker: ffmpeg the clip's audio into the cache as a WAV."""
     config = config or get_config()
