@@ -63,13 +63,49 @@ def test_imports_a_video_and_a_png_sequence_into_a_named_bin(
 
     assert result["ok"] is True
     assert result["bin"] == "Concert/Titles"
-    assert [clip["name"] for clip in result["imported"]] == ["C0012.mp4", "song_0001.png"]
+    assert [clip["name"] for clip in result["imported"]] == ["C0012.mp4", "song_[0001-0003].png"]
     assert result["imported"][1]["frames"] == 3
     assert result["not_imported"] == []
     root = pool.GetRootFolder()
     titles = root.GetSubFolderList()[0].GetSubFolderList()[0]
     assert titles.GetName() == "Titles"
     assert len(titles.GetClipList()) == 2
+
+
+def test_an_imported_sequence_whose_frames_are_on_disk_is_not_offline(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Resolve paths a sequence by its bracketed label (#85), which never exists on disk.
+
+    Offline must be judged by the frames behind the label, or every freshly imported
+    sequence reads offline and list_media(offline_only=True) sends a relink chase at
+    healthy media.
+    """
+    for index in range(1, 4):
+        a_file(tmp_path, f"seq/shot_{index:04d}.png")
+    attach(studio(pool=media_pool()))
+
+    result = import_media(
+        sequences=[
+            {"path": str(tmp_path / "seq" / "shot_%04d.png"), "start_index": 1, "end_index": 3}
+        ]
+    )
+
+    assert result["ok"] is True
+    assert result["imported"][0]["name"] == "shot_[0001-0003].png"
+    assert result["imported"][0]["offline"] is False
+    assert list_media(offline_only=True)["count"] == 0
+
+
+def test_a_sequence_whose_frames_moved_away_is_offline(attach: Attach, tmp_path: Path) -> None:
+    """The folder still exists — offline is judged by the first frame, not the folder."""
+    (tmp_path / "seq").mkdir()
+    clip = a_clip(tmp_path / "seq" / "shot_[0001-0003].png")
+    attach(studio(pool=media_pool(bins={"Stills": [clip]})))
+
+    assert [found["name"] for found in list_media(offline_only=True)["clips"]] == [
+        "shot_[0001-0003].png"
+    ]
 
 
 def test_import_applies_the_still_duration_workaround_to_image_media(
@@ -480,6 +516,34 @@ def test_relink_to_an_explicit_file_replaces_that_one_clip(attach: Attach, tmp_p
     assert result["ok"] is True
     assert result["results"][0]["file_path"] == str(renamed)
     assert result["results"][0]["offline"] is False
+
+
+def test_relink_to_a_file_reports_the_state_before_the_replace(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """ReplaceClip renames the pool clip (#85), so the reply must carry the before state.
+
+    was_offline is read before the replace, and the reply's clip name is the one the pool
+    clip answers to afterwards — the caller's name is gone.
+    """
+    clip = a_clip(tmp_path / "old" / "relink_me.png")
+    renamed = a_file(tmp_path, "relink_moved/relink_me_renamed.png")
+    attach(studio(pool=media_pool(bins={"Angles": [clip]})))
+    assert list_media(offline_only=True)["count"] == 1
+
+    result = relink_media(["relink_me.png"], str(renamed))
+
+    assert result["ok"] is True
+    assert result["results"] == [
+        {
+            "clip": "relink_me_renamed.png",
+            "bin": "Angles",
+            "ok": True,
+            "file_path": str(renamed),
+            "offline": False,
+            "was_offline": True,
+        }
+    ]
 
 
 def test_relink_to_a_file_refuses_more_than_one_clip(attach: Attach, tmp_path: Path) -> None:

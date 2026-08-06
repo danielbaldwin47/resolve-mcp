@@ -18,6 +18,7 @@ from __future__ import annotations
 import contextlib
 import math
 import random
+import re
 import wave
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -842,9 +843,16 @@ class FakeMediaPoolItem:
         return self._audio_mapping
 
     def ReplaceClip(self, file_path: str) -> bool:  # noqa: N802
+        """Mimic the real call's side effect: the pool clip is renamed after the new file.
+
+        Verified on Resolve Studio 21.0.3.7 (#85): after a replace, the clip no longer
+        answers to the name the caller used.
+        """
         if not Path(file_path).exists():
             return False
         self._properties["File Path"] = file_path
+        self._name = Path(file_path).name
+        self._properties["Clip Name"] = self._name
         return True
 
 
@@ -1296,10 +1304,10 @@ def _track_end(timeline: FakeTimeline, track_type: str, index: int) -> int:
 def _import_one(item: str | dict[str, Any]) -> FakeMediaPoolItem | None:
     """Mimic ImportMedia: a path that is not there imports nothing.
 
-    An imported sequence is named and pathed after its first frame rather than after the
-    ``%0Nd`` pattern. Nothing on record says what Resolve really calls it (#18 verified the
-    frame count only), so the fake deliberately does not echo the pattern back — code that
-    matched on it would be relying on an assumption no source supports.
+    An imported sequence is named and pathed by folding the index range into the ``%0Nd``
+    token — ``shot_%04d.png`` with frames 1–24 becomes ``shot_[0001-0024].png`` — which is
+    what Resolve Studio 21.0.3.7 really reports (#85): a label, not a path that exists on
+    disk. ``File Path`` and the clip name both carry the bracketed form.
     """
     if isinstance(item, dict):
         pattern = str(item.get("FilePath", ""))
@@ -1308,10 +1316,10 @@ def _import_one(item: str | dict[str, Any]) -> FakeMediaPoolItem | None:
         frames = max(end - start + 1, 0)
         if not _sequence_exists(pattern, start):
             return None
-        first = _first_frame(pattern, start)
+        label = _sequence_label(pattern, start, end)
         return FakeMediaPoolItem(
-            Path(first).name,
-            first,
+            Path(label).name,
+            label,
             {"Type": "Image Sequence", "Frames": str(frames), "Start": "0", "End": str(frames - 1)},
         )
 
@@ -1335,6 +1343,14 @@ def _first_frame(pattern: str, start: int) -> str:
 
 def _sequence_exists(pattern: str, start: int) -> bool:
     return Path(_first_frame(pattern, start)).exists()
+
+
+def _sequence_label(pattern: str, start: int, end: int) -> str:
+    """The bracketed name Resolve gives an imported sequence: ``shot_[0001-0024].png``."""
+    token = re.search(r"%0?\d*d", pattern)
+    if token is None:
+        return pattern
+    return pattern.replace(token.group(), f"[{token.group() % start}-{token.group() % end}]")
 
 
 class FakeProject:
