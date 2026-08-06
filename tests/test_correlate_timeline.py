@@ -106,13 +106,13 @@ def tunes_file(tmp_path: Path) -> Path:
     )
 
 
-def solos_file(tmp_path: Path) -> Path:
+def solos_file(tmp_path: Path, first_from: str | None = None, first_t: float = 0.0) -> Path:
     return records.write(
-        tmp_path / "concert-solos.json",
+        tmp_path / f"concert-solos-{first_from or 'nobody'}-{first_t}.json",
         {"kind": "solos", "audio": "concert.wav", "count": 2},
         "solos",
         [
-            {"change": 1, "t": 0.0, "to": "drums", "from": None, "signal": "prominence"},
+            {"change": 1, "t": first_t, "to": "drums", "from": first_from, "signal": "prominence"},
             {"change": 2, "t": 2.0, "to": "other", "from": "drums", "signal": "timbre"},
         ],
     )
@@ -177,8 +177,8 @@ def test_every_shot_lands_on_disk_with_its_offsets_bar_and_section(
         "role": None,
         "opening": False,
         "t": 1.033,
-        "in": 162,
-        "out": 249,
+        "in": {"frames": 162, "seconds": 2.7, "timecode": "00:00:02:42", "fps": 60.0},
+        "out": {"frames": 249, "seconds": 4.15, "timecode": "00:00:04:09", "fps": 60.0},
         "seconds": 1.45,
         "beat_offset": 0.033,
         "beat": 3,
@@ -279,7 +279,7 @@ def test_an_entry_with_no_role_in_it_is_dropped_rather_than_refused(
 
     result = _measured(tmp_path, angles={"C0012.mp4": {"subject": "the room"}})
 
-    assert result["roles"] == {}
+    assert result["roles"] is None
 
 
 def test_shots_are_counted_per_clip_even_without_a_sidecar(
@@ -292,7 +292,7 @@ def test_shots_are_counted_per_clip_even_without_a_sidecar(
 
     assert result["clips"]["C0012.mp4"]["cuts"] == 2
     assert result["clips"]["C0031.mp4"]["cuts"] == 1
-    assert result["roles"] == {}
+    assert result["roles"] is None
 
 
 def test_the_analysis_clock_is_read_off_the_master_audio_clip(
@@ -306,6 +306,7 @@ def test_the_analysis_clock_is_read_off_the_master_audio_clip(
     assert result["alignment"] == {
         "mode": "audio_clip",
         "audio": "master_mix.wav",
+        "matched": True,
         "zero_frame": -20,
     }
     assert _rows(result)[1]["t"] == 3.033
@@ -318,7 +319,140 @@ def test_a_timeline_without_audio_counts_from_its_own_first_frame(
 
     result = _measured(tmp_path)
 
-    assert result["alignment"] == {"mode": "timeline_start", "audio": None, "zero_frame": 100}
+    assert result["alignment"] == {
+        "mode": "timeline_start",
+        "audio": None,
+        "matched": False,
+        "zero_frame": 100,
+    }
+
+
+def test_the_clip_holding_the_analysed_mix_wins_over_the_scratch_track(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """On a hand-edited cut A1 is routinely camera scratch; anchoring to it shifts everything."""
+    attach(
+        studio(
+            timeline=FakeTimeline(
+                "hand-edited",
+                FPS,
+                start_frame=100,
+                video=[FakeTrack("Video 1", [_shot(*shot) for shot in SHOTS])],
+                audio=[
+                    FakeTrack("Scratch", [_shot("camera_scratch.wav", 100, 200, 0)]),
+                    FakeTrack("Master", [_shot("master_mix.wav", 100, 200, 120)]),
+                ],
+            )
+        )
+    )
+
+    result = _measured(tmp_path)
+
+    assert result["alignment"]["audio"] == "master_mix.wav"
+    assert result["alignment"]["matched"] is True
+    assert _rows(result)[1]["t"] == 3.033
+
+
+def test_an_unrecognised_mix_still_measures_but_says_the_clock_was_assumed(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """A reading taken off a clip nobody vouched for is the one to check before trusting it."""
+    attach(studio(timeline=a_cut()))
+
+    other = tmp_path / "some-other-mix.wav"
+    other.write_bytes(b"RIFF----WAVE")
+    result = _measured(tmp_path, audio=str(other))
+
+    assert result["alignment"]["audio"] == "master_mix.wav"
+    assert result["alignment"]["matched"] is False
+
+
+def test_a_mix_with_a_start_timecode_is_not_read_an_hour_late(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Source frames are absolute: a WAV stamped 01:00:00:00 calls its first frame 216000."""
+    stamped = FakeTimelineItem(
+        "master_mix.wav",
+        100,
+        200,
+        source_start=216000,
+        media_item=FakeMediaPoolItem("master_mix.wav", properties={"Start": "216000"}),
+    )
+    attach(
+        studio(
+            timeline=FakeTimeline(
+                "stamped",
+                FPS,
+                start_frame=100,
+                video=[FakeTrack("Video 1", [_shot(*shot) for shot in SHOTS])],
+                audio=[FakeTrack("Master", [stamped])],
+            )
+        )
+    )
+
+    result = _measured(tmp_path)
+
+    assert result["alignment"]["zero_frame"] == 100
+    assert _rows(result)[1]["t"] == 1.033
+
+
+def test_a_shot_that_starts_after_a_gap_opens_rather_than_cuts(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """There is no outgoing angle at that frame, so its distance from the beat says nothing."""
+    gapped = (SHOTS[0], ("C0031.mp4", 200, 87, 4200))
+    attach(studio(timeline=a_cut(shots=gapped)))
+
+    result = _measured(tmp_path)
+
+    assert [one["opening"] for one in _rows(result)] == [True, True]
+    assert result["openings"] == 2
+    assert result["beat_offsets"] is None
+
+
+def test_cuts_past_the_end_of_the_grid_are_counted_rather_than_pinned_quietly(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The nearest-beat lookup clamps, so a wrong clock otherwise produces well-formed nonsense."""
+    far = (*SHOTS, ("C0031.mp4", 700, 60, 5000))  # 10s in, against six seconds of analysis
+    attach(studio(timeline=a_cut(shots=far)))
+
+    result = _measured(tmp_path)
+
+    assert result["outside_grid"] == 1
+    assert result["cuts"] == 4
+
+
+def test_the_head_reads_as_whoever_the_first_change_took_over_from(
+    attach: Attach, tmp_path: Path
+) -> None:
+    attach(studio(timeline=a_cut()))
+
+    result = _measured(
+        tmp_path, solos=str(solos_file(tmp_path, first_from="piano", first_t=1.5))
+    )
+
+    assert _rows(result)[1]["front"] == "piano"
+
+
+def test_a_named_analysis_file_that_says_nothing_is_refused_not_read_as_absent(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Otherwise a tunes file whose records the reader cannot use looks like no tunes file."""
+    empty = records.write(
+        tmp_path / "empty-tunes.json",
+        {"kind": "tunes", "audio": "concert.wav", "count": 0},
+        "tunes",
+        [{"note": "nothing found"}],
+    )
+    attach(studio(timeline=a_cut()))
+
+    envelope = analysis_tools.correlate_timeline(
+        beats=str(beats_file(tmp_path)), tunes=str(empty)
+    )
+
+    assert envelope["ok"] is False
+    assert "tunes" in envelope["error"]["cause"]
 
 
 def test_sections_are_absent_rather_than_guessed_when_no_structure_file_is_given(

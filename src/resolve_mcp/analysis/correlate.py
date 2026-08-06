@@ -58,7 +58,7 @@ from ..resolve.timeline import (
     source_bounds,
     start_frame,
 )
-from ..timing import SECONDS_PRECISION
+from ..timing import SECONDS_PRECISION, dual_time
 from . import decode, energy, records
 from .beats import nearest
 
@@ -95,13 +95,20 @@ class Clock(NamedTuple):
     fps: float
     mode: str
     audio: str | None
+    matched: bool
 
     def seconds(self, frame: int) -> float:
         """Where ``frame`` falls in the analysis, unrounded — the callers round."""
         return (frame - self.zero_frame) / self.fps
 
     def reading(self) -> dict[str, Any]:
-        return {"mode": self.mode, "audio": self.audio, "zero_frame": self.zero_frame}
+        """How the times were arrived at — the first thing to check when they look wrong."""
+        return {
+            "mode": self.mode,
+            "audio": self.audio,
+            "matched": self.matched,
+            "zero_frame": self.zero_frame,
+        }
 
 
 class Music(NamedTuple):
@@ -142,7 +149,7 @@ def correlate_timeline(
     config = config or get_config()
     roles = _roles(angles)
     music = _music(beats, audio, tunes, solos, roles)
-    shots, clock, print_, name = _read_cut(connection, timeline, track)
+    shots, clock, print_, name = _read_cut(connection, timeline, track, music.audio)
 
     params: dict[str, Any] = {
         "timeline": name,
@@ -181,7 +188,7 @@ def correlate(
 
     progress(0.7, "measuring the cut against the music")
     rows = measure(shots, clock, music, transients)
-    summary = _summary(rows, clock, transients)
+    summary = _summary(rows, clock, transients, [float(one["t"]) for one in music.beats])
 
     target = config.analysis_dir / keyed_name(name, key, ".correlate.json", "correlate")
     # "count", not "cuts": the records themselves are the file's ``cuts`` field, and a header
@@ -207,6 +214,7 @@ def _read_cut(
     connection: ResolveConnection,
     name: str | None,
     track: int,
+    mix: Path | None = None,
 ) -> tuple[list[Shot], Clock, dict[str, Any], str]:
     """Everything Resolve has to answer for, taken before the job starts.
 
@@ -238,7 +246,8 @@ def _read_cut(
             ),
             detail={"timeline": found, "track": int(track)},
         )
-    return shots, _clock(reader, timeline, fps), fingerprint(reader, timeline), found
+    clock = _clock(reader, timeline, fps, mix)
+    return shots, clock, fingerprint(reader, timeline), found
 
 
 def _shots(reader: Reader, timeline: Any, track: int) -> list[Shot]:
@@ -259,14 +268,38 @@ def _shots(reader: Reader, timeline: Any, track: int) -> list[Shot]:
     return sorted(found, key=lambda shot: shot.record_in)
 
 
-def _clock(reader: Reader, timeline: Any, fps: float) -> Clock:
-    """Where the analysed mix sits under the cut, read off the first audio shot there is.
+def _clock(reader: Reader, timeline: Any, fps: float, mix: Path | None) -> Clock:
+    """Where the analysed mix sits under the cut, read off the audio shot that holds it.
 
     The mix is one continuous clip under the whole cut (#22: the cutting substrate), so its
     record position and its own in point together say which second of the analysis any
     timeline frame is.
+
+    *Which* audio clip is the question. On a cut this server built, A1 is the mix; on a
+    hand-edited concert it is routinely camera scratch, and anchoring to that would shift
+    every time in the file by however far apart the two recordings start. So when the caller
+    named the audio, the clip carrying that file wins, and ``matched`` says whether the mix
+    was recognised or merely assumed — which is the difference between a reading to trust
+    and one to check before writing a style profile from it.
+    """
+    found = _audio_shots(reader, timeline)
+    wanted = _matching(found, mix)
+    chosen = wanted or (found[0] if found else None)
+    if chosen is None:
+        return Clock(start_frame(timeline), fps, "timeline_start", None, False)
+    name, record_in, source_in = chosen
+    return Clock(record_in - source_in, fps, "audio_clip", name, wanted is not None)
+
+
+def _audio_shots(reader: Reader, timeline: Any) -> list[tuple[str, int, int]]:
+    """Every audio shot that will say where it sits: its clip name, record in and mix in.
+
+    The mix in is counted from the *start of the file*, not from the clip's own start
+    timecode: a WAV stamped 01:00:00:00 reports source frames an hour in, and subtracting
+    that stamp is the difference between a correct reading and one shifted by an hour.
     """
     count = int(read_frames(reader.optional(timeline, "GetTrackCount", 0, "audio")) or 0)
+    found: list[tuple[str, int, int]] = []
     for index in range(1, count + 1):
         for item in items_in_track(timeline, "audio", index):
             record_in = read_frames(item.GetStart())
@@ -274,8 +307,30 @@ def _clock(reader: Reader, timeline: Any, fps: float) -> Clock:
             if record_in is None or source_in is None:
                 continue
             name = clip_name(reader, item) or str(item.GetName() or "")
-            return Clock(record_in - source_in, fps, "audio_clip", name)
-    return Clock(start_frame(timeline), fps, "timeline_start", None)
+            found.append((name, record_in, source_in - _media_start(reader, item)))
+    return found
+
+
+def _media_start(reader: Reader, item: Any) -> int:
+    """The first frame of the media itself, which is not zero on anything with a start stamp."""
+    clip = reader.optional(item, "GetMediaPoolItem", None)
+    if clip is None:
+        return 0
+    return read_frames(reader.optional(clip, "GetClipProperty", None, "Start")) or 0
+
+
+def _matching(
+    found: Sequence[tuple[str, int, int]],
+    mix: Path | None,
+) -> tuple[str, int, int] | None:
+    """The audio shot holding the file the analysis ran on, by name or by stem."""
+    if mix is None:
+        return None
+    names = {mix.name.casefold(), mix.stem.casefold()}
+    for shot in found:
+        if shot[0].casefold() in names or Path(shot[0]).stem.casefold() in names:
+            return shot
+    return None
 
 
 # --- reading the analysis ---------------------------------------------------------------------
@@ -341,6 +396,18 @@ def _rows(path: Path, field: str) -> tuple[dict[str, Any], ...]:
         for row in held
         if isinstance(row, Mapping) and isinstance(row.get("t"), int | float)
     ]
+    if not rows:
+        # A file that was named but says nothing must not read like a file nobody named:
+        # both would leave the column null, and only one of them is what the caller meant.
+        raise InvalidRequestError(
+            cause=f"{path.name} holds no {field} record with a time in it.",
+            fix=(
+                f"Pass the {field} file a finished analysis job wrote — its records each "
+                'carry a "t" in seconds. An analysis that found nothing is worth rerunning '
+                "rather than measuring against."
+            ),
+            detail={"file": str(path), "field": field},
+        )
     return tuple(sorted(rows, key=lambda row: float(row["t"])))
 
 
@@ -429,12 +496,13 @@ def measure(
                 "cut": index,
                 "clip": shot.clip,
                 "role": roles.get(shot.clip),
-                # The first shot starts where the timeline does; nothing was cut *to* the
-                # music there, so it is marked and left out of the offset statistics.
-                "opening": index == 1,
+                "opening": _opens(index, shot, shots),
                 "t": _rounded(seconds),
-                "in": shot.record_in,
-                "out": shot.record_out,
+                # Dual time for the two timeline positions, because an outlier the agent
+                # flags is one the director then has to find in Resolve, and a bare frame
+                # number is the one form nobody can scrub to.
+                "in": dual_time(shot.record_in, clock.fps),
+                "out": dual_time(shot.record_out, clock.fps),
                 "seconds": _rounded(shot.duration / clock.fps),
                 "beat_offset": None if beat is None else _rounded(seconds - float(beat["t"])),
                 "beat": None if beat is None else beat.get("beat"),
@@ -446,6 +514,18 @@ def measure(
             }
         )
     return rows
+
+
+def _opens(index: int, shot: Shot, shots: Sequence[Shot]) -> bool:
+    """Whether this shot starts something rather than cutting away from something.
+
+    The first shot is one. So is a shot that begins after a gap: there is no outgoing angle
+    at that frame, so its distance from the nearest beat says nothing about how the director
+    cuts, and averaging it in would quietly describe a style nobody has. Both are marked
+    rather than dropped — a hand-edited timeline with three gaps in it is still a
+    measurement, and the records say which shots were left out of the statistics.
+    """
+    return index == 1 or shot.record_in != shots[index - 2].record_out
 
 
 def _beat_at(
@@ -484,10 +564,16 @@ def _front_at(
     times: Sequence[float],
     seconds: float,
 ) -> str | None:
-    """Who was out front when the cut happened: the last change at or before it."""
+    """Who was out front when the cut happened: the last change at or before it.
+
+    Before the first change there is still someone out front — the change records who it
+    was, as the voice it took over *from* — so a cut in the opening head reads as that
+    player rather than as nobody.
+    """
     if not rows:
         return None
-    held: str | None = None
+    first = rows[0].get("from")
+    held: str | None = str(first) if isinstance(first, str) else None
     for row, start in zip(rows, times, strict=False):
         if start > seconds:
             break
@@ -503,6 +589,7 @@ def _summary(
     rows: Sequence[dict[str, Any]],
     clock: Clock,
     transients: Sequence[float] | None,
+    grid: Sequence[float],
 ) -> dict[str, Any]:
     """The list-free reading: what a style profile is written from, and a self-review read.
 
@@ -519,6 +606,7 @@ def _summary(
         "alignment": clock.reading(),
         "cuts": len(rows),
         "openings": sum(1 for row in rows if row["opening"]),
+        "outside_grid": _outside(rows, grid),
         "beat_offsets": _offsets([row["beat_offset"] for row in cut_to_music]),
         "transient_offsets": transient_offsets,
         "bars": _histogram(row["in_bar"] for row in cut_to_music),
@@ -526,8 +614,21 @@ def _summary(
         "solos": _spread("front", cut_to_music) if _measured("front", rows) else None,
         "shot_seconds": _lengths([row["seconds"] for row in rows]),
         "clips": _usage(rows, "clip"),
-        "roles": _usage(rows, "role") if _measured("role", rows) else {},
+        "roles": _usage(rows, "role") if _measured("role", rows) else None,
     }
+
+
+def _outside(rows: Sequence[dict[str, Any]], grid: Sequence[float]) -> int:
+    """How many cuts fall outside the analysed span — the tell for a misaligned clock.
+
+    The nearest-beat lookup clamps: a cut an hour past the end of the grid still reports a
+    small-looking offset against the last beat, so a whole file measured against the wrong
+    audio looks well-formed. Anything above zero here means the times and the analysis are
+    not describing the same recording, and the alignment is what to check first.
+    """
+    if not grid:
+        return len(rows)
+    return sum(1 for row in rows if not grid[0] <= float(row["t"]) <= grid[-1])
 
 
 def _measured(field: str, rows: Sequence[dict[str, Any]]) -> bool:
@@ -604,13 +705,3 @@ def _rounded(seconds: float) -> float:
     return round(seconds, SECONDS_PRECISION)
 
 
-__all__ = [
-    "INLINE_CUTS",
-    "KIND",
-    "Clock",
-    "Music",
-    "Onsets",
-    "Shot",
-    "correlate_timeline",
-    "measure",
-]
