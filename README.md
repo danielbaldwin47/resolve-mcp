@@ -30,6 +30,7 @@ the `run_python` escape hatch.
 | `import_timeline` | Materialises a **new** timeline from such a file — never overwrites one |
 | `grab_frames` | Grabs chosen moments on a clip as JPEGs (≤1568px) the agent reads off disk |
 | `detect_scene_cuts` | Job: catalogs where a clip changes shot, gist inline and the full list on disk |
+| `separate_stems` | Two-pass GPU stem separation: mix → 4 stems, drums → kick/snare/toms |
 | `list_render_presets` | The project's render presets, spelled the way `render_timeline` needs |
 | `render_timeline` | Renders a timeline or a range of one as a background job |
 | `get_job` | Polls one background job: progress, result, or a structured failure |
@@ -86,6 +87,11 @@ you pass `refresh`.
 - **ffmpeg on PATH** for per-clip audio extraction, frame grabs and scene-cut detection
   (`RESOLVE_MCP_FFMPEG` points at it elsewhere). Timeline-scope audio goes through Resolve's
   own render queue and needs none.
+- **[python-audio-separator](https://github.com/nomadkaraoke/python-audio-separator) on
+  PATH** for `separate_stems` (`pip install "audio-separator[gpu]"`, or
+  `RESOLVE_MCP_AUDIO_SEPARATOR` points at the executable). It is run as a subprocess, not
+  imported, so it can live in its own environment and its torch/CUDA stack never loads
+  into the server. The two model files download on first use.
 
 ## Install
 
@@ -117,8 +123,11 @@ Zero-config by default; every path has an environment override.
 | --- | --- | --- |
 | `RESOLVE_SCRIPT_API` | `%PROGRAMDATA%\Blackmagic Design\DaVinci Resolve\Support\Developer\Scripting` | Scripting API root (holds `Modules/DaVinciResolveScript.py`) |
 | `RESOLVE_SCRIPT_LIB` | `C:\Program Files\Blackmagic Design\DaVinci Resolve\fusionscript.dll` | Scripting library |
-| `RESOLVE_MCP_CACHE` | `%LOCALAPPDATA%\resolve-mcp` | Cache root: snapshots, job records, cached results, acquired audio, grabbed frames, analysis catalogs, model weights |
+| `RESOLVE_MCP_CACHE` | `%LOCALAPPDATA%\resolve-mcp` | Cache root: snapshots, job records, cached results, acquired audio, grabbed frames, analysis catalogs, separated stems, model weights |
 | `RESOLVE_MCP_FFMPEG` | `ffmpeg` (found on PATH) | ffmpeg executable used for per-clip audio extraction, frame grabs and scene-cut detection |
+| `RESOLVE_MCP_AUDIO_SEPARATOR` | `audio-separator` (found on PATH) | python-audio-separator CLI used for stem separation |
+| `RESOLVE_MCP_STEM_MODEL` | `htdemucs_ft.yaml` | Pass one: the 4-stem model (vocals, drums, bass, other) |
+| `RESOLVE_MCP_DRUM_MODEL` | `MDX23C-DrumSep-6stem-FT.ckpt` | Pass two: the drum decomposition model (kick, snare, toms) |
 | `RESOLVE_MCP_LOG_LEVEL` | `INFO` | Log level for the stderr logger |
 | `RESOLVE_MCP_ALLOW_ANY_PYTHON` | unset | Bypass the interpreter check (see ADR 0001) |
 

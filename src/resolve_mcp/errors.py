@@ -7,6 +7,7 @@ into a tool result.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 RESOLVE_FIX = (
@@ -352,6 +353,50 @@ class AudioMappingError(ResolveMcpError):
         "Acquire this audio from the timeline instead (scope=timeline): only the render "
         "route captures audio Resolve has linked or offset away from the source file."
     )
+
+
+class SeparatorUnavailableError(ResolveMcpError):
+    """python-audio-separator is not installed — stem separation cannot run without it."""
+
+    code = "separator_unavailable"
+    default_fix = (
+        "Install it with pip install audio-separator[gpu] and make sure the audio-separator "
+        "command is on PATH, or point RESOLVE_MCP_AUDIO_SEPARATOR at the executable."
+    )
+
+
+class StemSeparationError(ResolveMcpError):
+    """The separator ran and did not produce the stems that were asked for."""
+
+    code = "stem_separation_failed"
+    default_fix = (
+        "Check the model name (RESOLVE_MCP_STEM_MODEL, RESOLVE_MCP_DRUM_MODEL) is one "
+        "audio-separator knows, and that the GPU has memory free. The separator's own "
+        "message is in detail.output."
+    )
+
+
+class ChainedJobError(ResolveMcpError):
+    """A job this one had to run first failed. Its cause, fix and code travel back unchanged.
+
+    Relabelling it as a stems failure would hide what actually broke: a render queue that
+    refused the export is a render queue problem whether the agent asked for audio or for
+    stems, and the advice that fixes it is the advice the acquisition already wrote.
+    """
+
+    code = "chained_job_failed"
+
+    def __init__(self, error: Mapping[str, Any], job_id: str) -> None:
+        detail = dict(error.get("detail") or {})
+        detail["job_id"] = job_id
+        super().__init__(
+            cause=str(error.get("cause") or f"The job {job_id} this one depends on failed."),
+            fix=str(error.get("fix")) if error.get("fix") else None,
+            detail=detail,
+        )
+        code = error.get("code")
+        if code:
+            self.code = str(code)
 
 
 class TranscriberUnavailableError(ResolveMcpError):

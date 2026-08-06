@@ -23,12 +23,18 @@ to force the export again when the director changed something no reading can see
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path, PureWindowsPath
-from typing import Any
+from typing import Any, NamedTuple
 
 from ..config import Config, get_config
-from ..errors import AudioExportError, AudioExtractionError, AudioMappingError, RenderQueueError
+from ..errors import (
+    AudioExportError,
+    AudioExtractionError,
+    AudioMappingError,
+    InvalidRequestError,
+    RenderQueueError,
+)
 from ..ffmpeg import Runner
 from ..jobs import cache
 from ..jobs.runner import JobOutput, Progress, band, start_job
@@ -50,6 +56,10 @@ DEFAULT_BIT_DEPTH = 24
 
 TIMELINE_KIND = "acquire_timeline_audio"
 CLIP_KIND = "acquire_clip_audio"
+
+TIMELINE_SCOPE = "timeline"
+CLIP_SCOPE = "clip"
+SCOPES = (TIMELINE_SCOPE, CLIP_SCOPE)
 
 RENDER_FORMAT = "wav"
 RENDER_CODEC = "lpcm"
@@ -76,12 +86,7 @@ def acquire_timeline_audio(
     project = current_project(connection, "No project is open, so there is no timeline to export.")
     found = find_timeline(project, timeline)
     name = str(found.GetName() or "timeline")
-    params = {
-        "scope": "timeline",
-        "timeline": name,
-        "sample_rate": sample_rate,
-        "bit_depth": bit_depth,
-    }
+    params = _timeline_params(name, sample_rate, bit_depth)
     identity = fingerprint(Reader(connection), found)
     key = cache.cache_key(TIMELINE_KIND, [identity], params)
 
@@ -174,31 +179,8 @@ def acquire_clip_audio(
     for real, and a caller can hand in its own to exercise the route without ffmpeg.
     """
     config = config or get_config()
-    pool = media.media_pool(connection)
-    located = media.find_clip(pool, clip, bin)
-    reported = media.properties(located.clip)
-    source = reported.get(media.FILE_PATH, "")
-    if not source or media.is_offline(source):
-        raise AudioExtractionError(
-            cause=f"{clip!r} has no readable file on disk.",
-            fix="relink_media points a clip back at its media; list_media shows what is offline.",
-            detail={"clip": clip, "file_path": source},
-        )
-
-    conflict = mapping_conflict(media.audio_mapping(located.clip), source)
-    if conflict is not None:
-        raise AudioMappingError(
-            cause=f"{clip!r} does not carry its own audio: {conflict}",
-            detail={"clip": clip, "file_path": source},
-        )
-
-    params = {
-        "scope": "clip",
-        "clip": clip,
-        "bin": located.bin_path,
-        "sample_rate": sample_rate,
-        "bit_depth": bit_depth,
-    }
+    located, source = _locate_clip(connection, clip, bin)
+    params = _clip_params(clip, located.bin_path, sample_rate, bit_depth)
     key = cache.cache_key(CLIP_KIND, [cache.fingerprint(source)], params)
 
     def work(progress: Progress) -> JobOutput:
@@ -283,6 +265,136 @@ def _walk(value: Any, path: tuple[str, ...] = ()) -> Iterator[tuple[tuple[str, .
 
 def _looks_like_a_path(value: str) -> bool:
     return ("/" in value or "\\" in value) and PureWindowsPath(value).suffix != ""
+
+
+# --- what an analysis job asks for ---------------------------------------------------------
+
+
+class Source(NamedTuple):
+    """A scope resolved to what identifies it, and to a way of acquiring its audio.
+
+    Every job that runs *on* audio — stems, beats, transcript — has the same problem: its
+    cache key has to be computable in the starter, before the audio exists, or a rerun
+    would re-export a whole concert only to discover it had the answer already. So the
+    identity is read here, up front and cheaply, while the acquisition itself is deferred
+    into ``start`` to run inside the calling job's own thread. That keeps the tool call as
+    short as one Resolve read and leaves the export where the agent can watch it.
+    """
+
+    fingerprint: dict[str, Any]
+    params: dict[str, Any]
+    start: Callable[[], dict[str, Any]]
+
+
+def audio_source(
+    connection: ResolveConnection,
+    scope: str = TIMELINE_SCOPE,
+    timeline: str | None = None,
+    clip: str | None = None,
+    bin: str | None = None,  # noqa: A002 - "bin" is the Resolve term the agent uses
+    sample_rate: int = DEFAULT_SAMPLE_RATE,
+    bit_depth: int = DEFAULT_BIT_DEPTH,
+    refresh: bool = False,
+    runner: Runner | None = None,
+    config: Config | None = None,
+) -> Source:
+    """Resolve a scope now; hand back the fingerprint, the params, and how to acquire it.
+
+    The refusals a route makes before it starts — offline media, audio Resolve has linked
+    away — happen here too, so an analysis tool declines for the same reason and with the
+    same advice the acquisition tool would have given, rather than failing a job later.
+    """
+    config = config or get_config()
+    if scope == TIMELINE_SCOPE:
+        project = current_project(connection, "No project is open, so there is no timeline.")
+        found = find_timeline(project, timeline)
+        name = str(found.GetName() or "timeline")
+        return Source(
+            fingerprint(Reader(connection), found),
+            _timeline_params(name, sample_rate, bit_depth),
+            lambda: acquire_timeline_audio(
+                connection,
+                timeline=name,
+                sample_rate=sample_rate,
+                bit_depth=bit_depth,
+                refresh=refresh,
+                config=config,
+            ),
+        )
+
+    if scope == CLIP_SCOPE:
+        if not clip:
+            raise InvalidRequestError(
+                cause="A clip scope needs a clip to read.",
+                fix="Name the clip, or use scope=timeline for the timeline mix.",
+                detail={"scope": scope},
+            )
+        located, source = _locate_clip(connection, clip, bin)
+        return Source(
+            cache.fingerprint(source),
+            _clip_params(clip, located.bin_path, sample_rate, bit_depth),
+            lambda: acquire_clip_audio(
+                connection,
+                clip,
+                bin=bin,
+                sample_rate=sample_rate,
+                bit_depth=bit_depth,
+                refresh=refresh,
+                runner=runner,
+                config=config,
+            ),
+        )
+
+    raise InvalidRequestError(
+        cause=f"{scope!r} is not an audio scope.",
+        fix=f"Use one of {', '.join(SCOPES)}: timeline for the mix, clip for one source file.",
+        detail={"requested": scope, "scopes": list(SCOPES)},
+    )
+
+
+def _locate_clip(
+    connection: ResolveConnection,
+    clip: str,
+    bin: str | None,  # noqa: A002 - "bin" is the Resolve term the agent uses
+) -> tuple[media.LocatedClip, str]:
+    """Find the clip and prove its audio is readable off its own file, or refuse."""
+    pool = media.media_pool(connection)
+    located = media.find_clip(pool, clip, bin)
+    reported = media.properties(located.clip)
+    source = reported.get(media.FILE_PATH, "")
+    if not source or media.is_offline(source):
+        raise AudioExtractionError(
+            cause=f"{clip!r} has no readable file on disk.",
+            fix="relink_media points a clip back at its media; list_media shows what is offline.",
+            detail={"clip": clip, "file_path": source},
+        )
+
+    conflict = mapping_conflict(media.audio_mapping(located.clip), source)
+    if conflict is not None:
+        raise AudioMappingError(
+            cause=f"{clip!r} does not carry its own audio: {conflict}",
+            detail={"clip": clip, "file_path": source},
+        )
+    return located, source
+
+
+def _timeline_params(name: str, sample_rate: int, bit_depth: int) -> dict[str, Any]:
+    return {
+        "scope": TIMELINE_SCOPE,
+        "timeline": name,
+        "sample_rate": sample_rate,
+        "bit_depth": bit_depth,
+    }
+
+
+def _clip_params(clip: str, bin_path: str, sample_rate: int, bit_depth: int) -> dict[str, Any]:
+    return {
+        "scope": CLIP_SCOPE,
+        "clip": clip,
+        "bin": bin_path,
+        "sample_rate": sample_rate,
+        "bit_depth": bit_depth,
+    }
 
 
 # --- shared ------------------------------------------------------------------------------

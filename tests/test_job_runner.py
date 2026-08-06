@@ -8,14 +8,15 @@ never do is stall, so that is the property under test.
 from __future__ import annotations
 
 import threading
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from resolve_mcp.config import get_config
-from resolve_mcp.errors import MediaOperationError
-from resolve_mcp.jobs import cache, store
-from resolve_mcp.jobs.runner import JobOutput, Progress, start_job, wait_for
+from resolve_mcp.errors import ChainedJobError, InternalError, MediaOperationError
+from resolve_mcp.jobs import cache, runner, store
+from resolve_mcp.jobs.runner import JobOutput, Progress, follow, start_job, wait_for
 
 
 def test_the_starter_returns_before_the_work_finishes() -> None:
@@ -32,6 +33,79 @@ def test_the_starter_returns_before_the_work_finishes() -> None:
 
     release.set()
     finished = wait_for(started["job_id"])
+
+    assert finished.state == "completed"
+    assert finished.result == {"done": True}
+
+
+def test_following_a_job_reports_it_on_the_way_and_hands_back_its_record() -> None:
+    """How a job chains on another: the child's progress is the parent's to report."""
+    release = threading.Event()
+    seen: list[float] = []
+
+    def work(progress: Progress) -> JobOutput:
+        progress(0.5, "halfway")
+        release.wait(timeout=5)
+        return JobOutput({"path": "D:/mix.wav"})
+
+    started = start_job("acquire_timeline_audio", {}, work)
+    threading.Timer(0.05, release.set).start()
+
+    finished = follow(
+        started["job_id"],
+        lambda record: seen.append(record.progress),
+        poll=0.01,
+    )
+
+    assert finished.state == "completed"
+    assert finished.result == {"path": "D:/mix.wav"}
+    assert seen
+
+
+def test_a_followed_job_that_fails_raises_its_own_cause_and_code() -> None:
+    """Relabelling it would hide what broke: the child's advice is the advice that fixes it."""
+
+    def work(progress: Progress) -> JobOutput:
+        raise MediaOperationError(cause="The pool refused the clip.", fix="Check the bin.")
+
+    started = start_job("acquire_clip_audio", {}, work)
+
+    with pytest.raises(ChainedJobError) as raised:
+        follow(started["job_id"], poll=0.01)
+
+    assert raised.value.code == "media_operation_failed"
+    assert raised.value.cause == "The pool refused the clip."
+    assert raised.value.fix == "Check the bin."
+    assert raised.value.detail["job_id"] == started["job_id"]
+
+
+def test_a_job_whose_thread_is_gone_fails_its_follower_rather_than_hanging() -> None:
+    """A record left saying running has nobody to finish it — waiting would be forever."""
+    orphan = store.new_job("acquire_timeline_audio", {})
+
+    with pytest.raises(InternalError) as raised:
+        follow(orphan.job_id, poll=0.01)
+
+    assert "without finishing" in raised.value.cause
+    assert raised.value.detail["job_id"] == orphan.job_id
+
+
+def test_a_job_that_finishes_between_the_read_and_the_thread_check_is_not_called_dead(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The authoritative record is the one read *after* the thread is known to be gone.
+
+    The window is a real one and too narrow to hit by running a thread, so the reads are
+    stubbed: a record still saying running, then a dead thread, then the completed record
+    the worker wrote on its way out. Reading it in that order is the whole fix.
+    """
+    running = store.new_job("acquire_timeline_audio", {})
+    completed = replace(running, state="completed", result={"done": True})
+    reads = iter([running, running, completed])
+    monkeypatch.setattr(runner, "alive", lambda job_id: False)
+    monkeypatch.setattr(store, "load", lambda job_id, config=None: next(reads))
+
+    finished = follow(running.job_id, poll=0.0)
 
     assert finished.state == "completed"
     assert finished.result == {"done": True}
