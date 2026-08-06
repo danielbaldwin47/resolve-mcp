@@ -282,8 +282,9 @@ def _as_export_failure(exc: RenderQueueError) -> AudioExportError:
     """Re-label a queue failure as an audio one, keeping any fix the queue was specific about.
 
     The generic queue advice is worth replacing with "check the timeline has audio on it".
-    Advice the queue raised for one case — a modal dialog stalling the render — is not:
-    that is the more actionable of the two, so it survives the relabelling.
+    Advice the queue raised for a specific case — a wedged render engine, a modal dialog
+    stalling the render — is not: those are the more actionable of the two, so they survive
+    the relabelling.
     """
     specific = exc.fix if exc.fix != RenderQueueError.default_fix else None
     return AudioExportError(cause=exc.cause, fix=specific, detail=exc.detail)

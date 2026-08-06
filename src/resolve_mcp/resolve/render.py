@@ -11,6 +11,14 @@ not passed to a call — so three things here are decisions rather than API call
   accepted. The only truthful completion signal is the job's own status going to Complete,
   and a Failed or Cancelled status is a failure even though every call returned True.
 
+* **A job that never starts is a different failure from a slow one.** Resolve's render
+  engine can wedge such that every job it is handed sits at "Ready for background render"
+  at 0% forever — deleting the queue does not clear it, only restarting Resolve does — and
+  from the outside that is identical to a long render (#92, live on Studio 21.0.3.7). The
+  signal that separates them is a status transition, not a duration: a healthy job leaves
+  the queue in seconds. So starting has a deadline of its own, far shorter than the
+  render's, and blowing it says the engine is wedged rather than guessing at the GUI.
+
 * **A completed render still has to have written the file.** Resolve reports success for
   renders that land nothing on disk (an unwritable target directory does this). The caller
   passes the path it expects, and its absence is a failure, not a cache entry.
@@ -32,8 +40,33 @@ Project = Any
 
 COMPLETE = "Complete"
 FAILED = ("Failed", "Cancelled")
+QUEUED = ("Ready", "Ready for background render")
+"""Statuses that say the job is accepted but not running — the only ones the start deadline
+may refuse on.
+
+Deliberately a whitelist of readings that *succeeded*. A status this build spells
+differently, and an unreported one (the way a dying handle and an unsupported build both
+read), are not "queued": they cost the render timeout rather than a false refusal, because
+a re-render is the worse trade against a wedge that at least announces itself by never
+finishing."""
 POLL_SECONDS = 1.0
 RENDER_TIMEOUT = 3600.0
+START_TIMEOUT = 60.0
+"""How long a job may sit queued before the engine is called wedged (#92).
+
+Deliberately generous: the observed healthy transition out of the queue is under 10s, so a
+minute leaves room for a loaded machine, and the cost of being wrong is a re-render."""
+
+WEDGED_FIX = (
+    "Restart Resolve — its render engine can get stuck so that every job it is given sits "
+    "queued forever, and clearing the render queue does not clear it. If that is not it, "
+    "check the Deliver page for a modal dialog holding the queue, then retry."
+)
+"""Both known causes of a job that never starts, likeliest first (#92).
+
+The order is what was observed twice live: in #88's wedge and #92's, no dialog was open, and
+only a restart cleared it. Naming the dialog alone sends the reader to a GUI with nothing to
+show them."""
 
 STATUS = "JobStatus"
 PERCENT = "CompletionPercentage"
@@ -177,10 +210,16 @@ def render(
     progress: Callable[[float, str], None] | None = None,
     poll: float = POLL_SECONDS,
     timeout: float = RENDER_TIMEOUT,
+    start_timeout: float = START_TIMEOUT,
     now: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
 ) -> Path:
     """Start the job, watch it to completion, and hand back the file it wrote.
+
+    Two deadlines, because two different failures wear the same face. ``start_timeout``
+    covers a job that never leaves the queue — Resolve's render engine can wedge such that
+    every job it is given sits at "Ready for background render" at 0% forever — and
+    ``timeout`` covers one that is genuinely running and taking too long.
 
     ``now`` and ``sleep`` are parameters so the polling loop is testable without a test
     that actually waits.
@@ -192,7 +231,18 @@ def render(
             detail={"render_job_id": job_id},
         )
     try:
-        _watch(project, job_id, progress, poll, timeout, now, sleep)
+        # Keyword, not positional: timeout and start_timeout are adjacent floats, and
+        # swapping them would typecheck and quietly hand the caller the wrong diagnosis.
+        _watch(
+            project,
+            job_id,
+            progress,
+            poll=poll,
+            timeout=timeout,
+            start_timeout=start_timeout,
+            now=now,
+            sleep=sleep,
+        )
     finally:
         _remove(project, job_id)
 
@@ -211,10 +261,18 @@ def _watch(
     progress: Callable[[float, str], None] | None,
     poll: float,
     timeout: float,
+    start_timeout: float,
     now: Callable[[], float],
     sleep: Callable[[float], None],
 ) -> None:
-    started = now()
+    """Poll the job until it completes, fails, or blows one of the two deadlines.
+
+    A job that has not left ``QUEUED`` has not started, and a wedged engine leaves it there
+    for as long as anyone cares to wait — the distinguishing signal is the transition, not
+    the duration, so it is worth a deadline of its own (#92, live on 21.0.3.7).
+    """
+    began_at = now()
+    has_started = False
     while True:
         reading = project.GetRenderJobStatus(job_id) or {}
         status = str(reading.get(STATUS, ""))
@@ -228,14 +286,49 @@ def _watch(
                 cause=f"The render job ended {status}.",
                 detail={"render_job_id": job_id, "status": reading},
             )
-        if now() - started > timeout:
+        waited = now() - began_at
+        # Three states, not two: a reading that is neither QUEUED nor empty is the job
+        # running, and an empty one is a reading that failed — which neither starts the
+        # clock's other half nor is allowed to refuse.
+        if not has_started and status and status not in QUEUED:
+            has_started = True
+            log.info("Render job %s started rendering after %.0fs (%s)", job_id, waited, status)
+        if not has_started and status in QUEUED and waited > start_timeout:
+            raise RenderQueueError(
+                cause=(
+                    f"Resolve accepted the render job and never started it: it was still "
+                    f"{status!r} after {start_timeout:.0f}s, at {int(percent * 100)}%. A job "
+                    f"that has not left the queue by now is not a slow render — nothing is "
+                    f"running it."
+                ),
+                fix=WEDGED_FIX,
+                detail={
+                    "render_job_id": job_id,
+                    "start_timeout_seconds": start_timeout,
+                    "status": reading,
+                },
+            )
+        if waited > timeout:
             raise RenderQueueError(
                 cause=f"The render job was still {status or 'unreported'} after {timeout:.0f}s.",
                 fix=(
-                    "Check the Deliver page — a modal dialog in the Resolve GUI stalls the "
-                    "queue. Cancel the job there, then retry."
+                    # Which advice is true here depends on whether the job was ever seen
+                    # running: a caller may set the two deadlines such that this one lands
+                    # first, and a job that never started wants the wedge advice, not a
+                    # confident "it did start".
+                    (
+                        "The job did start, so this is a render that ran long or stalled "
+                        "mid-way. Check the Deliver page — a modal dialog in the Resolve "
+                        "GUI also stalls a running queue. Cancel the job there, then retry."
+                    )
+                    if has_started
+                    else WEDGED_FIX
                 ),
-                detail={"render_job_id": job_id, "timeout_seconds": timeout},
+                detail={
+                    "render_job_id": job_id,
+                    "timeout_seconds": timeout,
+                    "started": has_started,
+                },
             )
         sleep(poll)
 
