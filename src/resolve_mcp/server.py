@@ -21,6 +21,7 @@ from .tools import (
     render,
     stems,
     timeline,
+    titles,
     video,
 )
 
@@ -43,7 +44,9 @@ Editing is declarative: you author a cut file, the server builds it. Call get_cu
 before writing one and validate_cut after every edit — do not guess the format. Every
 change is a rebuild into a new version, with one exception: swap_take flips a shot to one
 of its alternates in place. It is yours to keep the cut file in step afterwards — the
-server never writes it, and the swap report says exactly what to change.
+server never writes it, and the swap report says exactly what to change. Titles are
+declarative too and live outside the cut file: get_titles_schema, then apply_titles, which
+owns a Titles track and can be re-applied to every rebuild.
 
 When the audio evidence is ambiguous, look: grab_frames writes JPEGs you can read at any
 moment on any angle, and detect_scene_cuts catalogs where a piece of b-roll changes shot.
@@ -66,6 +69,7 @@ def build_server() -> FastMCP:
         *media.TOOLS,
         *timeline.TOOLS,
         *cut.TOOLS,
+        *titles.TOOLS,
         *video.TOOLS,
         *analysis.TOOLS,
         *stems.TOOLS,

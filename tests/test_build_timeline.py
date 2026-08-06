@@ -16,7 +16,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from resolve_mcp.cut.document import content_hash
+from resolve_mcp.document import content_hash
 from resolve_mcp.tools.cut import build_timeline
 
 from .conftest import Attach

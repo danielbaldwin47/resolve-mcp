@@ -26,6 +26,7 @@ from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from typing import Any, Final, TypeGuard
 
+from ..findings import Finding, ordered
 from ..logging_config import get_logger
 from ..timing import duration_frames, ranges_overlap
 from .schema import SCHEMA_VERSION
@@ -71,34 +72,6 @@ _FIX_HINTS: Final[dict[str, str]] = {
 }
 
 
-def severity_of(rule: str) -> str:
-    """``error`` blocks the build; ``warning`` is reported and never blocks."""
-    return "warning" if rule.startswith("W") else "error"
-
-
-@dataclass(frozen=True)
-class Finding:
-    """One rule firing on one thing, in the shape the agent reads."""
-
-    rule: str
-    id: str | None
-    message: str
-    fix_hint: str
-
-    @property
-    def severity(self) -> str:
-        """``error`` blocks the build; ``warning`` is reported and never blocks."""
-        return severity_of(self.rule)
-
-    def as_dict(self) -> dict[str, str | None]:
-        return {
-            "rule": self.rule,
-            "id": self.id,
-            "message": self.message,
-            "fix_hint": self.fix_hint,
-        }
-
-
 @dataclass(frozen=True)
 class ClipFacts:
     """What the rules need to know about one media-pool clip.
@@ -119,16 +92,6 @@ class ClipFacts:
 
 def _finding(rule: str, id: str | None, message: str, fix_hint: str | None = None) -> Finding:
     return Finding(rule=rule, id=id, message=message, fix_hint=fix_hint or _FIX_HINTS[rule])
-
-
-def _order(findings: list[Finding]) -> list[Finding]:
-    """Errors before warnings, rule number ascending, document order within a rule."""
-
-    def key(numbered: tuple[int, Finding]) -> tuple[int, int, int]:
-        position, finding = numbered
-        return (0 if finding.severity == "error" else 1, int(finding.rule[1:]), position)
-
-    return [finding for _, finding in sorted(enumerate(findings), key=key)]
 
 
 def parse_failure_finding(detail: str) -> Finding:
@@ -336,7 +299,7 @@ def validate_structure(
     """
     shape = list(_shape_errors(doc))
     if shape:
-        return _order(shape)
+        return ordered(shape)
 
     findings: list[Finding] = []
     findings += _id_errors(doc)
@@ -346,7 +309,7 @@ def validate_structure(
     findings += _overlay_errors(doc)
     findings += _segment_length_warnings(doc, min_segment_frames)
     findings += _audio_span_warnings(doc)
-    return _order(findings)
+    return ordered(findings)
 
 
 def _segments(doc: dict[str, Any]) -> list[dict[str, Any]]:
@@ -648,7 +611,7 @@ def validate_project(doc: Any, clips: Sequence[ClipFacts]) -> list[Finding]:
     findings += _bounds_errors(doc, resolved)
     findings += _rate_errors(doc, resolved)
     findings += _audio_errors(doc, resolved)
-    return _order(findings)
+    return ordered(findings)
 
 
 def _shape_is_unreadable(doc: Any) -> bool:
@@ -798,14 +761,12 @@ __all__ = [
     "DEFAULT_MIN_SEGMENT_FRAMES",
     "RULE_DESCRIPTIONS",
     "ClipFacts",
-    "Finding",
     "locked_track_finding",
     "overlay_positions",
     "parse_failure_finding",
     "placements",
     "positions",
     "resolve_aliases",
-    "severity_of",
     "total_frames",
     "validate_project",
     "validate_structure",

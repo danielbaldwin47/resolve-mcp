@@ -220,6 +220,29 @@ def _colors(markers: list[dict[str, Any]]) -> dict[str, int]:
     return counts
 
 
+def markers_by_name(
+    connection: ResolveConnection,
+    timeline: Timeline,
+    fps: float | None,
+    color: str | None = None,
+) -> dict[str, list[int]]:
+    """Marker name -> every record frame carrying it, for one colour or all of them.
+
+    A name is not unique on a timeline — nothing stops the GUI carrying two markers with
+    the same note — so every frame is kept and the caller decides what a repeat means. A
+    caller joining data to markers by name (titling does) has to be able to say "that
+    song is marked twice" rather than silently take the first.
+    """
+    clock = MarkerClock(connection, timeline, fps)
+    found: dict[str, list[int]] = {}
+    for relative, detail in sorted(_reported(clock).items()):
+        marker = _marker(relative, detail, clock)
+        if not _matches(marker, color):
+            continue
+        found.setdefault(marker["name"], []).append(marker["record"]["frames"])
+    return found
+
+
 # --- write ------------------------------------------------------------------------------
 
 

@@ -228,6 +228,49 @@ class CutInvalidError(ResolveMcpError):
     )
 
 
+class TitlesInvalidError(ResolveMcpError):
+    """The titles file did not pass the rules, so nothing was applied. ``detail`` holds them.
+
+    Nothing was applied means nothing was *cleared* either: the Titles track still holds
+    whatever the last good apply put there.
+    """
+
+    code = "titles_invalid"
+    default_fix = (
+        "Fix every error in detail.errors and apply again — validate_titles runs the "
+        "identical checks without touching the timeline."
+    )
+
+
+class TitlesApplyFailedError(ResolveMcpError):
+    """Resolve would not place the titles — a locked track, a refused clear, a clip astray.
+
+    ``detail`` names the timeline and the track it was working on, because the Titles
+    track may have been cleared before the failure: re-applying is always the right next
+    move, and it is safe, because the apply is declarative.
+    """
+
+    code = "titles_apply_failed"
+    default_fix = (
+        "Fix what detail names in the Resolve GUI (unlock the Titles track, close any modal "
+        "dialog) and apply again — the apply is idempotent, so a retry is always safe."
+    )
+
+
+class TitleTemplateError(ResolveMcpError):
+    """A placed template instance is not one this route can title.
+
+    The clip landed on the timeline but carries no Fusion comp, or a comp with no Text+
+    node in it — which means the media-pool clip is not a Text+ title template at all.
+    """
+
+    code = "title_template_unusable"
+    default_fix = (
+        "Point the template at a Text+ title clip: author it in the Resolve GUI, export "
+        "its bin as a .drb, and import that bin into the project's media pool."
+    )
+
+
 class BuildFailedError(ResolveMcpError):
     """Resolve would not build the cut — creation refused, a locked track, a clip astray.
 

@@ -34,7 +34,9 @@ from resolve_mcp.audio.stems import DRUM_STEMS, FOUR_STEMS, separation_params, t
 from resolve_mcp.config import get_config
 from resolve_mcp.jobs import cache
 from resolve_mcp.jobs.runner import wait_for
+from resolve_mcp.naming import timestamped_name
 from resolve_mcp.resolve.connection import get_connection
+from resolve_mcp.resolve.media import find_clip, media_pool
 from resolve_mcp.tools.cut import build_timeline, swap_take, validate_cut
 from resolve_mcp.tools.escape_hatch import run_python
 from resolve_mcp.tools.jobs import get_job, list_jobs
@@ -48,6 +50,7 @@ from resolve_mcp.tools.timeline import (
     list_markers,
     list_timelines,
 )
+from resolve_mcp.tools.titles import apply_titles
 from resolve_mcp.tools.video import detect_scene_cuts, grab_frames
 
 from . import otio
@@ -817,3 +820,126 @@ def test_the_text_plus_template_route_survives_a_drb_round_trip() -> None:
     print("\n" + report.render())
     assert report.per_instance_text, report.render()
     assert report.cleaned_up, report.render()
+
+
+TITLES_TEMPLATE_ENV = "RESOLVE_MCP_TITLES_TEMPLATE"
+"""The media-pool clip *name* of an imported Text+ template — not a path; #41 imports it."""
+
+SMOKE_SONGS = ("smoke-song-one", "smoke-song-two")
+FILLER_FRAMES = 120
+"""Long enough to hold two short titles, short enough for a stock five-second template."""
+
+TITLE_FRAMES = 50
+FADE_FRAMES = 12
+
+
+def test_apply_titles_places_text_plus_instances_with_their_own_text_and_fades(
+    tmp_path: Path,
+) -> None:
+    """#42 ACs 1, 2 and 4: the titles land at the right frames with the right words, the
+    opacity spline reads back, and a second apply replaces rather than stacks.
+
+    Runs on a scratch timeline it creates, marks, titles and deletes again — the same
+    shape as the #41 probe, so it never touches the cut anyone is reviewing. The template
+    must already be in the media pool (import its `.drb` once); pass its clip name.
+
+    Paste the printed report onto the ticket — that is the record the ticket asks for.
+    """
+    wanted = os.environ.get(TITLES_TEMPLATE_ENV, "").strip()
+    if not wanted:
+        pytest.skip(f"Set {TITLES_TEMPLATE_ENV} to the pool clip name of a Text+ template")
+    if get_status()["context"]["project"] is None:
+        pytest.skip("No project open in Resolve")
+
+    connection = get_connection()
+    pool = media_pool(connection)
+    project = connection.handle().GetProjectManager().GetCurrentProject()
+    template = find_clip(pool, wanted)
+    was_on = project.GetCurrentTimeline()
+
+    name = timestamped_name("apply-titles-smoke", "", "apply-titles-smoke")
+    scratch = pool.CreateEmptyTimeline(name)
+    assert scratch is not None, f"Resolve created no timeline called {name!r}"
+    try:
+        assert project.SetCurrentTimeline(scratch), f"Resolve would not open {name!r}"
+        start = int(scratch.GetStartFrame())
+        # Something on V1 so the timeline has a span for the titles to land inside.
+        placed = pool.AppendToTimeline(
+            [
+                {
+                    "mediaPoolItem": template.clip,
+                    "startFrame": 0,
+                    "endFrame": FILLER_FRAMES,
+                    "mediaType": 1,
+                    "trackIndex": 1,
+                    "recordFrame": start,
+                }
+            ]
+        )
+        assert placed, f"{wanted!r} would not append at {FILLER_FRAMES} frames — too short?"
+        for offset, key in zip((0, 60), SMOKE_SONGS, strict=True):
+            assert scratch.AddMarker(offset, "Blue", key, "apply_titles smoke", 1), (
+                f"Resolve refused a blue marker at {offset}"
+            )
+
+        file = tmp_path / "titles.json"
+        file.write_text(json.dumps(_smoke_titles(name, wanted)), encoding="utf-8")
+
+        result = apply_titles(str(file))
+        again = apply_titles(str(file))
+
+        print("\n" + _render_titles(result, again))
+        assert result["ok"] is True, result.get("error")
+        assert [one["id"] for one in result["placed"]] == ["smoke-01", "smoke-02"]
+        assert [one["record"]["frames"] for one in result["placed"]] == [start, start + 60]
+        assert again["ok"] is True, again.get("error")
+        assert again["cleared"] == 2, "a second apply must replace the titles, not stack them"
+    finally:
+        if was_on is not None:
+            project.SetCurrentTimeline(was_on)
+        pool.DeleteTimelines([scratch])
+
+
+def _smoke_titles(timeline: str, template: str) -> dict[str, Any]:
+    return {
+        "schema": 1,
+        "timeline": timeline,
+        "templates": {"title": {"clip": template}},
+        "songs": [
+            {
+                "key": key,
+                "events": [
+                    {
+                        "id": f"smoke-0{position}",
+                        "kind": "title",
+                        "text": f"Live smoke {position}",
+                        "in": 0,
+                        "out": TITLE_FRAMES,
+                        "fade": {"in": FADE_FRAMES, "out": FADE_FRAMES},
+                    }
+                ],
+            }
+            for position, key in enumerate(SMOKE_SONGS, start=1)
+        ],
+    }
+
+
+def _render_titles(first: dict[str, Any], second: dict[str, Any]) -> str:
+    """The report the ticket asks for: what landed, and what the fades said."""
+    if not first["ok"]:
+        return f"apply failed: {first['error']['cause']}\nfix: {first['error']['fix']}"
+    lines = [
+        f"timeline:      {first['timeline']['name']}",
+        f"track:         {first['track']['name']} "
+        f"(video {first['track']['index']}, created={first['track']['created']})",
+        f"second apply:  cleared {second.get('cleared')}, ok={second['ok']}",
+    ]
+    for one in first["placed"]:
+        lines.append(
+            f"  {one['id']}: {one['text']!r} @ {one['record']['frames']} for "
+            f"{one['duration']['frames']}f — node {one['node']['name']!r} "
+            f"({one['node']['text_plus_in_comp']} Text+ in comp), fade "
+            f"{one['fade']['in']}/{one['fade']['out']} verified={one['fade']['verified']} "
+            f"({one['fade']['detail']})"
+        )
+    return "\n".join(lines)

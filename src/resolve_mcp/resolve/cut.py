@@ -16,19 +16,19 @@ from __future__ import annotations
 
 from typing import Any, NamedTuple
 
-from ..cut.document import LoadedCut, read_cut_file
+from ..cut.document import read_cut_file
 from ..cut.schema import ANNOTATED_EXAMPLE, SCHEMA_DOC, SCHEMA_VERSION
 from ..cut.validate import (
     DEFAULT_MIN_SEGMENT_FRAMES,
     RULE_DESCRIPTIONS,
     ClipFacts,
-    Finding,
     resolve_aliases,
-    severity_of,
     total_frames,
     validate_project,
     validate_structure,
 )
+from ..document import LoadedDocument
+from ..findings import Finding, severity_of
 from ..logging_config import get_logger
 from ..timing import dual_time
 from . import media
@@ -75,7 +75,7 @@ class Source(NamedTuple):
 class Preflight(NamedTuple):
     """One pass of the rules, and the pool reading they were judged against."""
 
-    loaded: LoadedCut
+    loaded: LoadedDocument
     findings: list[Finding]
     sources: list[Source]
 

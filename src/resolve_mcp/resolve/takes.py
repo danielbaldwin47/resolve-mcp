@@ -26,8 +26,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Final
 
-from ..cut.document import LoadedCut, read_cut_file
-from ..cut.validate import Finding, placements, validate_structure
+from ..cut.document import read_cut_file
+from ..cut.validate import placements, validate_structure
+from ..document import LoadedDocument
 from ..errors import (
     BuildFailedError,
     CutInvalidError,
@@ -35,6 +36,7 @@ from ..errors import (
     ResolveMcpError,
     TimelineOperationError,
 )
+from ..findings import Finding
 from ..logging_config import get_logger
 from ..timing import dual_time
 from . import timeline as timeline_read
@@ -195,7 +197,7 @@ def swap_take(
     }
 
 
-def _checked_cut(cut_file: str) -> LoadedCut:
+def _checked_cut(cut_file: str) -> LoadedDocument:
     """The cut file, refused unless it still validates.
 
     Read once and carried, so the hash the report echoes is the hash of the very bytes the
