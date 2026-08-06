@@ -8,6 +8,7 @@ findable, and one that was still running has to be honest about having died.
 from __future__ import annotations
 
 import json
+import threading
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,8 @@ import pytest
 from resolve_mcp.config import get_config
 from resolve_mcp.errors import JobNotFoundError
 from resolve_mcp.jobs import store
+
+SAVES = 300
 
 
 def test_a_new_job_starts_running_and_lands_on_disk() -> None:
@@ -36,6 +39,67 @@ def test_progress_reads_back_from_disk_not_from_memory() -> None:
 
     assert reloaded.progress == pytest.approx(0.4)
     assert reloaded.step == "separating"
+
+
+def test_a_write_that_loses_the_race_with_a_reader_is_tried_again() -> None:
+    """The rule the retry encodes, testable off Windows where the race cannot happen.
+
+    A reader holding the file is a refusal to wait out, not a failure to report: giving up
+    would kill the worker thread mid-save and leave the record saying running forever.
+    """
+    attempts: list[int] = []
+
+    def flaky() -> str:
+        attempts.append(len(attempts))
+        if len(attempts) < 3:
+            raise PermissionError(32, "The process cannot access the file")
+        return "written"
+
+    assert store._sharing(flaky) == "written"
+    assert len(attempts) == 3
+
+
+def test_a_reader_that_never_lets_go_is_still_an_error() -> None:
+    """Retrying forever would hide a genuinely locked cache directory."""
+
+    def locked() -> str:
+        raise PermissionError(32, "The process cannot access the file")
+
+    with pytest.raises(PermissionError):
+        store._sharing(locked)
+
+
+def test_a_record_written_while_it_is_being_polled_survives_both_sides() -> None:
+    """The bug this guards, found by the first job to follow another job's record.
+
+    On Windows a replace fails while a reader holds the file, and a read fails mid-replace.
+    Unguarded, the write killed the worker thread mid-save and left the record saying
+    running forever — which is exactly what a polling agent, or a chained job, provokes.
+    Only Windows can fail this one; the retry itself is pinned by the two tests above.
+    """
+    record = store.new_job("separate_stems", {"scope": "timeline"})
+    done = threading.Event()
+    escaped: list[BaseException] = []
+
+    def writing() -> None:
+        try:
+            for index in range(SAVES):
+                record.progress = index / SAVES
+                store.save(record)
+            store.finish(record, result={"stems": 4})
+        except BaseException as exc:  # noqa: BLE001 - the point is that nothing escapes
+            escaped.append(exc)
+        finally:
+            done.set()
+
+    writer = threading.Thread(target=writing)
+    writer.start()
+    while not done.is_set():
+        store.load(record.job_id)
+    writer.join(timeout=10)
+
+    assert escaped == []
+    assert store.load(record.job_id).state == "completed"
 
 
 def test_an_unknown_job_id_names_the_tool_that_lists_them() -> None:

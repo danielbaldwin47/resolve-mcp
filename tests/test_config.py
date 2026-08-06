@@ -74,6 +74,26 @@ def test_artifacts_live_under_the_cache_root(tmp_path: Path) -> None:
     assert config.job_dir == tmp_path / "jobs"
     assert config.result_dir == tmp_path / "results"
     assert config.audio_dir == tmp_path / "audio"
+    assert config.stems_dir == tmp_path / "stems"
+
+
+def test_the_separator_and_its_two_models_are_overridable() -> None:
+    """The models are named, not discovered: a rename must not silently change a cache key."""
+    assert Config.from_env({}).audio_separator == "audio-separator"
+    assert Config.from_env({}).stem_model.startswith("htdemucs")
+    assert "DrumSep" in Config.from_env({}).drum_model
+
+    config = Config.from_env(
+        {
+            "RESOLVE_MCP_AUDIO_SEPARATOR": r"D:\tools\audio-separator.exe",
+            "RESOLVE_MCP_STEM_MODEL": "htdemucs_6s.yaml",
+            "RESOLVE_MCP_DRUM_MODEL": "drumsep.ckpt",
+        }
+    )
+
+    assert config.audio_separator == r"D:\tools\audio-separator.exe"
+    assert config.stem_model == "htdemucs_6s.yaml"
+    assert config.drum_model == "drumsep.ckpt"
 
 
 def test_ffmpeg_is_a_bare_name_on_path_until_told_otherwise() -> None:

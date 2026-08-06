@@ -7,35 +7,22 @@ director is doing in the GUI. What it cannot see is anything Resolve does to tha
 route.
 
 The subprocess call is a parameter (``runner``) so that command construction, failure
-shaping and the missing-binary case are all testable without ffmpeg installed — while the
-real thing stays one plain ``subprocess.run``.
+shaping and the missing-binary case are all testable without ffmpeg installed; the seam
+itself lives in ``resolve_mcp.ffmpeg``, shared with the frame-grab and scene-scan routes.
 """
 
 from __future__ import annotations
 
-import subprocess
-from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import NamedTuple
 
 from ..config import Config, get_config
-from ..errors import AudioExtractionError, FfmpegUnavailableError, InvalidRequestError
+from ..errors import AudioExtractionError, InvalidRequestError
+from ..ffmpeg import Runner, invoke, refused
 from ..logging_config import get_logger
 
 log = get_logger("audio")
 
 CODECS = {16: "pcm_s16le", 24: "pcm_s24le", 32: "pcm_s32le"}
-STDERR_TAIL = 800
-
-
-class Completed(NamedTuple):
-    """What the runner reports back: ffmpeg says why it refused on stderr."""
-
-    returncode: int
-    stderr: str
-
-
-Runner = Callable[[Sequence[str]], Completed]
 
 
 def command(
@@ -77,11 +64,6 @@ def command(
     ]
 
 
-def _run(argv: Sequence[str]) -> Completed:
-    finished = subprocess.run(argv, capture_output=True, text=True, check=False)
-    return Completed(finished.returncode, finished.stderr or "")
-
-
 def extract(
     source: Path | str,
     target: Path | str,
@@ -95,24 +77,10 @@ def extract(
     destination = Path(target)
     destination.parent.mkdir(parents=True, exist_ok=True)
     argv = command(config.ffmpeg, source, destination, sample_rate, bit_depth)
-
-    try:
-        finished = (runner or _run)(argv)
-    except FileNotFoundError as exc:
-        raise FfmpegUnavailableError(
-            cause=f"No ffmpeg at {config.ffmpeg!r}.",
-            detail={"executable": config.ffmpeg},
-        ) from exc
+    finished = invoke(argv, runner=runner, config=config)
 
     if finished.returncode != 0:
-        raise AudioExtractionError(
-            cause=f"ffmpeg refused {Path(source).name} (exit {finished.returncode}).",
-            detail={
-                "source": str(source),
-                "exit_code": finished.returncode,
-                "stderr": finished.stderr[-STDERR_TAIL:],
-            },
-        )
+        raise refused(source, finished, AudioExtractionError)
     if not destination.exists():
         raise AudioExtractionError(
             cause=f"ffmpeg reported success but wrote nothing to {destination}.",

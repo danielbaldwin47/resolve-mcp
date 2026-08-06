@@ -72,12 +72,17 @@ _TAKES: Final = """\
 
 - Selector = [main, alternates in order]; selected take = main. The main slot
   *is* the current selection, always.
+- `swap_take` counts that order: take 1 = the segment's own `source`, take 2
+  onwards = `alternates` in document order. Indexes, not aliases — the same
+  source can appear twice in one selector (two passes from one camera).
 - Every alternate's duration must equal main's — in-place `swap_take` can't
   ripple a sequential timeline; an unequal-length take choice is a main-segment
   edit + rebuild. Also dodges untested Resolve behavior on mismatched selector
   lengths.
 - Swap sync: after `swap_take`, Claude edits the file — alternate promoted to
-  main, main demoted. The server never writes the cut file."""
+  main, main demoted into its slot, so the selector order survives a rebuild.
+  The swap report hands back those exact fields. The server never writes the
+  cut file."""
 
 _OVERLAYS: Final = """\
 ## 4. Overlays

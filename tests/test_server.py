@@ -17,7 +17,7 @@ def descriptions() -> dict[str, str]:
     return {tool.name: tool.description or "" for tool in tools}
 
 
-def test_registers_the_session_media_timeline_cut_titling_and_job_tools() -> None:
+def test_registers_the_p1_session_media_timeline_cut_titling_render_and_job_tools() -> None:
     assert tool_names() == {
         "get_status",
         "list_projects",
@@ -41,6 +41,14 @@ def test_registers_the_session_media_timeline_cut_titling_and_job_tools() -> Non
         "get_titles_schema",
         "validate_titles",
         "apply_titles",
+        "swap_take",
+        "grab_frames",
+        "detect_scene_cuts",
+        "transcribe_audio",
+        "analyze_music",
+        "separate_stems",
+        "list_render_presets",
+        "render_timeline",
         "get_job",
         "list_jobs",
         "run_python",

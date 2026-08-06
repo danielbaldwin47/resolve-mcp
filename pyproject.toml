@@ -6,6 +6,18 @@ readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "fastmcp>=3.4,<4",
+    # The analysis substrate: numpy does the arithmetic, scipy the IIR filtering the
+    # loudness standard needs. Both are imported inside workers, never at startup.
+    "numpy>=2.0,<3",
+    "scipy>=1.14,<2",
+]
+
+[project.optional-dependencies]
+# The analysis backends: heavy, GPU-bound, and imported inside the workers that need them.
+# Kept out of the base install so the server (and CI, which runs the fake tier) does not
+# pull a CUDA runtime to answer get_status.
+analysis = [
+    "faster-whisper>=1.0",
 ]
 
 [project.scripts]
@@ -48,3 +60,10 @@ python_version = "3.12"
 files = ["src", "tests"]
 strict = true
 warn_unused_ignores = true
+
+# The analysis extras ship no stubs, and are not installed at all in CI or on a machine
+# that only drives Resolve — so the imports are unresolvable rather than untyped. scipy
+# ships no type information either; the two functions used from it are filters over arrays.
+[[tool.mypy.overrides]]
+module = ["faster_whisper.*", "scipy.*"]
+ignore_missing_imports = true

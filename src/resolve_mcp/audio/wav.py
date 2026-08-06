@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import contextlib
 import wave
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -18,21 +19,34 @@ from ..errors import AudioExtractionError
 BITS_PER_BYTE = 8
 
 
-def describe(path: Path | str) -> dict[str, Any]:
-    """Duration, sample rate, channels and bit depth of a WAV on disk."""
+@contextlib.contextmanager
+def opened(path: Path | str) -> Iterator[wave.Wave_read]:
+    """An open WAV, or the one failure every reader of one should report.
+
+    Anything that reads a WAV this server wrote reads a file the server can also delete and
+    make again, so the advice is the same wherever the read happens — which is why the
+    reading itself is the only part left to the caller.
+    """
     target = Path(path)
     try:
         with contextlib.closing(wave.open(str(target), "rb")) as handle:
-            frames = handle.getnframes()
-            rate = handle.getframerate()
-            channels = handle.getnchannels()
-            width = handle.getsampwidth()
+            yield handle
     except (OSError, wave.Error) as exc:
         raise AudioExtractionError(
             cause=f"{target.name} is not a readable WAV file ({exc}).",
             fix="Delete it from the cache directory and run the job again.",
             detail={"path": str(target)},
         ) from exc
+
+
+def describe(path: Path | str) -> dict[str, Any]:
+    """Duration, sample rate, channels and bit depth of a WAV on disk."""
+    target = Path(path)
+    with opened(target) as handle:
+        frames = handle.getnframes()
+        rate = handle.getframerate()
+        channels = handle.getnchannels()
+        width = handle.getsampwidth()
     return {
         "path": str(target),
         "duration_seconds": round(frames / rate, 3) if rate else None,

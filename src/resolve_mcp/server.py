@@ -11,7 +11,19 @@ from fastmcp import FastMCP
 from . import __version__
 from .config import get_config
 from .logging_config import configure_logging, get_logger
-from .tools import cut, escape_hatch, jobs, media, project, timeline, titles
+from .tools import (
+    analysis,
+    cut,
+    escape_hatch,
+    jobs,
+    media,
+    project,
+    render,
+    stems,
+    timeline,
+    titles,
+    video,
+)
 
 log = get_logger("server")
 
@@ -29,9 +41,15 @@ together, ranges are half-open [in, out), and a time you give in seconds must sa
 snap it to a frame ({"seconds": 2.52, "snap": "floor"}).
 
 Editing is declarative: you author a cut file, the server builds it. Call get_cut_schema
-before writing one and validate_cut after every edit — do not guess the format. Titles are
+before writing one and validate_cut after every edit — do not guess the format. Every
+change is a rebuild into a new version, with one exception: swap_take flips a shot to one
+of its alternates in place. It is yours to keep the cut file in step afterwards — the
+server never writes it, and the swap report says exactly what to change. Titles are
 declarative too and live outside the cut file: get_titles_schema, then apply_titles, which
 owns a Titles track and can be re-applied to every rebuild.
+
+When the audio evidence is ambiguous, look: grab_frames writes JPEGs you can read at any
+moment on any angle, and detect_scene_cuts catalogs where a piece of b-roll changes shot.
 
 Heavy work (renders, analysis) hands back a job_id straight away — carry on working and
 poll it with get_job; list_jobs finds what you started before a restart. Results are cached
@@ -52,6 +70,10 @@ def build_server() -> FastMCP:
         *timeline.TOOLS,
         *cut.TOOLS,
         *titles.TOOLS,
+        *video.TOOLS,
+        *analysis.TOOLS,
+        *stems.TOOLS,
+        *render.TOOLS,
         *jobs.TOOLS,
         *escape_hatch.TOOLS,
     ):
