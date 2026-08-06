@@ -8,7 +8,17 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..analysis import applause, music, silence, solos, structure, transcribe, transcript, whisper
+from ..analysis import (
+    applause,
+    fills,
+    music,
+    silence,
+    solos,
+    structure,
+    transcribe,
+    transcript,
+    whisper,
+)
 from ..resolve.connection import get_connection
 from .envelope import tool
 
@@ -149,6 +159,48 @@ def transcribe_audio(
     }
 
 
-TOOLS: tuple[Any, ...] = (transcribe_audio, analyze_music, analyze_structure)
+@tool
+def detect_drum_fills(
+    stems: str,
+    audio: str,
+    minimum_confidence: float = fills.DEFAULT_MINIMUM_CONFIDENCE,
+    refresh: bool = False,
+) -> dict[str, Any]:
+    """Start drum-fill detection over separated drum stems. Returns a job to poll.
 
-__all__ = ["TOOLS", "analyze_music", "analyze_structure", "transcribe_audio"]
+    stems is the directory a separate_stems job reported — the kick, snare and toms files
+    its second pass wrote. audio is the master mix those stems came from: fills are reported
+    against its beat grid, and if music analysis already ran over it the beats come from
+    cache rather than the model again.
+
+    The result names one JSON file and summarises it. Every candidate carries its start and
+    end (both on the grid), the bar and beat it starts on, the beat it resolves into, hits
+    per stem, how much busier it is than the median beat of this performance, and a 0-1
+    confidence with the four factors behind it — density, tom share, whether a hit lands on
+    the resolution point, and where that point sits in the phrase. Inline you get the count,
+    the mean confidence and the strongest candidate.
+
+    These are candidates, not verdicts: a burst of toms into a downbeat is evidence, and
+    whether it is a fill, a trade or a save is yours to read. Runs longer than two bars are
+    counted and left out — that is a drum solo, a different question. minimum_confidence is
+    the floor on what gets written; refresh redoes work the cache would answer for.
+    """
+    return {
+        "job": fills.detect_drum_fills(
+            stems,
+            audio,
+            minimum_confidence=minimum_confidence,
+            refresh=refresh,
+        )
+    }
+
+
+TOOLS: tuple[Any, ...] = (transcribe_audio, analyze_music, analyze_structure, detect_drum_fills)
+
+__all__ = [
+    "TOOLS",
+    "analyze_music",
+    "analyze_structure",
+    "detect_drum_fills",
+    "transcribe_audio",
+]

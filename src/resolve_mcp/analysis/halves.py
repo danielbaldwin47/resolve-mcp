@@ -23,13 +23,18 @@ from ..naming import slug
 from . import records
 
 
-def readable(audio: str | Path) -> Path:
-    """The audio as a path, or the error that says what to pass instead."""
+def readable(audio: str | Path, fix: str | None = None) -> Path:
+    """The audio as a path, or the error that says what to pass instead.
+
+    The ``fix`` differs per job because the advice does: a fill job wants the master the
+    stems came from, and music analysis wants any master at all.
+    """
     source = Path(audio)
     if not source.is_file():
         raise InvalidRequestError(
             cause=f"There is no file at {source}.",
-            fix=(
+            fix=fix
+            or (
                 "Pass the path to the master mix, or the path an acquire_timeline_audio job "
                 "returned. Analysis reads WAV."
             ),
@@ -45,11 +50,10 @@ def identity(source: Path, config: Config) -> dict[str, Any]:
     and a false hit there would attribute one concert's beats to another; a master the
     director handed over is fingerprinted, because it is tens of gigabytes that sit
     unchanged for months and reading all of it would stall the starter that is supposed to
-    return a job id at once.
+    return a job id at once. The rule itself lives in ``jobs.cache``, so jobs that key off
+    an audio path without going through a half agree with the ones that do.
     """
-    if inside(source, config.audio_dir):
-        return {"sha256": cache.content_hash(source)}
-    return cache.fingerprint(source)
+    return cache.identity(source, config.audio_dir)
 
 
 def inside(source: Path, directory: Path) -> bool:

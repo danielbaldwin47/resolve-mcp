@@ -18,6 +18,7 @@ master mix — no stems, no Resolve. Three consequences worth stating:
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -130,6 +131,27 @@ def beats_of(
         refresh,
         config or get_config(),
     )
+
+
+def numbered_beats(
+    source: Path,
+    described: dict[str, Any],
+    identity: dict[str, Any],
+    detector: beats_module.Detector | None,
+    refresh: bool,
+    config: Config,
+) -> list[dict[str, Any]]:
+    """The beat records themselves, from ``beats_of`` — computed or read back from disk.
+
+    The document is the interchange format, so a caller that wants the grid rather than a
+    path reads it the way an agent would. Reading it here rather than at the caller keeps
+    the file's layout the business of the module that writes it. Drum-fill detection (#39)
+    reports against this grid and must not pay for the beat model a second time on audio
+    music analysis already ran over.
+    """
+    document = beats_of(source, described, identity, detector, refresh, config)
+    written = json.loads(Path(document["path"]).read_text(encoding="utf-8"))
+    return list(written[BEATS])
 
 
 def analyze(
