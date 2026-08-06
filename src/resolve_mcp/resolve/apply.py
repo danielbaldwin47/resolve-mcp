@@ -105,8 +105,13 @@ def apply_titles(connection: ResolveConnection, titles_file: str) -> dict[str, A
     pool = media.media_pool(connection)
 
     track = _own_track(timeline, timeline_read.name_of(timeline))
-    _refuse_locked(timeline, track)
+    # The switch comes first: ``GetIsTrackLocked`` answers ``False`` for every track of a
+    # timeline that is not current (#84), so the lock guard below would wave through a
+    # locked track and Resolve would then report titles as placed and place none — the
+    # exact failure the guard exists to catch. Nothing has been written at this point, so
+    # a refusal after the switch still applies nothing.
     _target(project, timeline, track.timeline)
+    _refuse_locked(timeline, track)
     cleared = _clear(timeline, track)
     _place(pool, checked.events, checked.templates, track)
     items = _verify(timeline, checked.events, track)
@@ -228,10 +233,7 @@ def _target(project: Project, timeline: Timeline, name: str) -> None:
 
 def _same(one: Timeline, other: Timeline) -> bool:
     """Identity by Resolve's own id: two proxies for one timeline are not the same object."""
-    first, second = getattr(one, "GetUniqueId", None), getattr(other, "GetUniqueId", None)
-    if callable(first) and callable(second):
-        return bool(first() == second())
-    return bool(timeline_read.name_of(one) == timeline_read.name_of(other))
+    return timeline_read.same_timeline(one, other)
 
 
 def _clear(timeline: Timeline, track: OwnedTrack) -> int:

@@ -189,6 +189,23 @@ def next_free_name(requested: str, existing: set[str]) -> str:
     return f"{base} v{number}"
 
 
+def same_timeline(one: Timeline | None, other: Timeline | None) -> bool:
+    """Whether two handles are one timeline, by Resolve's own id.
+
+    Two proxies for the same timeline are not the same Python object — ``GetCurrentTimeline``
+    and ``GetTimelineByIndex`` hand back different ones — so identity has to be asked of
+    Resolve. ``GetUniqueId`` predates neither build this runs on, but a build without it
+    falls back to the name, which is unique within a project because this server refuses to
+    create a colliding one.
+    """
+    if one is None or other is None:
+        return False
+    first, second = getattr(one, "GetUniqueId", None), getattr(other, "GetUniqueId", None)
+    if callable(first) and callable(second):
+        return bool(first() == second())
+    return bool(name_of(one) == name_of(other))
+
+
 @contextlib.contextmanager
 def current_timeline(project: Project, timeline: Timeline) -> Iterator[None]:
     """Work on the timeline that was asked for, and put the director's back afterwards.
@@ -433,13 +450,25 @@ def inspect_timeline(
     timeline = find_timeline(project, name)
     current = current_name(project)
     is_current = name_of(timeline) == current
-    switching = make_current and not is_current
-    reader = Reader(connection, current=is_current or switching)
 
     with contextlib.ExitStack() as stack:
-        if switching:
+        made_current = False
+        if make_current and not is_current:
             log.info("Switching to %r for the read, and back after (#84)", name_of(timeline))
             stack.enter_context(current_timeline(project, timeline))
+            # Whether the switch *landed*, not whether it was asked for. Resolve refuses
+            # ``SetCurrentTimeline`` while a modal dialog is up (#41, and ``_target`` in
+            # apply.py raises on exactly this) — and a refusal here would otherwise have
+            # the reader trust the very falsy answers this whole path exists to distrust,
+            # with ``read_as_current`` certifying them.
+            made_current = same_timeline(project.GetCurrentTimeline(), timeline)
+            if not made_current:
+                log.warning(
+                    "Resolve would not make %r current, so its editor-state fields stay "
+                    "unknown (#84); close any modal dialog in the Resolve GUI",
+                    name_of(timeline),
+                )
+        reader = Reader(connection, current=is_current or made_current)
         heading = summarise(reader, timeline, project, current)
         fps = heading["fps"]
 
@@ -452,6 +481,7 @@ def inspect_timeline(
         ]
         item_count = sum(track["item_count"] for track in tracks)
         markers = _marker_count(reader, timeline)
+        currency = _currency(reader.reads_current, made_current)
 
     result: dict[str, Any] = {
         "timeline": {**heading, "markers": markers},
@@ -459,7 +489,7 @@ def inspect_timeline(
         "range": {"in": dual_time(window[0], fps), "out": dual_time(window[1], fps)},
         "tracks": None if detail == "summary" else [_without_items(track) for track in tracks],
         "item_count": item_count,
-        "currency": _currency(is_current, switching),
+        "currency": currency,
         "truncated": False,
         "spilled_to": None,
     }
@@ -489,12 +519,16 @@ proven safe rather than merely untested. Anything added here needs the same evid
 """
 
 
-def _currency(is_current: bool, switching: bool) -> dict[str, Any]:
-    """Whether the reading's editor-state fields can be believed, and what to do if not."""
-    trustworthy = is_current or switching
+def _currency(trustworthy: bool, made_current: bool) -> dict[str, Any]:
+    """Whether the reading's editor-state fields can be believed, and what to do if not.
+
+    ``made_current`` is what the switch achieved, never what it was asked to do: a switch
+    Resolve refused leaves ``trustworthy`` false, and the reply says the fields are unknown
+    rather than certifying the falsy answers as real.
+    """
     return {
         "read_as_current": trustworthy,
-        "made_current": switching,
+        "made_current": made_current,
         "unknown_fields": [] if trustworthy else list(UNKNOWN_OFF_CURRENT),
         "fix": (
             None
@@ -581,21 +615,18 @@ def _read_track(
         if _touches(placement, window)
     ]
     where = (track_type, index)
+    readable = reader.reads_current
     return {
         "type": track_type,
         "index": index,
-        "name": str(reader.optional(timeline, "GetTrackName", "", track_type, index) or ""),
+        "name": str(reader.optional(timeline, "GetTrackName", "", *where) or ""),
         # ``None``, not ``False``, off the current timeline — see ``Reader.reads_current``.
-        "enabled": (
-            bool(reader.optional(timeline, "GetIsTrackEnabled", True, *where))
-            if reader.reads_current
-            else None
-        ),
-        "locked": (
-            bool(reader.optional(timeline, "GetIsTrackLocked", False, *where))
-            if reader.reads_current
-            else None
-        ),
+        "enabled": bool(reader.optional(timeline, "GetIsTrackEnabled", True, *where))
+        if readable
+        else None,
+        "locked": bool(reader.optional(timeline, "GetIsTrackLocked", False, *where))
+        if readable
+        else None,
         "item_count": len(in_range),
         "items": (
             [

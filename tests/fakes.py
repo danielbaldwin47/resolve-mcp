@@ -458,8 +458,14 @@ class FakeTimelineItem(AnswersNone):
         return None
 
     def GetSelectedTakeIndex(self) -> int:  # noqa: N802
-        """Zero when the clip is not a take selector, else the 1-based selection."""
+        """Zero when the clip is not a take selector, else the 1-based selection.
+
+        Also zero off the current timeline, the same #84 lie ``GetTakesCount`` tells — the
+        sweep measured this one drifting ``1 -> 0``, and zero is not a take at all.
+        """
         self._check("GetSelectedTakeIndex")
+        if not self._reads_current():
+            return 0
         return self._selected
 
     def SelectTakeByIndex(self, index: int) -> bool:  # noqa: N802
@@ -570,6 +576,10 @@ class FakeTimeline(AnswersNone):
             for track in tracks:
                 for item in track.items:
                     item.adopt(owner)
+                    # Belt and braces with ``GetItemListInTrack``: a path that reaches an
+                    # item some other way still finds it knowing its timeline, so #84 is
+                    # modelled there too rather than silently reading truthful.
+                    item.held_by(self)
 
     def _check(self) -> None:
         if self._owner is not None:

@@ -437,6 +437,10 @@ def test_make_current_switches_for_the_read_and_puts_the_timeline_back(attach: A
     assert result["currency"]["read_as_current"] is True
     assert result["currency"]["made_current"] is True
     assert result["currency"]["unknown_fields"] == []
+    # ``current`` is the project's standing state, which the restore puts back — so it
+    # stays false even though the read itself was taken with the timeline current. The two
+    # answer different questions and are deliberately allowed to disagree here.
+    assert result["timeline"]["current"] is False
     assert project.timeline_switches == ["survey v1", "sunset-set v3"]
     back = project.GetCurrentTimeline()
     assert back is not None
@@ -473,6 +477,32 @@ def test_make_current_on_the_open_timeline_switches_nothing(attach: Attach) -> N
     assert result["tracks"][0]["items"][0]["takes"] == 3
     assert result["currency"]["made_current"] is False
     assert project.timeline_switches == []
+
+
+def test_a_switch_resolve_refuses_leaves_the_fields_unknown_rather_than_certified(
+    attach: Attach,
+) -> None:
+    """``made_current`` is what the switch achieved, never what it was asked to do.
+
+    Resolve refuses ``SetCurrentTimeline`` while a modal dialog is up (#41). Taking the
+    request as the answer would hand the reader the falsy values this whole path exists to
+    distrust — and stamp ``read_as_current: true`` on them, which is worse than the bug it
+    was fixing, because the reply would now vouch for the wrong number.
+    """
+    resolve, project = _surveying()
+    project.refuse_set_current = True
+    attach(resolve)
+
+    result = inspect_timeline("survey v1", detail="clips", make_current=True)
+
+    assert result["ok"] is True
+    assert result["currency"]["read_as_current"] is False
+    assert result["currency"]["made_current"] is False
+    assert result["currency"]["unknown_fields"] == ["enabled", "locked", "takes"]
+    track = result["tracks"][0]
+    assert track["enabled"] is None
+    assert track["locked"] is None
+    assert result["tracks"][0]["items"][0]["takes"] is None
 
 
 def test_the_fields_that_survived_the_sweep_are_still_read_off_a_non_current_timeline(
