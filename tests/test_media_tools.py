@@ -72,6 +72,29 @@ def test_imports_a_video_and_a_png_sequence_into_a_named_bin(
     assert len(titles.GetClipList()) == 2
 
 
+def test_an_imported_sequence_reports_the_same_type_as_moving_footage(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Resolve types a sequence ``Video``, exactly as it types a movie (#85, #95 probe).
+
+    Nothing in the reply separates the two, which is why ``media.is_still`` judges by file
+    suffix — code that keyed off ``Type`` would be reading a distinction Resolve never draws.
+    """
+    video = a_file(tmp_path, "C0012.mp4")
+    for index in range(1, 4):
+        a_file(tmp_path, f"seq/shot_{index:04d}.png")
+    attach(studio(pool=media_pool()))
+
+    result = import_media(
+        paths=[str(video)],
+        sequences=[
+            {"path": str(tmp_path / "seq" / "shot_%04d.png"), "start_index": 1, "end_index": 3}
+        ],
+    )
+
+    assert [clip["type"] for clip in result["imported"]] == ["Video", "Video"]
+
+
 def test_an_imported_sequence_whose_frames_are_on_disk_is_not_offline(
     attach: Attach, tmp_path: Path
 ) -> None:

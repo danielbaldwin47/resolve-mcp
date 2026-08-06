@@ -1308,6 +1308,10 @@ def _import_one(item: str | dict[str, Any]) -> FakeMediaPoolItem | None:
     token — ``shot_%04d.png`` with frames 1–24 becomes ``shot_[0001-0024].png`` — which is
     what Resolve Studio 21.0.3.7 really reports (#85): a label, not a path that exists on
     disk. ``File Path`` and the clip name both carry the bracketed form.
+
+    ``Type`` is ``Video``, live-verified twice (#85 body, #95 probe): Resolve does not
+    separate a sequence from moving footage here, which is why
+    :func:`resolve_mcp.resolve.media.is_still` keys off the file suffix instead.
     """
     if isinstance(item, dict):
         pattern = str(item.get("FilePath", ""))
@@ -1320,7 +1324,7 @@ def _import_one(item: str | dict[str, Any]) -> FakeMediaPoolItem | None:
         return FakeMediaPoolItem(
             Path(label).name,
             label,
-            {"Type": "Image Sequence", "Frames": str(frames), "Start": "0", "End": str(frames - 1)},
+            {"Type": "Video", "Frames": str(frames), "Start": "0", "End": str(frames - 1)},
         )
 
     path = Path(item)
