@@ -253,7 +253,10 @@ def analyze(
             f"{KIND}:{SOLOS}",
             cache.cache_key(
                 f"{KIND}:{SOLOS}",
-                [identity, stem_identity or _stem_identity(stems, config)],
+                [
+                    identity,
+                    stem_identity if stem_identity is not None else _stem_identity(stems, config),
+                ],
                 shape,
             ),
             lambda path: _solos(
