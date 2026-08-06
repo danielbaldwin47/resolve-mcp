@@ -75,10 +75,12 @@ def test_imports_a_video_and_a_png_sequence_into_a_named_bin(
 def test_an_imported_sequence_reports_the_same_type_as_moving_footage(
     attach: Attach, tmp_path: Path
 ) -> None:
-    """Resolve types a sequence ``Video``, exactly as it types a movie (#85, #95 probe).
+    """Pins the fake's fidelity, not a decision in ``src``: ``type`` is a pass-through.
 
-    Nothing in the reply separates the two, which is why ``media.is_still`` judges by file
-    suffix — code that keyed off ``Type`` would be reading a distinction Resolve never draws.
+    Resolve Studio 21.0.3.7 types a sequence ``Video``, exactly as it types a movie (#85
+    body, #95 probe), so the reply draws no distinction between them. The fake claimed
+    ``Image Sequence`` until #97; asserting both clips together is what makes the *absence*
+    of the distinction the thing under test.
     """
     video = a_file(tmp_path, "C0012.mp4")
     for index in range(1, 4):
