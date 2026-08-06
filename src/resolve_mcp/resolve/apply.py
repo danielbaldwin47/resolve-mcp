@@ -157,13 +157,9 @@ def _own_track(timeline: Timeline, name: str) -> OwnedTrack:
     is added but cannot be *named* is refused, because the next apply would not recognise
     it and would stack a second one on top.
     """
-    matching = [
-        index
-        for index in range(1, _track_count(timeline) + 1)
-        if str(timeline.GetTrackName(VIDEO, index) or "") == TRACK_NAME
-    ]
-    if matching:
-        return OwnedTrack(max(matching), name, created=False)
+    standing = find_track(timeline, name)
+    if standing is not None:
+        return standing
 
     if not timeline.AddTrack(VIDEO):
         raise TitlesApplyFailedError(
@@ -171,7 +167,7 @@ def _own_track(timeline: Timeline, name: str) -> OwnedTrack:
             f"was applied.",
             detail={"timeline": name, "track": TRACK_NAME},
         )
-    added = OwnedTrack(_track_count(timeline), name, created=True)
+    added = OwnedTrack(track_count(timeline), name, created=True)
     rename = getattr(timeline, "SetTrackName", None)
     if not (callable(rename) and rename(VIDEO, added.index, TRACK_NAME)):
         raise TitlesApplyFailedError(
@@ -185,7 +181,22 @@ def _own_track(timeline: Timeline, name: str) -> OwnedTrack:
     return added
 
 
-def _track_count(timeline: Timeline) -> int:
+def find_track(timeline: Timeline, name: str) -> OwnedTrack | None:
+    """The topmost video track called ``Titles``, or ``None`` when the timeline has none.
+
+    Split out from :func:`_own_track` because only an *apply* may create the track: a tool
+    that edits what is already there has nothing to put on a track it just made, and a
+    freshly created empty one would be a worse answer than saying there are no titles.
+    """
+    matching = [
+        index
+        for index in range(1, track_count(timeline) + 1)
+        if str(timeline.GetTrackName(VIDEO, index) or "") == TRACK_NAME
+    ]
+    return OwnedTrack(max(matching), name, created=False) if matching else None
+
+
+def track_count(timeline: Timeline) -> int:
     try:
         return int(timeline.GetTrackCount(VIDEO) or 0)
     except (TypeError, ValueError):
@@ -370,4 +381,4 @@ def _write_titles(
     return written
 
 
-__all__ = ["OwnedTrack", "apply_titles"]
+__all__ = ["VIDEO", "OwnedTrack", "apply_titles", "find_track", "track_count"]

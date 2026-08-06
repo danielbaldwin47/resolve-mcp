@@ -120,8 +120,13 @@ _RERUN: Final = """\
 `apply_titles` is declarative and idempotent: same file, same timeline, same
 result. Nothing is validated against the previous run, and no state is kept
 between runs — the timeline *is* the state. Edit the file and re-apply to move,
-retime or re-word titles, including a one-word typo fix: re-applying costs one
-clear and one append, and it is the only route this server offers today."""
+retime or re-word titles: re-applying costs one clear and one append.
+
+A typo in a title already placed does not need that. `edit_title` writes new
+words, or new exposed template params, into that one instance in place and
+leaves the rest of the track alone. It edits the timeline and not this file, so
+the next apply puts the old wording back — change both when the fix is one to
+keep."""
 
 _RULES: Final = """\
 ## 5. Validation

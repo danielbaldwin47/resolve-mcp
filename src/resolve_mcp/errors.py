@@ -257,6 +257,35 @@ class TitlesApplyFailedError(ResolveMcpError):
     )
 
 
+class TitleNotFoundError(ResolveMcpError):
+    """No single placed title answers to what the edit asked for — none, or more than one.
+
+    ``detail`` lists what is actually on the Titles track, because the caller's next move
+    is always to pick from that list rather than to guess again.
+    """
+
+    code = "title_not_found"
+    default_fix = (
+        "Run list_titles and copy the text of the one you mean exactly; pass at= its record "
+        "frame as well when two titles read the same."
+    )
+
+
+class TitleEditFailedError(ResolveMcpError):
+    """A placed title was found but would not take the edit, or took it for its neighbours.
+
+    Distinct from ``titles_apply_failed`` because the recovery is different: nothing was
+    cleared and nothing was placed, so the track is exactly as it was apart from whatever
+    this write did land — which ``detail`` says per input.
+    """
+
+    code = "title_edit_failed"
+    default_fix = (
+        "Check the input id against list_titles and that the Titles track is unlocked, then "
+        "edit again — or re-run apply_titles, which rebuilds the track from the file."
+    )
+
+
 class TitleTemplateError(ResolveMcpError):
     """A placed template instance is not one this route can title.
 

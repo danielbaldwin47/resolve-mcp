@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..resolve import apply, titles
+from ..resolve import apply, title_edit, titles
 from ..resolve.connection import get_connection
 from .envelope import tool
 
@@ -63,10 +63,73 @@ def apply_titles(titles_file: str) -> dict[str, Any]:
     return apply.apply_titles(get_connection(), titles_file)
 
 
+@tool
+def list_titles(timeline: str | None = None) -> dict[str, Any]:
+    """Read back every title standing on a timeline's Titles track, and what it exposes.
+
+    The counterpart to apply_titles: that one writes the track from a file, this one reads
+    the track as it now is. Each title reports its position along the track, where it sits,
+    the words it says and the Fusion inputs its template exposes — `params.values` is the
+    list of input ids edit_title will accept, read off the placed instance itself, since a
+    media-pool template has no comp to ask.
+
+    Run it before edit_title to copy the exact wording and to see what is editable. A
+    build that will not enumerate its inputs says so in `params.detail` and reports none;
+    the inputs can still be written by id. Anything on the track that is not a Text+ title
+    is listed too, with `unreadable` saying why — a stray clip on the Titles track is
+    worth knowing about, since the next apply_titles will delete it.
+    """
+    return title_edit.list_titles(get_connection(), timeline)
+
+
+@tool
+def edit_title(
+    title: str | None = None,
+    text: str | None = None,
+    params: dict[str, Any] | None = None,
+    at: Any = None,
+    timeline: str | None = None,
+) -> dict[str, Any]:
+    """Fix one already-placed title in place — its words, its exposed params, or both.
+
+    For the typo you spot in the review, this is one call and it costs nothing else: no
+    rebuild, no re-apply, no clear. The title keeps its Fusion comp, its fade and its
+    position, and every other title on the track is read before and after the write and
+    reported unchanged — `other_titles_unchanged` is that count.
+
+    Name the title by `title`, the exact words it says now (list_titles reports them), or
+    by `at`, its record frame — or both when two titles read the same. Nothing matching,
+    or more than one, is refused with everything on the track listed rather than guessed
+    at. `text` sets the words; `params` sets exposed inputs by Fusion id,
+    e.g. {"Size": 0.08}. Every write is read back off the clip, and an input that does not
+    read back as written is an error, not a silent no-op.
+
+    This edits the timeline, not titles.json — so the next apply_titles puts the old
+    wording back. Fix the file too when the change is one you want to keep.
+    """
+    return title_edit.edit_title(
+        get_connection(),
+        title,
+        text=text,
+        params=params,
+        at=at,
+        timeline=timeline,
+    )
+
+
 TOOLS: tuple[Any, ...] = (
     get_titles_schema,
     validate_titles,
     apply_titles,
+    list_titles,
+    edit_title,
 )
 
-__all__ = ["TOOLS", "apply_titles", "get_titles_schema", "validate_titles"]
+__all__ = [
+    "TOOLS",
+    "apply_titles",
+    "edit_title",
+    "get_titles_schema",
+    "list_titles",
+    "validate_titles",
+]
