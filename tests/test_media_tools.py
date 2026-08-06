@@ -72,6 +72,31 @@ def test_imports_a_video_and_a_png_sequence_into_a_named_bin(
     assert len(titles.GetClipList()) == 2
 
 
+def test_an_imported_sequence_reports_the_same_type_as_moving_footage(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Pins the fake's fidelity, not a decision in ``src``: ``type`` is a pass-through.
+
+    Resolve Studio 21.0.3.7 types a sequence ``Video``, exactly as it types a movie (#85
+    body, #95 probe), so the reply draws no distinction between them. The fake claimed
+    ``Image Sequence`` until #97; asserting both clips together is what makes the *absence*
+    of the distinction the thing under test.
+    """
+    video = a_file(tmp_path, "C0012.mp4")
+    for index in range(1, 4):
+        a_file(tmp_path, f"seq/shot_{index:04d}.png")
+    attach(studio(pool=media_pool()))
+
+    result = import_media(
+        paths=[str(video)],
+        sequences=[
+            {"path": str(tmp_path / "seq" / "shot_%04d.png"), "start_index": 1, "end_index": 3}
+        ],
+    )
+
+    assert [clip["type"] for clip in result["imported"]] == ["Video", "Video"]
+
+
 def test_an_imported_sequence_whose_frames_are_on_disk_is_not_offline(
     attach: Attach, tmp_path: Path
 ) -> None:
