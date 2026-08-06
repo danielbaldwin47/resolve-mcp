@@ -122,6 +122,62 @@ def test_every_way_the_queue_can_refuse_a_job_says_which(
     assert expected in raised.value.cause
 
 
+def test_a_build_that_refuses_the_pair_renders_through_the_fallback_preset(
+    tmp_path: Path,
+) -> None:
+    """Resolve 21.0.3 refuses every ("wav", …) pair, so the preset is the only way in (#32).
+
+    The settings are applied after the preset, so the caller's target directory survives it.
+    """
+    project = FakeProject("sunset-set")
+    project.accepts_format = False
+    project.render_presets["Audio Only"] = ("wav", "lpcm")
+
+    job_id = render.submit(
+        project,
+        {"TargetDir": str(tmp_path)},
+        ("wav", "lpcm"),
+        fallback_preset="Audio Only",
+    )
+
+    assert job_id
+    assert project.loaded_presets == ["Audio Only"]
+    assert project.render_settings["TargetDir"] == str(tmp_path)
+
+
+def test_the_fallback_preset_is_left_alone_when_the_pair_is_taken(tmp_path: Path) -> None:
+    """A preset carries a whole render config — loading one a build did not need would
+    overwrite settings the caller never asked to change."""
+    project = FakeProject("sunset-set")
+    project.render_presets["Audio Only"] = ("wav", "lpcm")
+
+    render.submit(
+        project,
+        {"TargetDir": str(tmp_path)},
+        ("wav", "lpcm"),
+        fallback_preset="Audio Only",
+    )
+
+    assert project.loaded_presets == []
+    assert project.render_format == ("wav", "lpcm")
+
+
+def test_a_refused_pair_with_no_preset_to_fall_back_on_says_both(tmp_path: Path) -> None:
+    project = FakeProject("sunset-set")
+    project.accepts_format = False
+
+    with pytest.raises(RenderQueueError) as raised:
+        render.submit(
+            project,
+            {"TargetDir": str(tmp_path)},
+            ("wav", "lpcm"),
+            fallback_preset="Audio Only",
+        )
+
+    assert "would not render" in raised.value.cause
+    assert raised.value.detail["preset"] == "Audio Only"
+
+
 def test_a_queue_that_will_not_start_takes_its_job_back_off(tmp_path: Path) -> None:
     project = FakeProject("sunset-set")
     project.starts_rendering = False

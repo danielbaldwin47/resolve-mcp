@@ -523,6 +523,9 @@ class FakeTimeline(AnswersNone):
         self.exports: list[tuple[str, Any, tuple[Any, ...]]] = []
         self.export_result = True
         self.export_writes_the_file = True
+        # Export type *values* that answer True and write a zero-byte file — Resolve 21.0.3
+        # does exactly this for EXPORT_FCPXML_1_10 (#26, live).
+        self.export_types_that_write_nothing: set[Any] = set()
         self.add_track_result = True
         self.set_track_name_result = True
         # A clear that answers True and leaves the clips standing is the failure a caller
@@ -662,12 +665,15 @@ class FakeTimeline(AnswersNone):
         """Write an interchange file. The subtype is variadic because Resolve's is optional.
 
         ``export_writes_the_file=False`` models the failure the return value hides: Resolve
-        answers True and nothing lands on disk.
+        answers True and nothing lands on disk. ``export_types_that_write_nothing`` models
+        the same failure for one export type only, which is the real shape of it.
         """
         self._check()
         self.exports.append((file_name, export_type, subtype))
         if not self.export_result:
             return False
+        if export_type in self.export_types_that_write_nothing:
+            return True
         if self.export_writes_the_file:
             target = Path(file_name)
             target.parent.mkdir(parents=True, exist_ok=True)

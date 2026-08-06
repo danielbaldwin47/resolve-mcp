@@ -114,6 +114,73 @@ def test_export_falls_back_to_the_newest_fcpxml_this_build_has(attach: Attach) -
     assert result["export_type"] == "EXPORT_FCPXML_1_8"
 
 
+def test_export_walks_past_a_type_this_build_defines_but_cannot_write(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Defined is not the same as writable — Resolve 21.0.3 proves the two come apart.
+
+    It defines EXPORT_FCPXML_1_10, answers True for it, and writes a zero-byte file (#26,
+    live). Picking on definedness alone hands back a failure for a format the build can
+    still write one version down.
+    """
+    cut = a_cut()
+    fake = studio(timeline=cut, export_types=("EXPORT_FCPXML_1_9", "EXPORT_FCPXML_1_10"))
+    cut.export_types_that_write_nothing = {fake.EXPORT_FCPXML_1_10}  # type: ignore[attr-defined]
+    attach(fake)
+
+    result = export_timeline(format="fcpxml", path=str(tmp_path / "cut"))
+
+    assert result["ok"] is True
+    assert result["export_type"] == "EXPORT_FCPXML_1_9"
+    assert result["bytes"] > 0
+    assert Path(result["path"]).stat().st_size == result["bytes"]
+
+
+def test_the_broken_export_type_never_touches_the_file_the_caller_asked_for(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The zero-byte write is not the whole damage: Resolve keeps the handle, so the path it
+    touched can never be exported to or deleted again. The probe therefore happens on a
+    throwaway file, and the target sees exactly one export — the one that works."""
+    cut = a_cut()
+    fake = studio(timeline=cut, export_types=("EXPORT_FCPXML_1_9", "EXPORT_FCPXML_1_10"))
+    cut.export_types_that_write_nothing = {fake.EXPORT_FCPXML_1_10}  # type: ignore[attr-defined]
+    attach(fake)
+    target = tmp_path / "cut.fcpxml"
+
+    export_timeline(format="fcpxml", path=str(target))
+
+    written_to_target = [
+        export_type for file_name, export_type, _ in cut.exports if Path(file_name) == target
+    ]
+    assert written_to_target == [fake.EXPORT_FCPXML_1_9]  # type: ignore[attr-defined]
+
+
+def test_export_reports_every_type_it_tried_when_none_of_them_writes(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """A build where the whole ladder is broken says so with the attempts, not a bare no."""
+    cut = a_cut()
+    fake = studio(timeline=cut, export_types=("EXPORT_FCPXML_1_9", "EXPORT_FCPXML_1_10"))
+    cut.export_types_that_write_nothing = {
+        fake.EXPORT_FCPXML_1_10,  # type: ignore[attr-defined]
+        fake.EXPORT_FCPXML_1_9,  # type: ignore[attr-defined]
+    }
+    attach(fake)
+    target = tmp_path / "cut.fcpxml"
+
+    result = export_timeline(format="fcpxml", path=str(target))
+
+    assert result["ok"] is False
+    assert result["error"]["code"] == "timeline_export_failed"
+    assert [attempt["export_type"] for attempt in result["error"]["detail"]["attempts"]] == [
+        "EXPORT_FCPXML_1_10",
+        "EXPORT_FCPXML_1_9",
+    ]
+    # A failed probe leaves nothing where the caller was going to look.
+    assert not target.exists()
+
+
 def test_export_uses_a_type_whose_value_is_zero(attach: Attach) -> None:
     """The constants are plain numbers, and the first of them is 0.
 

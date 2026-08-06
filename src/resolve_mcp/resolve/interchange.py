@@ -32,6 +32,9 @@ Four things are decisions rather than API calls:
 
 from __future__ import annotations
 
+import shutil
+import tempfile
+from contextlib import suppress
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -112,7 +115,7 @@ def export_timeline(
     timeline = find_timeline(project, name)
     timeline_name = name_of(timeline)
 
-    export_type, constant = _export_type(resolve, spec)
+    export_type, constant = _export_type(resolve, spec, timeline)
     target = write_target(
         path, timeline_name, spec.suffix, (config or get_config()).interchange_dir, "timeline"
     )
@@ -168,20 +171,86 @@ def _format(export_format: str) -> Format:
     return spec
 
 
-def _export_type(resolve: Any, spec: Format) -> tuple[Any, str]:
-    """The newest constant for this format that the attached Resolve actually defines."""
-    for constant in spec.export_types:
-        value = getattr(resolve, constant, None)
-        if value is not None:
-            return value, constant
-    raise TimelineExportFailedError(
-        cause=f"This Resolve build defines no export type for {spec.key}.",
-        fix=(
-            "Update Resolve, or export in another format — otio and drt are supported on "
-            "every build this server attaches to."
-        ),
-        detail={"format": spec.key, "tried": list(spec.export_types)},
-    )
+def _export_types(resolve: Any, spec: Format) -> list[tuple[Any, str]]:
+    """Every constant for this format the attached Resolve defines, newest first."""
+    defined = [
+        (getattr(resolve, constant, None), constant)
+        for constant in spec.export_types
+        if getattr(resolve, constant, None) is not None
+    ]
+    if not defined:
+        raise TimelineExportFailedError(
+            cause=f"This Resolve build defines no export type for {spec.key}.",
+            fix=(
+                "Update Resolve, or export in another format — otio and drt are supported on "
+                "every build this server attaches to."
+            ),
+            detail={"format": spec.key, "tried": list(spec.export_types)},
+        )
+    return defined
+
+
+def _export_type(resolve: Any, spec: Format, timeline: Any) -> tuple[Any, str]:
+    """The newest constant for this format that this build can actually write through.
+
+    Defining a constant is not the same as exporting through it. Resolve 21.0.3 defines
+    EXPORT_FCPXML_1_10, answers True for it, and writes a zero-byte file — and then keeps
+    the handle, so that path can never be exported to or deleted again (#26, live). A
+    ladder that picks on definedness alone therefore both fails and takes the caller's
+    target down with it.
+
+    So a format with more than one candidate is settled on a scratch file first, and only
+    the winner is ever pointed at the target. That costs one extra export, on fcpxml alone
+    — otio and drt have a single candidate each and go straight out. Nothing is cached
+    between calls: a memo keyed on the build would be one more thing to be wrong about
+    after a reconnect, and the probe is cheap next to the render it usually precedes.
+    """
+    candidates = _export_types(resolve, spec)
+    if len(candidates) == 1:
+        return candidates[0]
+
+    winner, attempts = _probe(timeline, spec, candidates)
+    if winner is None:
+        raise TimelineExportFailedError(
+            cause=f"No export type this Resolve defines for {spec.key} writes a file.",
+            fix=(
+                "Export in another format — otio and drt are written by every build this "
+                "server attaches to — or update Resolve."
+            ),
+            detail={"format": spec.key, "attempts": attempts},
+        )
+    return winner
+
+
+def _probe(
+    timeline: Any, spec: Format, candidates: list[tuple[Any, str]]
+) -> tuple[tuple[Any, str] | None, list[dict[str, Any]]]:
+    """Export to a throwaway file per candidate, newest first, and report the first that lands.
+
+    One file per candidate, never reused: a constant that fails leaves its path unusable.
+    The directory is left to the OS to clean — the files Resolve holds open cannot be
+    deleted from here, and they are a few KB of XML.
+    """
+    attempts: list[dict[str, Any]] = []
+    scratch = Path(tempfile.mkdtemp(prefix="resolve-mcp-export-probe-"))
+    for export_type, constant in candidates:
+        target = scratch / f"{constant}{spec.suffix}"
+        returned = bool(timeline.Export(str(target), export_type))
+        written = _written_bytes(target)
+        if returned and written:
+            log.info("This build writes %s through %s", spec.key, constant)
+            _discard(scratch)
+            return (export_type, constant), attempts
+        attempts.append({"export_type": constant, "returned": returned, "bytes": written})
+        log.warning("This build defines %s but writes nothing through it", constant)
+    _discard(scratch)
+    return None, attempts
+
+
+def _discard(scratch: Path) -> None:
+    """Best effort: Resolve keeps a handle on what it exported, and that is not an error."""
+    with suppress(OSError):
+        shutil.rmtree(scratch, ignore_errors=True)
 
 
 def _written_bytes(target: Path) -> int:

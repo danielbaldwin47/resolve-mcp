@@ -63,6 +63,8 @@ SCOPES = (TIMELINE_SCOPE, CLIP_SCOPE)
 
 RENDER_FORMAT = "wav"
 RENDER_CODEC = "lpcm"
+#: Stock Resolve preset, and the only route to a WAV on a build that refuses the pair above.
+AUDIO_ONLY_PRESET = "Audio Only"
 
 EXPORT_FLOOR = 0.1
 EXPORT_CEILING = 0.9
@@ -135,7 +137,12 @@ def export_timeline_mix(
             "AudioSampleRate": int(params["sample_rate"]),
         }
         try:
-            job_id = render.submit(project, settings, (RENDER_FORMAT, RENDER_CODEC))
+            job_id = render.submit(
+                project,
+                settings,
+                (RENDER_FORMAT, RENDER_CODEC),
+                fallback_preset=AUDIO_ONLY_PRESET,
+            )
             render.render(
                 project,
                 job_id,

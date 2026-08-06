@@ -95,6 +95,7 @@ def submit(
     project: Project,
     settings: dict[str, Any],
     format_and_codec: tuple[str, str] | None = None,
+    fallback_preset: str | None = None,
 ) -> str:
     """Push one job onto the queue and return its id.
 
@@ -102,13 +103,26 @@ def submit(
     immediately before the job is added so that the job captures them. The pair travels as
     one because Resolve takes it as one, and it is optional because a loaded preset has
     already set both — setting them again would overwrite the rest of what the preset chose.
+
+    ``fallback_preset`` is the way past a build that refuses the pair outright: Resolve
+    21.0.3 lists Wave among its render formats, returns an empty codec map for it, and
+    refuses every ("wav", …) pair, so audio can only be reached through the stock preset
+    that already selects it (#32, live). The settings are applied after the preset either
+    way, so the caller's target directory and name still win.
     """
     if format_and_codec is not None:
         format_, codec = format_and_codec
         if not project.SetCurrentRenderFormatAndCodec(format_, codec):
-            raise RenderQueueError(
-                cause=f"Resolve would not render {format_}/{codec}.",
-                detail={"format": format_, "codec": codec},
+            if fallback_preset is None or not project.LoadRenderPreset(fallback_preset):
+                raise RenderQueueError(
+                    cause=f"Resolve would not render {format_}/{codec}.",
+                    detail={"format": format_, "codec": codec, "preset": fallback_preset},
+                )
+            log.info(
+                "Resolve refused %s/%s — rendering through the %r preset instead",
+                format_,
+                codec,
+                fallback_preset,
             )
     if not project.SetRenderSettings(settings):
         raise RenderQueueError(
