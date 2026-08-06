@@ -145,7 +145,7 @@ Zero-config by default; every path has an environment override.
 | `RESOLVE_MCP_FFMPEG` | `ffmpeg` (found on PATH) | ffmpeg executable used for per-clip audio extraction, frame grabs and scene-cut detection |
 | `RESOLVE_MCP_AUDIO_SEPARATOR` | `audio-separator` (found on PATH) | python-audio-separator CLI used for stem separation |
 | `RESOLVE_MCP_STEM_MODEL` | `htdemucs_ft.yaml` | Pass one: the 4-stem model (vocals, drums, bass, other) |
-| `RESOLVE_MCP_DRUM_MODEL` | `MDX23C-DrumSep-6stem-FT.ckpt` | Pass two: the drum decomposition model (kick, snare, toms) |
+| `RESOLVE_MCP_DRUM_MODEL` | `MDX23C-DrumSep-aufr33-jarredou.ckpt` | Pass two: the drum decomposition model (kick, snare, toms) |
 | `RESOLVE_MCP_LOG_LEVEL` | `INFO` | Log level for the stderr logger |
 | `RESOLVE_MCP_ALLOW_ANY_PYTHON` | unset | Bypass the interpreter check (see ADR 0001) |
 
