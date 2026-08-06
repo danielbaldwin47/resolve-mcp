@@ -255,12 +255,21 @@ class FakeTimelineItem(AnswersNone):
     (``GetTakeCount`` is not an API method at all; the real one is ``GetTakesCount``, which
     is why that particular name was the one caught being ``None``.)
 
+    A name in :attr:`NOT_API_METHODS` is answered that way on *every* item, without a test
+    opting in — see the constant for why that set is not the same thing as ``missing``.
+
     The take selector is modelled with the same suspicion as the append: ``AddTake`` and
     ``SelectTakeByIndex`` both answer ``Bool``, so ``takes_land`` and ``select_take_lands``
     model the answer that lies — a truthy return over a selector that did not change.
     ``FinalizeTake`` is deliberately absent: it collapses a selector permanently, so a
     wrapper that called it should fail loudly here rather than quietly on a real cut.
     """
+
+    #: Names no Resolve build declares, as against ``missing``, which is a name some build
+    #: has and this one does not: nothing can opt out of these, because there is no build
+    #: to opt into. ``GetTakeCount`` is the singular a wrapper reaches for when it means
+    #: ``GetTakesCount`` (#68), and reading it looked exactly like reading zero takes.
+    NOT_API_METHODS = frozenset({"GetTakeCount"})
 
     def __init__(
         self,
@@ -304,7 +313,7 @@ class FakeTimelineItem(AnswersNone):
         self._refuses = set(refuses or ())
         self._end_is_inclusive = end_is_inclusive
         self.comps: list[FakeFusionComp] = list(comps or ())
-        self._missing = set(missing or ())
+        self._missing = set(missing or ()) | FakeTimelineItem.NOT_API_METHODS
         self._owner = owner
 
     SOURCE_GETTERS = ("GetSourceStartFrame", "GetSourceEndFrame")

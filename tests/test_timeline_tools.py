@@ -341,6 +341,27 @@ def test_a_shot_reports_the_media_pool_clip_it_came_from(attach: Attach) -> None
     assert reported["enabled"] is True
 
 
+def test_a_selector_is_counted_by_the_plural_name_the_api_really_declares(
+    attach: Attach,
+) -> None:
+    """``GetTakeCount`` is not an API method, and asking for it counts nothing.
+
+    The singular reads back as ``None`` (see ``FakeTimelineItem.NOT_API_METHODS``), which
+    ``Reader`` cannot tell from a getter that is not there — so it takes the default branch
+    and every clip reports zero takes, silently and forever (#68). Only the plural
+    ``GetTakesCount`` counts a selector, so this test fails against the singular rather
+    than degrading to a plausible zero.
+    """
+    item = FakeTimelineItem("C0012.mp4", 0, 10, takes=3)
+    # The premise: the fake answers the wrong name the way a live item does.
+    assert item.GetTakeCount is None
+    attach(studio(timeline=FakeTimeline("cut v1", video=[FakeTrack("Video 1", [item])])))
+
+    result = inspect_timeline(detail="clips")
+
+    assert result["tracks"][0]["items"][0]["takes"] == 3
+
+
 def test_the_out_point_is_one_past_the_last_frame_whatever_get_end_says(attach: Attach) -> None:
     """Half-open [in, out) is the cut file's convention; GetEnd is not trusted to agree."""
     item = FakeTimelineItem("C0012.mp4", 100, 60, end_is_inclusive=True)
