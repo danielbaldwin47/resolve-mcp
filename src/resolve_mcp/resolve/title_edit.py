@@ -75,7 +75,7 @@ class Placed:
 
     @property
     def where(self) -> str:
-        return f"the title at position {self.position} on the {TRACK_NAME} track"
+        return where_of(self.position)
 
     def as_dict(self, fps: float | None, params: fusion.Params | None) -> dict[str, Any]:
         return {
@@ -188,10 +188,19 @@ def _standing(timeline: Timeline, track: apply.OwnedTrack) -> list[Placed]:
     return [_read_one(item, position) for position, item in enumerate(ordered, start=1)]
 
 
+def where_of(position: int) -> str:
+    """How a title is named in every message about it: by where it is, not by what it says.
+
+    Its words are the thing being changed, so they cannot also be the thing that identifies
+    it in the report of the change.
+    """
+    return f"the title at position {position} on the {TRACK_NAME} track"
+
+
 def _read_one(item: Item, position: int) -> Placed:
     record_in = timeline_read.read_frames(item.GetStart())
     duration = timeline_read.read_frames(item.GetDuration())
-    where = f"the title at position {position} on the {TRACK_NAME} track"
+    where = where_of(position)
     try:
         node = fusion.title_node(item, where)
     except TitleTemplateError as exc:
@@ -349,7 +358,7 @@ def _refuse_strays(
     ``apply._write_titles`` gives: a Fusion handle can go on answering for a comp the
     timeline has since replaced, so a read through it proves only that the handle remembers.
     """
-    fresh = fusion.title_node(chosen.item, chosen.where)
+    fresh = _walk_back(chosen, track)
     strayed: list[dict[str, Any]] = []
     if text is not None:
         read = fusion.read_text(fresh)
@@ -365,11 +374,37 @@ def _refuse_strays(
         cause=f"{len(strayed)} input(s) of the title at position {chosen.position} did not "
         f"read back as written: {strayed[0]['input']} was given {strayed[0]['wrote']!r} and "
         f"reads {strayed[0]['reads']!r}.",
-        fix="An input that reads back as nothing is one this template has not got — check "
-        "the id against list_titles. An input that keeps its old value is a refused write: "
-        "unlock the Titles track in the timeline header and edit again.",
-        detail=track.detail(position=chosen.position, strayed=strayed),
+        fix="An input that reads back as nothing is one this template has not got — pick an "
+        "id from detail.editable, which is every input this node will take. An input that "
+        "keeps its old value is a refused write: unlock the Titles track and edit again.",
+        # The full id list, not the summary list_titles reports: an id that summary passed
+        # over is exactly the id someone is most likely to have got wrong.
+        detail=track.detail(
+            position=chosen.position,
+            strayed=strayed,
+            editable=fusion.editable_ids(fresh),
+        ),
     )
+
+
+def _walk_back(placed: Placed, track: apply.OwnedTrack) -> fusion.TitleNode:
+    """Reach a placed title's node again, turning a comp that has gone unreadable into a
+    failure about *this edit* rather than a bare template error.
+
+    It matters most for the neighbours: a comp that will not answer after the write is the
+    shared-comp damage the caller has to hear about, and ``TitleTemplateError`` on its own
+    would name a template without naming the edit that disturbed it.
+    """
+    try:
+        return fusion.title_node(placed.item, placed.where)
+    except TitleTemplateError as exc:
+        raise TitleEditFailedError(
+            cause=f"After the write, {placed.where} of {track.timeline!r} would not answer "
+            f"for its Text+ node: {exc.cause}",
+            fix="Re-run apply_titles to rebuild the track from the file, then check the "
+            "template carries one Text+ node per placed instance.",
+            detail=track.detail(position=placed.position),
+        ) from exc
 
 
 def _refuse_shared_comp(
@@ -378,19 +413,34 @@ def _refuse_shared_comp(
     before: dict[int, dict[str, Any]],
     track: apply.OwnedTrack,
 ) -> int:
-    """Re-read the neighbours and refuse if the edit reached any of them.
+    """Re-read the neighbours, and put back anything the edit reached before refusing.
 
     This is the one check an apply cannot make cheaply and an edit gets for free, and it
     is the whole of "neighbouring titles unaffected": instances of a template that share
     one Fusion comp all answer for the same inputs, so a title fixed here would silently
-    re-word the one before it. Returns how many neighbours were re-read and confirmed.
+    re-word the one before it.
+
+    Two limits on it, stated because the report must not read wider than the check is.
+    Only the inputs this call *wrote* are compared, plus the text — reading all 194 of a
+    Text+'s external inputs on every neighbour would cost more bridge calls than the edit
+    itself, and a shared comp shows up in the written ones first. And only neighbours whose
+    node could be read take part; a clip on the track that is not a title has nothing to
+    compare, which is why the returned count is of neighbours *verified* rather than of
+    clips present.
+
+    The restore is what makes this an unwound edit rather than a reported one. On a shared
+    comp, writing a neighbour's old values back also puts the target's own text back —
+    same comp, same inputs — so the track ends where it started, which is a better place
+    to hand back than half-edited. It is best-effort and its outcome is reported either
+    way: this always raises, because an edit that could not be confined is not an edit
+    anyone should be told succeeded.
     """
     moved = []
     for placed in standing:
         if placed.position == chosen.position or placed.position not in before:
             continue
         was = before[placed.position]
-        now = _values_of(fusion.title_node(placed.item, placed.where), was)
+        now = _values_of(_walk_back(placed, track), was)
         for key, old in was.items():
             if not fusion.same_value(old, now.get(key)):
                 moved.append(
@@ -400,14 +450,57 @@ def _refuse_shared_comp(
         raise TitleEditFailedError(
             cause=f"Editing the title at position {chosen.position} changed "
             f"{len({entry['position'] for entry in moved})} other title(s) on "
-            f"{track.name!r} of {track.timeline!r}.",
+            f"{track.name!r} of {track.timeline!r}, so the edit was put back.",
             fix="The placed instances share one Fusion comp, so this template cannot carry "
             "per-instance titles and no in-place edit of it is safe. Author a fresh Text+ "
-            "template in the GUI, export its bin again, and re-run apply_titles to restore "
-            "the wording this edit disturbed.",
-            detail=track.detail(position=chosen.position, changed=moved),
+            "template in the GUI and export its bin again. detail.restored says whether the "
+            "old wording went back; run apply_titles if it did not.",
+            detail=track.detail(
+                position=chosen.position,
+                changed=moved,
+                restored=_put_back(standing, before, moved),
+            ),
         )
-    return len(before) - (1 if chosen.position in before else 0)
+    # Every entry in `before` is a readable node, and _pick guarantees the target is one
+    # of them, so the neighbours verified are simply the rest.
+    return len(before) - 1
+
+
+def _put_back(
+    standing: list[Placed],
+    before: dict[int, dict[str, Any]],
+    moved: list[dict[str, Any]],
+) -> bool:
+    """Write the disturbed neighbours' old values back. Never raises; says if it worked.
+
+    Called only on the way into a failure, so a Resolve that has stopped answering must
+    not turn the diagnosis into a different exception — the caller is owed the finding
+    about the shared comp far more than it is owed this.
+    """
+    by_position = {placed.position: placed for placed in standing}
+    disturbed = []
+    for position in sorted({int(entry["position"]) for entry in moved}):
+        placed = by_position.get(position)
+        if placed is None or placed.node is None:
+            return False
+        disturbed.append((placed.node, before[position]))
+
+    try:
+        for node, was in disturbed:
+            for key, old in was.items():
+                if key == fusion.STYLED_TEXT:
+                    fusion.set_text(node, "" if old is None else str(old))
+                else:
+                    fusion.set_input(node, key, old)
+        # Read back, for the same reason every other write here is read back.
+        for node, was in disturbed:
+            now = _values_of(node, was)
+            if any(not fusion.same_value(old, now.get(key)) for key, old in was.items()):
+                return False
+    except Exception:
+        log.warning("Could not put back the title(s) the edit disturbed", exc_info=True)
+        return False
+    return True
 
 
 __all__ = ["Placed", "edit_title", "list_titles"]

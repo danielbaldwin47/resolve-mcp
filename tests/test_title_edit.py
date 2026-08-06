@@ -498,10 +498,8 @@ def test_a_write_that_is_taken_and_dropped_is_reported_rather_than_believed(
 
 
 def test_an_input_id_this_template_has_not_got_is_reported(attach: Attach) -> None:
-    a_session(
-        attach,
-        a_timeline([a_title("Sunset Boulevard", FIRST, refuses={"StyleSize"})]),
-    )
+    """A Text+ carries a fixed set of inputs, so a wrong id is dropped and reads as None."""
+    a_session(attach, a_timeline([a_title("Sunset Boulevard", FIRST)]))
 
     failure = error(edit_title(title="Sunset Boulevard", params={"StyleSize": 0.08}))
 
@@ -537,6 +535,74 @@ def test_instances_sharing_one_fusion_comp_are_refused_by_reading_the_neighbour(
             "reads": "Sunset Boulevard",
         }
     ]
+
+
+def test_an_edit_a_shared_comp_spread_is_put_back_before_the_refusal(attach: Attach) -> None:
+    """The neighbour is the one that was damaged, so the neighbour is what gets restored —
+    and on a shared comp that puts the target back too, leaving the track as it was."""
+    shared = FakeFusionComp([FakeFusionTool(inputs={"StyledText": "Sunset Boulevar"})])
+    timeline = a_session(
+        attach,
+        a_timeline(
+            [
+                a_title("Sunset Boulevar", FIRST, comp=shared),
+                a_title("Sunset Boulevar", SECOND, comp=shared),
+            ]
+        ),
+    )
+
+    failure = error(edit_title(at=FIRST, text="Sunset Boulevard"))
+
+    assert failure["detail"]["restored"] is True
+    assert [text_of(item) for item in items_on(timeline)] == [
+        "Sunset Boulevar",
+        "Sunset Boulevar",
+    ]
+
+
+def test_a_restore_that_will_not_take_is_reported_rather_than_claimed(attach: Attach) -> None:
+    shared = FakeFusionComp(
+        [FakeFusionTool(inputs={"StyledText": "Sunset Boulevar"}, refuses={"StyledText"})]
+    )
+    a_session(
+        attach,
+        a_timeline(
+            [
+                a_title("Sunset Boulevar", FIRST, comp=shared),
+                a_title("Sunset Boulevar", SECOND, comp=shared),
+            ]
+        ),
+    )
+
+    # The write is dropped, so _refuse_strays catches it first — the target never strays
+    # into the neighbour at all, and the caller is told about the input, not the comp.
+    failure = error(edit_title(at=FIRST, text="Sunset Boulevard"))
+
+    assert failure["code"] == "title_edit_failed"
+    assert failure["detail"]["strayed"][0]["input"] == "StyledText"
+
+
+def test_a_refused_write_names_every_input_the_node_would_have_taken(attach: Attach) -> None:
+    a_session(
+        attach,
+        a_timeline(
+            [
+                a_title(
+                    "Sunset Boulevard",
+                    FIRST,
+                    inputs={"Size": 0.09, "Red1": 1.0, "Nest": 0.0},
+                    defaults={"Size": 0.08, "Red1": 1.0},
+                    internal={"Nest"},
+                )
+            ]
+        ),
+    )
+
+    failure = error(edit_title(title="Sunset Boulevard", params={"Siez": 0.1}))
+
+    # Red1 is not in the params listing (it sits at its default) but is still writable, so
+    # the id the caller should have used is here even though the summary passed it over.
+    assert failure["detail"]["editable"] == ["Red1", "Size", "StyledText"]
 
 
 def test_a_clip_on_the_track_that_is_not_a_title_cannot_be_edited(attach: Attach) -> None:

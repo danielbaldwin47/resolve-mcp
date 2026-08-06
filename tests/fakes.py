@@ -224,8 +224,15 @@ class FakeFusionTool(AnswersNone):
         return attrs if key is None else attrs.get(key)
 
     def SetInput(self, key: str, value: Any) -> None:  # noqa: N802
+        """A write lands only on an input this node actually has.
+
+        A Fusion node's inputs are fixed by its type: ``SetInput`` with an id the node
+        does not carry is ignored, and ``GetInput`` then answers ``None``. Nothing in the
+        return value says so — it is ``None`` either way — so a fake that grew a new input
+        on demand would let a typo'd id read back as a clean write and pass.
+        """
         self._check()
-        if key in self.refuses:
+        if key in self.refuses or key not in self.inputs:
             return  # taken and dropped: the API reports nothing either way
         self.inputs[key] = value
 

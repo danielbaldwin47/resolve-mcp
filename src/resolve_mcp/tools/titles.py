@@ -69,11 +69,16 @@ def list_titles(timeline: str | None = None) -> dict[str, Any]:
 
     The counterpart to apply_titles: that one writes the track from a file, this one reads
     the track as it now is. Each title reports its position along the track, where it sits,
-    the words it says and the Fusion inputs its template exposes — `params.values` is the
-    list of input ids edit_title will accept, read off the placed instance itself, since a
-    media-pool template has no comp to ask.
+    the words it says, and the Fusion inputs its template *sets* — read off the placed
+    instance itself, since a media-pool template has no comp to ask.
 
-    Run it before edit_title to copy the exact wording and to see what is editable. A
+    `params.values` is a summary, not the limit of what is editable: a stock Text+ carries
+    194 settable inputs and nearly all sit at their stock value, so what is reported is the
+    handful the template moved — its font, size and justification — which is what tells one
+    template from another. `params.detail` gives both counts. edit_title takes any id the
+    node has, and names them all if you get one wrong.
+
+    Run it before edit_title to copy the exact wording and to see what the template sets. A
     build that will not enumerate its inputs says so in `params.detail` and reports none;
     the inputs can still be written by id. Anything on the track that is not a Text+ title
     is listed too, with `unreadable` saying why — a stray clip on the Titles track is
@@ -94,15 +99,17 @@ def edit_title(
 
     For the typo you spot in the review, this is one call and it costs nothing else: no
     rebuild, no re-apply, no clear. The title keeps its Fusion comp, its fade and its
-    position, and every other title on the track is read before and after the write and
-    reported unchanged — `other_titles_unchanged` is that count.
+    position. Every other readable title on the track has its text and the inputs this
+    call writes read before and after, and `other_titles_unchanged` is how many were
+    confirmed — if one moved, the instances share a Fusion comp, the edit is put back and
+    the call fails rather than reporting a success that re-worded someone else's title.
 
     Name the title by `title`, the exact words it says now (list_titles reports them), or
     by `at`, its record frame — or both when two titles read the same. Nothing matching,
     or more than one, is refused with everything on the track listed rather than guessed
     at. `text` sets the words; `params` sets exposed inputs by Fusion id,
-    e.g. {"Size": 0.08}. Every write is read back off the clip, and an input that does not
-    read back as written is an error, not a silent no-op.
+    e.g. {"Size": 0.08}. Any id the node has works, not just the ones list_titles shows —
+    a write that does not read back fails and names every id it would have taken.
 
     This edits the timeline, not titles.json — so the next apply_titles puts the old
     wording back. Fix the file too when the change is one you want to keep.

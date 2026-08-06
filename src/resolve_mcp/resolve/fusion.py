@@ -212,7 +212,7 @@ def read_input(node: TitleNode, key: str) -> Any:
     return node.tool.GetInput(key)
 
 
-def read_params(node: TitleNode, limit: int = PARAM_LIMIT) -> Params:
+def read_params(node: TitleNode) -> Params:
     """The inputs this template *sets*, by id, so the agent can see what makes it itself.
 
     Enumerating everything is not the answer, and the live listing is why: a plain Text+
@@ -225,7 +225,9 @@ def read_params(node: TitleNode, limit: int = PARAM_LIMIT) -> Params:
 
     That is a listing rule, never a permission: ``edit_title`` will write *any* id, listed
     or not, and proves the write by reading it back. ``detail`` says how many were passed
-    over so the reader knows the listing is a summary.
+    over so the reader knows the listing is a summary, and :func:`editable_ids` gives the
+    full set — which is what a refused write reports, so an id that this rule passed over
+    is always reachable at the moment someone needs it.
 
     Never raises: a build that does not enumerate its inputs still takes every write by id,
     so an unusable listing is reported and the edit route stays open. Only scalars are kept
@@ -257,7 +259,7 @@ def read_params(node: TitleNode, limit: int = PARAM_LIMIT) -> Params:
         if _is_set(value, attrs):
             values[str(found)] = value
 
-    shown = dict(sorted(values.items())[:limit])
+    shown = dict(sorted(values.items())[:PARAM_LIMIT])
     detail = (
         f"{len(values)} input(s) this template sets, of {editable} editable "
         f"of {len(listed)} listed"
@@ -265,6 +267,34 @@ def read_params(node: TitleNode, limit: int = PARAM_LIMIT) -> Params:
     if len(shown) < len(values):
         detail += f"; showing the first {len(shown)} by id"
     return Params(shown, True, detail)
+
+
+def editable_ids(node: TitleNode) -> list[str]:
+    """Every input id this node will take a write on, in full and unfiltered.
+
+    :func:`read_params` reports what the template *sets*, which is the useful summary and
+    is deliberately a fraction of what exists. This is the other half of that bargain: an
+    id the summary passed over is still writable, so a write refused for an unknown id
+    reports this list and the caller can see what they should have asked for. Kept off the
+    happy path on purpose — nearly two hundred ids on a stock Text+ is a diagnosis, not a
+    listing.
+    """
+    lister = _callable(node.tool, "GetInputList")
+    if lister is None:
+        return []
+    try:
+        listed = dict(lister() or {})
+    except (TypeError, ValueError):
+        return []
+    found = set()
+    for entry in listed.values():
+        attrs = _attrs_of(entry)
+        if attrs is None or not attrs.get(EXTERNAL):
+            continue
+        key = attrs.get(INPUT_ID)
+        if key is not None:
+            found.add(str(key))
+    return sorted(found)
 
 
 def _attrs_of(entry: Any) -> dict[str, Any] | None:
@@ -432,6 +462,7 @@ __all__ = [
     "Fade",
     "Params",
     "TitleNode",
+    "editable_ids",
     "read_input",
     "read_params",
     "read_text",
