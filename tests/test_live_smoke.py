@@ -324,12 +324,32 @@ def test_the_interchange_formats_all_write_a_file(tmp_path: Path) -> None:
 # --- build_timeline: the footgun wraps, on the only API that can confirm them --------------
 
 
+def _decodable(clips: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Pool entries with media behind them that ffmpeg can open.
+
+    A timeline is a pool clip too — it reports a frame count and a rate and is never
+    offline — and every build test here leaves one behind, so on a project the suite has
+    run once the shortest "clip" in the pool is a timeline with no file on disk (#34,
+    live).
+    """
+    return [
+        one
+        for one in clips
+        if one["fps"] and one["frames"] and not one["offline"] and one["type"] != "Timeline"
+    ]
+
+
 def a_source_clip() -> dict[str, Any]:
-    """A pool clip long enough to cut three shots out of, with a rate the cut can declare."""
+    """A pool clip long enough to cut three shots out of, with a rate the cut can declare.
+
+    Timelines are excluded for the same reason the video tests exclude them: every build
+    here leaves one in the pool, and a timeline reports a frame count and a rate while
+    having no media behind it to cut from (#34, live).
+    """
     listing = list_media()
     if not listing["ok"]:
         pytest.skip("No media pool")
-    for entry in listing["clips"]:
+    for entry in _decodable(listing["clips"]):
         clip = inspect_clip(entry["name"], bin=entry["bin"] or None)
         if not clip["ok"]:
             continue
@@ -649,20 +669,6 @@ def test_faster_whisper_reports_words_in_the_shape_the_worker_reads(tmp_path: Pa
         assert word.text
         assert 0.0 <= word.start <= word.end
         assert 0.0 <= word.confidence <= 1.0
-
-
-def _decodable(clips: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Pool entries ffmpeg can actually open.
-
-    A timeline is a pool clip too — it reports a frame count and a rate and is never
-    offline, and every build here leaves one behind, so the shortest "clip" in the pool is
-    usually a timeline with no file on disk (#34, live).
-    """
-    return [
-        one
-        for one in clips
-        if one["fps"] and one["frames"] and not one["offline"] and one.get("type") != "Timeline"
-    ]
 
 
 def test_a_real_frame_grab_lands_on_the_moment_resolve_numbers_it_at() -> None:

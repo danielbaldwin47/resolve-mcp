@@ -23,7 +23,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from ..errors import RenderPresetNotFoundError, RenderQueueError
+from ..errors import RenderPresetNotFoundError, RenderQueueError, ResolveMcpError
 from ..logging_config import get_logger
 
 log = get_logger("render")
@@ -109,15 +109,35 @@ def submit(
     refuses every ("wav", …) pair, so audio can only be reached through the stock preset
     that already selects it (#32, live). The settings are applied after the preset either
     way, so the caller's target directory and name still win.
+
+    What the fallback deliberately does *not* do is confirm the preset selected the format
+    that was asked for. On the build this exists for, ``GetCurrentRenderFormatAndCodec``
+    answers ``{"format": "unknown"}`` after ``Audio Only`` loads and still renders a WAV —
+    so a check against the requested format would reject the one route that works. The
+    file the job writes is what settles it, and ``render`` already refuses a job that
+    produced nothing.
     """
     if format_and_codec is not None:
         format_, codec = format_and_codec
         if not project.SetCurrentRenderFormatAndCodec(format_, codec):
-            if fallback_preset is None or not project.LoadRenderPreset(fallback_preset):
+            if fallback_preset is None:
                 raise RenderQueueError(
                     cause=f"Resolve would not render {format_}/{codec}.",
-                    detail={"format": format_, "codec": codec, "preset": fallback_preset},
+                    detail={"format": format_, "codec": codec, "preset": None},
                 )
+            # load_preset, not LoadRenderPreset: a bare False means both "no such preset"
+            # and "will not load", and the two want different answers from the caller.
+            try:
+                load_preset(project, fallback_preset)
+            except ResolveMcpError as exc:
+                raise RenderQueueError(
+                    cause=(
+                        f"Resolve would not render {format_}/{codec}, and the "
+                        f"{fallback_preset!r} preset it falls back on is unusable: {exc.cause}"
+                    ),
+                    fix=exc.fix,
+                    detail={"format": format_, "codec": codec, "preset": fallback_preset},
+                ) from exc
             log.info(
                 "Resolve refused %s/%s — rendering through the %r preset instead",
                 format_,

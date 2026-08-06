@@ -4,15 +4,21 @@ This is the structural escape hatch. The scripting API cannot cut a transition, 
 route around that wall is: export the cut, hand-edit a dissolve into the document, import
 it back. Everything here exists to make that round trip safe to take.
 
-Four things are decisions rather than API calls:
+Five things are decisions rather than API calls:
 
 * **A format name is not an export constant.** ``Timeline.Export`` takes a number that
   lives on the Resolve app object, and which numbers exist depends on the build — FCPXML
   has gained a constant per version of the format. So a format maps to an ordered list of
-  constant names and the newest one this build has wins; a build with none of them fails
-  naming what it looked for, not with an ``AttributeError`` from inside a wrapper. The lookup
-  tests against ``None`` and never against truthiness, because the first constant Resolve
-  defines has the value 0.
+  constant names, newest first; a build with none of them fails naming what it looked for,
+  not with an ``AttributeError`` from inside a wrapper. The lookup tests against ``None``
+  and never against truthiness, because the first constant Resolve defines has the value 0.
+* **Defined is not the same as writable, so the newest one that *works* wins.** Resolve
+  21.0.3 defines ``EXPORT_FCPXML_1_10``, answers True for it, writes a zero-byte file, and
+  then holds that file open — so the path it touched can never be exported to or deleted
+  again (#26, live). Picking on definedness alone therefore fails *and* destroys the
+  caller's target. A format with more than one candidate is settled on a scratch file
+  first and only the winner is aimed at the target; the answer is remembered for the life
+  of the attach, because a probe that walks past a broken constant strands a file.
 * **The export is confirmed on disk, not by the return value.** ``Export`` answers a bool,
   and a path in a successful reply that has nothing behind it is worse than a failure: the
   agent's next move is to open that file.
@@ -34,7 +40,6 @@ from __future__ import annotations
 
 import shutil
 import tempfile
-from contextlib import suppress
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -115,7 +120,7 @@ def export_timeline(
     timeline = find_timeline(project, name)
     timeline_name = name_of(timeline)
 
-    export_type, constant = _export_type(resolve, spec, timeline)
+    export_type, constant = _export_type(resolve, spec, timeline, connection.build_notes)
     target = write_target(
         path, timeline_name, spec.suffix, (config or get_config()).interchange_dir, "timeline"
     )
@@ -124,16 +129,13 @@ def export_timeline(
     except OSError as exc:
         raise TimelineExportFailedError(cause=f"Could not create {target.parent}: {exc}") from exc
 
-    # Two arguments, not three: the subtype is Resolve's own optional argument and none of
-    # these three formats has one. Passing a subtype constant borrowed from AAF or EDL
-    # would be a guess at what the export means.
-    if not timeline.Export(str(target), export_type):
+    returned, written = _export_once(timeline, target, export_type)
+    if not returned:
         raise TimelineExportFailedError(
             cause=f"Resolve refused to export {timeline_name!r} as {spec.key} to {target}.",
             detail={"timeline": timeline_name, "format": spec.key, "export_type": constant},
         )
 
-    written = _written_bytes(target)
     if not written:
         raise TimelineExportFailedError(
             cause=(
@@ -171,13 +173,10 @@ def _format(export_format: str) -> Format:
     return spec
 
 
-def _export_types(resolve: Any, spec: Format) -> list[tuple[Any, str]]:
+def _defined_types(resolve: Any, spec: Format) -> list[tuple[Any, str]]:
     """Every constant for this format the attached Resolve defines, newest first."""
-    defined = [
-        (getattr(resolve, constant, None), constant)
-        for constant in spec.export_types
-        if getattr(resolve, constant, None) is not None
-    ]
+    values = ((getattr(resolve, constant, None), constant) for constant in spec.export_types)
+    defined = [(value, constant) for value, constant in values if value is not None]
     if not defined:
         raise TimelineExportFailedError(
             cause=f"This Resolve build defines no export type for {spec.key}.",
@@ -190,7 +189,9 @@ def _export_types(resolve: Any, spec: Format) -> list[tuple[Any, str]]:
     return defined
 
 
-def _export_type(resolve: Any, spec: Format, timeline: Any) -> tuple[Any, str]:
+def _export_type(
+    resolve: Any, spec: Format, timeline: Any, notes: dict[str, Any]
+) -> tuple[Any, str]:
     """The newest constant for this format that this build can actually write through.
 
     Defining a constant is not the same as exporting through it. Resolve 21.0.3 defines
@@ -200,14 +201,27 @@ def _export_type(resolve: Any, spec: Format, timeline: Any) -> tuple[Any, str]:
     target down with it.
 
     So a format with more than one candidate is settled on a scratch file first, and only
-    the winner is ever pointed at the target. That costs one extra export, on fcpxml alone
-    — otio and drt have a single candidate each and go straight out. Nothing is cached
-    between calls: a memo keyed on the build would be one more thing to be wrong about
-    after a reconnect, and the probe is cheap next to the render it usually precedes.
+    the winner is ever pointed at the target. Two consequences worth stating:
+
+    * **A single-candidate format is not probed.** otio and drt each define one constant,
+      and a probe could only confirm what there is no alternative to. They go straight at
+      the target, and a build that cannot write them fails on the post-export byte check
+      as before.
+    * **The answer is remembered for the attach, not the call.** A probe that has to walk
+      past a broken constant strands a file Resolve will not release, so probing per export
+      would leak one directory per export. ``notes`` is emptied whenever a handle is
+      attached, so a reconnect re-probes rather than trusting the last build's answer.
     """
-    candidates = _export_types(resolve, spec)
+    candidates = _defined_types(resolve, spec)
     if len(candidates) == 1:
         return candidates[0]
+
+    note = f"export_type:{spec.key}"
+    remembered = notes.get(note)
+    if remembered is not None:
+        value = getattr(resolve, remembered, None)
+        if value is not None:
+            return value, str(remembered)
 
     winner, attempts = _probe(timeline, spec, candidates)
     if winner is None:
@@ -219,6 +233,7 @@ def _export_type(resolve: Any, spec: Format, timeline: Any) -> tuple[Any, str]:
             ),
             detail={"format": spec.key, "attempts": attempts},
         )
+    notes[note] = winner[1]
     return winner
 
 
@@ -228,15 +243,16 @@ def _probe(
     """Export to a throwaway file per candidate, newest first, and report the first that lands.
 
     One file per candidate, never reused: a constant that fails leaves its path unusable.
-    The directory is left to the OS to clean — the files Resolve holds open cannot be
-    deleted from here, and they are a few KB of XML.
+    Removing the directory afterwards is best effort and *expected to fail whenever a
+    candidate was walked past* — Resolve holds the zero-byte file it wrote open for the
+    life of the process, so that scratch directory outlives the server. It is a few KB of
+    XML, and the caller remembers the answer so this happens once per attach.
     """
     attempts: list[dict[str, Any]] = []
     scratch = Path(tempfile.mkdtemp(prefix="resolve-mcp-export-probe-"))
     for export_type, constant in candidates:
-        target = scratch / f"{constant}{spec.suffix}"
-        returned = bool(timeline.Export(str(target), export_type))
-        written = _written_bytes(target)
+        scratch_target = scratch / f"{constant}{spec.suffix}"
+        returned, written = _export_once(timeline, scratch_target, export_type)
         if returned and written:
             log.info("This build writes %s through %s", spec.key, constant)
             _discard(scratch)
@@ -247,10 +263,22 @@ def _probe(
     return None, attempts
 
 
+def _export_once(timeline: Any, target: Path, export_type: Any) -> tuple[bool, int]:
+    """One ``Export`` call: what Resolve said, and what actually landed on disk.
+
+    The two are separate answers because Resolve gives a True that means nothing — the
+    whole reason this module never trusts the return value alone.
+    """
+    # Two arguments, not three: the subtype is Resolve's own optional argument and none of
+    # these three formats has one. Passing a subtype constant borrowed from AAF or EDL
+    # would be a guess at what the export means.
+    returned = bool(timeline.Export(str(target), export_type))
+    return returned, _written_bytes(target)
+
+
 def _discard(scratch: Path) -> None:
     """Best effort: Resolve keeps a handle on what it exported, and that is not an error."""
-    with suppress(OSError):
-        shutil.rmtree(scratch, ignore_errors=True)
+    shutil.rmtree(scratch, ignore_errors=True)
 
 
 def _written_bytes(target: Path) -> int:

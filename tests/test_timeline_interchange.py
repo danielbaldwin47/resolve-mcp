@@ -156,6 +156,47 @@ def test_the_broken_export_type_never_touches_the_file_the_caller_asked_for(
     assert written_to_target == [fake.EXPORT_FCPXML_1_9]  # type: ignore[attr-defined]
 
 
+def test_the_probe_happens_once_per_attach_and_not_once_per_export(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """A probe that walks past a broken constant strands a file Resolve will not release,
+    so probing per export would leak one directory per export."""
+    cut = a_cut()
+    fake = studio(timeline=cut, export_types=("EXPORT_FCPXML_1_9", "EXPORT_FCPXML_1_10"))
+    cut.export_types_that_write_nothing = {fake.EXPORT_FCPXML_1_10}  # type: ignore[attr-defined]
+    attach(fake)
+
+    for index in range(3):
+        assert export_timeline(format="fcpxml", path=str(tmp_path / f"cut{index}"))["ok"] is True
+
+    walked_past = [
+        export_type
+        for _, export_type, _ in cut.exports
+        if export_type == fake.EXPORT_FCPXML_1_10  # type: ignore[attr-defined]
+    ]
+    assert len(walked_past) == 1, "the broken constant was tried again after it was settled"
+
+
+def test_a_reconnect_re_probes_rather_than_trusting_the_last_builds_answer(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The next handle may be a different Resolve, and what one build writes says nothing
+    about what the next one does."""
+    first = a_cut()
+    second = a_cut()
+    one = studio(timeline=first, export_types=("EXPORT_FCPXML_1_9", "EXPORT_FCPXML_1_10"))
+    two = studio(timeline=second, export_types=("EXPORT_FCPXML_1_9", "EXPORT_FCPXML_1_10"))
+    first.export_types_that_write_nothing = {one.EXPORT_FCPXML_1_10}  # type: ignore[attr-defined]
+    attach(one, two)
+
+    assert export_timeline(format="fcpxml", path=str(tmp_path / "one"))["ok"] is True
+    one.drop()  # Resolve quits; the next call reconnects to a build that writes 1_10
+    result = export_timeline(format="fcpxml", path=str(tmp_path / "two"))
+
+    assert result["ok"] is True
+    assert result["export_type"] == "EXPORT_FCPXML_1_10"
+
+
 def test_export_reports_every_type_it_tried_when_none_of_them_writes(
     attach: Attach, tmp_path: Path
 ) -> None:

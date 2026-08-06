@@ -36,6 +36,19 @@ class ResolveConnection:
         # stale handle is left to observe.
         self._ever_attached = False
         self._lock = threading.RLock()
+        self._build_notes: dict[str, Any] = {}
+
+    @property
+    def build_notes(self) -> dict[str, Any]:
+        """Facts about the attached build that cost a real call to learn.
+
+        Emptied whenever a handle is attached, so nothing learned about one Resolve is
+        believed about the next. What goes here is what cannot change while the same
+        Resolve is attached and is expensive to ask twice — the interchange layer keeps
+        the export type this build actually writes through, which costs a whole export
+        to discover (#26).
+        """
+        return self._build_notes
 
     @property
     def connected(self) -> bool:
@@ -70,6 +83,9 @@ class ResolveConnection:
             handle, failure = self._connect_once()
             if handle is not None and self._probe(handle):
                 self._handle = handle
+                # A new handle may be a different Resolve; nothing learned about the last
+                # one survives into it.
+                self._build_notes.clear()
                 log.info("Resolve %s", "reconnected" if self._ever_attached else "attached")
                 self._ever_attached = True
                 return handle
