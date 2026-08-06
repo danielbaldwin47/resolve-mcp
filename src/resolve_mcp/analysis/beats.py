@@ -115,13 +115,19 @@ def _downbeat_flags(grid: BeatGrid) -> tuple[bool, ...]:
     """Match each downbeat to the nearest beat rather than trusting float equality."""
     flags = [False] * len(grid.beats)
     for downbeat in grid.downbeats:
-        nearest = _nearest(grid.beats, downbeat)
-        if nearest is not None and abs(grid.beats[nearest] - downbeat) <= DOWNBEAT_TOLERANCE:
-            flags[nearest] = True
+        found = nearest(grid.beats, downbeat)
+        if found is not None and abs(grid.beats[found] - downbeat) <= DOWNBEAT_TOLERANCE:
+            flags[found] = True
     return tuple(flags)
 
 
-def _nearest(beats: Sequence[float], seconds: float) -> int | None:
+def nearest(beats: Sequence[float], seconds: float) -> int | None:
+    """Index of the beat — or downbeat — closest to a time, or ``None`` if there is no grid.
+
+    Public because snapping to the grid is not only this module's business: a solo change
+    measured off an energy curve is called on the bar it lands nearest (#38), and one bisect
+    over a sorted list is the whole of that operation.
+    """
     if not beats:
         return None
     after = bisect.bisect_left(beats, seconds)

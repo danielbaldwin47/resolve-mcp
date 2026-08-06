@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import contextlib
 import math
+import random
 import wave
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -1723,6 +1724,37 @@ def write_clicks(
             envelope = 1.0 - offset / decay
             wobble = math.sin(2 * math.pi * 2_000.0 * offset / sample_rate)
             samples[start + offset] = int(peak * envelope * envelope * wobble)
+    return _write_samples(path, samples, sample_rate, bit_depth, channels)
+
+
+def write_sections(
+    path: Path,
+    sections: Sequence[tuple[str, float]],
+    sample_rate: int = 8_000,
+    bit_depth: int = 24,
+    channels: int = 2,
+    frequency: float = 440.0,
+    amplitude: float = 0.3,
+    seed: int = 7,
+) -> Path:
+    """A concert-shaped WAV: ``("tone" | "noise" | "silence", seconds)`` laid end to end.
+
+    The applause half of structure analysis reads a tagger, not the waveform, so what this
+    fixture has to be right about is its *shape* — where the music stops, how long the room
+    goes on for, and how long the whole file is, since the last tune ends where the file
+    does. The noise is seeded so a boundary assertion means the same thing on every run.
+    """
+    noise = random.Random(seed)
+    peak = 2 ** (bit_depth - 1) * amplitude
+    samples: list[int] = []
+    for kind, seconds in sections:
+        for index in range(int(seconds * sample_rate)):
+            if kind == "silence":
+                samples.append(0)
+            elif kind == "noise":
+                samples.append(int(peak * noise.uniform(-1.0, 1.0)))
+            else:
+                samples.append(int(peak * math.sin(2 * math.pi * frequency * index / sample_rate)))
     return _write_samples(path, samples, sample_rate, bit_depth, channels)
 
 

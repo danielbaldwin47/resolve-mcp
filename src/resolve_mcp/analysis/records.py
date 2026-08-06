@@ -38,6 +38,16 @@ def write(
     return path
 
 
+def read(path: Path) -> dict[str, Any]:
+    """A file this module wrote, back as one dict — header keys and all of its records.
+
+    For a worker reading another worker's half, not for a tool result: the layout above is
+    what keeps an agent out of the whole file, and this is the one caller that wants it.
+    """
+    loaded: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+    return loaded
+
+
 def _rows(rows: Sequence[Mapping[str, Any]]) -> list[str]:
     """Each record on its own line, comma-separated the way JSON wants."""
     written = [json.dumps(dict(row)) for row in rows]
