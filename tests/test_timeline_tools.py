@@ -14,6 +14,7 @@ from resolve_mcp.tools.timeline import inspect_timeline, list_timelines
 from .conftest import Attach
 from .fakes import (
     FakeMediaPoolItem,
+    FakeProject,
     FakeTimeline,
     FakeTimelineItem,
     FakeTrack,
@@ -360,6 +361,143 @@ def test_a_selector_is_counted_by_the_plural_name_the_api_really_declares(
     result = inspect_timeline(detail="clips")
 
     assert result["tracks"][0]["items"][0]["takes"] == 3
+
+
+# --- #84: the getters that only answer for the current timeline -----------------------------
+
+
+def _surveying(other_is_current: bool = True) -> tuple[Any, FakeProject]:
+    """A timeline read the way an agent surveying a project reads it: from the outside.
+
+    ``getters_need_current`` is what the live sweep proved of Studio 21.0.3.7 — enabled,
+    locked and takes all answer falsy for a timeline that is not the project's current one.
+    The flags are set the *opposite* way round from their falsy value (enabled and locked
+    both true, a real selector of three) so that a wrapper reporting the lie cannot pass by
+    coincidence.
+    """
+    item = FakeTimelineItem("C0012.mp4", 0, 10, takes=3)
+    survey = FakeTimeline(
+        "survey v1",
+        video=[FakeTrack("Video 1", [item], enabled=True, locked=True)],
+    )
+    survey.getters_need_current = True
+    open_now = a_cut()
+    current = open_now if other_is_current else survey
+    resolve = studio(timelines=[open_now, survey], timeline=current)
+    project: Any = resolve.GetProjectManager().GetCurrentProject()
+    assert isinstance(project, FakeProject)
+    return resolve, project
+
+
+def test_a_timeline_that_is_not_current_reports_unknown_not_a_confident_zero(
+    attach: Attach,
+) -> None:
+    """#84: ``0`` and "unknown" are different answers, and Resolve returns the first.
+
+    An agent asking "does this shot have alternates?" about a timeline it is not currently
+    looking at got a confident ``takes: 0`` — the exact silent-wrong-value shape the
+    wrappers in this repo exist to prevent. ``None`` is the honest reading, and the reply
+    says which fields it applies to and how to get the real ones.
+    """
+    resolve, project = _surveying()
+    attach(resolve)
+
+    result = inspect_timeline("survey v1", detail="clips")
+
+    assert result["ok"] is True
+    assert result["timeline"]["current"] is False
+    track = result["tracks"][0]
+    assert track["enabled"] is None
+    assert track["locked"] is None
+    assert result["tracks"][0]["items"][0]["takes"] is None
+    currency = result["currency"]
+    assert currency["read_as_current"] is False
+    assert currency["made_current"] is False
+    assert currency["unknown_fields"] == ["enabled", "locked", "takes"]
+    assert "make_current" in (currency["fix"] or "")
+
+
+def test_make_current_switches_for_the_read_and_puts_the_timeline_back(attach: Attach) -> None:
+    """The opt-in: the caller accepts a GUI switch and gets the real numbers for it.
+
+    The switch is the *only* way to get them — the #84 probe proved a fresh handle, and
+    even a fresh project object, still reads falsy — so the restore is what keeps a read
+    from moving the director's timeline out from under them.
+    """
+    resolve, project = _surveying()
+    attach(resolve)
+
+    result = inspect_timeline("survey v1", detail="clips", make_current=True)
+
+    assert result["ok"] is True
+    track = result["tracks"][0]
+    assert track["enabled"] is True
+    assert track["locked"] is True
+    assert result["tracks"][0]["items"][0]["takes"] == 3
+    assert result["currency"]["read_as_current"] is True
+    assert result["currency"]["made_current"] is True
+    assert result["currency"]["unknown_fields"] == []
+    assert project.timeline_switches == ["survey v1", "sunset-set v3"]
+    back = project.GetCurrentTimeline()
+    assert back is not None
+    assert back.GetName() == "sunset-set v3"
+
+
+def test_the_current_timeline_answers_in_full_without_being_switched(attach: Attach) -> None:
+    """The common read is unchanged: no nulls, and no switch to restore."""
+    resolve, project = _surveying(other_is_current=False)
+    attach(resolve)
+
+    result = inspect_timeline("survey v1", detail="clips")
+
+    track = result["tracks"][0]
+    assert track["enabled"] is True
+    assert track["locked"] is True
+    assert result["tracks"][0]["items"][0]["takes"] == 3
+    assert result["currency"] == {
+        "read_as_current": True,
+        "made_current": False,
+        "unknown_fields": [],
+        "fix": None,
+    }
+    assert project.timeline_switches == []
+
+
+def test_make_current_on_the_open_timeline_switches_nothing(attach: Attach) -> None:
+    """Asking for a switch that is not needed must not move anything."""
+    resolve, project = _surveying(other_is_current=False)
+    attach(resolve)
+
+    result = inspect_timeline("survey v1", detail="clips", make_current=True)
+
+    assert result["tracks"][0]["items"][0]["takes"] == 3
+    assert result["currency"]["made_current"] is False
+    assert project.timeline_switches == []
+
+
+def test_the_fields_that_survived_the_sweep_are_still_read_off_a_non_current_timeline(
+    attach: Attach,
+) -> None:
+    """The nulls are confined to the three proven getters, not spread over the reading.
+
+    The #84 sweep read every Timeline and TimelineItem getter with a non-falsy true value
+    on a non-current timeline: frames, names, source bounds, ``GetClipEnabled`` and
+    ``GetMarkers`` did not drift. Blanking those too would answer "unknown" to questions
+    Resolve answers perfectly well.
+    """
+    resolve, project = _surveying()
+    attach(resolve)
+
+    result = inspect_timeline("survey v1", detail="clips")
+
+    assert result["timeline"]["name"] == "survey v1"
+    assert result["tracks"][0]["name"] == "Video 1"
+    assert result["tracks"][0]["item_count"] == 1
+    shot = result["tracks"][0]["items"][0]
+    assert shot["name"] == "C0012.mp4"
+    assert shot["record"]["in"]["frames"] == 0
+    assert shot["record"]["duration"]["frames"] == 10
+    assert shot["enabled"] is True
 
 
 def test_the_out_point_is_one_past_the_last_frame_whatever_get_end_says(attach: Attach) -> None:

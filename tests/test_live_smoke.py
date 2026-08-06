@@ -506,11 +506,89 @@ def test_a_real_take_selector_swaps_the_angle_without_moving_the_shot(tmp_path: 
 
 
 def _video_items(name: str) -> list[dict[str, Any]]:
-    read = inspect_timeline(name, detail="clips")
+    """The shots on V1, read so that ``takes`` is a number rather than ``None``.
+
+    ``make_current`` is explicit rather than relied upon: #84 makes the take count readable
+    only on the project's current timeline, and this passed before only because the build
+    happened to leave its timeline current. That is the coincidence the ticket was opened
+    on — asking for the switch says what the reading needs instead of inheriting it.
+    """
+    read = inspect_timeline(name, detail="clips", make_current=True)
     assert read["ok"] is True, read.get("error")
+    assert read["currency"]["read_as_current"] is True
     video = [track for track in read["tracks"] if track["type"] == "video"][0]
     items: list[dict[str, Any]] = video["items"]
     return items
+
+
+def test_a_non_current_timeline_reports_unknown_rather_than_a_confident_zero() -> None:
+    """#84, the half no fake can settle: that Resolve really does answer falsely.
+
+    The fakes model this defect, but only because this test measured it — they hand back
+    the same object whether or not a timeline is current, so left to themselves they would
+    agree with any wrapper. What is checked here is the premise: that reading a timeline
+    the project does not have open yields false/zero from Resolve itself, and that the
+    wrapper turns that into ``null`` rather than passing it on.
+
+    Read-only: it names a timeline that is *not* current and never switches.
+    """
+    if get_status()["context"]["project"] is None:
+        pytest.skip("No project open in Resolve")
+    listing = list_timelines()
+    assert listing["ok"] is True
+    others = [entry["name"] for entry in listing["timelines"] if not entry["current"]]
+    if not others:
+        pytest.skip("Project has no timeline other than the open one")
+
+    read = inspect_timeline(others[0], detail="clips")
+
+    assert read["ok"] is True, read.get("error")
+    assert read["timeline"]["current"] is False
+    currency = read["currency"]
+    assert currency["read_as_current"] is False
+    assert currency["made_current"] is False
+    assert currency["unknown_fields"] == ["enabled", "locked", "takes"]
+    for track in read["tracks"]:
+        assert track["enabled"] is None
+        assert track["locked"] is None
+        # The fields the #84 sweep proved currency-safe still answer, so the nulls above
+        # are a named exception and not a whole reading gone dark.
+        assert track["name"]
+        for item in track["items"]:
+            assert item["takes"] is None
+            assert item["record"]["duration"]["frames"] is not None
+
+
+def test_make_current_reads_the_real_flags_and_puts_the_timeline_back() -> None:
+    """The opt-in, live: the switch is what makes those three fields readable at all.
+
+    The #84 probe ruled out every cheaper route — a fresh timeline handle, and even a
+    fresh project object, still read false/zero — so this is the only way to the numbers,
+    and putting the director's timeline back is the price of taking it.
+    """
+    if get_status()["context"]["project"] is None:
+        pytest.skip("No project open in Resolve")
+    listing = list_timelines()
+    was_open = listing["current"]
+    others = [entry["name"] for entry in listing["timelines"] if not entry["current"]]
+    if not others or was_open is None:
+        pytest.skip("Project needs an open timeline and one other")
+
+    read = inspect_timeline(others[0], detail="clips", make_current=True)
+
+    assert read["ok"] is True, read.get("error")
+    assert read["currency"] == {
+        "read_as_current": True,
+        "made_current": True,
+        "unknown_fields": [],
+        "fix": None,
+    }
+    for track in read["tracks"]:
+        assert track["enabled"] is not None
+        assert track["locked"] is not None
+        for item in track["items"]:
+            assert item["takes"] is not None
+    assert list_timelines()["current"] == was_open
 
 
 def test_a_rebuild_makes_the_next_version_and_leaves_the_last_one_alone(tmp_path: Path) -> None:

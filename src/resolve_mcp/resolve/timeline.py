@@ -293,8 +293,31 @@ class Reader:
     call, and only on the path where a read has already failed.
     """
 
-    def __init__(self, connection: ResolveConnection) -> None:
+    def __init__(self, connection: ResolveConnection, current: bool = True) -> None:
         self._connection = connection
+        self._current = current
+
+    @property
+    def reads_current(self) -> bool:
+        """Whether editor-state getters can be believed on this reader's timeline (#84).
+
+        A handful of getters are backed by editor state rather than timeline data, and for
+        a timeline that is not the project's current one they answer the falsy value of
+        their own type — ``GetTakesCount`` zero, ``GetIsTrackEnabled`` and
+        ``GetIsTrackLocked`` false — with no error and no ``None``. A caller cannot tell
+        that apart from a genuinely empty selector or a genuinely muted track, so reporting
+        the number is reporting a wrong answer confidently.
+
+        The caller asks *this* rather than looking for ``None`` in the answer, because
+        Resolve returns ``None`` from these getters for its own unrelated reasons — a clip
+        kind with no selector — and that has always meant zero. Reading "unknown" out of
+        the value would put the two back together one line after the reader separated them.
+
+        Defaults to trusting: every other reader in this package works on a timeline it has
+        already made current, and only the read that deliberately does not switch sets
+        ``current=False``.
+        """
+        return self._current
 
     def optional(self, target: Any, method: str, default: Any, *args: Any) -> Any:
         getter = getattr(target, method, None)
@@ -392,6 +415,7 @@ def inspect_timeline(
     start: Any = None,
     end: Any = None,
     limit: int = DEFAULT_ITEM_LIMIT,
+    make_current: bool = False,
     config: Config | None = None,
 ) -> dict[str, Any]:
     """Read one timeline at a chosen detail level, over a chosen range."""
@@ -406,27 +430,36 @@ def inspect_timeline(
         )
 
     project = open_project(connection)
-    reader = Reader(connection)
     timeline = find_timeline(project, name)
     current = current_name(project)
-    heading = summarise(reader, timeline, project, current)
-    fps = heading["fps"]
+    is_current = name_of(timeline) == current
+    switching = make_current and not is_current
+    reader = Reader(connection, current=is_current or switching)
 
-    window = _window(heading, start, end, fps)
-    with_items = detail == "clips"
-    tracks = [
-        _read_track(reader, timeline, track_type, index, window, fps, with_items)
-        for track_type, count in heading["tracks"].items()
-        for index in range(1, count + 1)
-    ]
-    item_count = sum(track["item_count"] for track in tracks)
+    with contextlib.ExitStack() as stack:
+        if switching:
+            log.info("Switching to %r for the read, and back after (#84)", name_of(timeline))
+            stack.enter_context(current_timeline(project, timeline))
+        heading = summarise(reader, timeline, project, current)
+        fps = heading["fps"]
+
+        window = _window(heading, start, end, fps)
+        with_items = detail == "clips"
+        tracks = [
+            _read_track(reader, timeline, track_type, index, window, fps, with_items)
+            for track_type, count in heading["tracks"].items()
+            for index in range(1, count + 1)
+        ]
+        item_count = sum(track["item_count"] for track in tracks)
+        markers = _marker_count(reader, timeline)
 
     result: dict[str, Any] = {
-        "timeline": {**heading, "markers": _marker_count(reader, timeline)},
+        "timeline": {**heading, "markers": markers},
         "detail": detail,
         "range": {"in": dual_time(window[0], fps), "out": dual_time(window[1], fps)},
         "tracks": None if detail == "summary" else [_without_items(track) for track in tracks],
         "item_count": item_count,
+        "currency": _currency(is_current, switching),
         "truncated": False,
         "spilled_to": None,
     }
@@ -442,6 +475,38 @@ def inspect_timeline(
             heading["name"], full, config or get_config(), fallback="timeline"
         )
     return result
+
+
+UNKNOWN_OFF_CURRENT: Final = ("enabled", "locked", "takes")
+"""Reply fields whose getters only answer for the current timeline (#84).
+
+Named here rather than inferred, because the list is a live finding and not a rule: the
+#84 sweep read every Timeline and TimelineItem getter twice — once with the timeline
+current, once not — against a fixture built so each true value was non-falsy, since a
+getter whose real answer is already ``0`` cannot be *seen* to lie. Three drifted; the
+other ninety, frames and names and source bounds and ``GetClipEnabled`` among them, are
+proven safe rather than merely untested. Anything added here needs the same evidence.
+"""
+
+
+def _currency(is_current: bool, switching: bool) -> dict[str, Any]:
+    """Whether the reading's editor-state fields can be believed, and what to do if not."""
+    trustworthy = is_current or switching
+    return {
+        "read_as_current": trustworthy,
+        "made_current": switching,
+        "unknown_fields": [] if trustworthy else list(UNKNOWN_OFF_CURRENT),
+        "fix": (
+            None
+            if trustworthy
+            else (
+                "Resolve answers these only for the project's current timeline, and "
+                "answers falsely rather than failing for any other — so they are reported "
+                "as null instead of a plausible zero. Pass make_current=true to switch to "
+                "this timeline for the read and switch back, or open it in Resolve."
+            )
+        ),
+    }
 
 
 def _window(heading: dict[str, Any], start: Any, end: Any, fps: float | None) -> tuple[int, int]:
@@ -515,12 +580,22 @@ def _read_track(
         )
         if _touches(placement, window)
     ]
+    where = (track_type, index)
     return {
         "type": track_type,
         "index": index,
         "name": str(reader.optional(timeline, "GetTrackName", "", track_type, index) or ""),
-        "enabled": bool(reader.optional(timeline, "GetIsTrackEnabled", True, track_type, index)),
-        "locked": bool(reader.optional(timeline, "GetIsTrackLocked", False, track_type, index)),
+        # ``None``, not ``False``, off the current timeline — see ``Reader.reads_current``.
+        "enabled": (
+            bool(reader.optional(timeline, "GetIsTrackEnabled", True, *where))
+            if reader.reads_current
+            else None
+        ),
+        "locked": (
+            bool(reader.optional(timeline, "GetIsTrackLocked", False, *where))
+            if reader.reads_current
+            else None
+        ),
         "item_count": len(in_range),
         "items": (
             [
@@ -613,7 +688,12 @@ def read_item(
         # ``GetTakesCount``, not ``GetTakeCount``: the plural is the method the scripting
         # README actually declares (line 523), and fusionscript answers an unknown name
         # with ``None`` rather than raising — so the singular read as zero takes forever.
-        "takes": int(reader.optional(item, "GetTakesCount", 0) or 0),
+        # ``None`` rather than 0 off the current timeline is #84: same wrong number, and
+        # this time Resolve is the one saying it. A ``None`` *from* the getter still means
+        # zero — see ``Reader.reads_current`` for why the two are not read off one value.
+        "takes": (
+            int(reader.optional(item, "GetTakesCount", 0) or 0) if reader.reads_current else None
+        ),
     }
 
 

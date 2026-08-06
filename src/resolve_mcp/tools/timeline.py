@@ -38,6 +38,7 @@ def inspect_timeline(
     start: Any = None,
     end: Any = None,
     limit: int = timelines.DEFAULT_ITEM_LIMIT,
+    make_current: bool = False,
 ) -> dict[str, Any]:
     """Read one timeline (the open one by default) at a chosen detail level and range.
 
@@ -50,6 +51,14 @@ def inspect_timeline(
     difference between the two, so that timeline_frame = source_frame + sync_offset. On the
     director's stacked reference that offset is the per-angle sync, one angle per track.
 
+    A track's enabled and locked, and a shot's takes, come back as null on any timeline
+    that is not the project's current one: Resolve answers those three from editor state
+    and reports false/zero for every other timeline, so null is the honest reading and a
+    number would be a confident wrong answer. The currency block in the reply says whether
+    they were readable and names them when they were not. Pass make_current=true to switch
+    to the timeline for the read and switch back — it costs a visible change of the open
+    timeline in the Resolve window, which is why it is not the default.
+
     Past limit shots the reply is capped and the full reading spills to disk (spilled_to);
     narrow the range or read that file rather than raising the cap.
     """
@@ -61,6 +70,7 @@ def inspect_timeline(
         start=start,
         end=end,
         limit=limit,
+        make_current=make_current,
     )
 
 
