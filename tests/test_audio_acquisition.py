@@ -12,6 +12,7 @@ from __future__ import annotations
 import shutil
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -40,6 +41,7 @@ from .fakes import (
     FakeResolve,
     FakeTimeline,
     FakeTimelineItem,
+    FakeTrack,
     ffmpeg_absent,
     ffmpeg_refusing,
     media_pool,
@@ -256,6 +258,66 @@ def test_a_timeline_with_audio_on_a_later_track_is_still_exportable(attach: Atta
     record = wait_for(acquire_timeline_audio(get_connection())["job_id"])
 
     assert record.state == "completed", record.error
+
+
+def test_audio_that_sits_only_on_switched_off_tracks_is_refused_too(attach: Attach) -> None:
+    """Live on 21.0.3.7: one clip on A1 with A1 disabled wedges the queue exactly as an
+    empty timeline does. The hang is "nothing to render", not "no items"."""
+    timeline = FakeTimeline(
+        "sunset-set v3",
+        "59.94",
+        video=[[_shot()]],
+        audio=[FakeTrack("Audio 1", [FakeTimelineItem("Board mix.wav", 0, 500)], enabled=False)],
+    )
+    resolve = studio(timeline=timeline)
+    attach(resolve)
+
+    record = wait_for(acquire_timeline_audio(get_connection())["job_id"])
+
+    assert record.state == "failed"
+    assert record.error is not None
+    assert record.error["code"] == "audio_export_failed"
+    assert "switched off" in record.error["cause"]
+    assert _project(resolve).render_jobs == []
+
+
+def test_one_live_audio_track_is_enough_even_beside_switched_off_ones(attach: Attach) -> None:
+    """The refusal is about the whole timeline, not about any one track being off."""
+    timeline = FakeTimeline(
+        "sunset-set v3",
+        "59.94",
+        video=[[_shot()]],
+        audio=[
+            FakeTrack("Audio 1", [FakeTimelineItem("Scratch.wav", 0, 500)], enabled=False),
+            FakeTrack("Audio 2", [FakeTimelineItem("Board mix.wav", 0, 500)]),
+        ],
+    )
+    attach(studio(timeline=timeline))
+
+    record = wait_for(acquire_timeline_audio(get_connection())["job_id"])
+
+    assert record.state == "completed", record.error
+
+
+def test_a_track_count_that_will_not_read_exports_rather_than_refuses(attach: Attach) -> None:
+    """An unreadable count is not zero audio, and must not be spent refusing a real mix.
+
+    The guard trades one failure for another, and this is the direction that trade has to
+    run: a hang announces itself by never finishing, while a false refusal of a timeline
+    that does have a mix on it looks exactly like the truth.
+    """
+    attach(studio(timeline=_TimelineThatWillNotCountItsTracks("sunset-set v3", "59.94")))
+
+    record = wait_for(acquire_timeline_audio(get_connection())["job_id"])
+
+    assert record.state == "completed", record.error
+
+
+class _TimelineThatWillNotCountItsTracks(FakeTimeline):
+    """A handle that answers ``None`` for its audio track count — a dying one, or an old build."""
+
+    def GetTrackCount(self, track_type: str) -> Any:  # noqa: N802 - mirrors the Resolve API
+        return None if track_type == "audio" else super().GetTrackCount(track_type)
 
 
 def _shot() -> FakeTimelineItem:

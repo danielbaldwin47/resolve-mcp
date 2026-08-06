@@ -1924,11 +1924,7 @@ def sync_reference(
     return FakeTimeline(name, fps, start_frame=start_frame, video=video)
 
 
-def with_a_mix(
-    timeline: FakeTimeline,
-    name: str = "Board mix.wav",
-    duration: int = 500,
-) -> FakeTimeline:
+def with_a_mix(timeline: FakeTimeline) -> FakeTimeline:
     """Put a board recording on the timeline's first audio track, and hand it back.
 
     A ``FakeTimeline`` is built with no tracks at all, which is the one timeline Resolve
@@ -1936,10 +1932,15 @@ def with_a_mix(
     queued and then never run (#88). Any fake standing in for a timeline whose mix comes
     off the render queue therefore has to carry audio, or the test is exercising the
     refusal rather than the export it means to.
+
+    Kept as a wrapper rather than a default on the fake, because a timeline that carries
+    audio is not the default a *Resolve* timeline has, and the tests that assert on track
+    counts read the fake's tracks as given.
     """
-    timeline._tracks["audio"].append(
-        FakeTrack("Audio 1", [FakeTimelineItem(name, timeline.GetStartFrame(), duration)])
-    )
+    item = FakeTimelineItem("Board mix.wav", timeline._start_frame, 500)
+    if timeline._owner is not None:
+        item.adopt(timeline._owner)
+    timeline._tracks["audio"].append(FakeTrack("Audio 1", [item]))
     return timeline
 
 

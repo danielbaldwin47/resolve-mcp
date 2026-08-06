@@ -43,7 +43,7 @@ from ..naming import keyed_name
 from ..resolve import media, render
 from ..resolve.connection import ResolveConnection
 from ..resolve.session import current_project
-from ..resolve.timeline import Reader, current_timeline, find_timeline, fingerprint
+from ..resolve.timeline import Reader, current_timeline, find_timeline, fingerprint, read_frames
 from . import ffmpeg, wav
 
 log = get_logger("audio")
@@ -88,7 +88,7 @@ def acquire_timeline_audio(
     project = current_project(connection, "No project is open, so there is no timeline to export.")
     found = find_timeline(project, timeline)
     name = str(found.GetName() or "timeline")
-    refuse_a_silent_mix(found, name)
+    refuse_a_timeline_with_no_audio(found, name)
     params = _timeline_params(name, sample_rate, bit_depth)
     identity = fingerprint(Reader(connection), found)
     key = cache.cache_key(TIMELINE_KIND, [identity], params)
@@ -117,6 +117,10 @@ def export_timeline_mix(
 ) -> JobOutput:
     """The worker: queue an audio-only render of one timeline and wait for the WAV."""
     config = config or get_config()
+    # Checked in the starters too, so the refusal reaches the agent as a reply rather than a
+    # job it has to poll. This is the copy that holds the invariant: nothing this worker is
+    # handed reaches the queue unchecked, whichever route called it.
+    refuse_a_timeline_with_no_audio(timeline, str(params["timeline"]))
     target_dir = config.audio_dir
     target_dir.mkdir(parents=True, exist_ok=True)
     stem = keyed_name(str(params["timeline"]), key, "", "audio")
@@ -124,6 +128,10 @@ def export_timeline_mix(
 
     progress(0.05, "queuing the audio export")
     with current_timeline(project, timeline):
+        # Only here, with the timeline current, can a track's enabled state be believed
+        # (#84), so the second half of the precondition waits until the switch has happened
+        # and still runs before anything is queued.
+        refuse_a_timeline_with_every_audio_track_off(timeline, str(params["timeline"]))
         # One file for the whole timeline. The other mode renders a file per clip on it,
         # which for a concert cut is hundreds of fragments instead of the mix.
         project.SetCurrentRenderMode(render.SINGLE_CLIP)
@@ -157,39 +165,112 @@ def export_timeline_mix(
     return JobOutput(_result(expecting, params), (expecting,))
 
 
-def refuse_a_silent_mix(timeline: Timeline, name: str) -> None:
+def refuse_a_timeline_with_no_audio(timeline: Timeline, name: str) -> None:
     """Refuse to export a timeline with nothing on its audio tracks, before anything queues.
 
     Resolve takes such a render and never runs it: the job sits at "Ready for background
     render" at 0%, ``IsRenderingInProgress()`` reports ``True``, no dialog opens, and there
     is no error and no timeout — only ``DeleteAllRenderJobs()`` clears it, and the next one
     wedges the same way (#88, live on Studio 21.0.3.7). A hang is the one failure nothing
-    downstream can recover from or explain, so the precondition is checked here rather than
-    left to the queue.
+    downstream can recover from or explain, so the precondition is checked before the queue
+    can see the job.
 
-    The counts are read straight off the timeline rather than through ``Reader.optional``:
-    a getter that fails has to raise, because degrading it to an empty list would let a
-    dying handle read as "no audio" and refuse a timeline that has a mix on it. Reading
-    them off a timeline that is not the current one is sound — verified live on 21.0.3.7,
-    where ``GetItemListInTrack`` agreed exactly with the current-timeline reading, unlike
-    ``GetTakesCount`` and ``GetIsTrackEnabled`` (#84).
+    Only a reading that *succeeded* is allowed to refuse. A getter that answers ``None`` —
+    the way this API says "not on this build", and the way a dying handle reads — leaves
+    this silent rather than turning an unreadable count into "no audio": refusing a timeline
+    that has a mix on it is the failure this guard would otherwise trade the hang for, and
+    it is the worse of the two, because the hang at least announces itself by never
+    finishing. For the same reason the counts are not taken through the shared
+    ``timeline.items_in_track``, which folds ``None`` into an empty list.
+
+    Reading counts off a timeline that is not the current one is sound — verified live on
+    21.0.3.7, where ``GetItemListInTrack`` agreed exactly with the current-timeline reading,
+    unlike ``GetTakesCount`` and ``GetIsTrackEnabled`` (#84). That is why this half of the
+    precondition can run in a starter and
+    ``refuse_a_timeline_with_every_audio_track_off`` cannot.
     """
-    tracks = int(timeline.GetTrackCount("audio") or 0)
-    items = sum(
-        len(timeline.GetItemListInTrack("audio", index) or []) for index in range(1, tracks + 1)
-    )
-    if items:
+    counted = _audio_items(timeline, name, only_enabled=False)
+    if counted is None or counted.items:
         return
-    log.info("Refusing a mix export of %r: %d audio tracks, no items on them", name, tracks)
+    log.info("Refusing a mix export of %r: %d audio tracks, no items on them", name, counted.tracks)
     raise AudioExportError(
         cause=f"Timeline {name!r} has no audio items, so there is no mix to export.",
         fix=(
             "Check you targeted the timeline you meant — list_timelines names them, and "
             "inspect_timeline reports what sits on each track. Resolve queues an audio-only "
-            "render of a silent timeline and never runs it, so this refuses instead."
+            "render of a timeline with no audio on it and never runs it, so this refuses "
+            "instead."
         ),
-        detail={"timeline": name, "audio_tracks": tracks, "audio_items": 0},
+        detail={"timeline": name, "audio_tracks": counted.tracks, "audio_items": 0},
     )
+
+
+def refuse_a_timeline_with_every_audio_track_off(timeline: Timeline, name: str) -> None:
+    """Refuse when the only audio on the timeline sits on tracks that are switched off.
+
+    Resolve wedges on this exactly as it wedges on a timeline with no audio at all: one
+    clip on A1, A1 disabled, and the render sits at "Ready for background render" at 0%
+    with ``IsRenderingInProgress()`` True for as long as you care to watch (live on
+    21.0.3.7, while verifying #88). The hang is not "no items" — it is "nothing to render".
+
+    **This must only be called with ``timeline`` current.** ``GetIsTrackEnabled`` answers
+    ``False`` for every track of a timeline that is not the current one (#84), so run
+    anywhere else it would refuse every timeline it was handed.
+    """
+    counted = _audio_items(timeline, name, only_enabled=True)
+    if counted is None or counted.items:
+        return
+    log.info(
+        "Refusing a mix export of %r: audio on %d tracks, all of them off", name, counted.tracks
+    )
+    raise AudioExportError(
+        cause=(
+            f"Every audio track on timeline {name!r} is switched off, so the mix would be "
+            f"silent."
+        ),
+        fix=(
+            "Enable the audio track the mix should come from in Resolve's timeline, or "
+            "target the timeline you meant — inspect_timeline reports each track. Resolve "
+            "queues a render with nothing to render and never runs it, so this refuses "
+            "instead."
+        ),
+        detail={"timeline": name, "audio_tracks": counted.tracks, "audio_items_enabled": 0},
+    )
+
+
+class _AudioItems(NamedTuple):
+    """What the audio tracks hold: how many tracks were read, and how many items were on them."""
+
+    tracks: int
+    items: int
+
+
+def _audio_items(timeline: Timeline, name: str, only_enabled: bool) -> _AudioItems | None:
+    """Count the items on the timeline's audio tracks, or ``None`` if any reading failed.
+
+    ``None`` is the whole point: it is what keeps an unreadable timeline from being refused
+    as an empty one. Every getter here answers ``None`` rather than raising on a build that
+    lacks it, and a caller that cannot tell "no audio" from "no answer" must not refuse.
+    """
+    tracks = read_frames(timeline.GetTrackCount("audio"))
+    if tracks is None:
+        log.info("Not checking %r for audio: its audio track count did not read", name)
+        return None
+    items = 0
+    for index in range(1, tracks + 1):
+        if only_enabled:
+            enabled = timeline.GetIsTrackEnabled("audio", index)
+            if enabled is None:
+                log.info("Not checking %r for audio: audio track %d did not report on", name, index)
+                return None
+            if not enabled:
+                continue
+        listed = timeline.GetItemListInTrack("audio", index)
+        if listed is None:
+            log.info("Not checking %r for audio: audio track %d did not read", name, index)
+            return None
+        items += len(listed)
+    return _AudioItems(tracks, items)
 
 
 def _as_export_failure(exc: RenderQueueError) -> AudioExportError:
@@ -352,7 +433,7 @@ def audio_source(
         project = current_project(connection, "No project is open, so there is no timeline.")
         found = find_timeline(project, timeline)
         name = str(found.GetName() or "timeline")
-        refuse_a_silent_mix(found, name)
+        refuse_a_timeline_with_no_audio(found, name)
         return Source(
             fingerprint(Reader(connection), found),
             _timeline_params(name, sample_rate, bit_depth),
