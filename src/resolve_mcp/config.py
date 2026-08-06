@@ -89,6 +89,17 @@ class Config:
         return self.cache_dir / "analysis"
 
     @property
+    def render_dir(self) -> Path:
+        """Deliverables rendered without a target directory of their own.
+
+        Its own folder rather than the audio one because these are files a human opens and
+        hands on, and because everything under it is the server's to replace: a re-render
+        after a review round overwrites in place, which is only safe where nothing the
+        director put there can be sitting.
+        """
+        return self.cache_dir / "renders"
+
+    @property
     def interchange_dir(self) -> Path:
         """Where exported timelines (OTIO, FCPXML, DRT) land when no path is given.
 

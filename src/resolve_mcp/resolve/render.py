@@ -23,7 +23,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from ..errors import RenderQueueError
+from ..errors import RenderPresetNotFoundError, RenderQueueError
 from ..logging_config import get_logger
 
 log = get_logger("render")
@@ -38,18 +38,78 @@ RENDER_TIMEOUT = 3600.0
 STATUS = "JobStatus"
 PERCENT = "CompletionPercentage"
 
+SINGLE_CLIP = 1
+"""One file for the span rendered. The other mode writes a file per clip on the timeline."""
 
-def submit(project: Project, settings: dict[str, Any], format_: str, codec: str) -> str:
+
+def presets(project: Project) -> list[str]:
+    """Every render preset this project offers, in the order Resolve lists them."""
+    listed = project.GetRenderPresetList() or []
+    return [str(one) for one in listed]
+
+
+def require_preset(project: Project, name: str) -> list[str]:
+    """Check the project has this preset, and hand back the list it was checked against.
+
+    Resolve answers a bare ``False`` both for a preset it does not have and for one it will
+    not load, so the name is checked against the list to tell the two apart. Reading the
+    list disturbs nothing, which is why a caller can ask this before queuing anything.
+    """
+    available = presets(project)
+    if name not in available:
+        raise RenderPresetNotFoundError(name, available)
+    return available
+
+
+def load_preset(project: Project, name: str) -> None:
+    """Make ``name`` the settings the next job captures — format, codec, resolution and all.
+
+    A preset is the only honest way to name a deliverable's shape: format and codec alone
+    leave resolution, bit rate and the rest at whatever the project was last set to, and
+    what those *should* be is the director's decision, made once in the Deliver page.
+    """
+    available = require_preset(project, name)
+    if not project.LoadRenderPreset(name):
+        raise RenderQueueError(
+            cause=f"Resolve would not load the render preset {name!r}.",
+            fix=(
+                "Open the Deliver page and select the preset by hand — a preset that will "
+                "not load is usually one saved against media or a codec this machine lacks."
+            ),
+            detail={"preset": name, "available": available},
+        )
+    log.info("Loaded render preset %s", name)
+
+
+def current_format(project: Project) -> dict[str, str]:
+    """The format and codec the project would render with now — ``format`` is the extension.
+
+    Empty when Resolve will not say: a deliverable whose suffix cannot be known is a
+    failure the caller has to shape, not a default this layer is allowed to guess.
+    """
+    reading = project.GetCurrentRenderFormatAndCodec() or {}
+    return {str(key): str(value) for key, value in reading.items() if value}
+
+
+def submit(
+    project: Project,
+    settings: dict[str, Any],
+    format_and_codec: tuple[str, str] | None = None,
+) -> str:
     """Push one job onto the queue and return its id.
 
     ``SetRenderSettings`` and the format/codec pair are project-level state; they are set
-    immediately before the job is added so that the job captures them.
+    immediately before the job is added so that the job captures them. The pair travels as
+    one because Resolve takes it as one, and it is optional because a loaded preset has
+    already set both — setting them again would overwrite the rest of what the preset chose.
     """
-    if not project.SetCurrentRenderFormatAndCodec(format_, codec):
-        raise RenderQueueError(
-            cause=f"Resolve would not render {format_}/{codec}.",
-            detail={"format": format_, "codec": codec},
-        )
+    if format_and_codec is not None:
+        format_, codec = format_and_codec
+        if not project.SetCurrentRenderFormatAndCodec(format_, codec):
+            raise RenderQueueError(
+                cause=f"Resolve would not render {format_}/{codec}.",
+                detail={"format": format_, "codec": codec},
+            )
     if not project.SetRenderSettings(settings):
         raise RenderQueueError(
             cause="Resolve refused the render settings.",

@@ -20,7 +20,7 @@ def test_a_completed_render_hands_back_the_file_it_wrote(tmp_path: Path) -> None
     project = FakeProject("sunset-set")
     expecting = tmp_path / "mix.wav"
     write_wav(expecting, seconds=0.1)
-    job_id = render.submit(project, {"TargetDir": str(tmp_path)}, "wav", "lpcm")
+    job_id = render.submit(project, {"TargetDir": str(tmp_path)}, ("wav", "lpcm"))
 
     assert render.render(project, job_id, expecting, sleep=_no_sleep) == expecting
     assert project.render_format == ("wav", "lpcm")
@@ -29,7 +29,7 @@ def test_a_completed_render_hands_back_the_file_it_wrote(tmp_path: Path) -> None
 def test_the_queue_is_left_as_it_was_found(tmp_path: Path) -> None:
     project = FakeProject("sunset-set")
     expecting = write_wav(tmp_path / "mix.wav", seconds=0.1)
-    job_id = render.submit(project, {"TargetDir": str(tmp_path)}, "wav", "lpcm")
+    job_id = render.submit(project, {"TargetDir": str(tmp_path)}, ("wav", "lpcm"))
 
     render.render(project, job_id, expecting, sleep=_no_sleep)
 
@@ -40,7 +40,7 @@ def test_a_failed_job_is_a_failure_even_though_every_call_returned_true(tmp_path
     project = FakeProject("sunset-set")
     project.render_statuses = ["Rendering", "Failed"]
     expecting = write_wav(tmp_path / "mix.wav", seconds=0.1)
-    job_id = render.submit(project, {"TargetDir": str(tmp_path)}, "wav", "lpcm")
+    job_id = render.submit(project, {"TargetDir": str(tmp_path)}, ("wav", "lpcm"))
 
     with pytest.raises(RenderQueueError) as raised:
         render.render(project, job_id, expecting, sleep=_no_sleep)
@@ -53,7 +53,7 @@ def test_a_render_that_writes_nothing_is_not_a_success(tmp_path: Path) -> None:
     """Resolve reports Complete for renders that land nothing — an unwritable target does."""
     project = FakeProject("sunset-set")
     project.render_writes_the_file = False
-    job_id = render.submit(project, {"TargetDir": str(tmp_path)}, "wav", "lpcm")
+    job_id = render.submit(project, {"TargetDir": str(tmp_path)}, ("wav", "lpcm"))
 
     with pytest.raises(RenderQueueError) as raised:
         render.render(project, job_id, tmp_path / "mix.wav", sleep=_no_sleep)
@@ -65,7 +65,7 @@ def test_a_queue_that_never_finishes_times_out_pointing_at_the_gui(tmp_path: Pat
     project = FakeProject("sunset-set")
     project.render_statuses = ["Rendering"]
     clock = iter([0.0, 0.0, 10_000.0])
-    job_id = render.submit(project, {"TargetDir": str(tmp_path)}, "wav", "lpcm")
+    job_id = render.submit(project, {"TargetDir": str(tmp_path)}, ("wav", "lpcm"))
 
     with pytest.raises(RenderQueueError) as raised:
         render.render(
@@ -87,7 +87,7 @@ def test_progress_comes_from_the_jobs_own_percentage(tmp_path: Path) -> None:
     project.render_statuses = ["Rendering", "Rendering", "Complete"]
     expecting = write_wav(tmp_path / "mix.wav", seconds=0.1)
     seen: list[float] = []
-    job_id = render.submit(project, {"TargetDir": str(tmp_path)}, "wav", "lpcm")
+    job_id = render.submit(project, {"TargetDir": str(tmp_path)}, ("wav", "lpcm"))
 
     render.render(
         project,
@@ -117,7 +117,7 @@ def test_every_way_the_queue_can_refuse_a_job_says_which(
     setattr(project, refusal, False)
 
     with pytest.raises(RenderQueueError) as raised:
-        render.submit(project, {"TargetDir": str(tmp_path)}, "wav", "lpcm")
+        render.submit(project, {"TargetDir": str(tmp_path)}, ("wav", "lpcm"))
 
     assert expected in raised.value.cause
 
@@ -125,7 +125,7 @@ def test_every_way_the_queue_can_refuse_a_job_says_which(
 def test_a_queue_that_will_not_start_takes_its_job_back_off(tmp_path: Path) -> None:
     project = FakeProject("sunset-set")
     project.starts_rendering = False
-    job_id = render.submit(project, {"TargetDir": str(tmp_path)}, "wav", "lpcm")
+    job_id = render.submit(project, {"TargetDir": str(tmp_path)}, ("wav", "lpcm"))
 
     with pytest.raises(RenderQueueError) as raised:
         render.render(project, job_id, tmp_path / "mix.wav", sleep=_no_sleep)

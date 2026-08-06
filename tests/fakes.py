@@ -127,6 +127,14 @@ class FakeTimelineItem:
     for one it does not know. Verified live on Studio 21.0.3.7, where
     ``hasattr(item, "GetTakeCount")`` is ``True`` and the attribute is ``None`` — so a
     ``hasattr`` guard passes and the call then fails with ``NoneType is not callable``.
+    (``GetTakeCount`` is not an API method at all; the real one is ``GetTakesCount``, which
+    is why that particular name was the one caught being ``None``.)
+
+    The take selector is modelled with the same suspicion as the append: ``AddTake`` and
+    ``SelectTakeByIndex`` both answer ``Bool``, so ``takes_land`` and ``select_take_lands``
+    model the answer that lies — a truthy return over a selector that did not change.
+    ``FinalizeTake`` is deliberately absent: it collapses a selector permanently, so a
+    wrapper that called it should fail loudly here rather than quietly on a real cut.
     """
 
     def __init__(
@@ -146,6 +154,10 @@ class FakeTimelineItem:
         comps: Sequence[FakeFusionComp] | None = None,
         missing: frozenset[str] | set[str] | None = None,
         owner: FakeResolve | None = None,
+        add_take_result: bool = True,
+        takes_land: bool = True,
+        select_take_result: bool = True,
+        select_take_lands: bool = True,
     ) -> None:
         self._name = name
         self._start = start
@@ -155,7 +167,14 @@ class FakeTimelineItem:
         self._source_end = source_end
         self._media_item = media_item
         self._enabled = enabled
-        self._takes = takes
+        self._selector: list[dict[str, Any]] = [self._own_take() for _ in range(takes)]
+        self._selected = 1 if takes else 0
+        # Public so a test can break a selector *after* a build has made one — the item is
+        # created inside the build, so the constructor is not a seam a swap test can reach.
+        self.add_take_result = add_take_result
+        self.takes_land = takes_land
+        self.select_take_result = select_take_result
+        self.select_take_lands = select_take_lands
         self._supports_source_frames = supports_source_frames
         self._refuses = set(refuses or ())
         self._end_is_inclusive = end_is_inclusive
@@ -228,9 +247,67 @@ class FakeTimelineItem:
         self._check("GetClipEnabled")
         return self._enabled
 
-    def GetTakeCount(self) -> int:  # noqa: N802
-        self._check("GetTakeCount")
-        return self._takes
+    def _own_take(self) -> dict[str, Any]:
+        """The clip already on the track, as the take Resolve seeds a new selector with."""
+        start = self._source_start or 0
+        return {
+            "startFrame": start,
+            "endFrame": start + self._duration,
+            "mediaPoolItem": self._media_item,
+        }
+
+    def AddTake(  # noqa: N802
+        self,
+        media_item: FakeMediaPoolItem,
+        start_frame: int | None = None,
+        end_frame: int | None = None,
+    ) -> bool:
+        """Add a take, seeding the selector from the placed clip when there is none yet."""
+        self._check("AddTake")
+        if not self.add_take_result:
+            return False
+        if self.takes_land:
+            if not self._selector:
+                self._selector.append(self._own_take())
+            self._selector.append(
+                {
+                    "startFrame": start_frame,
+                    "endFrame": end_frame,
+                    "mediaPoolItem": media_item,
+                }
+            )
+            # *Unverified*: the README does not say where the selection lands after an add.
+            # The fake takes the worse of the two possibilities — the new take, not the main
+            # one — so a build that leaves the selection to chance shows up here rather than
+            # as the wrong angle on a director's timeline.
+            self._selected = len(self._selector)
+        return True
+
+    def GetTakesCount(self) -> int:  # noqa: N802
+        """Zero for a clip that is not a take selector — not one for its own media."""
+        self._check("GetTakesCount")
+        return len(self._selector)
+
+    def GetTakeByIndex(self, index: int) -> dict[str, Any] | None:  # noqa: N802
+        self._check("GetTakeByIndex")
+        if 1 <= index <= len(self._selector):
+            return dict(self._selector[index - 1])
+        return None
+
+    def GetSelectedTakeIndex(self) -> int:  # noqa: N802
+        """Zero when the clip is not a take selector, else the 1-based selection."""
+        self._check("GetSelectedTakeIndex")
+        return self._selected
+
+    def SelectTakeByIndex(self, index: int) -> bool:  # noqa: N802
+        self._check("SelectTakeByIndex")
+        if not self.select_take_result:
+            return False
+        if not 1 <= index <= len(self._selector):
+            return False
+        if self.select_take_lands:
+            self._selected = index
+        return True
 
     def GetFusionCompCount(self) -> int:  # noqa: N802
         """Zero for an ordinary clip. A Text+ instance that answers zero has lost its comp."""
@@ -619,6 +696,9 @@ class FakeMediaPool:
         self.import_folder_result: bool | None = None
         self.import_lands_nothing = False
         self.imported_folder: FakeFolder | None = None
+        # Take-selector knobs handed to every item this pool appends: an item a build
+        # creates cannot be configured any other way, since the test never holds it.
+        self.take_quirks: dict[str, Any] = {}
         self.append_calls: list[list[dict[str, Any]]] = []
         self.append_result: list[FakeTimelineItem] | None = None
         self.appends_share_one_comp = False
@@ -929,6 +1009,7 @@ class FakeMediaPool:
             media_item=clip,
             comps=comps,
             owner=self._owner,
+            **self.take_quirks,
         )
         # An explicit track index without a media type: Resolve reports success and drops it.
         if media_type is None and "trackIndex" in info:
@@ -955,6 +1036,7 @@ class FakeMediaPool:
                     media_item=clip,
                     comps=comps,
                     owner=self._owner,
+                    **self.take_quirks,
                 )
         if not self.appends_land_nowhere:
             timeline.place(track_type, index, item)
@@ -1073,6 +1155,14 @@ class FakeProject:
         self.render_statuses: list[str] = ["Complete"]
         self.render_seconds = 2.0
         self.render_writes_the_file = True
+        # A preset carries the format and codec with it — loading one is what sets them,
+        # which is why the deliver route never sets a format of its own.
+        self.render_presets: dict[str, tuple[str, str]] = {
+            "H.264 Master": ("mp4", "H.264"),
+            "ProRes 422 HQ": ("mov", "ProRes422HQ"),
+        }
+        self.loaded_presets: list[str] = []
+        self.accepts_preset = True
         self.accepts_format = True
         self.accepts_settings = True
         self.accepts_job = True
@@ -1092,6 +1182,24 @@ class FakeProject:
             return False
         self.render_format = (format_, codec)
         return True
+
+    def GetRenderPresetList(self) -> list[str]:  # noqa: N802
+        return list(self.render_presets)
+
+    def LoadRenderPreset(self, name: str) -> bool:  # noqa: N802
+        """Resolve answers a bare ``False`` for a preset it does not have, and for a refusal."""
+        if not self.accepts_preset or name not in self.render_presets:
+            return False
+        self.loaded_presets.append(name)
+        self.render_format = self.render_presets[name]
+        return True
+
+    def GetCurrentRenderFormatAndCodec(self) -> dict[str, str]:  # noqa: N802
+        """``format`` is the file extension, not the display name — as in the real API."""
+        if self.render_format is None:
+            return {}
+        format_, codec = self.render_format
+        return {"format": format_, "codec": codec}
 
     def SetRenderSettings(self, settings: dict[str, Any]) -> bool:  # noqa: N802
         if not self.accepts_settings:
@@ -1132,14 +1240,20 @@ class FakeProject:
         return False
 
     def _write_the_render(self) -> None:
+        """Whatever the current format says lands: a real WAV, or bytes for a video file."""
         target = Path(str(self.render_settings.get("TargetDir", "")))
         name = str(self.render_settings.get("CustomName", "render"))
-        write_wav(
-            target / f"{name}.wav",
-            seconds=self.render_seconds,
-            sample_rate=int(self.render_settings.get("AudioSampleRate", 48000)),
-            bit_depth=int(self.render_settings.get("AudioBitDepth", 24)),
-        )
+        extension = self.render_format[0] if self.render_format else "wav"
+        if extension == "wav":
+            write_wav(
+                target / f"{name}.wav",
+                seconds=self.render_seconds,
+                sample_rate=int(self.render_settings.get("AudioSampleRate", 48000)),
+                bit_depth=int(self.render_settings.get("AudioBitDepth", 24)),
+            )
+            return
+        target.mkdir(parents=True, exist_ok=True)
+        (target / f"{name}.{extension}").write_bytes(b"\0" * 2048)
 
     def GetName(self) -> str:  # noqa: N802
         return self._name

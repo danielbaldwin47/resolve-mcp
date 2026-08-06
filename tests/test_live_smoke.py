@@ -30,11 +30,12 @@ import pytest
 from resolve_mcp.audio.acquire import acquire_timeline_audio
 from resolve_mcp.jobs.runner import wait_for
 from resolve_mcp.resolve.connection import get_connection
-from resolve_mcp.tools.cut import build_timeline, validate_cut
+from resolve_mcp.tools.cut import build_timeline, swap_take, validate_cut
 from resolve_mcp.tools.escape_hatch import run_python
 from resolve_mcp.tools.jobs import get_job, list_jobs
 from resolve_mcp.tools.media import inspect_clip, list_media
 from resolve_mcp.tools.project import get_status, list_projects, snapshot_project
+from resolve_mcp.tools.render import list_render_presets, render_timeline
 from resolve_mcp.tools.timeline import (
     export_timeline,
     import_timeline,
@@ -335,19 +336,31 @@ def a_source_clip() -> dict[str, Any]:
     pytest.skip("No pool clip long enough to cut a smoke timeline from")
 
 
-def a_smoke_cut(tmp_path: Path, source: dict[str, Any], durations: tuple[int, ...]) -> str:
-    """A rough-cut shaped file (no master audio) built from one real clip."""
+def a_smoke_cut(
+    tmp_path: Path,
+    source: dict[str, Any],
+    durations: tuple[int, ...],
+    alternate_at: int | None = None,
+) -> str:
+    """A rough-cut shaped file (no master audio) built from one real clip.
+
+    ``alternate_at`` gives every segment one equal-duration alternate starting there — the
+    same clip is a legitimate alternate source, and one clip is all a smoke run can count on.
+    """
     at = source["start"]
-    segments = []
+    segments: list[dict[str, Any]] = []
     for index, length in enumerate(durations):
-        segments.append(
-            {
-                "id": f"s{index:03d}",
-                "source": "angle",
-                "in": at,
-                "out": at + length,
-            }
-        )
+        segment: dict[str, Any] = {
+            "id": f"s{index:03d}",
+            "source": "angle",
+            "in": at,
+            "out": at + length,
+        }
+        if alternate_at is not None:
+            segment["alternates"] = [
+                {"source": "angle", "in": alternate_at, "out": alternate_at + length}
+            ]
+        segments.append(segment)
         at += length
     angle = {"clip": source["name"]}
     if source["bin"] is not None:
@@ -380,7 +393,7 @@ def test_a_real_build_places_every_shot_exactly_where_the_cut_puts_it(tmp_path: 
     result = build_timeline(cut_file)
 
     assert result["ok"] is True, result.get("error")
-    assert result["placed"] == {"segments": 3, "audio": False}
+    assert result["placed"] == {"segments": 3, "audio": False, "selectors": 0}
     built = inspect_timeline(result["timeline"]["name"], detail="clips")
     assert built["ok"] is True
     video = [track for track in built["tracks"] if track["type"] == "video"][0]
@@ -388,6 +401,57 @@ def test_a_real_build_places_every_shot_exactly_where_the_cut_puts_it(tmp_path: 
     timeline_start = built["timeline"]["start"]["frames"]
     assert [item["record"]["duration"]["frames"] for item in video["items"]] == list(durations)
     assert starts == [timeline_start, timeline_start + 48, timeline_start + 72]
+
+
+def test_a_real_take_selector_swaps_the_angle_without_moving_the_shot(tmp_path: Path) -> None:
+    """The take path end to end, and the three things no fake can settle about it.
+
+    (a) whether ``AddTake`` reads ``endFrame`` half-open the way ``AppendToTimeline`` does —
+    a selector whose takes are all the same length is the only thing making an in-place swap
+    legal, so an off-by-one here is the whole feature; (b) where Resolve leaves the selection
+    after an add, which the build refuses to assume and sets to the main take explicitly; and
+    (c) whether the swapped shot really plays the alternate's frames while keeping its own
+    position and length.
+    """
+    if get_status()["context"]["project"] is None:
+        pytest.skip("No project open in Resolve")
+    source = a_source_clip()
+    durations = (48, 24, 36)
+    alternate_at = source["start"] + sum(durations)
+    cut_file = a_smoke_cut(tmp_path, source, durations, alternate_at=alternate_at)
+    assert validate_cut(cut_file)["valid"] is True
+
+    result = build_timeline(cut_file)
+
+    assert result["ok"] is True, result.get("error")
+    assert result["placed"] == {"segments": 3, "audio": False, "selectors": 3}
+    name = result["timeline"]["name"]
+    before = _video_items(name)
+    assert [item["takes"] for item in before] == [2, 2, 2]
+    assert [item["source"]["in"]["frames"] for item in before][0] == source["start"]
+
+    swapped = swap_take(cut_file, "s000", 2, timeline=name)
+
+    assert swapped["ok"] is True, swapped.get("error")
+    assert swapped["changed"] is True
+    assert swapped["sync"]["in"] == alternate_at
+    after = _video_items(name)
+    assert after[0]["source"]["in"]["frames"] == alternate_at
+    assert [item["record"]["in"]["frames"] for item in after] == [
+        item["record"]["in"]["frames"] for item in before
+    ]
+    assert [item["record"]["duration"]["frames"] for item in after] == list(durations)
+
+    assert swap_take(cut_file, "s000", 1, timeline=name)["ok"] is True
+    assert _video_items(name)[0]["source"]["in"]["frames"] == source["start"]
+
+
+def _video_items(name: str) -> list[dict[str, Any]]:
+    read = inspect_timeline(name, detail="clips")
+    assert read["ok"] is True, read.get("error")
+    video = [track for track in read["tracks"] if track["type"] == "video"][0]
+    items: list[dict[str, Any]] = video["items"]
+    return items
 
 
 def test_a_rebuild_makes_the_next_version_and_leaves_the_last_one_alone(tmp_path: Path) -> None:
@@ -569,6 +633,86 @@ def test_a_real_scene_scan_reports_cuts_on_the_clips_own_clock() -> None:
     assert Path(record.result["path"]).exists()
     for cut in record.result["first_cuts"]:
         assert bounds["in"]["frames"] < cut["frames"] < bounds["out"]["frames"]
+
+def test_the_preset_list_is_the_one_in_the_deliver_page() -> None:
+    """#33: whether ``GetRenderPresetList`` answers at all, and with what spelling.
+
+    Run with ``-s`` and record the names on the ticket — every render_timeline call names
+    one of them, and they are per project and per machine.
+    """
+    if get_status()["context"]["project"] is None:
+        pytest.skip("No project open in Resolve")
+
+    reply = list_render_presets()
+
+    assert reply["ok"] is True, reply.get("error")
+    assert reply["count"] > 0, "a stock Resolve ships presets; an empty list means the getter lied"
+    print(f"\nrender presets: {reply['presets']}")
+
+
+def test_a_range_render_covers_the_frames_it_was_given(tmp_path: Path) -> None:
+    """#33: the AC no fake can answer — that MarkIn/MarkOut are read on the timeline's clock.
+
+    The fakes prove the conversion (half-open in, inclusive out) and that the settings
+    reach ``SetRenderSettings``. What only Resolve can say is whether those frame numbers
+    are absolute timeline frames — a timeline starting at 01:00:00:00 starts at frame 86400,
+    and a Resolve reading them as offsets from zero would render the wrong part of the set
+    while reporting success.
+
+    So two ranges are rendered, one three times the other: if the marks were ignored, both
+    would be the whole timeline and the files would be the same size. Slow — it renders
+    twice. Check the shorter file opens and starts where the range said.
+    """
+    if get_status()["context"]["timeline"] is None:
+        pytest.skip("No timeline open in Resolve")
+    presets = list_render_presets()
+    assert presets["ok"] is True, presets.get("error")
+    if not presets["presets"]:
+        pytest.skip("No render presets in this project")
+    preset = os.environ.get("RESOLVE_MCP_RENDER_PRESET") or presets["presets"][0]
+
+    whole = inspect_timeline(detail="summary")
+    assert whole["ok"] is True
+    first = whole["timeline"]["start"]["frames"]
+    fps = whole["timeline"]["fps"] or 24
+    if whole["timeline"]["duration"]["frames"] < int(fps * 13):
+        pytest.skip("The open timeline is too short to render two ranges out of")
+
+    short = render_timeline(
+        preset=preset,
+        name="resolve-mcp-smoke-short",
+        target_dir=str(tmp_path),
+        start=first + int(fps),
+        end=first + int(fps * 3),
+    )
+    assert short["ok"] is True, short.get("error")
+    short_record = wait_for(short["job"]["job_id"], timeout=1800.0)
+    assert short_record.state == "completed", short_record.error
+
+    long = render_timeline(
+        preset=preset,
+        name="resolve-mcp-smoke-long",
+        target_dir=str(tmp_path),
+        start=first + int(fps),
+        end=first + int(fps * 7),
+    )
+    assert long["ok"] is True, long.get("error")
+    long_record = wait_for(long["job"]["job_id"], timeout=1800.0)
+    assert long_record.state == "completed", long_record.error
+
+    assert short_record.result is not None
+    assert long_record.result is not None
+    shorter = Path(short_record.result["path"])
+    longer = Path(long_record.result["path"])
+    assert shorter.exists() and longer.exists()
+    print(f"\nrendered {shorter} ({shorter.stat().st_size} bytes) with preset {preset!r}")
+    assert longer.stat().st_size > shorter.stat().st_size * 1.5, (
+        "a three-times-longer range rendered the same size — MarkIn/MarkOut were ignored"
+    )
+
+    polled = get_job(short["job"]["job_id"])
+    assert polled["ok"] is True
+    assert polled["job"]["state"] == "completed"
 
 
 def test_snapshot_writes_a_real_drp(tmp_path: Path) -> None:
