@@ -10,4 +10,9 @@ The output is a file, not a return value. A concert's worth of words does not fi
 result and would eat the client's output cap whole, so the job writes timestamped
 LLM-friendly JSON — one record per line, greppable — and returns the path plus gist stats.
 The agent reads the slices it needs.
+
+Nothing heavy is imported here. ``decode`` and ``energy`` pull numpy and scipy, the beat
+model pulls torch, and transcription pulls faster-whisper, so the workers import what they
+need when they run and server startup stays a stdio handshake rather than a scientific
+stack (see ``jobs.runner``).
 """

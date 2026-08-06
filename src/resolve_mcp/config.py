@@ -99,7 +99,7 @@ class Config:
 
     @property
     def analysis_dir(self) -> Path:
-        """What the analysis jobs write: transcripts, scene-cut catalogs, later beat maps.
+        """What the analysis jobs write: transcripts, scene-cut catalogs, beats, energy curves.
 
         Separate from the WAVs they were read off: the audio is a cache of something Resolve
         or ffmpeg can make again, while these are the files the agent greps and quotes in a

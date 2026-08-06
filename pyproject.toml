@@ -6,6 +6,10 @@ readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "fastmcp>=3.4,<4",
+    # The analysis substrate: numpy does the arithmetic, scipy the IIR filtering the
+    # loudness standard needs. Both are imported inside workers, never at startup.
+    "numpy>=2.0,<3",
+    "scipy>=1.14,<2",
 ]
 
 [project.optional-dependencies]
@@ -57,8 +61,9 @@ files = ["src", "tests"]
 strict = true
 warn_unused_ignores = true
 
-# The analysis extra ships no stubs, and is not installed at all in CI or on a machine that
-# only drives Resolve — so the import is unresolvable rather than untyped.
+# The analysis extras ship no stubs, and are not installed at all in CI or on a machine
+# that only drives Resolve — so the imports are unresolvable rather than untyped. scipy
+# ships no type information either; the two functions used from it are filters over arrays.
 [[tool.mypy.overrides]]
-module = ["faster_whisper.*"]
+module = ["faster_whisper.*", "scipy.*"]
 ignore_missing_imports = true

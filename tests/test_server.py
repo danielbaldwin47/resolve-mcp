@@ -42,6 +42,7 @@ def test_registers_the_p1_session_media_timeline_cut_render_and_job_tools() -> N
         "grab_frames",
         "detect_scene_cuts",
         "transcribe_audio",
+        "analyze_music",
         "separate_stems",
         "list_render_presets",
         "render_timeline",
