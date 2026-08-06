@@ -35,6 +35,7 @@ from resolve_mcp.tools.escape_hatch import run_python
 from resolve_mcp.tools.jobs import get_job, list_jobs
 from resolve_mcp.tools.media import inspect_clip, list_media
 from resolve_mcp.tools.project import get_status, list_projects, snapshot_project
+from resolve_mcp.tools.render import list_render_presets, render_timeline
 from resolve_mcp.tools.timeline import (
     export_timeline,
     import_timeline,
@@ -571,6 +572,87 @@ def test_the_render_queue_exports_the_real_timeline_mix() -> None:
 
     again = acquire_timeline_audio(get_connection())
     assert again["cached"] is True, "an unchanged timeline must be a cache hit"
+
+
+def test_the_preset_list_is_the_one_in_the_deliver_page() -> None:
+    """#33: whether ``GetRenderPresetList`` answers at all, and with what spelling.
+
+    Run with ``-s`` and record the names on the ticket — every render_timeline call names
+    one of them, and they are per project and per machine.
+    """
+    if get_status()["context"]["project"] is None:
+        pytest.skip("No project open in Resolve")
+
+    reply = list_render_presets()
+
+    assert reply["ok"] is True, reply.get("error")
+    assert reply["count"] > 0, "a stock Resolve ships presets; an empty list means the getter lied"
+    print(f"\nrender presets: {reply['presets']}")
+
+
+def test_a_range_render_covers_the_frames_it_was_given(tmp_path: Path) -> None:
+    """#33: the AC no fake can answer — that MarkIn/MarkOut are read on the timeline's clock.
+
+    The fakes prove the conversion (half-open in, inclusive out) and that the settings
+    reach ``SetRenderSettings``. What only Resolve can say is whether those frame numbers
+    are absolute timeline frames — a timeline starting at 01:00:00:00 starts at frame 86400,
+    and a Resolve reading them as offsets from zero would render the wrong part of the set
+    while reporting success.
+
+    So two ranges are rendered, one three times the other: if the marks were ignored, both
+    would be the whole timeline and the files would be the same size. Slow — it renders
+    twice. Check the shorter file opens and starts where the range said.
+    """
+    if get_status()["context"]["timeline"] is None:
+        pytest.skip("No timeline open in Resolve")
+    presets = list_render_presets()
+    assert presets["ok"] is True, presets.get("error")
+    if not presets["presets"]:
+        pytest.skip("No render presets in this project")
+    preset = os.environ.get("RESOLVE_MCP_RENDER_PRESET") or presets["presets"][0]
+
+    whole = inspect_timeline(detail="summary")
+    assert whole["ok"] is True
+    first = whole["timeline"]["start"]["frames"]
+    fps = whole["timeline"]["fps"] or 24
+    if whole["timeline"]["duration"]["frames"] < int(fps * 13):
+        pytest.skip("The open timeline is too short to render two ranges out of")
+
+    short = render_timeline(
+        preset=preset,
+        name="resolve-mcp-smoke-short",
+        target_dir=str(tmp_path),
+        start=first + int(fps),
+        end=first + int(fps * 3),
+    )
+    assert short["ok"] is True, short.get("error")
+    short_record = wait_for(short["job"]["job_id"], timeout=1800.0)
+    assert short_record.state == "completed", short_record.error
+
+    long = render_timeline(
+        preset=preset,
+        name="resolve-mcp-smoke-long",
+        target_dir=str(tmp_path),
+        start=first + int(fps),
+        end=first + int(fps * 7),
+    )
+    assert long["ok"] is True, long.get("error")
+    long_record = wait_for(long["job"]["job_id"], timeout=1800.0)
+    assert long_record.state == "completed", long_record.error
+
+    assert short_record.result is not None
+    assert long_record.result is not None
+    shorter = Path(short_record.result["path"])
+    longer = Path(long_record.result["path"])
+    assert shorter.exists() and longer.exists()
+    print(f"\nrendered {shorter} ({shorter.stat().st_size} bytes) with preset {preset!r}")
+    assert longer.stat().st_size > shorter.stat().st_size * 1.5, (
+        "a three-times-longer range rendered the same size — MarkIn/MarkOut were ignored"
+    )
+
+    polled = get_job(short["job"]["job_id"])
+    assert polled["ok"] is True
+    assert polled["job"]["state"] == "completed"
 
 
 def test_snapshot_writes_a_real_drp(tmp_path: Path) -> None:
