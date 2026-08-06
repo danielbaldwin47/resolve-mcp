@@ -30,7 +30,6 @@ rather than an unsure one.
 from __future__ import annotations
 
 import bisect
-import json
 import statistics
 from collections import Counter
 from collections.abc import Mapping, Sequence
@@ -38,7 +37,7 @@ from pathlib import Path
 from typing import Any, NamedTuple
 
 from ..audio import separator, wav
-from ..audio.stems import DRUM_STEMS
+from ..audio.stems import DRUM_PASS, DRUM_STEMS
 from ..config import Config, get_config
 from ..errors import InvalidRequestError
 from ..jobs import cache
@@ -90,7 +89,6 @@ class Candidate(NamedTuple):
     counts: dict[str, int]
     density: float
     density_ratio: float
-    resolves_at: float
     resolves_into_bar: int | None
     factors: dict[str, float]
     confidence: float
@@ -102,6 +100,20 @@ class Detection(NamedTuple):
     candidates: tuple[Candidate, ...]
     considered: int
     dropped: int
+    baseline: float
+
+
+class Reading(NamedTuple):
+    """The performance as the rules see it: the grid, its spans, the hits in each, the norm.
+
+    Every one of these is derived from the same two inputs and every rule needs several of
+    them, so they travel as one thing rather than as five arguments in the same order.
+    """
+
+    beats: Sequence[Mapping[str, Any]]
+    edges: Sequence[float]
+    tallies: Sequence[Counter[str]]
+    times: Sequence[float]
     baseline: float
 
 
@@ -133,12 +145,18 @@ def candidates(
         # Nothing to be busier than: a kit this quiet has no ordinary beat to depart from.
         return Detection((), 0, 0, 0.0)
 
+    reading = Reading(
+        beats=beats,
+        edges=edges,
+        tallies=tallies,
+        times=sorted(hit.seconds for hit in hits),
+        baseline=baseline,
+    )
     busy = [
         (density >= baseline * BUSY_MULTIPLE and sum(tally.values()) >= MINIMUM_HITS)
         or tally[TOM_STEM] >= TOM_HITS
         for tally, density in zip(tallies, densities, strict=True)
     ]
-    times = sorted(hit.seconds for hit in hits)
 
     kept: list[Candidate] = []
     considered = 0
@@ -148,7 +166,7 @@ def candidates(
             dropped += 1
             continue
         considered += 1
-        candidate = _weighed(beats, edges, tallies, baseline, times, first, last)
+        candidate = _weighed(reading, first, last)
         if candidate.confidence >= minimum_confidence:
             kept.append(candidate)
     return Detection(tuple(kept), considered, dropped, baseline)
@@ -191,44 +209,39 @@ def _runs(busy: Sequence[bool]) -> list[tuple[int, int]]:
     return runs
 
 
-def _weighed(
-    beats: Sequence[Mapping[str, Any]],
-    edges: Sequence[float],
-    tallies: Sequence[Counter[str]],
-    baseline: float,
-    times: Sequence[float],
-    first: int,
-    last: int,
-) -> Candidate:
-    """One run turned into a candidate: its span, its counts, and how sure the rules are."""
+def _weighed(reading: Reading, first: int, last: int) -> Candidate:
+    """One run turned into a candidate: its span, its counts, and how sure the rules are.
+
+    The end of the span *is* the resolution point — the beat the fill lands into — because
+    a run is grown until the playing settles, and that beat is what a cut is placed against.
+    """
     counts: Counter[str] = Counter()
-    for tally in tallies[first : last + 1]:
+    for tally in reading.tallies[first : last + 1]:
         counts.update(tally)
     total = sum(counts.values())
-    start, end = edges[first], edges[last + 1]
+    start, end = reading.edges[first], reading.edges[last + 1]
     length = last - first + 1
     density = total / (end - start)
 
-    into = beats[last + 1] if last + 1 < len(beats) else None
+    into = reading.beats[last + 1] if last + 1 < len(reading.beats) else None
     tolerance = RESOLUTION_BEATS * (end - start) / length
     factors = {
-        "density": _clamp((density / baseline - 1.0) / (STRONG_MULTIPLE - 1.0)),
+        "density": _clamp((density / reading.baseline - 1.0) / (STRONG_MULTIPLE - 1.0)),
         "toms": _clamp(counts[TOM_STEM] / total / TOM_SHARE) if total else 0.0,
-        "resolution": 1.0 if _hit_near(times, end, tolerance) else 0.0,
+        "resolution": 1.0 if _hit_near(reading.times, end, tolerance) else 0.0,
         "phrase": _phrase(into),
     }
     return Candidate(
         start=round(start, PLACES),
         end=round(end, PLACES),
         beats=length,
-        beat=int(beats[first]["beat"]),
-        bar=int(beats[first]["bar"]),
-        in_bar=int(beats[first]["in_bar"]),
+        beat=int(reading.beats[first]["beat"]),
+        bar=int(reading.beats[first]["bar"]),
+        in_bar=int(reading.beats[first]["in_bar"]),
         hits=total,
         counts={stem: counts[stem] for stem in sorted(counts)},
         density=round(density, PLACES),
-        density_ratio=round(density / baseline, PLACES),
-        resolves_at=round(end, PLACES),
+        density_ratio=round(density / reading.baseline, PLACES),
         resolves_into_bar=int(into["bar"]) if into is not None else None,
         factors={name: round(value, PLACES) for name, value in factors.items()},
         confidence=round(
@@ -264,7 +277,6 @@ def rows(detection: Detection) -> tuple[dict[str, Any], ...]:
             "bar": one.bar,
             "in_bar": one.in_bar,
             "beats": one.beats,
-            "resolves_at": one.resolves_at,
             "resolves_into_bar": one.resolves_into_bar,
             "hits": one.hits,
             **{stem: one.counts.get(stem, 0) for stem in DRUM_STEMS},
@@ -324,7 +336,7 @@ def detect_drum_fills(
 
     settings = {"minimum_confidence": float(minimum_confidence)}
     identity = cache.identity(source, config.audio_dir)
-    key = cache.cache_key(KIND, [identity, *_stem_inputs(found)], settings)
+    key = _key(identity, found, settings)
 
     def work(progress: Progress) -> JobOutput:
         return detect(
@@ -351,17 +363,11 @@ def detect_drum_fills(
 
 
 def _readable(audio: str | Path) -> Path:
-    source = Path(audio)
-    if not source.is_file():
-        raise InvalidRequestError(
-            cause=f"There is no file at {source}.",
-            fix=(
-                "Pass the master mix the stems were separated from — the beat grid comes from "
-                "it, and fills are reported against that grid."
-            ),
-            detail={"requested": str(source)},
-        )
-    return source
+    return music.readable_audio(
+        audio,
+        "Pass the master mix the stems were separated from — the beat grid comes from it, "
+        "and fills are reported against that grid.",
+    )
 
 
 def _stems(stems: Mapping[str, str | Path] | str | Path) -> dict[str, Path]:
@@ -384,8 +390,9 @@ def _stems(stems: Mapping[str, str | Path] | str | Path) -> dict[str, Path]:
         raise InvalidRequestError(
             cause="None of the drum stems were named, so there is nothing to look for fills in.",
             fix=(
-                "Pass the drums mapping a separate_stems job returned, or its directory. The "
-                f"stems this reads are {', '.join(DRUM_STEMS)}."
+                "Pass the directory a separate_stems job reported — its second pass writes the "
+                f"{', '.join(DRUM_STEMS)} this reads. A four-stem separation on its own is not "
+                "enough; the drum pass is what fills are found in."
             ),
             detail={"wanted": list(DRUM_STEMS), "given": given},
         )
@@ -393,17 +400,29 @@ def _stems(stems: Mapping[str, str | Path] | str | Path) -> dict[str, Path]:
 
 
 def _collected(directory: Path) -> dict[str, Path]:
+    """The drum stems under a separation's directory — the pass's own, or the parent of it.
+
+    A separation writes its two passes into ``<directory>/mix`` and ``<directory>/drums``,
+    and the job reports the parent. That parent is what an agent has in hand, so it is what
+    this accepts, and the drum pass inside it is looked in first. The parent itself is
+    checked too, because a director who copied three stems into a folder of their own is
+    doing something reasonable and should not have to name a subdirectory that is not there.
+    """
     if not directory.is_dir():
         raise InvalidRequestError(
             cause=f"There is no directory at {directory}.",
-            fix="Pass the directory a separate_stems job reported, or its drums mapping.",
+            fix="Pass the directory a separate_stems job reported, or the drum pass inside it.",
             detail={"requested": str(directory)},
         )
-    return {
-        label: path
-        for label, path in separator.collect(directory).items()
-        if label in DRUM_STEMS
-    }
+    for candidate in (directory / DRUM_PASS, directory):
+        found = {
+            label: path
+            for label, path in separator.collect(candidate).items()
+            if label in DRUM_STEMS
+        }
+        if found:
+            return found
+    return {}
 
 
 def _all_on_disk(found: Mapping[str, Path]) -> None:
@@ -428,17 +447,21 @@ def _sane_floor(minimum_confidence: float) -> None:
         )
 
 
-def _stem_inputs(found: Mapping[str, Path]) -> list[dict[str, Any]]:
-    """Identity for the stems, fingerprinted rather than hashed — the path is the hash.
+def _key(
+    identity: Mapping[str, Any],
+    stems: Mapping[str, Path],
+    settings: Mapping[str, Any],
+) -> str:
+    """The job's key. One function, because the starter and the worker must agree on it.
 
-    Every other input to an analysis job is hashed when this server wrote it, because a
-    false hit would attribute one concert's readings to another. Stems are the exception
-    and get away with it: a separation writes into a directory named after its own cache
-    key, which is derived from the content hash of the audio it separated. The path already
-    carries the content identity, size and mtime catch a rewrite in place, and reading three
-    concert-length WAVs would stall a starter whose whole job is to hand back an id at once.
+    The stems are fingerprinted rather than hashed, which is the one place this pillar
+    departs from "hash what the server wrote" — see ADR 0003.
     """
-    return [{"stem": label, **cache.fingerprint(path)} for label, path in sorted(found.items())]
+    inputs = [
+        dict(identity),
+        *({"stem": label, **cache.fingerprint(path)} for label, path in sorted(stems.items())),
+    ]
+    return cache.cache_key(KIND, inputs, dict(settings))
 
 
 def detect(
@@ -453,15 +476,20 @@ def detect(
     refresh: bool = False,
     config: Config | None = None,
 ) -> JobOutput:
-    """The worker: the grid, then the hits, then the rules over both."""
+    """The worker: the grid, then the hits, then the rules over both.
+
+    The grid comes from the half ``analyze_music`` writes, under that half's own key: a
+    master the agent already ran music analysis over does not pay for the beat model a
+    second time (#22, story 26).
+    """
     config = config or get_config()
     config.analysis_dir.mkdir(parents=True, exist_ok=True)
     described = wav.describe(source)
-    identity = dict(identity) if identity is not None else cache.identity(source, config.audio_dir)
-    key = key or cache.cache_key(KIND, [identity, *_stem_inputs(stems)], dict(settings))
+    known = dict(identity) if identity is not None else cache.identity(source, config.audio_dir)
+    key = key or _key(known, stems, settings)
 
     progress(0.05, "reading the beat grid")
-    grid = _beat_grid(source, described, identity, detector, refresh, config)
+    grid = music.numbered_beats(source, described, known, detector, refresh, config)
 
     progress(0.25, "transcribing the drum stems")
     hits = drums.transcribe(stems, transcriber)
@@ -485,26 +513,3 @@ def detect(
     return JobOutput({"path": str(target), **summary}, (target,))
 
 
-def _beat_grid(
-    source: Path,
-    described: Mapping[str, Any],
-    identity: Mapping[str, Any],
-    detector: beats_module.Detector | None,
-    refresh: bool,
-    config: Config,
-) -> list[dict[str, Any]]:
-    """The numbered beats, read back from the half ``analyze_music`` shares with this job.
-
-    Sharing the entry rather than the code is the point: a master the agent already ran
-    music analysis over does not pay for the beat model twice (#22, story 26).
-    """
-    document = music.beats_half(
-        source,
-        described=dict(described),
-        identity=dict(identity),
-        detector=detector,
-        refresh=refresh,
-        config=config,
-    )
-    written = json.loads(Path(document["path"]).read_text(encoding="utf-8"))
-    return list(written[music.BEATS])

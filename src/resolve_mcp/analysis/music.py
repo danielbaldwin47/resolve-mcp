@@ -25,6 +25,7 @@ and reading all of it would stall the starter that is supposed to return a job i
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -98,17 +99,11 @@ def analyze_music(
 
 
 def _readable(audio: str | Path) -> Path:
-    source = Path(audio)
-    if not source.is_file():
-        raise InvalidRequestError(
-            cause=f"There is no file at {source}.",
-            fix=(
-                "Pass the path to the master mix, or the path an acquire_timeline_audio job "
-                "returned. Analysis reads WAV."
-            ),
-            detail={"requested": str(source)},
-        )
-    return source
+    return readable_audio(
+        audio,
+        "Pass the path to the master mix, or the path an acquire_timeline_audio job "
+        "returned. Analysis reads WAV.",
+    )
 
 
 def _asked_for_something(beats: bool, energy: bool) -> None:
@@ -137,11 +132,11 @@ def _identity(source: Path, config: Config) -> dict[str, Any]:
 
 def beats_half(
     source: Path,
-    described: dict[str, Any] | None = None,
-    identity: dict[str, Any] | None = None,
-    detector: beats_module.Detector | None = None,
-    refresh: bool = False,
-    config: Config | None = None,
+    described: dict[str, Any],
+    identity: dict[str, Any],
+    detector: beats_module.Detector | None,
+    refresh: bool,
+    config: Config,
 ) -> dict[str, Any]:
     """The beats half on its own terms — the entry every job that needs a grid shares.
 
@@ -149,17 +144,49 @@ def beats_half(
     a second time on audio music analysis already ran over, so the half is callable on its
     own and the key stays exactly the one ``analyze`` writes.
     """
-    config = config or get_config()
-    shape = described if described is not None else wav.describe(source)
-    known = identity if identity is not None else _identity(source, config)
     return _half(
         BEATS,
-        cache.cache_key(f"{KIND}:{BEATS}", [known], {}),
-        lambda path: _beats(source, path, shape, detector),
+        cache.cache_key(f"{KIND}:{BEATS}", [identity], {}),
+        lambda path: _beats(source, path, described, detector),
         source,
         refresh,
         config,
     )
+
+
+def numbered_beats(
+    source: Path,
+    described: dict[str, Any],
+    identity: dict[str, Any],
+    detector: beats_module.Detector | None,
+    refresh: bool,
+    config: Config,
+) -> list[dict[str, Any]]:
+    """The beat records themselves, from the half above — computed or read back from disk.
+
+    The document is the interchange format, so a caller that wants the grid rather than a
+    path reads it the way an agent would. Reading it here rather than at the caller keeps
+    the file's layout the business of the module that writes it.
+    """
+    document = beats_half(source, described, identity, detector, refresh, config)
+    written = json.loads(Path(document["path"]).read_text(encoding="utf-8"))
+    return list(written[BEATS])
+
+
+def readable_audio(audio: str | Path, fix: str) -> Path:
+    """The path, if there is a file at it — the check every audio starter makes first.
+
+    The ``fix`` differs per job because the advice does: a fill job wants the master the
+    stems came from, and music analysis wants any master at all.
+    """
+    source = Path(audio)
+    if not source.is_file():
+        raise InvalidRequestError(
+            cause=f"There is no file at {source}.",
+            fix=fix,
+            detail={"requested": str(source)},
+        )
+    return source
 
 
 def analyze(

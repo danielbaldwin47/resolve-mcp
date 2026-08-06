@@ -49,9 +49,12 @@ def detect(path: Path, detector: Detector | None = None) -> BeatGrid: ...
   the interpreter in ADR 0001 — it fails loudly with a fix, rather than silently. The
   second is not a testable claim; it was settled by measurement in the research tickets and
   is re-checked by ear on real concerts.
-- Later analysis tickets (#38 drum fills, #39 solos, #40 applause) inherit the shape: one
-  seam per model, the same missing-dependency error, the same split between what the model
-  says and what the worker does with it.
+- Later analysis tickets (#38 structure and solo changes, #39 drum fills) inherit the
+  shape: one seam per model, the same missing-dependency error, the same split between what
+  the model says and what the worker does with it. #39 shows the shape holds even when the
+  seam has no model behind it — its default transcriber is this repo's own onset detector
+  run per drum stem, and the seam earns its keep by letting the rule layer be tested on
+  exact hits rather than on synthesized audio.
 - The arithmetic that *is* a published standard gets held to it rather than to a fixture:
   the BS.1770 loudness filter is checked against the coefficients the standard tabulates,
   so "the numbers look plausible" is never the assertion.
