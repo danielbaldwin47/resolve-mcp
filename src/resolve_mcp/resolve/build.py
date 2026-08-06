@@ -1,4 +1,4 @@
-"""Materialising a cut file: sequential V1 over one master-audio clip, as a new version.
+"""Materialising a cut file: sequential V1 and anchored V2, over one master-audio clip.
 
 The one write primitive Resolve gives us is append-with-exact-placement, and the #18 spike
 found it full of silent failures. Everything in this file exists to make one guarantee:
@@ -6,9 +6,13 @@ found it full of silent failures. Everything in this file exists to make one gua
 
 * **Nothing starts on a file that will not build.** The same rules ``validate_cut`` runs
   run here first, over the same pool reading, and a single error aborts before a timeline
-  is created. A cut that is valid but describes something this build cannot place is
-  refused for the same reason — a timeline missing part of its own cut is the half-built
-  outcome the pre-flight exists to prevent.
+  is created — a timeline missing part of its own cut is the half-built outcome the
+  pre-flight exists to prevent.
+* **Overlays are placed, never positioned.** An overlay states an anchor segment and an
+  offset, so its V2 record frame is computed from the same layout E9 validated against
+  (``overlay_positions``). Re-timing an earlier segment and rebuilding therefore leaves
+  every overlay over the content it was anchored to, which is the whole point of the
+  anchor: an absolute frame would have to be re-authored on every tightening pass.
 * **A new version every time.** The name is ``<base> v<N+1>`` scanned off the project's
   existing names, so no build ever writes into a timeline someone has already reviewed.
 * **Resolve's answer is never the evidence.** An append onto a locked track returns
@@ -28,8 +32,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Final
 
-from ..cut.validate import locked_track_finding, placements
-from ..errors import BuildFailedError, CutInvalidError, UnsupportedCutFeatureError
+from ..cut.validate import locked_track_finding, overlay_positions, placements
+from ..errors import BuildFailedError, CutInvalidError
 from ..logging_config import get_logger
 from ..naming import next_version_name
 from . import cut, media, takes
@@ -46,10 +50,8 @@ Timeline = Any
 MEDIA_TYPES: Final[dict[str, int]] = {"video": 1, "audio": 2}
 """Resolve's ``mediaType``: 1 appends video only, 2 audio only. Never omitted."""
 
-TRACK_INDEX: Final = timeline_read.FIRST_TRACK
-"""Sequential V1 is one video track and one audio track; both are the first of their kind."""
-
-TRACK_LABELS: Final[dict[str, str]] = {"video": "V1", "audio": "A1"}
+TRACK_PREFIXES: Final[dict[str, str]] = {"video": "V", "audio": "A"}
+"""Also the order tracks are reported in, so every log and failure detail reads the same."""
 
 AUDIO_TRACK_TYPE: Final = "stereo"
 """What a master mix is. ``AddTrack`` defaults to mono, which would fold a stereo mix."""
@@ -59,11 +61,38 @@ MISPLACED_CAP: Final = 20
 
 
 @dataclass(frozen=True)
+class Track:
+    """One target track: a media type and a 1-based index, which never travel apart.
+
+    Resolve drops an append naming a ``trackIndex`` without its ``mediaType``, and a lock
+    check or a read-back is meaningless without both — so the pair is one value here.
+    """
+
+    type: str
+    index: int
+
+    @property
+    def label(self) -> str:
+        """What the timeline header calls it — the only name an agent or director sees."""
+        return f"{TRACK_PREFIXES[self.type]}{self.index}"
+
+
+V1: Final = Track("video", 1)
+"""The sequential cut: segments butt-joined in document order."""
+
+V2: Final = Track("video", 2)
+"""Overlays ride above the cut here, so covering a seam never displaces the segments."""
+
+A1: Final = Track("audio", 1)
+"""One continuous master mix under the whole cut."""
+
+
+@dataclass(frozen=True)
 class Shot:
-    """One append: which frames of which clip land where, on which kind of track."""
+    """One append: which frames of which clip land where, on which track."""
 
     id: str
-    track_type: str
+    track: Track
     clip: Clip
     name: str
     source_in: int
@@ -80,8 +109,8 @@ class Shot:
             "mediaPoolItem": self.clip,
             "startFrame": self.source_in,
             "endFrame": self.source_out,
-            "mediaType": MEDIA_TYPES[self.track_type],
-            "trackIndex": TRACK_INDEX,
+            "mediaType": MEDIA_TYPES[self.track.type],
+            "trackIndex": self.track.index,
             "recordFrame": self.record,
         }
 
@@ -106,7 +135,6 @@ def build_timeline(
     # E1 is an error, so a pre-flight with no errors has a document that parsed and matched
     # the schema — every read of it below is a field the rules have already been over.
     doc: dict[str, Any] = checked.loaded.doc
-    _refuse_what_cannot_be_placed(doc)
 
     project = timeline_read.open_project(connection)
     pool = media.media_pool(connection)
@@ -134,30 +162,18 @@ def build_timeline(
         "content_hash": checked.loaded.content_hash,
         "timeline": timeline_read.summarise(timeline_read.Reader(connection), built, project, name),
         "placed": {
-            "segments": sum(1 for shot in shots if shot.track_type == "video"),
-            "audio": any(shot.track_type == "audio" for shot in shots),
+            "segments": _count(shots, V1),
+            "overlays": _count(shots, V2),
+            "audio": bool(_count(shots, A1)),
             "selectors": made,
         },
         "warnings": [finding.as_dict() for finding in checked.warnings],
     }
 
 
-# --- what this build will not attempt ------------------------------------------------------
-
-
-def _refuse_what_cannot_be_placed(doc: dict[str, Any]) -> None:
-    """Overlays validate, but only the V1 substrate is built here — say so, build nothing."""
-    overlays = doc.get("overlays") or []
-    if not overlays:
-        return
-    raise UnsupportedCutFeatureError(
-        cause=f"This cut has {len(overlays)} overlay(s); build_timeline places the sequential "
-        f"V1 and the master audio only.",
-        fix="Remove the overlays block to build the V1 cut now — anchored overlays are placed "
-        "by a later tool, and building without them would leave a timeline that does not "
-        "match its own cut file.",
-        detail={"overlays": [str(overlay["id"]) for overlay in overlays]},
-    )
+def _count(shots: list[Shot], track: Track) -> int:
+    """How many of this build's appends one track took — segments and overlays are both V."""
+    return sum(1 for shot in shots if shot.track == track)
 
 
 # --- placement ------------------------------------------------------------------------------
@@ -173,10 +189,26 @@ def _shots(doc: dict[str, Any], clips: dict[str, media.LocatedClip], start: int)
         shots.append(
             _shot(
                 id=id,
-                track_type="video",
+                track=V1,
                 located=clips[str(segment["source"])],
                 source_in=int(segment["in"]),
                 record=record,
+                duration=duration,
+            )
+        )
+    anchored = overlay_positions(doc)
+    for overlay in doc.get("overlays") or []:
+        # The anchor resolves against the layout above, so an overlay is positioned by the
+        # cut it covers rather than by a frame number anyone had to keep up to date.
+        id = str(overlay["id"])
+        offset, duration = anchored[id]
+        shots.append(
+            _shot(
+                id=id,
+                track=V2,
+                located=clips[str(overlay["source"])],
+                source_in=int(overlay["in"]),
+                record=start + offset,
                 duration=duration,
             )
         )
@@ -187,7 +219,7 @@ def _shots(doc: dict[str, Any], clips: dict[str, media.LocatedClip], start: int)
         shots.append(
             _shot(
                 id="audio",
-                track_type="audio",
+                track=A1,
                 located=clips[str(audio["source"])],
                 source_in=int(audio["in"]),
                 record=start,
@@ -199,7 +231,7 @@ def _shots(doc: dict[str, Any], clips: dict[str, media.LocatedClip], start: int)
 
 def _shot(
     id: str,
-    track_type: str,
+    track: Track,
     located: media.LocatedClip,
     source_in: int,
     record: int,
@@ -207,7 +239,7 @@ def _shot(
 ) -> Shot:
     return Shot(
         id=id,
-        track_type=track_type,
+        track=track,
         clip=located.clip,
         name=_clip_name(located),
         source_in=source_in,
@@ -227,7 +259,7 @@ def _selectors(
     shots: list[Shot],
 ) -> list[takes.Selector]:
     """The alternates each segment carries, against the record frame its shot landed on."""
-    records = {shot.id: shot.record for shot in shots if shot.track_type == "video"}
+    records = {shot.id: shot.record for shot in shots if shot.track == V1}
     found = []
     for segment in doc["segments"]:
         alternates = segment.get("alternates") or []
@@ -287,24 +319,24 @@ def _make_tracks(timeline: Timeline, shots: list[Shot], name: str) -> None:
     came with keeps whatever the project's timeline template gave it — the API cannot
     restyle an existing track, so the layout is logged rather than assumed.
     """
-    for track_type in _track_types(shots):
+    for track in _tracks(shots):
         # Only an audio track takes a sub-type; passing one to video is meaningless.
-        extra = (AUDIO_TRACK_TYPE,) if track_type == "audio" else ()
-        while _track_count(timeline, track_type) < TRACK_INDEX:
-            if not timeline.AddTrack(track_type, *extra):
+        extra = (AUDIO_TRACK_TYPE,) if track.type == "audio" else ()
+        while _track_count(timeline, track.type) < track.index:
+            if not timeline.AddTrack(track.type, *extra):
                 # Refused rather than merely unanswered: retrying would spin forever, and
                 # appending to a track that is not there drops the clip silently.
                 raise BuildFailedError(
-                    cause=f"Resolve refused to add a {track_type} track to {name!r}.",
+                    cause=f"Resolve refused to add a {track.type} track to {name!r}.",
                     fix="Close any modal dialog in the Resolve GUI, delete the empty "
                     "timeline, and build again.",
-                    detail={"timeline": name, "track_type": track_type},
+                    detail={"timeline": name, "track": track.label},
                 )
-            log.info("Added a %s track to %s", track_type, name)
+            log.info("Added %s to %s", track.label, name)
     log.info(
         "%s targets %s (%d video, %d audio tracks)",
         name,
-        ", ".join(TRACK_LABELS[track_type] for track_type in _track_types(shots)),
+        ", ".join(track.label for track in _tracks(shots)),
         _track_count(timeline, "video"),
         _track_count(timeline, "audio"),
     )
@@ -318,13 +350,13 @@ def _track_count(timeline: Timeline, track_type: str) -> int:
         return 0
 
 
-def _track_types(shots: list[Shot]) -> list[str]:
-    """The kinds of track this cut needs, in a fixed order so the logs read the same way."""
-    return [
-        track_type
-        for track_type in TRACK_LABELS
-        if any(shot.track_type == track_type for shot in shots)
-    ]
+def _tracks(shots: list[Shot]) -> list[Track]:
+    """The tracks this cut needs, in a fixed order so the logs read the same way each time."""
+    order = list(TRACK_PREFIXES)
+    return sorted(
+        {shot.track for shot in shots},
+        key=lambda track: (order.index(track.type), track.index),
+    )
 
 
 def _refuse_locked_tracks(timeline: Timeline, shots: list[Shot], name: str) -> None:
@@ -335,9 +367,9 @@ def _refuse_locked_tracks(timeline: Timeline, shots: list[Shot], name: str) -> N
     check costs one call against a failure mode that leaves no trace anywhere else.
     """
     locked = [
-        locked_track_finding(TRACK_LABELS[track_type])
-        for track_type in _track_types(shots)
-        if timeline.GetIsTrackLocked(track_type, TRACK_INDEX)
+        locked_track_finding(track.label)
+        for track in _tracks(shots)
+        if timeline.GetIsTrackLocked(track.type, track.index)
     ]
     if not locked:
         return
@@ -372,11 +404,7 @@ def _append(pool: Pool, shots: list[Shot], name: str) -> None:
 
 def _verify(timeline: Timeline, shots: list[Shot], name: str) -> None:
     """Read the tracks back: the only way to know an append landed where it was told to."""
-    misplaced = [
-        shot
-        for track_type in _track_types(shots)
-        for shot in _adrift(timeline, shots, track_type)
-    ]
+    misplaced = [shot for track in _tracks(shots) for shot in _adrift(timeline, shots, track)]
     if not misplaced:
         return
     raise BuildFailedError(
@@ -393,13 +421,13 @@ def _verify(timeline: Timeline, shots: list[Shot], name: str) -> None:
     )
 
 
-def _adrift(timeline: Timeline, shots: list[Shot], track_type: str) -> list[Shot]:
-    wanted = [shot for shot in shots if shot.track_type == track_type]
+def _adrift(timeline: Timeline, shots: list[Shot], track: Track) -> list[Shot]:
+    wanted = [shot for shot in shots if shot.track == track]
     if not wanted:
         return []
     landed = {
         (item.GetStart(), item.GetDuration())
-        for item in timeline.GetItemListInTrack(track_type, TRACK_INDEX) or []
+        for item in timeline.GetItemListInTrack(track.type, track.index) or []
     }
     return [shot for shot in wanted if (shot.record, shot.duration) not in landed]
 
@@ -408,10 +436,10 @@ def _expected(shot: Shot) -> dict[str, Any]:
     return {
         "id": shot.id,
         "clip": shot.name,
-        "track": TRACK_LABELS[shot.track_type],
+        "track": shot.track.label,
         "record_frame": shot.record,
         "duration": shot.duration,
     }
 
 
-__all__ = ["Shot", "build_timeline"]
+__all__ = ["Shot", "Track", "build_timeline"]

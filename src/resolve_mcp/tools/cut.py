@@ -50,7 +50,9 @@ def build_timeline(
 
     Every build makes a new version and never touches an earlier one, so rebuilding after
     an edit is always safe. The segments land butt-joined in document order over one
-    continuous master-audio clip; positions are computed, so gaps cannot happen.
+    continuous master-audio clip; positions are computed, so gaps cannot happen. Overlays
+    land on V2 at their anchor segment's start plus the offset — never a frame you state —
+    so tightening a segment and rebuilding leaves every overlay over the same content.
 
     The validate_cut rules run first: a single error aborts before any timeline is created,
     and comes back with the same per-segment findings. The report echoes the cut file's
