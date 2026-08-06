@@ -255,6 +255,11 @@ class FakeTimelineItem(AnswersNone):
     (``GetTakeCount`` is not an API method at all; the real one is ``GetTakesCount``, which
     is why that particular name was the one caught being ``None``.)
 
+    That singular is answered as ``None`` on *every* item, without a test opting in
+    (:data:`NOT_AN_API_METHOD`): it is not a build difference a test would choose to model
+    but a name no Resolve has, and the whole cost of #68 was that reading it looked like
+    reading zero takes.
+
     The take selector is modelled with the same suspicion as the append: ``AddTake`` and
     ``SelectTakeByIndex`` both answer ``Bool``, so ``takes_land`` and ``select_take_lands``
     model the answer that lies — a truthy return over a selector that did not change.
@@ -304,8 +309,14 @@ class FakeTimelineItem(AnswersNone):
         self._refuses = set(refuses or ())
         self._end_is_inclusive = end_is_inclusive
         self.comps: list[FakeFusionComp] = list(comps or ())
-        self._missing = set(missing or ())
+        self._missing = set(missing or ()) | FakeTimelineItem.NOT_AN_API_METHOD
         self._owner = owner
+
+    #: Names no Resolve build declares, so the live object answers them with ``None``
+    #: rather than not having them. ``GetTakeCount`` is the singular a wrapper reaches for
+    #: when it means ``GetTakesCount`` (#68); confirmed on Studio 21.0.3.7 as absent from
+    #: ``dir(item)`` with the attribute reading back ``None``.
+    NOT_AN_API_METHOD = frozenset({"GetTakeCount"})
 
     SOURCE_GETTERS = ("GetSourceStartFrame", "GetSourceEndFrame")
 
