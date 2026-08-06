@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..analysis import music, silence, transcribe, transcript, whisper
+from ..analysis import applause, music, silence, solos, structure, transcribe, transcript, whisper
 from ..resolve.connection import get_connection
 from .envelope import tool
 
@@ -45,6 +45,54 @@ def analyze_music(
             energy=energy,
             window_seconds=window_seconds,
             hop_seconds=hop_seconds,
+            refresh=refresh,
+        )
+    }
+
+
+@tool
+def analyze_structure(
+    audio: str,
+    tunes: bool = True,
+    solos: bool = False,
+    stems: str | None = None,
+    threshold: float = applause.DEFAULT_THRESHOLD,
+    tune_seconds: float = applause.DEFAULT_TUNE_SECONDS,
+    solo_seconds: float = solos.DEFAULT_MINIMUM_SECONDS,
+    refresh: bool = False,
+) -> dict[str, Any]:
+    """Start tune-boundary and solo-change analysis of a concert. Returns a job to poll.
+
+    A jazz set has no verses to segment, so the boundaries come from the room: applause is
+    tagged on the master mix, and the music between two bursts is a tune. The tunes file
+    holds one record per tune — its number, start, end, length, and the seconds of applause
+    on either side of it — which is what a songs.json author reads before placing markers.
+    Inline you get how many tunes, how much clapping, and where the longest one starts.
+
+    solos=true adds the second half and needs stems: pass the directory a separate_stems
+    job returned. It measures which stem is out front over its own quiet baseline, and
+    where the residual stem's brightness steps — one horn out, piano in, both inside
+    `other` — and writes one record per change point: where it is called, where it was
+    measured, whether it landed on a downbeat, and what handed over to what. Change points
+    are snapped to the nearest downbeat within a couple of seconds, so this half reads the
+    beat grid — analyze_music's if it exists, or it detects one and leaves it for that tool
+    to reuse.
+
+    Nothing here names the soloist: no separator ships a horn stem or a piano stem, so what
+    is measured is that the front changed and when. threshold moves how sure the tagger has
+    to be that it is hearing a room; tune_seconds is how much music has to sit between two
+    bursts before it is a tune rather than an announcement; solo_seconds is the same idea
+    for a stretch out front. Reruns on unchanged audio come back from cache immediately.
+    """
+    return {
+        "job": structure.analyze_structure(
+            audio,
+            tunes=tunes,
+            solos=solos,
+            stems=stems,
+            threshold=threshold,
+            tune_seconds=tune_seconds,
+            solo_seconds=solo_seconds,
             refresh=refresh,
         )
     }
@@ -97,6 +145,6 @@ def transcribe_audio(
     }
 
 
-TOOLS: tuple[Any, ...] = (transcribe_audio, analyze_music)
+TOOLS: tuple[Any, ...] = (transcribe_audio, analyze_music, analyze_structure)
 
-__all__ = ["TOOLS", "analyze_music", "transcribe_audio"]
+__all__ = ["TOOLS", "analyze_music", "analyze_structure", "transcribe_audio"]
