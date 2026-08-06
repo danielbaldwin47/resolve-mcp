@@ -19,8 +19,10 @@ in PowerShell, which is the shell on the machine this runs on:
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
+import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -28,13 +30,17 @@ from typing import Any
 import pytest
 
 from resolve_mcp.audio.acquire import acquire_timeline_audio
+from resolve_mcp.audio.stems import DRUM_STEMS, FOUR_STEMS, separation_params, two_pass
+from resolve_mcp.config import get_config
+from resolve_mcp.jobs import cache
 from resolve_mcp.jobs.runner import wait_for
 from resolve_mcp.resolve.connection import get_connection
-from resolve_mcp.tools.cut import build_timeline, validate_cut
+from resolve_mcp.tools.cut import build_timeline, swap_take, validate_cut
 from resolve_mcp.tools.escape_hatch import run_python
 from resolve_mcp.tools.jobs import get_job, list_jobs
 from resolve_mcp.tools.media import inspect_clip, list_media
 from resolve_mcp.tools.project import get_status, list_projects, snapshot_project
+from resolve_mcp.tools.render import list_render_presets, render_timeline
 from resolve_mcp.tools.timeline import (
     export_timeline,
     import_timeline,
@@ -42,8 +48,10 @@ from resolve_mcp.tools.timeline import (
     list_markers,
     list_timelines,
 )
+from resolve_mcp.tools.video import detect_scene_cuts, grab_frames
 
 from . import otio
+from .fakes import write_wav
 from .text_plus_probe import TEMPLATE_ENV, probe_template_append
 
 pytestmark = pytest.mark.live
@@ -334,19 +342,31 @@ def a_source_clip() -> dict[str, Any]:
     pytest.skip("No pool clip long enough to cut a smoke timeline from")
 
 
-def a_smoke_cut(tmp_path: Path, source: dict[str, Any], durations: tuple[int, ...]) -> str:
-    """A rough-cut shaped file (no master audio) built from one real clip."""
+def a_smoke_cut(
+    tmp_path: Path,
+    source: dict[str, Any],
+    durations: tuple[int, ...],
+    alternate_at: int | None = None,
+) -> str:
+    """A rough-cut shaped file (no master audio) built from one real clip.
+
+    ``alternate_at`` gives every segment one equal-duration alternate starting there — the
+    same clip is a legitimate alternate source, and one clip is all a smoke run can count on.
+    """
     at = source["start"]
-    segments = []
+    segments: list[dict[str, Any]] = []
     for index, length in enumerate(durations):
-        segments.append(
-            {
-                "id": f"s{index:03d}",
-                "source": "angle",
-                "in": at,
-                "out": at + length,
-            }
-        )
+        segment: dict[str, Any] = {
+            "id": f"s{index:03d}",
+            "source": "angle",
+            "in": at,
+            "out": at + length,
+        }
+        if alternate_at is not None:
+            segment["alternates"] = [
+                {"source": "angle", "in": alternate_at, "out": alternate_at + length}
+            ]
+        segments.append(segment)
         at += length
     angle = {"clip": source["name"]}
     if source["bin"] is not None:
@@ -379,7 +399,7 @@ def test_a_real_build_places_every_shot_exactly_where_the_cut_puts_it(tmp_path: 
     result = build_timeline(cut_file)
 
     assert result["ok"] is True, result.get("error")
-    assert result["placed"] == {"segments": 3, "audio": False}
+    assert result["placed"] == {"segments": 3, "audio": False, "selectors": 0}
     built = inspect_timeline(result["timeline"]["name"], detail="clips")
     assert built["ok"] is True
     video = [track for track in built["tracks"] if track["type"] == "video"][0]
@@ -387,6 +407,57 @@ def test_a_real_build_places_every_shot_exactly_where_the_cut_puts_it(tmp_path: 
     timeline_start = built["timeline"]["start"]["frames"]
     assert [item["record"]["duration"]["frames"] for item in video["items"]] == list(durations)
     assert starts == [timeline_start, timeline_start + 48, timeline_start + 72]
+
+
+def test_a_real_take_selector_swaps_the_angle_without_moving_the_shot(tmp_path: Path) -> None:
+    """The take path end to end, and the three things no fake can settle about it.
+
+    (a) whether ``AddTake`` reads ``endFrame`` half-open the way ``AppendToTimeline`` does —
+    a selector whose takes are all the same length is the only thing making an in-place swap
+    legal, so an off-by-one here is the whole feature; (b) where Resolve leaves the selection
+    after an add, which the build refuses to assume and sets to the main take explicitly; and
+    (c) whether the swapped shot really plays the alternate's frames while keeping its own
+    position and length.
+    """
+    if get_status()["context"]["project"] is None:
+        pytest.skip("No project open in Resolve")
+    source = a_source_clip()
+    durations = (48, 24, 36)
+    alternate_at = source["start"] + sum(durations)
+    cut_file = a_smoke_cut(tmp_path, source, durations, alternate_at=alternate_at)
+    assert validate_cut(cut_file)["valid"] is True
+
+    result = build_timeline(cut_file)
+
+    assert result["ok"] is True, result.get("error")
+    assert result["placed"] == {"segments": 3, "audio": False, "selectors": 3}
+    name = result["timeline"]["name"]
+    before = _video_items(name)
+    assert [item["takes"] for item in before] == [2, 2, 2]
+    assert [item["source"]["in"]["frames"] for item in before][0] == source["start"]
+
+    swapped = swap_take(cut_file, "s000", 2, timeline=name)
+
+    assert swapped["ok"] is True, swapped.get("error")
+    assert swapped["changed"] is True
+    assert swapped["sync"]["in"] == alternate_at
+    after = _video_items(name)
+    assert after[0]["source"]["in"]["frames"] == alternate_at
+    assert [item["record"]["in"]["frames"] for item in after] == [
+        item["record"]["in"]["frames"] for item in before
+    ]
+    assert [item["record"]["duration"]["frames"] for item in after] == list(durations)
+
+    assert swap_take(cut_file, "s000", 1, timeline=name)["ok"] is True
+    assert _video_items(name)[0]["source"]["in"]["frames"] == source["start"]
+
+
+def _video_items(name: str) -> list[dict[str, Any]]:
+    read = inspect_timeline(name, detail="clips")
+    assert read["ok"] is True, read.get("error")
+    video = [track for track in read["tracks"] if track["type"] == "video"][0]
+    items: list[dict[str, Any]] = video["items"]
+    return items
 
 
 def test_a_rebuild_makes_the_next_version_and_leaves_the_last_one_alone(tmp_path: Path) -> None:
@@ -508,6 +579,209 @@ def test_the_render_queue_exports_the_real_timeline_mix() -> None:
 
     again = acquire_timeline_audio(get_connection())
     assert again["cached"] is True, "an unchanged timeline must be a cache hit"
+
+
+def test_the_real_separator_produces_the_stems_the_two_passes_expect(tmp_path: Path) -> None:
+    """The AC no seam can check: that these models exist and label their output that way.
+
+    The fakes prove the two commands, the progress mapping, the caching and every refusal.
+    What they cannot prove is that ``htdemucs_ft.yaml`` and the DrumSep checkpoint are
+    names audio-separator resolves, that the drum model yields kick/snare/toms at all, or
+    that the real CLI writes ``<input>_(Label)_<model>.wav`` — the naming the stem mapping
+    reads back. Slow: the first run downloads both models.
+
+    The skip asks the *configured* executable, not the default name: a director who pointed
+    ``RESOLVE_MCP_AUDIO_SEPARATOR`` at an install off PATH would otherwise silently skip the
+    one check no fake can stand in for.
+    """
+    if shutil.which(get_config().audio_separator) is None:
+        pytest.skip(f"No audio-separator at {get_config().audio_separator!r}")
+
+    fixture = write_wav(tmp_path / "separator-probe.wav", seconds=4.0)
+    audio = {
+        "path": str(fixture),
+        "content_sha256": cache.content_hash(fixture),
+        "scope": "live",
+    }
+
+    output = two_pass(audio, separation_params(), lambda fraction, step: None)
+
+    assert set(output.result["stems"]) >= set(FOUR_STEMS)
+    assert set(output.result["drums"]) >= set(DRUM_STEMS)
+    assert all(Path(one).stat().st_size > 0 for one in output.result["stems"].values())
+    assert all(Path(one).stat().st_size > 0 for one in output.result["drums"].values())
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec("faster_whisper") is None,
+    reason="the analysis extra is not installed (uv sync --extra analysis)",
+)
+def test_faster_whisper_reports_words_in_the_shape_the_worker_reads(tmp_path: Path) -> None:
+    """The other AC no seam can check: what a real faster-whisper word object looks like.
+
+    The fake tier substitutes the model entirely, so every assertion above it is about
+    ``Word``, a shape this repo made up. That ``segment.words`` is populated at all with
+    ``word_timestamps=True``, and that each one carries ``word``/``start``/``end``/
+    ``probability``, is only answerable with the real model loaded. Slow on first run: it
+    downloads large-v3 and needs a GPU to be quick about it.
+
+    Two seconds of tone is deliberately not speech — the claim under test is the shape of
+    the reply, not what was heard, and a model that hears nothing still has to return
+    cleanly rather than raise.
+    """
+    from resolve_mcp.analysis import whisper
+
+    from .fakes import write_wav
+
+    audio = write_wav(tmp_path / "tone.wav", seconds=2.0)
+
+    heard = whisper.transcribe(audio, {"model": whisper.DEFAULT_MODEL})
+
+    assert isinstance(heard.words, tuple)
+    for word in heard.words:
+        assert word.text
+        assert 0.0 <= word.start <= word.end
+        assert 0.0 <= word.confidence <= 1.0
+
+
+def test_a_real_frame_grab_lands_on_the_moment_resolve_numbers_it_at() -> None:
+    """The AC no seam can check: that Start really is the offset between the two clocks.
+
+    The fakes prove the command shape, the cap and the caching against a clip whose Start
+    this test wrote itself. Whether real footage — an hour-based start timecode, a codec
+    ffmpeg has to seek inside — is numbered the way the wrapper assumes only shows up here.
+    """
+    listing = list_media()
+    if not listing["ok"]:
+        pytest.skip("No project open in Resolve")
+    footage = next(
+        (one for one in listing["clips"] if one["fps"] and not one["offline"] and one["frames"]),
+        None,
+    )
+    if footage is None:
+        pytest.skip("No online clip with a frame rate in the media pool")
+    bounds = inspect_clip(footage["name"], bin=footage["bin"] or None)["bounds"]["media"]
+    middle = bounds["in"]["frames"] + bounds["duration"]["frames"] // 2
+
+    result = grab_frames(footage["name"], [middle], bin=footage["bin"] or None)
+
+    assert result["ok"] is True, result.get("error")
+    grabbed = result["frames"][0]
+    assert Path(grabbed["path"]).exists()
+    assert grabbed["time"]["frames"] == middle
+    assert max(grabbed["width"], grabbed["height"]) <= 1568
+
+    again = grab_frames(footage["name"], [middle], bin=footage["bin"] or None)
+    assert again["cached"] is True, "unchanged media must be a cache hit"
+
+
+def test_a_real_scene_scan_reports_cuts_on_the_clips_own_clock() -> None:
+    """The other half of the clock check: pts_time counts from the file, cuts from the clip.
+
+    Slow — this decodes a whole clip, so it takes the shortest one in the pool. What it is
+    for is the mapping the fakes replay rather than produce: that ffmpeg's reported times
+    become frame numbers inside the bounds ``inspect_clip`` reports for the same clip.
+    """
+    listing = list_media()
+    if not listing["ok"]:
+        pytest.skip("No project open in Resolve")
+    footage = [
+        one for one in listing["clips"] if one["fps"] and not one["offline"] and one["frames"]
+    ]
+    if not footage:
+        pytest.skip("No online clip with a frame rate in the media pool")
+    shortest = min(footage, key=lambda one: one["frames"])
+    bounds = inspect_clip(shortest["name"], bin=shortest["bin"] or None)["bounds"]["media"]
+
+    started = detect_scene_cuts(shortest["name"], bin=shortest["bin"] or None)
+    record = wait_for(started["job_id"], timeout=1800.0)
+
+    assert started["ok"] is True, started.get("error")
+    assert record.state == "completed", record.error
+    assert record.result is not None
+    assert Path(record.result["path"]).exists()
+    for cut in record.result["first_cuts"]:
+        assert bounds["in"]["frames"] < cut["frames"] < bounds["out"]["frames"]
+
+def test_the_preset_list_is_the_one_in_the_deliver_page() -> None:
+    """#33: whether ``GetRenderPresetList`` answers at all, and with what spelling.
+
+    Run with ``-s`` and record the names on the ticket — every render_timeline call names
+    one of them, and they are per project and per machine.
+    """
+    if get_status()["context"]["project"] is None:
+        pytest.skip("No project open in Resolve")
+
+    reply = list_render_presets()
+
+    assert reply["ok"] is True, reply.get("error")
+    assert reply["count"] > 0, "a stock Resolve ships presets; an empty list means the getter lied"
+    print(f"\nrender presets: {reply['presets']}")
+
+
+def test_a_range_render_covers_the_frames_it_was_given(tmp_path: Path) -> None:
+    """#33: the AC no fake can answer — that MarkIn/MarkOut are read on the timeline's clock.
+
+    The fakes prove the conversion (half-open in, inclusive out) and that the settings
+    reach ``SetRenderSettings``. What only Resolve can say is whether those frame numbers
+    are absolute timeline frames — a timeline starting at 01:00:00:00 starts at frame 86400,
+    and a Resolve reading them as offsets from zero would render the wrong part of the set
+    while reporting success.
+
+    So two ranges are rendered, one three times the other: if the marks were ignored, both
+    would be the whole timeline and the files would be the same size. Slow — it renders
+    twice. Check the shorter file opens and starts where the range said.
+    """
+    if get_status()["context"]["timeline"] is None:
+        pytest.skip("No timeline open in Resolve")
+    presets = list_render_presets()
+    assert presets["ok"] is True, presets.get("error")
+    if not presets["presets"]:
+        pytest.skip("No render presets in this project")
+    preset = os.environ.get("RESOLVE_MCP_RENDER_PRESET") or presets["presets"][0]
+
+    whole = inspect_timeline(detail="summary")
+    assert whole["ok"] is True
+    first = whole["timeline"]["start"]["frames"]
+    fps = whole["timeline"]["fps"] or 24
+    if whole["timeline"]["duration"]["frames"] < int(fps * 13):
+        pytest.skip("The open timeline is too short to render two ranges out of")
+
+    short = render_timeline(
+        preset=preset,
+        name="resolve-mcp-smoke-short",
+        target_dir=str(tmp_path),
+        start=first + int(fps),
+        end=first + int(fps * 3),
+    )
+    assert short["ok"] is True, short.get("error")
+    short_record = wait_for(short["job"]["job_id"], timeout=1800.0)
+    assert short_record.state == "completed", short_record.error
+
+    long = render_timeline(
+        preset=preset,
+        name="resolve-mcp-smoke-long",
+        target_dir=str(tmp_path),
+        start=first + int(fps),
+        end=first + int(fps * 7),
+    )
+    assert long["ok"] is True, long.get("error")
+    long_record = wait_for(long["job"]["job_id"], timeout=1800.0)
+    assert long_record.state == "completed", long_record.error
+
+    assert short_record.result is not None
+    assert long_record.result is not None
+    shorter = Path(short_record.result["path"])
+    longer = Path(long_record.result["path"])
+    assert shorter.exists() and longer.exists()
+    print(f"\nrendered {shorter} ({shorter.stat().st_size} bytes) with preset {preset!r}")
+    assert longer.stat().st_size > shorter.stat().st_size * 1.5, (
+        "a three-times-longer range rendered the same size — MarkIn/MarkOut were ignored"
+    )
+
+    polled = get_job(short["job"]["job_id"])
+    assert polled["ok"] is True
+    assert polled["job"]["state"] == "completed"
 
 
 def test_snapshot_writes_a_real_drp(tmp_path: Path) -> None:

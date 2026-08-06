@@ -23,7 +23,9 @@ from __future__ import annotations
 import itertools
 import json
 import os
+import time
 import uuid
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -43,6 +45,10 @@ STATES = (RUNNING, COMPLETED, FAILED)
 
 SESSION = uuid.uuid4().hex
 """This server process. Records written under any other session predate a restart."""
+
+SHARING_ATTEMPTS = 20
+SHARING_PAUSE = 0.01
+"""How long either side of a poll waits out the other's handle. See ``_sharing``."""
 
 _sequence = itertools.count()
 """Breaks ties in "newest first": the Windows clock is coarser than two starts in a row."""
@@ -115,7 +121,7 @@ def save(record: JobRecord, config: Config | None = None) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     scratch = target.with_suffix(".writing")
     scratch.write_text(json.dumps(record.payload(), indent=2), encoding="utf-8")
-    os.replace(scratch, target)
+    _sharing(lambda: os.replace(scratch, target))
 
 
 def finish(
@@ -158,9 +164,30 @@ def load_all(state: str | None = None, config: Config | None = None) -> list[Job
     return [one for one in found if one.state == state]
 
 
+def _sharing[T](attempt: Callable[[], T]) -> T:
+    """Do it again if the other side of a poll had the file open.
+
+    Windows refuses to replace a file while another handle holds it, and refuses the read
+    that lands mid-replace — and polling is exactly two handles on one record: ``get_job``
+    or a chained job on one side, the worker saving its progress on the other. The window
+    is microseconds wide, so a short retry closes it. Letting the error out would kill the
+    worker thread mid-save and leave the record saying ``running`` forever, which is the
+    one failure the whole store exists to prevent; on the reading side it would report a
+    running job as gone.
+    """
+    for attempt_number in range(SHARING_ATTEMPTS):
+        try:
+            return attempt()
+        except PermissionError:
+            if attempt_number == SHARING_ATTEMPTS - 1:
+                raise
+            time.sleep(SHARING_PAUSE)
+    raise AssertionError("unreachable")  # pragma: no cover
+
+
 def _read(path: Path) -> JobRecord | None:
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
+        raw = json.loads(_sharing(lambda: path.read_text(encoding="utf-8")))
     except FileNotFoundError:
         return None
     except (OSError, ValueError):
@@ -171,6 +198,8 @@ def _read(path: Path) -> JobRecord | None:
         return None
     known = {name: raw[name] for name in JobRecord.__dataclass_fields__ if name in raw}
     return JobRecord(**known)
+
+
 
 
 def _recovered(record: JobRecord, config: Config) -> JobRecord:

@@ -12,6 +12,14 @@ dependencies = [
     "scipy>=1.14,<2",
 ]
 
+[project.optional-dependencies]
+# The analysis backends: heavy, GPU-bound, and imported inside the workers that need them.
+# Kept out of the base install so the server (and CI, which runs the fake tier) does not
+# pull a CUDA runtime to answer get_status.
+analysis = [
+    "faster-whisper>=1.0",
+]
+
 [project.scripts]
 resolve-mcp = "resolve_mcp.__main__:main"
 
@@ -53,7 +61,9 @@ files = ["src", "tests"]
 strict = true
 warn_unused_ignores = true
 
+# The analysis extras ship no stubs, and are not installed at all in CI or on a machine
+# that only drives Resolve — so the imports are unresolvable rather than untyped. scipy
+# ships no type information either; the two functions used from it are filters over arrays.
 [[tool.mypy.overrides]]
-# scipy ships no type information; the two functions used from it are filters over arrays.
-module = ["scipy.*"]
+module = ["faster_whisper.*", "scipy.*"]
 ignore_missing_imports = true

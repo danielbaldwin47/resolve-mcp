@@ -7,6 +7,7 @@ into a tool result.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 RESOLVE_FIX = (
@@ -227,16 +228,6 @@ class CutInvalidError(ResolveMcpError):
     )
 
 
-class UnsupportedCutFeatureError(ResolveMcpError):
-    """The cut is valid but describes something this build cannot place yet.
-
-    Refused rather than partially built: a timeline missing a part of the cut that made it
-    is the half-built outcome the pre-flight exists to prevent.
-    """
-
-    code = "unsupported_cut_feature"
-
-
 class BuildFailedError(ResolveMcpError):
     """Resolve would not build the cut — creation refused, a locked track, a clip astray.
 
@@ -290,6 +281,37 @@ class RenderQueueError(ResolveMcpError):
         "Open the Deliver page and check the render queue for a failed or cancelled job, "
         "clear it, and retry. A render that reports success but writes nothing usually means "
         "the target directory is not writable from the machine Resolve runs on."
+    )
+
+
+class RenderPresetNotFoundError(ResolveMcpError):
+    """The render preset asked for is not one this project offers."""
+
+    code = "render_preset_not_found"
+
+    def __init__(self, name: str, available: list[str]) -> None:
+        super().__init__(
+            cause=f"No render preset named {name!r} in this project.",
+            fix=(
+                "list_render_presets names every preset, exactly as it must be spelled. "
+                "Presets are per project and per user — one made on another machine is not here."
+            ),
+            detail={"requested": name, "available": available},
+        )
+
+
+class RenderTargetExistsError(ResolveMcpError):
+    """A file already sits where the render would land, and the caller named that place.
+
+    Resolve does not reliably overwrite: it may write ``name_0.mp4`` beside the old file
+    instead, and the job would then report a path holding yesterday's export.
+    """
+
+    code = "render_target_exists"
+    default_fix = (
+        "Render under a different name, or pass refresh=true to replace what is there. "
+        "Leaving target_dir out puts the file in the server's own render directory, which "
+        "it replaces without asking."
     )
 
 
@@ -354,6 +376,91 @@ class AnalysisFailedError(ResolveMcpError):
     default_fix = (
         "Check the audio plays and holds what you expect, then start the job again. "
         "Analysis can be narrowed to one half (beats or energy) to isolate which fails."
+    )
+
+
+class SeparatorUnavailableError(ResolveMcpError):
+    """python-audio-separator is not installed — stem separation cannot run without it."""
+
+    code = "separator_unavailable"
+    default_fix = (
+        "Install it with pip install audio-separator[gpu] and make sure the audio-separator "
+        "command is on PATH, or point RESOLVE_MCP_AUDIO_SEPARATOR at the executable."
+    )
+
+
+class StemSeparationError(ResolveMcpError):
+    """The separator ran and did not produce the stems that were asked for."""
+
+    code = "stem_separation_failed"
+    default_fix = (
+        "Check the model name (RESOLVE_MCP_STEM_MODEL, RESOLVE_MCP_DRUM_MODEL) is one "
+        "audio-separator knows, and that the GPU has memory free. The separator's own "
+        "message is in detail.output."
+    )
+
+
+class ChainedJobError(ResolveMcpError):
+    """A job this one had to run first failed. Its cause, fix and code travel back unchanged.
+
+    Relabelling it as a stems failure would hide what actually broke: a render queue that
+    refused the export is a render queue problem whether the agent asked for audio or for
+    stems, and the advice that fixes it is the advice the acquisition already wrote.
+    """
+
+    code = "chained_job_failed"
+
+    def __init__(self, error: Mapping[str, Any], job_id: str) -> None:
+        detail = dict(error.get("detail") or {})
+        detail["job_id"] = job_id
+        super().__init__(
+            cause=str(error.get("cause") or f"The job {job_id} this one depends on failed."),
+            fix=str(error.get("fix")) if error.get("fix") else None,
+            detail=detail,
+        )
+        code = error.get("code")
+        if code:
+            self.code = str(code)
+
+
+class TranscriberUnavailableError(ResolveMcpError):
+    """faster-whisper is not installed in this venv, so nothing can be transcribed."""
+
+    code = "transcriber_unavailable"
+    default_fix = (
+        "Install the transcription extra with `uv sync --extra analysis`, which pulls "
+        "faster-whisper and its CUDA runtime. The first run also downloads the model, "
+        "which takes a while and needs the disk space."
+    )
+
+
+class TranscriptionError(ResolveMcpError):
+    """The transcription job could not produce a transcript."""
+
+    code = "transcription_failed"
+    default_fix = (
+        "Check the audio the transcript was to be made from — get_job on the acquisition "
+        "job named in detail reports what happened to it — then start the job again."
+    )
+
+
+class FrameGrabError(ResolveMcpError):
+    """ffmpeg would not give up a frame of this clip."""
+
+    code = "frame_grab_failed"
+    default_fix = (
+        "Check the clip is online and holds video — inspect_clip reports both — and that the "
+        "time asked for is inside its bounds. ffmpeg's own message is in detail.stderr."
+    )
+
+
+class SceneDetectionError(ResolveMcpError):
+    """ffmpeg would not decode this clip looking for scene cuts."""
+
+    code = "scene_detection_failed"
+    default_fix = (
+        "Check the clip is online and holds video — inspect_clip reports both. "
+        "ffmpeg's own message is in detail.stderr."
     )
 
 

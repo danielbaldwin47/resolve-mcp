@@ -17,6 +17,9 @@ DEFAULT_SCRIPT_LIB = Path("C:/Program Files/Blackmagic Design/DaVinci Resolve/fu
 DEFAULT_LOG_LEVEL = "INFO"
 CACHE_DIR_NAME = "resolve-mcp"
 DEFAULT_FFMPEG = "ffmpeg"
+DEFAULT_AUDIO_SEPARATOR = "audio-separator"
+DEFAULT_STEM_MODEL = "htdemucs_ft.yaml"
+DEFAULT_DRUM_MODEL = "MDX23C-DrumSep-6stem-FT.ckpt"
 
 
 TRUTHY = {"1", "true", "yes", "on"}
@@ -31,6 +34,9 @@ class Config:
     log_level: str
     allow_any_python: bool = False
     ffmpeg: str = DEFAULT_FFMPEG
+    audio_separator: str = DEFAULT_AUDIO_SEPARATOR
+    stem_model: str = DEFAULT_STEM_MODEL
+    drum_model: str = DEFAULT_DRUM_MODEL
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Config:
@@ -46,6 +52,9 @@ class Config:
             log_level=env.get("RESOLVE_MCP_LOG_LEVEL") or DEFAULT_LOG_LEVEL,
             allow_any_python=(env.get(BYPASS_ENV) or "").lower() in TRUTHY,
             ffmpeg=env.get("RESOLVE_MCP_FFMPEG") or DEFAULT_FFMPEG,
+            audio_separator=env.get("RESOLVE_MCP_AUDIO_SEPARATOR") or DEFAULT_AUDIO_SEPARATOR,
+            stem_model=env.get("RESOLVE_MCP_STEM_MODEL") or DEFAULT_STEM_MODEL,
+            drum_model=env.get("RESOLVE_MCP_DRUM_MODEL") or DEFAULT_DRUM_MODEL,
         )
 
     @property
@@ -79,9 +88,35 @@ class Config:
         return self.cache_dir / "audio"
 
     @property
+    def stems_dir(self) -> Path:
+        """Separated stems, one directory per content hash + params, two passes inside it."""
+        return self.cache_dir / "stems"
+
+    @property
+    def frame_dir(self) -> Path:
+        """Grabbed JPEGs. The agent opens these by path, so they outlive the call that made them."""
+        return self.cache_dir / "frames"
+
+    @property
     def analysis_dir(self) -> Path:
-        """Beat grids and energy curves. Read in slices, so they outlive the job that wrote them."""
+        """What the analysis jobs write: transcripts, scene-cut catalogs, beats, energy curves.
+
+        Separate from the WAVs they were read off: the audio is a cache of something Resolve
+        or ffmpeg can make again, while these are the files the agent greps and quotes in a
+        review round, and it should be able to tell the two apart at a glance.
+        """
         return self.cache_dir / "analysis"
+
+    @property
+    def render_dir(self) -> Path:
+        """Deliverables rendered without a target directory of their own.
+
+        Its own folder rather than the audio one because these are files a human opens and
+        hands on, and because everything under it is the server's to replace: a re-render
+        after a review round overwrites in place, which is only safe where nothing the
+        director put there can be sitting.
+        """
+        return self.cache_dir / "renders"
 
     @property
     def interchange_dir(self) -> Path:

@@ -16,6 +16,7 @@ from resolve_mcp.cut.validate import (
     ClipFacts,
     Finding,
     locked_track_finding,
+    overlay_positions,
     validate_project,
     validate_structure,
 )
@@ -442,6 +443,33 @@ def test_e9_catches_an_overlay_running_past_the_end_of_the_cut() -> None:
     findings = validate_structure(doc)
 
     assert "E9" in rules(findings)
+
+
+# --- overlay placement: the numbers E9 judges and the build places against ----------------
+
+
+def test_overlay_positions_resolve_each_anchor_to_an_absolute_span() -> None:
+    """One function answers where an overlay goes, so the rule and the build cannot differ."""
+    doc = valid_doc()
+    doc["overlays"].append(
+        {
+            "id": "b04",
+            "source": "broll_pan",
+            "in": 1400,
+            "out": 1440,
+            "over": {"segment": "s002", "offset": 50},
+        }
+    )
+
+    assert overlay_positions(doc) == {"b03": (24, 100), "b04": (250, 40)}
+
+
+def test_overlay_positions_skip_an_anchor_that_does_not_exist() -> None:
+    """E9 has already refused such a document; there is no position to invent for it."""
+    doc = valid_doc()
+    doc["overlays"][0]["over"]["segment"] = "s999"
+
+    assert overlay_positions(doc) == {}
 
 
 # --- E10: overlays do not overlap each other --------------------------------------------
