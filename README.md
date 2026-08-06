@@ -26,7 +26,7 @@ detection, the render/deliver tools, and the `run_python` escape hatch.
 | `organize_media` | Batch bin operations: create nested bins, move clips |
 | `relink_media` | Points offline clips at media that moved (folder relink or file replace) |
 | `list_timelines` | Timelines with version, duration, fps and track stack; names the newest cut |
-| `inspect_timeline` | One timeline at a chosen detail and range, in dual time |
+| `inspect_timeline` | One timeline at a chosen detail and range, in dual time; `make_current` to read the flags Resolve only answers for the open timeline |
 | `list_markers` | Markers in record time, narrowed by colour and range |
 | `set_markers` | Batch marker writes; an existing marker is never overwritten unless asked |
 | `export_timeline` | Writes a timeline out as OTIO, FCPXML or DRT |
@@ -57,6 +57,15 @@ in the project answers to — colliding names walk the `<base> v<N>` convention.
 Resolve's own document and accepts no import options at all, so it names its own timeline;
 what holds there is the check on the way out. Either way the cut already in the project is
 never the thing that gets written over.
+
+Three fields read `null` on any timeline that is not the one open in Resolve: a track's
+`enabled` and `locked`, and a shot's `takes`. Resolve answers those from editor state and
+reports `False`/`0` for every other timeline — no error to catch, just a plausible wrong
+number — so the server reports "unknown" rather than passing it on. The `currency` block in
+the reply names them, and `make_current` switches to the timeline for the read and switches
+back when you want the real values. It is opt-in because the switch is visible in the
+Resolve window. [ADR 0004](docs/adr/0004-editor-state-getters-only-answer-for-the-current-timeline.md)
+has the sweep that established which getters this covers, and which are proven safe.
 
 Editing is declarative and split across two files that never mention each other. The
 **cut file** owns the cut and materialises as a new `<name> v<N>` timeline every build.
