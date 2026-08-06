@@ -524,6 +524,12 @@ class FakeTimeline(AnswersNone):
         self.exports: list[tuple[str, Any, tuple[Any, ...]]] = []
         self.export_result = True
         self.export_writes_the_file = True
+        # Export type *values* that answer True and write a zero-byte file — Resolve 21.0.3
+        # does exactly this for EXPORT_FCPXML_1_10 (#26, live).
+        self.export_types_that_write_nothing: set[Any] = set()
+        # Paths one of those types has touched. Resolve keeps the handle for the life of
+        # the process, so the name is spent whatever type asks for it next (#26, live).
+        self.export_paths_held_open: set[str] = set()
         self.add_track_result = True
         self.set_track_name_result = True
         # A clear that answers True and leaves the clips standing is the failure a caller
@@ -663,12 +669,24 @@ class FakeTimeline(AnswersNone):
         """Write an interchange file. The subtype is variadic because Resolve's is optional.
 
         ``export_writes_the_file=False`` models the failure the return value hides: Resolve
-        answers True and nothing lands on disk.
+        answers True and nothing lands on disk. ``export_types_that_write_nothing`` models
+        the same failure for one export type only, which is the real shape of it.
+
+        A type that writes nothing also *poisons the path it touched*, exactly as the real
+        one does: Resolve holds that zero-byte file open for the life of the process, so
+        every later export to the same name fails no matter which type is asked for. That
+        is why the real ladder never reuses a scratch filename, and modelling it here is
+        what makes reuse fail a test instead of only failing on the machine.
         """
         self._check()
         self.exports.append((file_name, export_type, subtype))
         if not self.export_result:
             return False
+        if file_name in self.export_paths_held_open:
+            return False
+        if export_type in self.export_types_that_write_nothing:
+            self.export_paths_held_open.add(file_name)
+            return True
         if self.export_writes_the_file:
             target = Path(file_name)
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -1368,11 +1386,18 @@ class FakeProject:
         return list(self.render_presets)
 
     def LoadRenderPreset(self, name: str) -> bool:  # noqa: N802
-        """Resolve answers a bare ``False`` for a preset it does not have, and for a refusal."""
+        """Resolve answers a bare ``False`` for a preset it does not have, and for a refusal.
+
+        Loading a preset also **replaces the render settings**, which is why the caller
+        applies its own after this and not before. Modelling the clobber is what makes
+        that ordering testable: get it backwards and the caller's target directory is the
+        preset's, not the one that was asked for.
+        """
         if not self.accepts_preset or name not in self.render_presets:
             return False
         self.loaded_presets.append(name)
         self.render_format = self.render_presets[name]
+        self.render_settings = {"TargetDir": "C:/preset-default", "CustomName": "preset-default"}
         return True
 
     def GetCurrentRenderFormatAndCodec(self) -> dict[str, str]:  # noqa: N802

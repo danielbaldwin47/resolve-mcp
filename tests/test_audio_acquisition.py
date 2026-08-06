@@ -155,6 +155,45 @@ def test_the_export_renders_one_file_for_the_whole_timeline(attach: Attach) -> N
     assert _project(resolve).render_mode == 1
 
 
+def test_the_mix_still_exports_on_a_build_that_refuses_the_wav_pair(attach: Attach) -> None:
+    """Resolve 21.0.3 refuses every ("wav", …) pair, and the mix has to come out anyway.
+
+    The stock ``Audio Only`` preset is the only route to a WAV on that build (#32, live),
+    so the worker names it as the fallback. Without this test the worker could stop passing
+    it and every other test here would stay green.
+    """
+    resolve = studio(timeline=FakeTimeline("sunset-set v3", "59.94"))
+    project = _project(resolve)
+    project.accepts_format = False
+    project.render_presets["Audio Only"] = ("wav", "lpcm")
+    attach(resolve)
+
+    record = wait_for(acquire_timeline_audio(get_connection())["job_id"])
+
+    assert record.state == "completed", record.error
+    assert record.result is not None
+    assert Path(record.result["path"]).exists()
+    assert project.loaded_presets == ["Audio Only"]
+    # The preset chose the format; the caller still chose where it lands.
+    assert project.render_settings["TargetDir"] == str(get_config().audio_dir)
+    assert project.render_settings["ExportVideo"] is False
+
+
+def test_a_build_with_no_wav_route_at_all_fails_the_job_naming_both(attach: Attach) -> None:
+    """The pair refused and no usable fallback: the reply has to name the preset too,
+    or the machine that cannot render audio looks identical to one missing a codec."""
+    resolve = studio(timeline=FakeTimeline("sunset-set v3", "59.94"))
+    _project(resolve).accepts_format = False  # and no "Audio Only" among the presets
+    attach(resolve)
+
+    record = wait_for(acquire_timeline_audio(get_connection())["job_id"])
+
+    assert record.state == "failed"
+    assert record.error is not None
+    assert record.error["code"] == "audio_export_failed"
+    assert "Audio Only" in record.error["cause"]
+
+
 def test_a_queue_that_refuses_the_job_fails_the_job_not_the_server(attach: Attach) -> None:
     resolve = studio(timeline=FakeTimeline("sunset-set v3", "59.94"))
     _project(resolve).accepts_job = False
