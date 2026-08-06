@@ -29,7 +29,10 @@ together, ranges are half-open [in, out), and a time you give in seconds must sa
 snap it to a frame ({"seconds": 2.52, "snap": "floor"}).
 
 Editing is declarative: you author a cut file, the server builds it. Call get_cut_schema
-before writing one and validate_cut after every edit — do not guess the format.
+before writing one and validate_cut after every edit — do not guess the format. Every
+change is a rebuild into a new version, with one exception: swap_take flips a shot to one
+of its alternates in place. It is yours to keep the cut file in step afterwards — the
+server never writes it, and the swap report says exactly what to change.
 
 Heavy work (renders, analysis) hands back a job_id straight away — carry on working and
 poll it with get_job; list_jobs finds what you started before a restart. Results are cached

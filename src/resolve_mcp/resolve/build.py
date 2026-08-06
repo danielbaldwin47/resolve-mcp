@@ -32,11 +32,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Final
 
-from ..cut.validate import locked_track_finding, overlay_positions, positions
+from ..cut.validate import locked_track_finding, overlay_positions, placements
 from ..errors import BuildFailedError, CutInvalidError
 from ..logging_config import get_logger
 from ..naming import next_version_name
-from . import cut, media
+from . import cut, media, takes
 from . import timeline as timeline_read
 from .connection import ResolveConnection
 
@@ -146,11 +146,15 @@ def build_timeline(
     _unlock_stills(clips)
 
     built = _create(pool, project, name)
-    shots = _shots(doc, clips, _start_frame(built))
+    shots = _shots(doc, clips, timeline_read.start_frame(built))
     _make_tracks(built, shots, name)
     _refuse_locked_tracks(built, shots, name)
     _append(pool, shots, name)
     _verify(built, shots, name)
+    # Takes hang off placed clips, so they are attached only once every placement has been
+    # read back — a selector on a shot that slid somewhere else would be alternates for a
+    # shot the cut file does not have.
+    made = takes.attach_takes(built, _selectors(doc, clips, shots), name)
 
     log.info("Built %s: %d clips from %s", name, len(shots), checked.loaded.content_hash)
     return {
@@ -161,6 +165,7 @@ def build_timeline(
             "segments": _count(shots, V1),
             "overlays": _count(shots, V2),
             "audio": bool(_count(shots, A1)),
+            "selectors": made,
         },
         "warnings": [finding.as_dict() for finding in checked.warnings],
     }
@@ -176,18 +181,18 @@ def _count(shots: list[Shot], track: Track) -> int:
 
 def _shots(doc: dict[str, Any], clips: dict[str, media.LocatedClip], start: int) -> list[Shot]:
     """Every append the cut asks for, positioned absolutely from the timeline start."""
-    placed = positions(doc)
+    placed = placements(doc, start)
     shots = []
     for segment in doc["segments"]:
         id = str(segment["id"])
-        offset, duration = placed[id]
+        record, duration = placed[id]
         shots.append(
             _shot(
                 id=id,
                 track=V1,
                 located=clips[str(segment["source"])],
                 source_in=int(segment["in"]),
-                record=start + offset,
+                record=record,
                 duration=duration,
             )
         )
@@ -236,20 +241,50 @@ def _shot(
         id=id,
         track=track,
         clip=located.clip,
-        name=str(located.clip.GetName() or ""),
+        name=_clip_name(located),
         source_in=source_in,
         record=record,
         duration=duration,
     )
 
 
-def _start_frame(timeline: Timeline) -> int:
-    """The timeline's own first frame. A record frame below it is *not* clamped (#18 (d))."""
-    try:
-        return int(float(timeline.GetStartFrame()))
-    except (TypeError, ValueError):
-        log.warning("Resolve gave an unreadable start frame; placing from 0")
-        return 0
+def _clip_name(located: media.LocatedClip) -> str:
+    """What to call the clip in a failure — read once, since a dead handle answers nothing."""
+    return str(located.clip.GetName() or "")
+
+
+def _selectors(
+    doc: dict[str, Any],
+    clips: dict[str, media.LocatedClip],
+    shots: list[Shot],
+) -> list[takes.Selector]:
+    """The alternates each segment carries, against the record frame its shot landed on."""
+    records = {shot.id: shot.record for shot in shots if shot.track == V1}
+    found = []
+    for segment in doc["segments"]:
+        alternates = segment.get("alternates") or []
+        if not alternates:
+            continue
+        found.append(
+            takes.Selector(
+                segment=str(segment["id"]),
+                record=records[str(segment["id"])],
+                takes=tuple(_take(alternate, clips) for alternate in alternates),
+            )
+        )
+    return found
+
+
+def _take(alternate: dict[str, Any], clips: dict[str, media.LocatedClip]) -> takes.Take:
+    source = str(alternate["source"])
+    located = clips[source]
+    return takes.Take(
+        source=source,
+        clip=located.clip,
+        name=_clip_name(located),
+        source_in=int(alternate["in"]),
+        duration=int(alternate["out"]) - int(alternate["in"]),
+    )
 
 
 # --- the writes -------------------------------------------------------------------------------
