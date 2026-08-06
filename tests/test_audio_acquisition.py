@@ -277,7 +277,7 @@ def test_audio_that_sits_only_on_switched_off_tracks_is_refused_too(attach: Atta
     assert record.state == "failed"
     assert record.error is not None
     assert record.error["code"] == "audio_export_failed"
-    assert "switched off" in record.error["cause"]
+    assert "switched on and carrying audio" in record.error["cause"]
     assert _project(resolve).render_jobs == []
 
 
@@ -297,6 +297,48 @@ def test_one_live_audio_track_is_enough_even_beside_switched_off_ones(attach: At
     record = wait_for(acquire_timeline_audio(get_connection())["job_id"])
 
     assert record.state == "completed", record.error
+
+
+def test_the_track_check_runs_after_the_switch_not_before_it(attach: Attach) -> None:
+    """#84: track flags read as off on any timeline that is not current.
+
+    So the switched-on check is only truthful once the export has made its timeline
+    current. Run it a moment earlier — in the starter, where the cheaper check lives — and
+    it refuses every timeline the agent did not already have open. The fake tells that lie
+    here on purpose, so moving the check turns this red rather than the live machine.
+    """
+    open_now = with_a_mix(FakeTimeline("sunset-set v3", "59.94"))
+    other = with_a_mix(FakeTimeline("sunset-set v2", "59.94"))
+    other.track_flags_need_current = True
+    attach(studio(timeline=open_now, timelines=[open_now, other]))
+
+    record = wait_for(acquire_timeline_audio(get_connection(), timeline="sunset-set v2")["job_id"])
+
+    assert record.state == "completed", record.error
+
+
+def test_a_track_that_will_not_say_whether_it_is_on_exports_rather_than_refuses(
+    attach: Attach,
+) -> None:
+    """Same trade as the unreadable count: silence about a track is not "the track is off"."""
+    timeline = _TimelineThatWillNotSayIfTracksAreOn(
+        "sunset-set v3",
+        "59.94",
+        video=[[_shot()]],
+        audio=[[FakeTimelineItem("Board mix.wav", 0, 500)]],
+    )
+    attach(studio(timeline=timeline))
+
+    record = wait_for(acquire_timeline_audio(get_connection())["job_id"])
+
+    assert record.state == "completed", record.error
+
+
+class _TimelineThatWillNotSayIfTracksAreOn(FakeTimeline):
+    """A build whose ``GetIsTrackEnabled`` answers nothing at all."""
+
+    def GetIsTrackEnabled(self, track_type: str, index: int) -> Any:  # noqa: N802
+        return None
 
 
 def test_a_track_count_that_will_not_read_exports_rather_than_refuses(attach: Attach) -> None:

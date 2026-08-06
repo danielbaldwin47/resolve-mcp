@@ -515,6 +515,8 @@ class FakeTimeline(AnswersNone):
         }
         self._markers = dict(markers or {})
         self._owner = owner
+        #: #84's defect, opt-in: track flags read as off unless this timeline is current.
+        self.track_flags_need_current = False
         self.marker_writes: list[dict[str, Any]] = []
         self.refuse_markers = False
         # Refusing one marker by name is how a failed *replacement* is staged: Resolve
@@ -613,9 +615,25 @@ class FakeTimeline(AnswersNone):
         return list(track.items) if track else None
 
     def GetIsTrackEnabled(self, track_type: str, index: int) -> bool:  # noqa: N802
+        """Whether the track is on — and, opted into, the lie Resolve tells about that.
+
+        ``track_flags_need_current`` models #84: on Studio 21.0.3.7 this getter answers
+        ``False`` for *every* track of a timeline that is not the project's current one,
+        with no error and no ``None`` to distinguish "off" from "you did not ask the
+        current timeline". It is off by default because the read path documents the
+        defect rather than working around it; a caller whose correctness depends on
+        having switched first turns it on, and then a check that runs before the switch
+        reads every track as off.
+        """
         self._check()
+        if self.track_flags_need_current and not self._is_current():
+            return False
         track = self._track(track_type, index)
         return bool(track and track.enabled)
+
+    def _is_current(self) -> bool:
+        project = self._owner.current_project if self._owner is not None else None
+        return project is not None and project.GetCurrentTimeline() is self
 
     def GetIsTrackLocked(self, track_type: str, index: int) -> bool:  # noqa: N802
         self._check()
