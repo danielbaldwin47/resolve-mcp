@@ -6,9 +6,11 @@ rather than API calls, and are the reason this file exists at all:
 * **Bin paths are slash-separated from the media pool root** (``"Concert/Angles"``), the
   root's own name optional as a first segment. Resolve's API has no bin path — only
   ``GetSubFolderList()`` walks — and "current folder" state that every import depends on.
-* **Offline means the file is gone**, not that Resolve says so: there is no offline flag in
-  the scripting API. A clip is offline when it has a ``File Path`` that is not on disk. A
-  clip with no path at all (multicam, compound) is not offline, it is pathless.
+* **Offline means the media is gone**, not that Resolve says so: there is no offline flag in
+  the scripting API. A clip is offline when nothing on disk stands behind its ``File Path``
+  — the path itself for ordinary media, the first frame for a sequence, whose path is only
+  a label (``shot_[0001-0024].png``, #85). A clip with no path at all (multicam, compound)
+  is not offline, it is pathless.
 * **Metadata fields route by what the clip itself reports.** The clip property key names are
   undocumented, so nothing is hard-coded: each clip is enumerated once with
   ``GetClipProperty()`` and a field whose key is in that dict is written as a clip property,
