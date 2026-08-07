@@ -48,7 +48,7 @@ from ..resolve.session import frame_rate
 from ..resolve.timeline import (
     FIRST_TRACK,
     Reader,
-    angle_name,
+    angle_of,
     clip_name,
     find_timeline,
     fingerprint,
@@ -279,9 +279,11 @@ def _shots(reader: Reader, timeline: Any, track: int) -> list[Shot]:
         if record_in is None or duration is None:
             log.warning("Skipped a shot on video track %d: Resolve gave no position", track)
             continue
-        media = reader.optional(item, "GetMediaPoolItem", None) is not None
-        name = angle_name(reader, item) or str(item.GetName() or "")
-        found.append(Shot(clip=name, record_in=record_in, duration=duration, media=media))
+        clip = reader.optional(item, "GetMediaPoolItem", None)
+        name = angle_of(reader, item, clip) or str(item.GetName() or "")
+        found.append(
+            Shot(clip=name, record_in=record_in, duration=duration, media=clip is not None)
+        )
     ordered = sorted(found, key=lambda shot: (shot.record_in, not shot.media))
     return _without_transitions(ordered, track)
 
@@ -308,14 +310,23 @@ def _without_transitions(shots: Sequence[Shot], track: int) -> list[Shot]:
     what follows. Compared against its neighbour alone the second shape survives — and then
     the real shot behind it is the thing that overlaps, so it is dropped instead. That swap
     leaves the cut count right and the cut wrong, which is the worst way to be wrong. So
-    the comparison is against every media-backed shot on the track, not the one before.
+    the comparison is against every *other* item on the track, not the one before.
+
+    Overlap alone is not quite the test, because a dissolve into a slate overlaps only the
+    slate and a slate has no pool item either — so "overlaps something real" cannot separate
+    them and "overlaps anything" throws both away. What separates them is that a shot holds
+    some stretch of track *exclusively* and a transition never does: every frame of a
+    dissolve is a frame some neighbour is also on. So a pool-less item is a transition when
+    the rest of the track already covers all of it, and a shot otherwise.
     """
-    solid = [shot for shot in shots if shot.media]
     kept: list[Shot] = []
     dropped = 0
-    for shot in shots:
-        transition = not shot.media and any(shot.overlaps(other) for other in solid)
-        if transition or (kept and shot.overlaps(kept[-1])):
+    for index, shot in enumerate(shots):
+        others = [other for position, other in enumerate(shots) if position != index]
+        if not shot.media and _covered_by(shot, others):
+            dropped += 1
+            continue
+        if kept and shot.overlaps(kept[-1]):
             dropped += 1
             continue
         kept.append(shot)
@@ -324,6 +335,25 @@ def _without_transitions(shots: Sequence[Shot], track: int) -> list[Shot]:
             "Video track %d: %d transitions read past, %d shots kept", track, dropped, len(kept)
         )
     return kept
+
+
+def _covered_by(shot: Shot, others: Sequence[Shot]) -> bool:
+    """Is every frame of ``shot`` also held by something else on the track?
+
+    Walked rather than summed, because two neighbours that each cover half of a dissolve
+    cover all of it between them, and a gap anywhere means the item is holding track of its
+    own — which is the thing a transition never does.
+    """
+    frame = shot.record_in
+    while frame < shot.record_out:
+        reach = max(
+            (other.record_out for other in others if other.record_in <= frame < other.record_out),
+            default=None,
+        )
+        if reach is None:
+            return False
+        frame = reach
+    return True
 
 
 def _clock(
@@ -351,7 +381,7 @@ def _clock(
     and one to check before writing a style profile from it.
     """
     if given is not None:
-        return Clock(given, fps, GIVEN, mix.name if mix else None, True)
+        return Clock(given, fps, GIVEN, mix.name if mix else None, mix is not None)
 
     found = _audio_shots(reader, timeline)
     wanted = _matching(found, mix)

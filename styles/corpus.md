@@ -20,7 +20,7 @@ recency breaks ties).
 | --- | --- | --- | --- | --- | --- |
 | 1 | `2026-06_Zinc_and_Monkfish` | Zinc - Set 2 Main | concert | **measured, labelled** | **Anchor** — strongest current-taste exemplar; two-camera, 2026 |
 | 2 | `Archive/Client/Ryan and Hang Main - 9-23-24 gene edit` | Freefall Timeline, Sunshine Timeline, Mercies Timeline | concert | **measured, labelled** | Canonical snapshot for Ryan and Hang; music-performance cuts only |
-| 3 | `Mike Tucker Scullers` | Concert Full Cut | concert | not started | Good two-camera concert; older, so recency weighting applies |
+| 3 | `Mike Tucker Scullers` | Concert Full Cut | concert | **measured, unlabelled** | Good two-camera concert; older, so recency weighting applies |
 | 4 | `Archive/Client/Ryan and Hang Main - 9-23-24 gene edit` | Stablemates | concert | not started | Older but explicitly taste-endorsed. Read from the Ryan and Hang project, not `Ryan Devlin Projects Current` — same timeline, one project to open |
 | 5 | `2026-06_Zinc_and_Monkfish` | Monkfish Main | concert | not started | **Partial** — only a couple of tunes cut; measure those tunes only |
 | 6 | `Archive/Client/Side Step Blues Clues Album` | Blues Clues Main, Devlin Time Main, For All The Other Times Main, Intro Main, Outro Main, People We Love Main, Walk Spirit Talk Spirit Main, EJ's Blues Main | studio-session | **deferred** | Footage not on the box; and studio-session is a different cutting context from the concert work this pass is about. Revisit when the concert profile is settled |
@@ -87,9 +87,10 @@ the right one.
 | # | Timeline | Context | Cuts | Alignment | Sidecar | Result |
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | Zinc - Set 2 Main | concert | 366 (360 measured, 6 openings) | `audio_clip`, matched | `angles/2026-06_Zinc_and_Monkfish.json` (confirmed 2026-08-07) | `…/analysis/Zinc---Set-2-Main-dcb16e19eca1.correlate.json` |
-| 2 | Freefall Timeline | concert | 44 (43 measured, 1 opening) | `given` @ 86400 | `angles/Ryan-and-Hang-Main-9-23-24-gene-edit.json` | `…/analysis/Freefall-Timeline-*.correlate.json` |
-| 2 | Sunshine Timeline | concert | 50 (49 measured, 1 opening) | `given` @ 86400 | same | `…/analysis/Sunshine-Timeline-*.correlate.json` |
+| 2 | Freefall Timeline | concert | 44 (43 measured, 1 opening) | `given` @ 86400 | `angles/Ryan-and-Hang-Main-9-23-24-gene-edit.json` | `…/analysis/Freefall-Timeline-a82bc5a80bcd.correlate.json` |
+| 2 | Sunshine Timeline | concert | 50 (49 measured, 1 opening) | `given` @ 86400 | same | `…/analysis/Sunshine-Timeline-edbbc561a240.correlate.json` |
 | 2 | Mercies Timeline | concert | 38 (37 measured, 1 opening) | `given` @ 86400 | same | `…/analysis/Mercies-Timeline-622d697cfd3e.correlate.json` |
+| 3 | Concert Full Cut | concert | 349 (326 measured, 23 openings) | `given` @ 75903 | **none — unlabelled** | `…/analysis/Concert-Full-Cut-bc11cb456a36.correlate.json` |
 
 **Entry 1, measured 2026-08-06.** Against `Zinc Set 2 Reaper v4.wav` (74:10,
 48 kHz, the Reaper master mix on A3), beats from `analyze_music` (11,130 beats,
@@ -169,3 +170,40 @@ Cautions on these rows:
   camera was read off the render and is not in doubt. Whether an operated
   camera that follows the music is best called `soloist-moving` is a vocabulary
   choice, and it is the one term here that did not come from the anchor.
+
+**Entry 3, measured 2026-08-07.** `Mike Tucker Scullers` / `Concert Full Cut`,
+349 shots over 95 minutes, two angles. **Unlabelled** — this project has no
+render, so the angle→camera mapping cannot be read, only guessed; the timing
+numbers below need no labels and stand on their own.
+
+The master mix is 32-bit float, which `analyze_music` refuses outright
+(#110 — and its `fix` line tells the caller to delete the file, which here is
+the director's own master on a media drive). Worked around by transcoding to
+24-bit PCM with ffmpeg: duration is preserved to the sample, 6130.888708 s both
+ways, so no time measured off it moved. Because the transcoded file is not the
+one on the timeline it cannot be matched to a clip, so the clock is `given` at
+frame 75903 — which is not a guess but what the eighteen A2 clips themselves
+say (`record_in - source_in`, the same value on every one of them). The cut
+starts about 7½ minutes into the recording, which is why that number sits
+before the timeline's own first frame.
+
+| Measure | Value |
+| --- | --- |
+| Cuts | 349 shots, 326 measured, **23 openings** |
+| Offset to nearest transient | median 29 ms, mean 51 ms, max 497 ms; 141 early / 185 late / 0 on |
+| Offset to nearest beat | median 97 ms, mean 846 ms, max 22.7 s |
+| Shot length | median 8.59 s, mean 16.22 s, min 0.38 s, max 238.9 s |
+| Bar position | 1:203, 2:55, 3:38, 4:27, 5:1, 6:1, 7:1 — **not usable** |
+| Angles | Angle 1: 182 cuts, 74.3%; Angle 2: 167 cuts, 25.7% |
+
+Three things worth carrying forward:
+
+- **23 openings** is far more than any other entry (1 each on the Judson's
+  tunes, 6 on the anchor). A full-set timeline has gaps between tunes, and a
+  shot after a gap has no outgoing angle — so the opening count is roughly the
+  tune count, and it is a free structural signal nothing is using yet.
+- The **home angle share is 74.3%**, in line with every other entry, and this
+  one was arrived at with no labels at all. The share is a fact about the
+  distribution; only the *name* of the angle needs a sidecar.
+- The bar histogram has positions 5, 6 and 7 in it. There is no such thing in
+  4/4. Same conclusion as entries 1 and 2: rubato gating first.
