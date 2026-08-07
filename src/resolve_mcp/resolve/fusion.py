@@ -115,6 +115,19 @@ NO_FADE = Fade(0, 0, (), True, "no fade asked for")
 """A hard cut on and off — the file said nothing about a fade, so nothing was written."""
 
 
+def baked_fade(frames_in: int, frames_out: int) -> Fade:
+    """The PNG route's fade: already in the pixels, so there is nothing to write or read.
+
+    Reported in the same shape as a written one so a caller reading the apply report does
+    not have to branch on the route to find out how a title fades. ``verified`` is true
+    because the ramp arrived with the card — the frames were counted against the event's
+    duration before anything was placed (T11), which is the whole of the check available.
+    """
+    if not (frames_in or frames_out):
+        return NO_FADE
+    return Fade(frames_in, frames_out, (), True, "baked into the exported frames")
+
+
 @dataclass(frozen=True)
 class Params:
     """The exposed inputs of one placed title's Text+ node, and whether they could be read.
@@ -462,6 +475,7 @@ __all__ = [
     "Fade",
     "Params",
     "TitleNode",
+    "baked_fade",
     "editable_ids",
     "read_input",
     "read_params",

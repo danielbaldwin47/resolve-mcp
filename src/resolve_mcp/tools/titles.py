@@ -50,9 +50,12 @@ def apply_titles(titles_file: str) -> dict[str, Any]:
     cut, mark the songs on the new version, re-apply this file unchanged.
 
     Each song's events are positioned from the blue marker whose name is the song key, so
-    the file needs no timeline frames in it. Text comes from the file verbatim, and fades
-    are written as Fusion opacity keyframes inside each placed instance, because Resolve
-    exposes no clip-level fade to the API at all.
+    the file needs no timeline frames in it. An event takes one of two routes and both are
+    placed in the same pass: `textplus` puts an instance of a media-pool template down and
+    writes the file's text and an opacity-keyframe fade into its Fusion comp, because
+    Resolve exposes no clip-level fade to the API at all; `png` places a designed card
+    already exported to frames with alpha, whose words and ramps are in the pixels. Cards
+    are imported for you into `04_Assets/Text/<song>`, once, and reused on later applies.
 
     The validate_titles rules run first: a single error aborts before the track is
     cleared, so a refused apply leaves the previous titles in place. The target timeline

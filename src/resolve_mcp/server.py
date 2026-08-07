@@ -46,9 +46,11 @@ change is a rebuild into a new version, with one exception: swap_take flips a sh
 of its alternates in place. It is yours to keep the cut file in step afterwards — the
 server never writes it, and the swap report says exactly what to change. Titles are
 declarative too and live outside the cut file: get_titles_schema, then apply_titles, which
-owns a Titles track and can be re-applied to every rebuild. A typo in one placed title
-needs neither: list_titles reads the track back and edit_title fixes that one instance,
-leaving every other title alone — fix titles.json too, or the next apply undoes it.
+owns a Titles track and can be re-applied to every rebuild. Each event picks its route —
+a Text+ template instance, or a designed PNG card already exported to frames — and both
+land in the same pass. A typo in one placed title needs neither: list_titles reads the
+track back and edit_title fixes that one instance, leaving every other title alone — fix
+titles.json too, or the next apply undoes it.
 
 When the audio evidence is ambiguous, look: grab_frames writes JPEGs you can read at any
 moment on any angle, and detect_scene_cuts catalogs where a piece of b-roll changes shot.

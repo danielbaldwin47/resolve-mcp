@@ -75,6 +75,20 @@ def an_event(**overrides: Any) -> dict[str, Any]:
     return event
 
 
+def a_card(**overrides: Any) -> dict[str, Any]:
+    """A PNG event. ``asset=None`` drops the field, which is how T6 is provoked."""
+    event: dict[str, Any] = {
+        "id": "p01",
+        "kind": "personnel",
+        "route": "png",
+        "asset": "cards/sunset-boulevard/personnel_%04d.png",
+        "in": 0,
+        "out": 240,
+    }
+    event.update(overrides)
+    return {key: value for key, value in event.items() if value is not None}
+
+
 def one_song(*events: dict[str, Any], key: str = "sunset-boulevard") -> dict[str, Any]:
     return valid_doc(songs=[{"key": key, "events": list(events)}])
 
@@ -96,14 +110,21 @@ def test_an_unsupported_schema_version_is_t1() -> None:
     assert "schema 1" in findings[0].message
 
 
-def test_a_file_with_no_templates_is_t1_because_a_title_needs_one() -> None:
-    findings = validate_structure(valid_doc(templates={}))
-    assert "templates" in findings[0].message
+def test_a_textplus_event_with_no_template_declared_is_t5() -> None:
+    """The templates block is optional now the PNG route needs none, so the event that
+    wanted one is where the missing declaration is reported."""
+    findings = only(validate_structure(valid_doc(templates={})), "T5")
+    assert len(findings) == 3
+    assert "declares none" in findings[0].message
 
 
-def test_an_event_with_no_text_is_t1() -> None:
+def test_a_templates_block_that_is_not_an_object_is_t1() -> None:
+    assert "templates" in only(validate_structure(valid_doc(templates=[])), "T1")[0].message
+
+
+def test_an_event_with_no_text_is_t6() -> None:
     doc = one_song({"id": "t01", "kind": "title", "in": 0, "out": 240})
-    assert "text" in only(validate_structure(doc), "T1")[0].message
+    assert "'text'" in only(validate_structure(doc), "T6")[0].message
 
 
 def test_a_blank_text_is_t1_because_the_server_never_writes_the_words() -> None:
@@ -189,10 +210,38 @@ def test_a_custom_event_must_name_its_own_template() -> None:
     assert rules_of(validate_structure(doc)) == ["T5"]
 
 
-def test_the_png_route_is_refused_until_the_png_tool_lands() -> None:
-    doc = one_song(an_event(route="png"))
-    findings = only(validate_structure(doc), "T6")
-    assert "textplus" in findings[0].message
+def test_a_png_event_carrying_an_asset_passes_the_structural_pass() -> None:
+    """The two routes coexist in one file: the structural rules judge each on its own
+    fields, and only the disk pass (T10/T11) has anything more to ask of a card."""
+    doc = one_song(a_card(), an_event(**{"in": 600, "out": 900}))
+    assert validate_structure(doc) == []
+
+
+def test_a_png_event_with_no_asset_is_t6() -> None:
+    doc = one_song(a_card(asset=None))
+    assert "'asset'" in only(validate_structure(doc), "T6")[0].message
+
+
+def test_a_png_event_carrying_text_is_t6_because_the_words_are_in_the_card() -> None:
+    doc = one_song(a_card(text="Sunset Boulevard"))
+    message = only(validate_structure(doc), "T6")[0].message
+    assert "'text'" in message and "textplus field" in message
+
+
+def test_a_png_event_carrying_a_template_is_t6() -> None:
+    doc = one_song(a_card(template="title"))
+    assert "'template'" in only(validate_structure(doc), "T6")[0].message
+
+
+def test_a_textplus_event_carrying_an_asset_is_t6() -> None:
+    doc = one_song(an_event(asset="cards/title_%04d.png"))
+    assert "'asset'" in only(validate_structure(doc), "T6")[0].message
+
+
+def test_a_png_event_needs_no_template_to_be_declared() -> None:
+    """T5 is a Text+ rule: a card is its own artwork and resolves to no pool template."""
+    doc = valid_doc(templates={}, songs=[{"key": "sunset-boulevard", "events": [a_card()]}])
+    assert validate_structure(doc) == []
 
 
 def test_a_song_with_no_events_is_only_a_warning() -> None:

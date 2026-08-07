@@ -9,9 +9,9 @@ Build contract: [issue #22](https://github.com/danielbaldwin47/resolve-mcp/issue
 
 P1 in progress, P2 titling started. Shipped so far: the server skeleton, the
 session/project tools, the media pool tools, the timeline read, marker and interchange
-tools, the declarative cut file and `build_timeline`, the Text+ titling tools, the
-background-job infrastructure with audio acquisition, frame grabs and scene-cut
-detection, the render/deliver tools, and the `run_python` escape hatch.
+tools, the declarative cut file and `build_timeline`, the titling tools on both the Text+
+and PNG routes, the background-job infrastructure with audio acquisition, frame grabs and
+scene-cut detection, the render/deliver tools, and the `run_python` escape hatch.
 
 | Tool | What it does |
 | --- | --- |
@@ -36,7 +36,7 @@ detection, the render/deliver tools, and the `run_python` escape hatch.
 | `build_timeline` | Builds a cut file into a fresh `<name> v<N>` timeline and verifies what landed |
 | `get_titles_schema` | The titles-file contract, its annotated example and the validation rules |
 | `validate_titles` | Dry-runs a titles file before the Titles track is touched |
-| `apply_titles` | Places Text+ titles from `titles.json` onto an owned Titles track, fades and all |
+| `apply_titles` | Places Text+ and PNG titles from `titles.json` onto an owned Titles track, fades and all |
 | `list_titles` | Reads the Titles track back: what each placed title says and which inputs it exposes |
 | `edit_title` | Fixes one placed title in place — its words or its exposed params, neighbours untouched |
 | `grab_frames` | Grabs chosen moments on a clip as JPEGs (≤1568px) the agent reads off disk |
@@ -75,8 +75,16 @@ Editing is declarative and split across two files that never mention each other.
 `Titles` — every apply clears that track whole and re-places from the file, so the same
 file always produces the same track. Title positions are offsets from the *blue marker*
 naming their song rather than timeline frames, which is what lets one titles file be
-re-applied unchanged to every rebuild. Fades are Fusion opacity keyframes inside each
-placed instance, because Resolve exposes no clip-level fade to the scripting API at all.
+re-applied unchanged to every rebuild.
+
+Each event picks one of two routes, and both land in the same pass. **Text+** places an
+instance of a GUI-authored template and writes its words and its fade into that instance's
+Fusion comp — clip-level fades are not exposed to the scripting API at all, so the fade is
+an opacity spline. **PNG** places a designed card exported to frames with alpha, its words
+and its ramps already in the pixels; the server consumes cards, never generates them. A
+card is imported once into `04_Assets/Text/<song>` and found rather than re-imported on
+every later apply, and gets the one-time out-point write that makes Resolve honour the
+requested length instead of dropping every image at the default still duration.
 
 A typo is the exception to all of that. `edit_title` writes new words or new exposed
 params straight into one already-placed Text+ instance — no clear, no append, no rebuild —

@@ -1,4 +1,4 @@
-"""The titles-file validation rules: 9 hard errors, 2 warnings, one implementation.
+"""The titles-file validation rules: 11 hard errors, 2 warnings, one implementation.
 
 The list is identical in the ``validate_titles`` dry run and in ``apply_titles``'
 pre-flight, so it lives here once and both call it. A failing file must abort before the
@@ -6,10 +6,13 @@ Titles track is cleared — a track emptied for titles that were never placed is
 outcome this file exists to prevent, and it is worse than the cut's equivalent because
 the thing destroyed is the *previous* good state.
 
-Two passes, because they need different things:
+Three passes, because they need different things:
 
-* :func:`validate_structure` reads the document alone — no project, no connection. Shape,
-  ids, ranges, fades and routes (T1-T4, T6, W1).
+* :func:`validate_structure` reads the document alone — no project, no connection, no
+  disk. Shape, ids, ranges, fades and route coherence (T1-T4, T6, W1).
+* :func:`validate_assets` reads the disk, and nothing else: the PNG cards an event points
+  at, and whether they carry the frames it asks for (T10, T11). It runs before Resolve is
+  opened, because a card that was never exported is worth saying so without a connection.
 * :func:`validate_project` takes the song anchors and template facts already read off the
   timeline and the media pool, and answers everything that depends on them (T5, T7-T9,
   W2). It is a pure function over those facts, so every rule here is unit-testable
@@ -24,14 +27,19 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Final, TypeGuard
 
 from ..findings import Finding, ordered
 from ..logging_config import get_logger
 from ..timing import ranges_overlap
-from .schema import KINDS, ROUTES, SCHEMA_VERSION, SUPPORTED_ROUTES
+from .assets import Asset, resolve_asset
+from .schema import DEFAULT_ROUTE, KINDS, ROUTES, SCHEMA_VERSION
 
 log = get_logger("titles")
+
+PNG: Final = "png"
+TEXTPLUS: Final = "textplus"
 
 RULE_DESCRIPTIONS: Final[dict[str, str]] = {
     "T1": "JSON parses; schema-valid; schema version supported",
@@ -39,10 +47,12 @@ RULE_DESCRIPTIONS: Final[dict[str, str]] = {
     "T3": "in < out on every event",
     "T4": "fade in + fade out fit inside the event's duration",
     "T5": "every template resolves to exactly one media-pool clip",
-    "T6": "event route supported by this build (textplus)",
+    "T6": "every event carries the fields its route needs (text, or asset)",
     "T7": "every song key names exactly one blue marker on the timeline",
     "T8": "events do not overlap — one Titles track shows one title at a time",
     "T9": "every event lands inside the timeline",
+    "T10": "every png asset is on disk",
+    "T11": "every png asset carries the frames its event asks for",
     "W1": "a song with no events",
     "W2": "a blue marker with no song in the file",
 }
@@ -53,10 +63,14 @@ _FIX_HINTS: Final[dict[str, str]] = {
     "T3": "Ranges are half-open [in, out); make out strictly greater than in.",
     "T4": "Shorten the fades or lengthen the event — a fade cannot run past the title.",
     "T5": "Import the template bin into the media pool, or fix templates.<name>.clip/.bin.",
-    "T6": "Only textplus titles are placed today; png titles land with the PNG route.",
+    "T6": "A textplus event needs 'text' and a template; a png event needs 'asset'.",
     "T7": "Name a blue marker exactly this key with set_markers, or fix the key.",
     "T8": "Stagger the events — one Titles track can only show one title at a time.",
     "T9": "Pull the event inside the timeline, or re-mark the song on the version you title.",
+    "T10": "Export the card to that path, or fix the event's 'asset' — paths are relative "
+    "to the titles file.",
+    "T11": "Re-bake the sequence to out - in frames, or retime the event to the frames it "
+    "has; a one-image card is frozen to length and can carry no fade.",
     "W1": "Add events to the song, or drop it from the file.",
     "W2": "Expected while titling a set a song at a time; otherwise add the song.",
 }
@@ -97,11 +111,17 @@ class Event:
     route: str
     template: str
     text: str
+    asset: str
     record_in: int
     duration: int
     fade_in: int
     fade_out: int
     note: str
+
+    @property
+    def is_png(self) -> bool:
+        """Which of the two routes places this event: a designed card, or a Text+ instance."""
+        return self.route == PNG
 
     @property
     def record_out(self) -> int:
@@ -162,13 +182,18 @@ def _target_errors(doc: dict[str, Any]) -> Iterator[Finding]:
 
 
 def _templates_errors(doc: dict[str, Any]) -> Iterator[Finding]:
-    templates = doc.get("templates")
-    if not isinstance(templates, dict) or not templates:
+    """The block is optional — a file whose events are all PNG declares no templates.
+
+    A missing one is not reported here even when a Text+ event needs it: T5 already names
+    the template that could not be found, against the event that wanted it, which is the
+    finding that says what to do about it.
+    """
+    templates = doc.get("templates", {})
+    if not isinstance(templates, dict):
         yield _finding(
             "T1",
             None,
-            "'templates' must be a non-empty object of name -> {clip, bin}; a Text+ title "
-            "is placed from a template clip and there is no default one.",
+            "'templates' must be an object of name -> {clip, bin} when present.",
         )
         return
     for name, template in templates.items():
@@ -216,13 +241,21 @@ def _event_errors(event: Any, where: str, song: str | None) -> Iterator[Finding]
         yield _finding("T1", id, f"'{where}.route' must be one of: {', '.join(ROUTES)}.")
     if "template" in event and not isinstance(event["template"], str):
         yield _finding("T1", id, f"'{where}.template' must be a template name.")
-    if not isinstance(event.get("text"), str) or not event["text"].strip():
+    if "text" in event and not (isinstance(event["text"], str) and event["text"].strip()):
         yield _finding(
             "T1",
             id,
             f"'{where}.text' must be the non-empty string to show; the server never "
             f"formats prose, so pass the final text.",
         )
+    if "asset" in event and not (isinstance(event["asset"], str) and event["asset"].strip()):
+        yield _finding(
+            "T1",
+            id,
+            f"'{where}.asset' must be a non-empty path to the exported card.",
+        )
+    if "bin" in event and not isinstance(event["bin"], str):
+        yield _finding("T1", id, f"'{where}.bin' must be a media-pool bin path when present.")
     for edge in ("in", "out"):
         if not _is_int(event.get(edge)):
             yield _finding(
@@ -342,20 +375,36 @@ def fades(event: Mapping[str, Any]) -> tuple[int, int]:
 
 
 def _route_errors(doc: dict[str, Any]) -> Iterator[Finding]:
-    """T6: a route this build cannot place, named now rather than half-applied later."""
+    """T6: the two routes take different fields, and neither ignores the other's.
+
+    A ``text`` on a PNG event is the mistake worth catching loudest: the words are baked
+    into the card, so the file would read as if it said them while the placed title showed
+    whatever was exported — a disagreement nothing downstream can see.
+    """
     for _, event in _events(doc):
+        id = str(event["id"])
         route = route_of(event)
-        if route not in SUPPORTED_ROUTES:
+        wanted, unwanted = (
+            ("asset", ("text", "template")) if route == PNG else ("text", ("asset", "bin"))
+        )
+        if not event.get(wanted):
             yield _finding(
                 "T6",
-                str(event["id"]),
-                f"Route {route!r} is not placed by this tool; it places "
-                f"{', '.join(SUPPORTED_ROUTES)}.",
+                id,
+                f"A {route} event needs {wanted!r}, and this one has none.",
             )
+        for field in unwanted:
+            if field in event:
+                yield _finding(
+                    "T6",
+                    id,
+                    f"{field!r} means nothing on a {route} event; it is a "
+                    f"{TEXTPLUS if route == PNG else PNG} field.",
+                )
 
 
 def route_of(event: Mapping[str, Any]) -> str:
-    return str(event.get("route", SUPPORTED_ROUTES[0]))
+    return str(event.get("route", DEFAULT_ROUTE))
 
 
 def template_of(event: Mapping[str, Any]) -> str:
@@ -365,15 +414,17 @@ def template_of(event: Mapping[str, Any]) -> str:
 
 def _declared_template_errors(doc: dict[str, Any]) -> Iterator[Finding]:
     """T5's first leg: a template the file never declared cannot be looked up at all."""
-    declared = set(doc["templates"])
+    declared = set(doc.get("templates", {}))
+    names = ", ".join(sorted(declared)) if declared else "none"
     for _, event in _events(doc):
+        if route_of(event) == PNG:
+            continue  # a PNG card is its own artwork; there is no template to resolve
         wanted = template_of(event)
         if wanted not in declared:
             yield _finding(
                 "T5",
                 str(event["id"]),
-                f"No template called {wanted!r} is declared; the file declares "
-                f"{', '.join(sorted(declared))}.",
+                f"No template called {wanted!r} is declared; the file declares {names}.",
             )
 
 
@@ -381,6 +432,62 @@ def _empty_song_warnings(doc: dict[str, Any]) -> Iterator[Finding]:
     for song in _songs(doc):
         if not song["events"]:
             yield _finding("W1", str(song["key"]), "This song has no title events.")
+
+
+# --- the asset pass -----------------------------------------------------------------------
+
+
+def validate_assets(
+    doc: dict[str, Any],
+    *,
+    base: Path,
+) -> tuple[list[Finding], dict[str, Asset]]:
+    """T10-T11: every PNG card, counted off disk, judged against the event that wants it.
+
+    The resolved cards come back beside the findings for the same reason the templates do:
+    the apply imports the very files the rules counted, so a card cannot be judged at one
+    length and placed at another. Events on the Text+ route are not represented at all, and
+    neither is a PNG event with no ``asset``: T6 has already said that is what is wrong with
+    it, and resolving an empty path would answer "nothing on disk" about the wrong thing.
+    """
+    findings: list[Finding] = []
+    resolved: dict[str, Asset] = {}
+    for song, event in _events(doc):
+        if route_of(event) != PNG or not event.get("asset"):
+            continue
+        asset = resolve_asset(event, str(song["key"]), base=base)
+        resolved[asset.event] = asset
+        findings += _asset_errors(asset, int(event["out"]) - int(event["in"]), fades(event))
+    return ordered(findings), resolved
+
+
+def _asset_errors(asset: Asset, duration: int, fade: tuple[int, int]) -> Iterator[Finding]:
+    """One card's own rules: it is there (T10), and it is the right length (T11)."""
+    if asset.missing:
+        what = "sequence" if asset.is_sequence else "image"
+        yield _finding(
+            "T10",
+            asset.event,
+            f"No {what} stands behind {asset.declared!r} (looked at {asset.path}).",
+        )
+        return
+    if duration <= 0:
+        return  # T3 already said the event has no frames; a length check would repeat it
+    if asset.is_sequence and asset.frames != duration:
+        yield _finding(
+            "T11",
+            asset.event,
+            f"{asset.declared!r} is {asset.frames} frame(s) and the event asks for "
+            f"{duration}. A sequence is placed whole — the fade-out is in its last frames, "
+            f"so it is neither trimmed nor stretched.",
+        )
+    if not asset.is_sequence and any(fade):
+        yield _finding(
+            "T11",
+            asset.event,
+            f"{asset.declared!r} is one image, held by freezing it, so the "
+            f"{fade[0]}-in/{fade[1]}-out fade this event asks for cannot be shown.",
+        )
 
 
 # --- the project pass ---------------------------------------------------------------------
@@ -477,14 +584,16 @@ def plan(doc: dict[str, Any], anchors: Mapping[str, Sequence[int]]) -> list[Even
         anchor = found[0]
         for event in song["events"]:
             fade_in, fade_out = fades(event)
+            png = route_of(event) == PNG
             planned.append(
                 Event(
                     id=str(event["id"]),
                     song=str(song["key"]),
                     kind=str(event["kind"]),
                     route=route_of(event),
-                    template=template_of(event),
-                    text=str(event["text"]),
+                    template="" if png else template_of(event),
+                    text="" if png else str(event.get("text", "")),
+                    asset=str(event.get("asset", "")) if png else "",
                     record_in=anchor + int(event["in"]),
                     duration=int(event["out"]) - int(event["in"]),
                     fade_in=fade_in,
@@ -540,7 +649,9 @@ def _unused_anchor_warnings(
 
 __all__ = [
     "ANCHOR_COLOR",
+    "PNG",
     "RULE_DESCRIPTIONS",
+    "TEXTPLUS",
     "Event",
     "TemplateFacts",
     "fades",
@@ -548,6 +659,7 @@ __all__ = [
     "plan",
     "route_of",
     "template_of",
+    "validate_assets",
     "validate_project",
     "validate_structure",
 ]
