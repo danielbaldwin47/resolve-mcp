@@ -14,6 +14,7 @@ this repo does not own.
 
 from __future__ import annotations
 
+import math
 import struct
 from collections.abc import Callable
 from pathlib import Path
@@ -21,7 +22,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from resolve_mcp.analysis import decode, silence
+from resolve_mcp.analysis import decode, energy, music, silence
 from resolve_mcp.audio import riff, wav
 from resolve_mcp.errors import AudioExtractionError
 
@@ -91,7 +92,10 @@ def test_describe_reports_a_float_wav(tmp_path: Path) -> None:
 
     described = wav.describe(path)
 
-    assert described["duration_seconds"] == pytest.approx(0.5)
+    # Exact, not approximate: #45 leaned on a float master and its transcode agreeing to the
+    # sample (6130.888708 both ways), so a frame lost in the header read would matter.
+    assert described["duration_seconds"] == 0.5
+    assert decode.read(path).frames == 22_050
     assert described["sample_rate"] == 44_100
     assert described["channels"] == 2
     assert described["bit_depth"] == 32
@@ -101,7 +105,7 @@ def test_describe_reports_a_float_wav(tmp_path: Path) -> None:
 def test_describe_still_reports_pcm_as_pcm(tmp_path: Path) -> None:
     described = wav.describe(write_wav(tmp_path / "tone.wav", seconds=0.5, bit_depth=24))
 
-    assert described["duration_seconds"] == pytest.approx(0.5)
+    assert described["duration_seconds"] == 0.5
     assert described["bit_depth"] == 24
     assert described["encoding"] == "pcm"
 
@@ -203,4 +207,36 @@ def test_the_reader_walks_past_chunks_it_does_not_know(tmp_path: Path) -> None:
     path = write_float_wav(tmp_path / "master.wav", seconds=0.1)
 
     assert b"fact" in path.read_bytes()
-    assert riff.header(path).frames == 4_800
+    with riff.opened(path) as handle:
+        assert handle.format.frames == 4_800
+
+
+def test_analyze_music_measures_a_float_master(tmp_path: Path) -> None:
+    """#110's own headline, at the tool the ticket names rather than a layer below it.
+
+    Beats are switched off because the detector is a model this tier does not install
+    (ADR 0002); the energy half reads the samples, which is the half the bug was in.
+    """
+    path = write_float_wav(tmp_path / "master.wav", seconds=2.0, sample_rate=8_000)
+    settings = {"beats": False, "energy": True, "window_seconds": 0.5, "hop_seconds": 0.25}
+
+    output = music.analyze(path, settings, lambda fraction, step: None)
+
+    assert output.result["audio"]["duration_seconds"] == 2.0
+    assert output.result["audio"]["sample_rate"] == 8_000
+    assert output.result["energy"]["count"] > 1
+
+
+def test_loudness_survives_a_master_that_peaks_above_full_scale(tmp_path: Path) -> None:
+    """The unclamped samples reach the loudness maths, which has to stay finite on them.
+
+    Passing peaks through is only right if what reads them can take it: BS.1770 is a log of
+    a mean square, so an above-full-scale file must measure *louder*, not overflow or clip.
+    """
+    quiet = decode.read(write_float_wav(tmp_path / "quiet.wav", seconds=0.5, amplitude=0.3))
+    hot = decode.read(write_float_wav(tmp_path / "hot.wav", seconds=0.5, amplitude=1.4))
+
+    measured = energy.integrated_lufs(hot)
+
+    assert math.isfinite(measured)
+    assert measured > energy.integrated_lufs(quiet)

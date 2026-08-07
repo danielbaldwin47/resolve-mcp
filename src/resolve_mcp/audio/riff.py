@@ -71,6 +71,17 @@ class Format(NamedTuple):
         return "float" if self.is_float else "pcm"
 
     @property
+    def full_scale(self) -> float:
+        """What one sample reads at the top of its range — the divisor that normalises it.
+
+        A float file is already stored in those units, so its full scale is 1.0 and dividing
+        by it is the no-op that says so. Both readers take the number from here rather than
+        each spelling out the fixed-point arithmetic: they had drifted into two spellings of
+        it already, and two spellings are two chances to be wrong about one file.
+        """
+        return 1.0 if self.is_float else float(1 << (self.bit_depth - 1))
+
+    @property
     def duration_seconds(self) -> float:
         return self.frames / self.sample_rate if self.sample_rate else 0.0
 
@@ -83,10 +94,10 @@ class Reader:
     exactly that and nothing else.
     """
 
-    def __init__(self, stream: BinaryIO, layout: Format, start: int) -> None:
-        self.format = layout
+    def __init__(self, stream: BinaryIO, header: Format, start: int) -> None:
+        self.format = header
         self._stream = stream
-        self._remaining = layout.frames * layout.block_align
+        self._remaining = header.frames * header.block_align
         stream.seek(start)
 
     def read_frames(self, count: int) -> bytes:
@@ -98,29 +109,19 @@ class Reader:
         self._remaining -= len(raw)
         return raw
 
-    def read_all(self) -> bytes:
-        """Every frame left, which for every caller but silence means the whole file."""
-        return self.read_frames(self.format.frames)
-
 
 @contextlib.contextmanager
 def opened(path: Path | str) -> Iterator[Reader]:
-    """A WAV open on its samples, its header already parsed."""
+    """A WAV open on its samples, its header already parsed and no sample read yet."""
     with Path(path).open("rb") as stream:
-        layout, start = _parse(stream)
-        yield Reader(stream, layout, start)
-
-
-def header(path: Path | str) -> Format:
-    """The header alone — no samples read, which matters when the file is gigabytes."""
-    with Path(path).open("rb") as stream:
-        return _parse(stream)[0]
+        header, start = _parse(stream)
+        yield Reader(stream, header, start)
 
 
 def read(path: Path | str) -> tuple[Format, bytes]:
     """The header and every frame behind it."""
     with opened(path) as handle:
-        return handle.format, handle.read_all()
+        return handle.format, handle.read_frames(handle.format.frames)
 
 
 def _parse(stream: BinaryIO) -> tuple[Format, int]:
@@ -165,6 +166,12 @@ def _data_bytes(stream: BinaryIO, declared: int) -> int:
 
 
 def _format(fmt: bytes | None, data_bytes: int) -> Format:
+    """The ``fmt `` chunk's bytes, checked and resolved into what the samples actually are.
+
+    Every refusal here names the thing that is wrong rather than the file, because the
+    caller turns these into advice and "not a readable WAV file" was the message that sent
+    someone toward deleting a perfectly good master (#110).
+    """
     if fmt is None:
         raise RiffError("no fmt chunk before the data chunk")
     if len(fmt) < FMT_BYTES:

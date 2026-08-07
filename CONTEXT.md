@@ -149,7 +149,10 @@ a dissolve), `tests/text_plus_probe.py` (Text+ probe fixtures).
 
 Test files pair 1:1 with the module they cover (`test_cut_validate.py` ↔
 `cut/validate.py`, `test_timeline_tools.py` ↔ `tools/timeline.py` +
-`resolve/timeline.py`, …). Live tier: `test_live_smoke.py` (module-level
+`resolve/timeline.py`, …). `test_wav_container.py` ↔ `audio/riff.py` is the
+exception that earns its keep: the headers it covers are read by `audio/wav.py`,
+`analysis/decode.py` and `analysis/silence.py` alike, and #110 was a bug in what
+all three agreed about. Live tier: `test_live_smoke.py` (module-level
 `pytest.mark.live`) and two `@pytest.mark.live` tests in
 `test_live_analysis.py`; everything else is fake-tier.
 

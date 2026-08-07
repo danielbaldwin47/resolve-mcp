@@ -50,13 +50,15 @@ def describe(path: Path | str) -> dict[str, Any]:
     """Duration, sample rate, channels, bit depth and encoding of a WAV on disk."""
     target = Path(path)
     with opened(target) as handle:
-        found = handle.format
+        header = handle.format
     return {
         "path": str(target),
-        "duration_seconds": round(found.duration_seconds, 3) if found.sample_rate else None,
-        "sample_rate": found.sample_rate,
-        "channels": found.channels,
-        "bit_depth": found.bit_depth,
-        "encoding": found.encoding,
+        "duration_seconds": round(header.duration_seconds, 3) if header.sample_rate else None,
+        "sample_rate": header.sample_rate,
+        "channels": header.channels,
+        "bit_depth": header.bit_depth,
+        # Depth alone stopped identifying a file the moment float became readable: 32-bit
+        # PCM and 32-bit float are different audio behind the same number (#110).
+        "encoding": header.encoding,
         "bytes": target.stat().st_size,
     }

@@ -62,7 +62,7 @@ def read(path: Path | str) -> Audio:
     """Decode a WAV, or say which file could not be decoded and why."""
     target = Path(path)
     try:
-        found, raw = riff.read(target)
+        header, raw = riff.read(target)
     except (OSError, riff.RiffError) as exc:
         raise AudioExtractionError(
             cause=f"{target.name} is not a readable WAV file ({exc}).",
@@ -74,35 +74,34 @@ def read(path: Path | str) -> Audio:
             detail={"path": str(target)},
         ) from exc
 
-    if not found.is_float and found.sample_width not in SUPPORTED_WIDTHS:
+    if not header.is_float and header.sample_width not in SUPPORTED_WIDTHS:
         raise AudioExtractionError(
-            cause=f"{target.name} is {found.bit_depth}-bit PCM, which is not supported.",
+            cause=f"{target.name} is {header.bit_depth}-bit PCM, which is not supported.",
             fix="Convert it to 16-, 24- or 32-bit PCM WAV and analyse that.",
-            detail={"path": str(target), "bit_depth": found.bit_depth},
+            detail={"path": str(target), "bit_depth": header.bit_depth},
         )
 
-    samples = _samples(raw, found.sample_width, found.is_float)
-    usable = samples.size - samples.size % found.channels
-    reshaped = samples[:usable].reshape(-1, found.channels).T
-    return Audio(samples=reshaped.copy(), sample_rate=found.sample_rate)
+    samples = _samples(raw, header)
+    usable = samples.size - samples.size % header.channels
+    reshaped = samples[:usable].reshape(-1, header.channels).T
+    return Audio(samples=reshaped.copy(), sample_rate=header.sample_rate)
 
 
-def _samples(raw: bytes, width: int, is_float: bool) -> NDArray[np.float32]:
-    """Interleaved sample bytes to interleaved floats.
+def _samples(raw: bytes, header: riff.Format) -> NDArray[np.float32]:
+    """Interleaved sample bytes to interleaved floats, in full-scale units.
 
-    Float sources are already in full-scale units, so they are only narrowed to float32 —
-    dividing by anything would be scaling a signal that is already scaled.
+    Float sources are only narrowed to float32: they are already stored in those units, so
+    the header's full scale is 1.0 and the division is the no-op that says so.
     """
-    if is_float:
-        precision = np.dtype("<f4") if width == riff.FLOAT32_BYTES else np.dtype("<f8")
-        return np.asarray(np.frombuffer(raw, dtype=precision), dtype=np.float32)
-    if width == 3:
+    if header.is_float:
+        precision = "<f4" if header.sample_width == riff.FLOAT32_BYTES else "<f8"
+        return np.asarray(np.frombuffer(raw, dtype=np.dtype(precision)), dtype=np.float32)
+    if header.sample_width == 3:
         ints = _from_24_bit(raw)
     else:
-        signed = np.dtype("<i2") if width == 2 else np.dtype("<i4")
+        signed = np.dtype("<i2") if header.sample_width == 2 else np.dtype("<i4")
         ints = np.frombuffer(raw, dtype=signed).astype(np.int32)
-    full_scale = float(2 ** (width * riff.BITS_PER_BYTE - 1))
-    return np.asarray(ints.astype(np.float32) / full_scale, dtype=np.float32)
+    return np.asarray(ints.astype(np.float32) / header.full_scale, dtype=np.float32)
 
 
 def _from_24_bit(raw: bytes) -> NDArray[np.int32]:

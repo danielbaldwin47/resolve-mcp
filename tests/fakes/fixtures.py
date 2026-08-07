@@ -18,6 +18,7 @@ from resolve_mcp.ffmpeg import Completed, Runner
 PCM_TAG = 0x0001
 FLOAT_TAG = 0x0003
 EXTENSIBLE_TAG = 0xFFFE
+FLOAT32_BITS = 32
 
 # The tail of KSDATAFORMAT_SUBTYPE_*, the GUID an extensible header carries in place of a tag.
 SUBFORMAT_TAIL = b"\x00\x00\x10\x00\x80\x00\x00\xaa\x00\x38\x9b\x71"
@@ -218,6 +219,7 @@ def write_tagged_wav(
 
 
 def _interleaved_ints(samples: list[int], bit_depth: int, channels: int) -> bytes:
+    """One mono signal laid out as interleaved fixed-point frames: every channel the same."""
     width = bit_depth // 8
     frames = bytearray()
     for sample in samples:
@@ -226,7 +228,8 @@ def _interleaved_ints(samples: list[int], bit_depth: int, channels: int) -> byte
 
 
 def _interleaved_floats(samples: list[float], bit_depth: int, channels: int) -> bytes:
-    code = "<f" if bit_depth == 32 else "<d"
+    """The same, in single or double precision — the layouts ``wave`` will not write."""
+    code = "<f" if bit_depth == FLOAT32_BITS else "<d"
     frames = bytearray()
     for sample in samples:
         frames.extend(struct.pack(code, sample) * channels)
