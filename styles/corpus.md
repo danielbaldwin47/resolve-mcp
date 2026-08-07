@@ -26,13 +26,27 @@ recency breaks ties).
 | 6 | `Archive/Client/Side Step Blues Clues Album` | Blues Clues Main, Devlin Time Main, For All The Other Times Main, Intro Main, Outro Main, People We Love Main, Walk Spirit Talk Spirit Main, EJ's Blues Main | studio-session | **deferred** | Footage not on the box; and studio-session is a different cutting context from the concert work this pass is about. Revisit when the concert profile is settled |
 | 7 | ~~`…Ryan and Hang…` Blues for Alice, Three Card Molly~~ | — | — | **dropped** | Confirmed single-camera (director, 2026-08-07) — no angle switches, so nothing to measure |
 
-7 concert-context timelines across 4 projects. The 8 studio-session timelines
-are deferred, not excluded. Full-set timelines carry many tunes, so per-cut
-counts run into the hundreds.
+7 concert-context timelines across **3 projects** — entries 1 and 5 are both
+`2026-06_Zinc_and_Monkfish`, entries 2 and 4 are both the Ryan and Hang gene
+edit, and entry 3 stands alone. Worth stating plainly because #21 policy 4
+counts *projects*, not timelines: measuring all seven would still leave every
+claim resting on three, and six of the seven are already done. The 8
+studio-session timelines are deferred, not excluded. Full-set timelines carry
+many tunes, so per-cut counts run into the hundreds.
 
 Entries 4, 6 and 7 were settled by the director on 2026-08-07: Stablemates
 reachable from the entry-2 project, Side Step deferred, and the conditional
 entry resolved single-camera without needing a pre-flight.
+
+**Entry 4 is the only one left, and it is blocked on a clock rather than on
+access.** Stablemates has no render, and its A1 audio items disagree about
+where the mix starts — 86391 from one, 86055 from another — because each
+multicam angle carries its own source offset. Every other entry had either a
+clip carrying the analysed mix or a render whose duration proved the frame.
+This has neither, so there is no number to name and defend, and it waits for
+a full-timeline export or the director rather than getting measured against a
+guess. Its 19 shots are the smallest sample in the corpus; publishing them
+against the wrong zero would cost more than leaving them out.
 
 ## Excluded, and why
 
