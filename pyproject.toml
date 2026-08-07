@@ -40,6 +40,17 @@ dev = [
     "ruff>=0.6",
 ]
 
+[tool.uv]
+# numba refuses numpy >= 2.5 outright ("Numba needs NumPy 2.4 or less"), and numba arrives
+# transitively on any box that injects the analysis models: panns_inference -> torchlibrosa ->
+# librosa -> numba. Without this, `uv sync` resolves numpy 2.5 and PANNs inference dies at import
+# while the whole fake tier stays green, because ADR 0002 injects the models rather than depending
+# on them. Constrained here rather than in [project.dependencies] so the cap governs this
+# environment without shipping in the published metadata: the server itself is fine on numpy 2.5.
+# numba 0.66.0 is the latest stable as of 2026-08; when 0.67 ships stable it likely lifts the
+# ceiling and this block can go.
+constraint-dependencies = ["numpy<2.5"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q --strict-markers -m 'not live'"
