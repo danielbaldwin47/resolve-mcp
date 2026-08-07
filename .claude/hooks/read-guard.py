@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
-"""Read guards, all halves in one script (dispatched on hook_event_name).
+"""Read guards, all three in one script (dispatched on hook_event_name).
 
 PostToolUse on Edit/Write/MultiEdit: record the edited path, keyed by session.
 PreToolUse on Read, blocking (exit 2) on either rule:
   1. Re-read: a whole-file Read of a path this session already edited — the
      content is in context and Edit/Write fail loudly on a miss, so the re-read
-     buys nothing.
-  2. Big first read: a whole-file Read of a repo file over BIG_FILE_LINES —
-     CLAUDE.md's "ranged (grep first) on big files", which prose alone did not
-     hold under load (one session full-read a 656-line module three times).
-A ranged Read (offset/limit present) is allowed by both: needing a different
-section of a big file is legitimate, and a deliberate `offset: 1, limit: <n>`
-remains the escape hatch, so this is a speed bump rather than a wall.
+     buys nothing. Any offset/limit is the escape: wanting a different section
+     of a big file is legitimate.
+  2. Big first read: a whole-file Read of a guarded-extension repo file
+     (GUARDED_EXT below) over BIG_FILE_LINES — CLAUDE.md's "ranged (grep first)
+     on big files". Here the escape is `limit`, since a bare `offset` still
+     pulls Read's 2000-line default. A deliberate `offset: 1, limit: <n>` passes,
+     so this is a speed bump rather than a wall.
 
-Measured motivation: read-after-edit ran ~46% of sessions pre-rules and ~39%
-after prose alone (2026-08-05 transcript audit) — the one axis prose never moved.
+Measured motivation (2026-08-05 transcript audit): read-after-edit ran ~46% of
+sessions pre-rules and ~39% after prose alone — the one axis prose never moved;
+and one session full-read a 656-line module three times under the grep-first
+prose rule.
 """
 import json
 import os
@@ -88,35 +90,41 @@ if event == "PostToolUse" and tool in ("Edit", "Write", "MultiEdit"):
     sys.exit(0)
 
 if event == "PreToolUse" and tool == "Read":
-    if "offset" in tool_input or "limit" in tool_input:
-        sys.exit(0)
     path = tool_input.get("file_path", "")
-    edited = set()
-    if state_file:
-        try:
-            with open(state_file) as f:
-                edited = set(f.read().splitlines())
-        except OSError:
-            edited = set()
-    if path in edited:
-        sys.stderr.write(
-            "Blocked (context discipline): this session already edited that file — its content is in your "
-            "context, and Edit/Write fail loudly on a miss, so a whole-file re-read buys nothing.\n"
-            "If you need a specific section, grep -n for it and Read with offset/limit.\n"
-        )
-        sys.exit(2)
 
-    if os.path.splitext(path)[1].lower() in GUARDED_EXT and in_project(path):
+    # The re-read rule's escape is unchanged: any offset/limit means the model is
+    # after a section, not the file.
+    if "offset" not in tool_input and "limit" not in tool_input:
+        edited = set()
+        if state_file:
+            try:
+                with open(state_file) as f:
+                    edited = set(f.read().splitlines())
+            except OSError:
+                edited = set()
+        if path in edited:
+            sys.stderr.write(
+                "Blocked (context discipline): this session already edited that file — its content is in your "
+                "context, and Edit/Write fail loudly on a miss, so a whole-file re-read buys nothing.\n"
+                "If you need a specific section, grep -n for it and Read with offset/limit.\n"
+            )
+            sys.exit(2)
+
+    # The size rule wants a *bounded* read, so it takes `limit` alone as the
+    # escape: a bare `offset` still pulls Read's 2000-line default, which is the
+    # whole of any file this rule covers.
+    if (
+        "limit" not in tool_input
+        and os.path.splitext(path)[1].lower() in GUARDED_EXT
+        and in_project(path)
+    ):
         lines = line_count(path)
         if lines is not None and lines > BIG_FILE_LINES:
             sys.stderr.write(
-                "Blocked (context discipline): {} is {} lines — over the {}-line whole-file limit.\n".format(
-                    os.path.basename(path), lines, BIG_FILE_LINES
-                )
-                + "Grep for the symbol you need first, then Read with offset/limit around the hit.\n"
-                "If you truly need the whole file, say so with an explicit range: offset 1, limit {}.\n".format(
-                    lines
-                )
+                f"Blocked (context discipline): {os.path.basename(path)} is {lines} lines — "
+                f"over the {BIG_FILE_LINES}-line whole-file limit.\n"
+                f"Grep for the symbol you need first, then Read with offset/limit around the hit.\n"
+                f"If you truly need the whole file, say so with an explicit range: offset 1, limit {lines}.\n"
             )
             sys.exit(2)
 
