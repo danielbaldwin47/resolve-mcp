@@ -159,6 +159,12 @@ The five canonical triage roles, each label string equal to its role name. See `
 Single-context — `CONTEXT.md` (repo map + vocabulary) and `docs/adr/` at
 the repo root. See `docs/agents/domain.md`.
 
+### The rough-cut pillar
+
+P4: transcript-driven A-roll assembly. The per-project brief and b-roll
+catalog the agent owns, the assembly loop, the `virtual_transcript`
+self-review and the cut report: `docs/agents/rough-cut.md`.
+
 ### The style layer
 
 `styles/` — profiles and angle sidecars, agent-authored and never touched by

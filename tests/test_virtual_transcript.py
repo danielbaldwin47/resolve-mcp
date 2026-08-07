@@ -101,8 +101,8 @@ def test_a_word_the_cut_chops_in_half_is_reported(tmp_path: Path) -> None:
 
     reading = a_reading(tmp_path, doc)
 
-    assert "W1" in rules(reading)
-    assert "'here'" in messages(reading, "W1")[0]
+    assert "W3" in rules(reading)
+    assert "'here'" in messages(reading, "W3")[0]
 
 
 def test_a_chopped_word_names_the_frame_that_would_have_spared_it(tmp_path: Path) -> None:
@@ -111,7 +111,7 @@ def test_a_chopped_word_names_the_frame_that_would_have_spared_it(tmp_path: Path
     doc["segments"][0]["out"] = 90
 
     reading = a_reading(tmp_path, doc)
-    hint = next(one["fix_hint"] for one in reading["warnings"] if one["rule"] == "W1")
+    hint = next(one["fix_hint"] for one in reading["warnings"] if one["rule"] == "W3")
 
     assert "frame 92" in hint
 
@@ -130,8 +130,8 @@ def test_the_same_line_surviving_twice_is_reported(tmp_path: Path) -> None:
     """The false start left in front of the good take — the failure this pillar exists to catch."""
     reading = a_reading(tmp_path, both_takes())
 
-    assert "W2" in rules(reading)
-    assert "'we start'" in messages(reading, "W2")[0]
+    assert "W4" in rules(reading)
+    assert "'we start'" in messages(reading, "W4")[0]
 
 
 def test_one_word_repeating_across_a_seam_is_not_reported(tmp_path: Path) -> None:
@@ -152,14 +152,14 @@ def test_one_word_repeating_across_a_seam_is_not_reported(tmp_path: Path) -> Non
     reading = a_reading(tmp_path, doc, transcripts={"cam_a": a_transcript(tmp_path, words)})
 
     assert reading["text"] == "so and and then"
-    assert "W2" not in rules(reading)
+    assert "W4" not in rules(reading)
 
 
 def test_a_source_with_no_transcript_is_reported_not_guessed_at(tmp_path: Path) -> None:
     """Silence in the read-back could mean "said nothing" or "nobody looked" — say which."""
     reading = a_reading(tmp_path, delivered(), transcripts={})
 
-    assert rules(reading).count("W3") == 2
+    assert rules(reading).count("W5") == 2
     assert reading["text"] == ""
 
 
@@ -177,7 +177,7 @@ def test_a_word_the_transcriber_was_unsure_of_is_flagged_where_it_is_delivered(
     """The uncertainty the cut report carries: it survived the edit, so it needs a listen."""
     reading = a_reading(tmp_path, delivered())
 
-    assert messages(reading, "W4") == ["'finish' is delivered at confidence 0.3"]
+    assert messages(reading, "W6") == ["'finish' is delivered at confidence 0.3"]
 
 
 def test_an_unsure_word_left_out_of_the_cut_is_not_flagged(tmp_path: Path) -> None:
@@ -188,14 +188,14 @@ def test_an_unsure_word_left_out_of_the_cut_is_not_flagged(tmp_path: Path) -> No
 
     reading = a_reading(tmp_path, doc)
 
-    assert "W4" not in rules(reading)
+    assert "W6" not in rules(reading)
 
 
 def test_the_confidence_floor_moves(tmp_path: Path) -> None:
     """A noisy shoot flags everything at the default; the floor is the agent's to set."""
     reading = a_reading(tmp_path, delivered(), below=0.2)
 
-    assert "W4" not in rules(reading)
+    assert "W6" not in rules(reading)
 
 
 def test_a_cut_from_one_camera_back_to_itself_is_a_jump_cut(tmp_path: Path) -> None:
@@ -215,7 +215,7 @@ def test_a_cut_between_two_cameras_is_not(tmp_path: Path) -> None:
     reading = a_reading(tmp_path, doc)
 
     assert [one["jump_cut"] for one in reading["seams"]] == [False]
-    assert "W5" not in rules(reading)
+    assert "W7" not in rules(reading)
 
 
 def test_an_overlay_riding_across_the_seam_covers_it(tmp_path: Path) -> None:
@@ -223,7 +223,7 @@ def test_an_overlay_riding_across_the_seam_covers_it(tmp_path: Path) -> None:
     reading = a_reading(tmp_path, delivered())
 
     assert reading["seams"][0]["covered_by"] == "b01"
-    assert "W5" not in rules(reading)
+    assert "W7" not in rules(reading)
 
 
 def test_an_uncovered_jump_cut_is_reported(tmp_path: Path) -> None:
@@ -232,7 +232,7 @@ def test_an_uncovered_jump_cut_is_reported(tmp_path: Path) -> None:
 
     reading = a_reading(tmp_path, doc)
 
-    assert "W5" in rules(reading)
+    assert "W7" in rules(reading)
     assert reading["seams"][0]["covered_by"] is None
 
 
@@ -244,7 +244,7 @@ def test_an_overlay_that_stops_short_of_the_seam_does_not_cover_it(tmp_path: Pat
     reading = a_reading(tmp_path, doc)
 
     assert reading["seams"][0]["covered_by"] is None
-    assert "W5" in rules(reading)
+    assert "W7" in rules(reading)
 
 
 def test_the_counts_summarise_what_the_findings_say(tmp_path: Path) -> None:
@@ -267,7 +267,7 @@ def test_nothing_here_blocks_a_cut(tmp_path: Path) -> None:
 
     reading = a_reading(tmp_path, doc)
 
-    assert set(rules(reading)) >= {"W1", "W2", "W5"}
+    assert set(rules(reading)) >= {"W3", "W4", "W7"}
     assert all(rule.startswith("W") for rule in rules(reading))
     assert "errors" not in reading
 

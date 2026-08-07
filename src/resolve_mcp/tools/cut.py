@@ -65,10 +65,15 @@ def virtual_transcript(
     `segments` is the same split per shot, and `words` places each word at the frame it
     lands on (spilled to disk past the inline cap). `seams` reports every join, which ones
     put two shots of one source together, and the overlay covering each. There is no
-    `errors` list because this cannot produce one — everything it finds is a
-    warning: a word cut in half (W1), a run of words surviving on both sides of a seam
-    because two takes were kept (W2), a source with no transcript (W3), a low-confidence
-    word delivered (W4), and an uncovered same-source seam (W5).
+    `errors` list because this cannot produce one — everything it finds is a warning: a
+    word cut in half (W3), a run of words surviving on both sides of a seam because two
+    takes were kept (W4), a source with no transcript (W5), a low-confidence word
+    delivered (W6), and an uncovered same-source seam (W7). The numbering carries on from
+    validate_cut's W1 and W2 rather than restarting, because both sets of warnings are
+    about the same cut file and a second W1 meaning something else would be a trap.
+
+    W4 compares each seam against the one before it, so two takes of a line separated by
+    another shot read back clean — the doubling this catches is the adjacent kind.
 
     Nothing here decides anything. Whether a repeat is a retake to drop or an echo you
     meant, whether filler stays, whether a mid-word cut is sloppy or deliberate — that

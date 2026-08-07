@@ -13,13 +13,13 @@ arithmetic disagrees with something readable.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
 from resolve_mcp.analysis import transcript
 from resolve_mcp.analysis.transcript import Word
 
+from . import cutfile
 from .fakes import FakeMediaPoolItem, media_pool, studio
 
 FPS = 24.0
@@ -64,9 +64,8 @@ def a_transcript(tmp_path: Path, words: tuple[Word, ...] = SPOKEN, name: str = "
 
 
 def a_cut(tmp_path: Path, doc: Any, name: str = "interview.cut.json") -> str:
-    path = tmp_path / name
-    path.write_text(json.dumps(doc), encoding="utf-8")
-    return str(path)
+    """The concert fixture's writer, bound to this pillar's file name."""
+    return cutfile.a_cut(tmp_path, doc, name)
 
 
 def delivered(**overrides: Any) -> dict[str, Any]:

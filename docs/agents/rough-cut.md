@@ -14,12 +14,19 @@ timeline is as an `overlays[]` entry in the cut file you author, and the only wa
 reaches anything is by changing what you decide. `tests/test_rough_cut_pillar.py` guards
 that — no module under `src/` names a brief or a catalog by path.
 
-They live per project:
+They live per project, in the repo:
 
 ```
 projects/<project>/brief.md      # what the director wants this to be
 projects/<project>/broll.json    # what you have to cover with
 ```
+
+In the repo, one file per project, keyed to the project — the same reading the angle
+sidecar settled, and the director confirmed on 2026-08-07 that sidecars stay in version
+control rather than sitting beside the footage on a media drive
+(`docs/agents/style-layer.md`). They are not under `styles/` because that layer is taste:
+a profile says how you cut, and neither a brief nor a shot list does. If the director would
+rather have one agent-owned root than two, moving them is a rename and a regex.
 
 ### The brief
 
@@ -105,15 +112,21 @@ Then work the warnings. There are no errors; this refuses nothing:
 
 | Rule | What it found | What it usually means |
 | --- | --- | --- |
-| W1 | a word cut in half | the boundary is a frame or two off; the fix hint names the frame |
-| W2 | the same run of words on both sides of a seam | two takes of one line both survived |
-| W3 | a segment's source has no transcript | either transcribe it, or it is silent on purpose |
-| W4 | a low-confidence word survives into the cut | listen to it before delivering |
-| W5 | an uncovered seam between two shots of one source | a jump cut with no b-roll over it |
+| W3 | a word cut in half | the boundary is a frame or two off; the fix hint names the frame |
+| W4 | the same run of words on both sides of a seam | two takes of one line both survived |
+| W5 | a segment's source has no transcript | either transcribe it, or it is silent on purpose |
+| W6 | a low-confidence word survives into the cut | listen to it before delivering |
+| W7 | an uncovered seam between two shots of one source | a jump cut with no b-roll over it |
 
-W2 is the one to take seriously: a cut file that keeps a false start in front of the good
+The numbering starts at W3 because `validate_cut` already owns W1 and W2 **for the same cut
+file**. One document, one numbering — two W2s meaning different things would be a trap in a
+session holding both results.
+
+W4 is the one to take seriously: a cut file that keeps a false start in front of the good
 take is structurally perfect — it validates, it builds, it plays — and only reading the
-words back says the piece stammers.
+words back says the piece stammers. It compares each seam against the one before it, so two
+takes of a line with another shot between them read back clean; the doubling it catches is
+the adjacent kind, which is where a false start actually lands.
 
 Every warning is a reading, not a verdict. A repeat can be deliberate. A mid-word cut can
 be the point. Filler is not flagged at all, because whether an "um" carries thought or
@@ -122,7 +135,9 @@ stalls is exactly the judgement the brief settles and no detector should.
 ## The cut report
 
 What the director gets is the built timeline plus markers on it — uncertainties only, not a
-running commentary. The W4 warnings are the natural contents: each one is a word you are
+running commentary. You write it with `set_markers`; there is no cut-report tool and there
+should not be, because which flags are worth the director's attention is the judgement.
+The W6 warnings are the natural contents: each one is a word you are
 delivering that the transcriber was unsure of, at a frame the director can jump to. Add
 anything you decided against the obvious reading, and leave everything you are confident
 about unmarked. Reviewing a rough cut should take minutes.

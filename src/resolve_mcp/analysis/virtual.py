@@ -32,6 +32,8 @@ from typing import Any, Final
 
 from ..config import Config, get_config
 from ..cut.document import read_cut_file
+from ..cut.validate import overlay_positions, positions, total_frames
+from ..document import LoadedDocument
 from ..errors import InvalidRequestError
 from ..findings import Finding, ordered
 from ..spill import spill
@@ -49,21 +51,22 @@ One word repeating across a cut is ordinary English — "and", "the", a name. Tw
 order is the shape of a line delivered twice with both takes kept.
 """
 
-RULE_DESCRIPTIONS: Final[dict[str, str]] = {
-    "W1": "a word is cut in half by a segment boundary",
-    "W2": "the same run of words survives on both sides of a seam",
-    "W3": "a segment's source has no transcript, so its words are unknown",
-    "W4": "a low-confidence word survives into the cut",
-    "W5": "two shots of one source meet at a seam no overlay covers",
-}
-
 _FIX_HINTS: Final[dict[str, str]] = {
-    "W1": "Move the boundary to the frame given here, or keep it if the clip is deliberate.",
-    "W2": "Drop one of the two takes, or make the second an alternate of the first.",
-    "W3": "Transcribe the source and pass it in, or accept that this segment reads as silence.",
-    "W4": "Grab the frame and listen, then fix the wording or let the uncertainty stand.",
-    "W5": "Cover the seam with an overlay anchored to the earlier segment, or accept the jump.",
+    "W3": "Move the boundary to the frame named above, or keep it if the clip is deliberate.",
+    "W4": "Drop one of the two takes, or make the second an alternate of the first.",
+    "W5": "Transcribe the source and pass it in, or accept that this segment reads as silence.",
+    "W6": "Grab the frame and listen, then fix the wording or let the uncertainty stand.",
+    "W7": "Cover the seam with an overlay anchored to the earlier segment, or accept the jump.",
 }
+"""The rules start at W3 because they share a document with ``cut/validate.py``.
+
+That module's rule set already owns W1 and W2 *for the same cut file*, so a second W1
+meaning something else is a trap: an agent holding a validate result and a reading of the
+same file in one session would have two W2s that disagree. One document, one numbering.
+"""
+
+_CLIPPED_HINT: Final = "Move the boundary to frame {frame}, or keep it if the clip is deliberate."
+"""W3 names the frame that would have spared the word, so it is built rather than looked up."""
 
 
 def virtual_transcript(
@@ -86,32 +89,32 @@ def virtual_transcript(
     sources = dict(transcripts or {})
 
     words_by_source = {alias: _words_of(path) for alias, path in sources.items()}
+    spans = {str(segment.get("id")): _span(segment, loaded.path.name) for segment in segments}
+    placed = _placed(doc, loaded.path.name)
     findings: list[Finding] = []
     rows: list[dict[str, Any]] = []
     read_back: list[dict[str, Any]] = []
-    at = 0
 
     for segment in segments:
         id = str(segment.get("id"))
         alias = str(segment.get("source"))
-        span = _span(segment, id, loaded.path.name)
-        duration = span[1] - span[0]
+        span = spans[id]
+        at, duration = placed[id]
         if alias not in words_by_source:
             findings.append(
-                _finding("W3", id, f"segment {id} plays {alias!r}, which has no transcript here")
+                _finding("W5", id, f"segment {id} plays {alias!r}, which has no transcript here")
             )
             read_back.append(_read(id, alias, at, duration, fps, []))
-            at += duration
             continue
 
         kept, clipped = _within(words_by_source[alias], span, fps)
         for word, edge, frame in clipped:
             findings.append(
                 _finding(
-                    "W1",
+                    "W3",
                     id,
                     f"segment {id} {edge} halfway through {word['word']!r}",
-                    _FIX_HINTS["W1"].replace("the frame given here", f"frame {frame}"),
+                    _CLIPPED_HINT.format(frame=frame),
                 )
             )
         for word, frame in kept:
@@ -128,24 +131,24 @@ def virtual_transcript(
             if confidence < below:
                 findings.append(
                     _finding(
-                        "W4",
+                        "W6",
                         id,
                         f"{str(word['word'])!r} is delivered at confidence "
                         f"{round(confidence, SECONDS_PRECISION)}",
                     )
                 )
         read_back.append(_read(id, alias, at, duration, fps, [word for word, _ in kept]))
-        at += duration
 
     findings.extend(_repeats(read_back))
-    seams = _seams(segments, read_back, doc)
+    seams = _seams(segments, placed, doc, fps, loaded.path.name)
     findings.extend(_uncovered(seams))
+    total = total_frames(doc)
 
-    return _result(loaded, doc, fps, at, read_back, rows, seams, ordered(findings), config)
+    return _result(loaded, doc, fps, total, read_back, rows, seams, ordered(findings), config)
 
 
 def _result(
-    loaded: Any,
+    loaded: LoadedDocument,
     doc: Any,
     fps: float,
     total: int,
@@ -157,8 +160,8 @@ def _result(
 ) -> dict[str, Any]:
     counts = {
         "words": len(rows),
-        "unsure": sum(1 for finding in findings if finding.rule == "W4"),
-        "clipped": sum(1 for finding in findings if finding.rule == "W1"),
+        "unsure": sum(1 for finding in findings if finding.rule == "W6"),
+        "clipped": sum(1 for finding in findings if finding.rule == "W3"),
         "jump_cuts": sum(1 for seam in seams if seam["jump_cut"]),
         "uncovered": sum(1 for seam in seams if seam["jump_cut"] and seam["covered_by"] is None),
     }
@@ -247,7 +250,7 @@ def _repeats(read_back: Sequence[Mapping[str, Any]]) -> list[Finding]:
             said = " ".join(tail[:run])
             found.append(
                 _finding(
-                    "W2",
+                    "W4",
                     str(later["id"]),
                     f"{said!r} ends {earlier['id']} and opens {later['id']}",
                 )
@@ -257,24 +260,30 @@ def _repeats(read_back: Sequence[Mapping[str, Any]]) -> list[Finding]:
 
 def _seams(
     segments: Sequence[Mapping[str, Any]],
-    read_back: Sequence[Mapping[str, Any]],
+    placed: Mapping[str, tuple[int, int]],
     doc: Any,
+    fps: float,
+    name: str,
 ) -> list[dict[str, Any]]:
     """Every join between two segments, and whether an overlay rides across it.
 
     Only a join between two shots of the *same* source is a jump cut: cutting from one
     camera to another is an ordinary edit, and covering it would be covering nothing.
+
+    Both sides of the question come from the cut module's own placement — the seam from
+    :func:`positions` and the overlay from :func:`overlay_positions`, the same two functions
+    E9 and the build use. Deriving either here would be measuring a layout nobody builds.
     """
-    spans = _overlay_spans(read_back, doc)
+    spans = _overlay_spans(doc, name)
     seams: list[dict[str, Any]] = []
-    for index, (earlier, later) in enumerate(zip(segments, segments[1:], strict=False)):
-        at = int(read_back[index + 1]["at"]["frames"])
+    for earlier, later in zip(segments, segments[1:], strict=False):
+        at = placed[str(later.get("id"))][0]
         jump = str(earlier.get("source")) == str(later.get("source"))
-        covering = [id for id, start, end in spans if start < at < end]
+        covering = [id for id, (start, length) in spans.items() if start < at < start + length]
         seams.append(
             {
                 "between": [str(earlier.get("id")), str(later.get("id"))],
-                "at": read_back[index + 1]["at"],
+                "at": dual_time(at, fps),
                 "jump_cut": jump,
                 "covered_by": covering[0] if covering else None,
             }
@@ -282,41 +291,28 @@ def _seams(
     return seams
 
 
-def _overlay_spans(
-    read_back: Sequence[Mapping[str, Any]],
-    doc: Any,
-) -> list[tuple[str, int, int]]:
-    """Where each overlay lands on the timeline, resolved through the segment it rides on."""
-    anchors = {str(read["id"]): int(read["at"]["frames"]) for read in read_back}
-    spans: list[tuple[str, int, int]] = []
-    for overlay in doc.get("overlays") or []:
-        if not isinstance(overlay, Mapping):
-            continue
-        over = overlay.get("over")
-        if not isinstance(over, Mapping):
-            continue
-        anchor = anchors.get(str(over.get("segment")))
-        if anchor is None:
-            continue
-        start = anchor + int(over.get("offset", 0))
-        spans.append((str(overlay.get("id")), start, start + _length(overlay)))
-    return spans
+def _overlay_spans(doc: Any, name: str) -> dict[str, tuple[int, int]]:
+    """Where each overlay lands, from the one function that answers that for the build."""
+    try:
+        return overlay_positions(doc)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise InvalidRequestError(
+            cause=f"{name} has an overlay that does not resolve to a position.",
+            fix="Call validate_cut — E9 names the overlay and what is wrong with its anchor.",
+            detail={"cut_file": name},
+        ) from exc
 
 
 def _uncovered(seams: Sequence[Mapping[str, Any]]) -> list[Finding]:
     return [
         _finding(
-            "W5",
+            "W7",
             str(seam["between"][1]),
             f"{seam['between'][0]} and {seam['between'][1]} are both one source, uncovered",
         )
         for seam in seams
         if seam["jump_cut"] and seam["covered_by"] is None
     ]
-
-
-def _length(overlay: Mapping[str, Any]) -> int:
-    return int(overlay.get("out", 0)) - int(overlay.get("in", 0))
 
 
 def _spoken(text: str) -> list[str]:
@@ -370,7 +366,24 @@ def _segments(doc: Any, name: str) -> list[Mapping[str, Any]]:
     return [segment for segment in segments if isinstance(segment, Mapping)]
 
 
-def _span(segment: Mapping[str, Any], id: str, name: str) -> tuple[int, int]:
+def _placed(doc: Any, name: str) -> dict[str, tuple[int, int]]:
+    """Every segment's ``(start, duration)`` — from the cut module, never derived here.
+
+    ``positions`` is what E9 validates against and what the build places against, so a
+    reading that summed its own durations could put a word at a frame no clip occupies.
+    """
+    try:
+        return positions(doc)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise InvalidRequestError(
+            cause=f"{name} has a segment that does not resolve to a position.",
+            fix="Call validate_cut — it names the segment and what is wrong with its range.",
+            detail={"cut_file": name},
+        ) from exc
+
+
+def _span(segment: Mapping[str, Any], name: str) -> tuple[int, int]:
+    id = str(segment.get("id"))
     try:
         span = (int(segment["in"]), int(segment["out"]))
     except (KeyError, TypeError, ValueError) as exc:
@@ -398,4 +411,4 @@ def _finding(rule: str, id: str | None, message: str, fix_hint: str | None = Non
     return Finding(rule=rule, id=id, message=message, fix_hint=fix_hint or _FIX_HINTS[rule])
 
 
-__all__ = ["INLINE_WORDS", "RULE_DESCRIPTIONS", "virtual_transcript"]
+__all__ = ["INLINE_WORDS", "virtual_transcript"]

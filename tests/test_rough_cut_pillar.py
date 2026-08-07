@@ -41,14 +41,42 @@ TIMELINE = "interview v1"
 
 SOURCE = Path(__file__).resolve().parent.parent / "src" / "resolve_mcp"
 
-PILLAR_DOCUMENTS = re.compile(r"\bbriefs? [/\\] | \bb-?rolls? [/\\]", re.VERBOSE | re.IGNORECASE)
+PILLAR_DOCUMENTS = re.compile(
+    r"""
+      \bprojects [/\\]     # the per-project directory the two documents live in
+    | \bbriefs? \.md        # or either of them named as the file it is
+    | \bb-?roll \.json
+    """,
+    re.VERBOSE | re.IGNORECASE,
+)
 """What reading the brief or the catalog would have to look like in source.
 
 The same guard the style layer gets, for the same reason: these two documents are the
 agent's, and the way that breaks is not a failing assertion — it is a convenience landing
 in ``src/`` that opens the catalog "just to check", after which coverage is server
-behaviour. A path shape rather than a word, so prose about b-roll stays allowed.
+behaviour.
+
+Written against the layout ``docs/agents/rough-cut.md`` documents —
+``projects/<project>/brief.md`` and ``projects/<project>/broll.json`` — because a guard
+matching a shape nothing uses passes forever while proving nothing. It is deliberately a
+path shape: prose about b-roll is what these modules *should* carry, and ``broll_pan`` is
+already a source alias in the schema example.
 """
+
+PROBES = (
+    ('open("projects/demo/broll.json")', True),
+    ('Path("projects") / project / "brief.md"', True),
+    ('"source": "broll_pan"', False),
+    ("b-roll rides the segment it covers", False),
+)
+"""Lines the guard must and must not catch — the assertion that the assertion works."""
+
+
+def test_the_guard_catches_what_it_is_written_for() -> None:
+    """A regex guard that matches nothing is a test that passes for the wrong reason."""
+    assert [bool(PILLAR_DOCUMENTS.search(line)) for line, _ in PROBES] == [
+        caught for _, caught in PROBES
+    ]
 
 
 def test_the_pillars_documents_stay_the_agents() -> None:
@@ -145,7 +173,7 @@ def test_the_delivered_cut_reads_back_as_one_clean_line(attach: Attach, tmp_path
 
     assert reading["text"] == "we start here and finish"
     assert reading["counts"]["uncovered"] == 0
-    assert [one["rule"] for one in reading["warnings"]] == ["W4"]
+    assert [one["rule"] for one in reading["warnings"]] == ["W6"]
 
 
 def test_the_self_review_catches_the_assembly_that_kept_both_takes(
@@ -165,7 +193,7 @@ def test_the_self_review_catches_the_assembly_that_kept_both_takes(
     reading = cut_tools.virtual_transcript(path, {"cam_a": a_transcript(tmp_path)})
 
     assert reading["text"] == "we start we start here and finish"
-    assert [one["rule"] for one in reading["warnings"]] == ["W2", "W4", "W5", "W5"]
+    assert [one["rule"] for one in reading["warnings"]] == ["W4", "W6", "W7", "W7"]
 
 
 def test_the_uncertainties_go_onto_the_timeline_as_the_cut_report(
@@ -203,7 +231,7 @@ def test_the_whole_pillar_runs_in_one_pass(attach: Attach, tmp_path: Path) -> No
     cut_tools.build_timeline(path)
     before = cut_tools.virtual_transcript(path, {"cam_a": a_transcript(tmp_path)})
 
-    assert "W2" in [one["rule"] for one in before["warnings"]]
+    assert "W4" in [one["rule"] for one in before["warnings"]]
 
     fixed = a_cut(tmp_path, delivered(), name="interview.cut.json")
     result = cut_tools.build_timeline(fixed)
@@ -211,7 +239,7 @@ def test_the_whole_pillar_runs_in_one_pass(attach: Attach, tmp_path: Path) -> No
 
     assert result["timeline"]["name"] == "interview v2"
     assert built(resolve, "interview v1") is not None
-    assert "W2" not in [one["rule"] for one in after["warnings"]]
+    assert "W4" not in [one["rule"] for one in after["warnings"]]
     assert after["counts"]["uncovered"] == 0
 
 
