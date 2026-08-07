@@ -141,6 +141,12 @@ you pass `refresh`.
   `RESOLVE_MCP_AUDIO_SEPARATOR` points at the executable). It is run as a subprocess, not
   imported, so it can live in its own environment and its torch/CUDA stack never loads
   into the server. The two model files download on first use.
+- **`uv sync --extra analysis`** for transcription. The extra carries faster-whisper *and*
+  the CUDA 12 runtime it needs (~1.3 GiB): the transcriber takes the GPU by default, and a
+  runtime nobody installed is the one thing that breaks it. No hand-installed wheels, no
+  `PATH` set before launch — the server puts the venv's own copy within reach. A box
+  without an NVIDIA card still transcribes; set `RESOLVE_MCP_WHISPER_DEVICE=cpu` and expect
+  it to be slow.
 
 ## Install
 
@@ -178,6 +184,8 @@ Zero-config by default; every path has an environment override.
 | `RESOLVE_MCP_STEM_MODEL` | `htdemucs_ft.yaml` | Pass one: the 4-stem model (vocals, drums, bass, other) |
 | `RESOLVE_MCP_DRUM_MODEL` | `MDX23C-DrumSep-aufr33-jarredou.ckpt` | Pass two: the drum decomposition model (kick, snare, toms) |
 | `RESOLVE_MCP_DEFAULT_RENDER_PRESET` | `H.265 Master` | Render preset `render_timeline` uses when the call names none. Must be a preset the project offers — an unknown name is refused, never swapped for another |
+| `RESOLVE_MCP_WHISPER_DEVICE` | `auto` | Device faster-whisper transcribes on: `auto`, `cuda` or `cpu`. `auto` takes the GPU whenever there is one |
+| `RESOLVE_MCP_WHISPER_COMPUTE_TYPE` | `default` | Precision: `default` is the model's stored precision (float16 for `large-v3`, widened to float32 on CPU). `float32` on `cuda` gives CPU-identical numbers at GPU speed |
 | `RESOLVE_MCP_LOG_LEVEL` | `INFO` | Log level for the stderr logger |
 | `RESOLVE_MCP_ALLOW_ANY_PYTHON` | unset | Bypass the interpreter check (see ADR 0001) |
 

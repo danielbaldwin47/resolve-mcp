@@ -18,6 +18,13 @@ dependencies = [
 # pull a CUDA runtime to answer get_status.
 analysis = [
     "faster-whisper>=1.0",
+    # The CUDA 12 runtime CTranslate2 links against (~1.3 GiB). Shipped in the extra rather
+    # than left to the machine because the device default is "auto": CTranslate2 picks CUDA
+    # the moment it sees an NVIDIA card, and then needs a runtime nothing else in this tree
+    # provides — so the extra used to fail on exactly the boxes it is most useful on (#128).
+    # No wheels exist for macOS, and nothing there would use them.
+    "nvidia-cublas-cu12>=12,<13; platform_system != 'Darwin'",
+    "nvidia-cudnn-cu12>=9,<10; platform_system != 'Darwin'",
 ]
 
 [project.scripts]
