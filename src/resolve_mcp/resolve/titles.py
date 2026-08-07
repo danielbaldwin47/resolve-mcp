@@ -189,7 +189,12 @@ def _templates(
 
 
 def _under(bin_path: str | None, declared: str) -> bool:
-    """Whether a clip's bin is the declared one or nested inside it, as find_clip searches."""
+    """Whether a clip's bin is the declared one or nested inside it, as find_clip searches.
+
+    ``declared`` is compared as written, so the one spelling this does not share with
+    :func:`media.find_clip` is the root's own name: ``Master`` reads as a bin called
+    Master here, where find_clip reads it as the root.
+    """
     where = bin_path or ""
     return where == declared or where.startswith(f"{declared}{media.BIN_SEPARATOR}")
 

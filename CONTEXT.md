@@ -22,6 +22,12 @@ timelines. The server measures; Claude decides.
   (`tools/envelope.py`).
 - **spill** — oversized results written to disk for the agent to grep
   instead of truncating.
+- **bin path** — a media pool folder, slash-separated from the root. To a
+  tool addressing one clip by name: omitted is the whole pool, a name is
+  that bin and everything nested inside it, `""` is the root folder alone
+  — the value `list_media` reports for a root clip, so a listing reads
+  back verbatim (#122). `list_media` itself takes the same paths but says
+  how deep to walk with its own `recursive` flag.
 - **the seam** — `resolve/connection.py` singleton, substituted by
   `tests/fakes/` via `set_connection()`; the only place fakes attach.
 - **fake tier / live tier** — `pytest -m 'not live'` against fakes (the

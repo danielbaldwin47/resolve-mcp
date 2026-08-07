@@ -584,6 +584,8 @@ def test_a_duplicated_name_still_refuses_without_a_bin(attach: Attach, tmp_path:
     assert result["error"]["detail"]["bins"] == ["", "Angles"]
     assert 'bin=""' in result["error"]["fix"]  # the root has to be expressible
     assert 'bin="Angles"' in result["error"]["fix"]
+    assert inspect_clip("C0012.mp4", bin="")["ok"] is True  # and every value offered works
+    assert inspect_clip("C0012.mp4", bin="Angles")["ok"] is True
 
 
 def test_every_bin_a_listing_reports_reads_the_same_clip_back(
@@ -622,6 +624,42 @@ def test_a_named_bin_still_reaches_a_clip_in_its_subfolder(
 
     assert result["ok"] is True
     assert result["clip"]["bin"] == "Angles/Cam A"
+
+
+def test_an_ambiguity_offers_only_the_bins_that_reach_one_clip(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """A bin whose subfolder holds another copy is not an answer, so it is not offered."""
+    same = a_file(tmp_path, "C0012.mp4")
+    attach(
+        studio(
+            pool=media_pool(bins={"Angles": [a_clip(same)], "Angles/Cam A": [a_clip(same)]})
+        )
+    )
+
+    result = inspect_clip("C0012.mp4", bin="Angles")
+
+    assert result["ok"] is False
+    assert result["error"]["code"] == "ambiguous_clip"
+    assert result["error"]["fix"] == (
+        'Pass one of these to say which: bin="Angles/Cam A".'
+    )  # not bin="Angles": searching it reaches the nested copy too
+    assert inspect_clip("C0012.mp4", bin="Angles/Cam A")["ok"] is True
+
+
+def test_two_copies_in_one_bin_are_refused_with_advice_that_is_not_a_bin(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """When no bin can answer, the fix says so instead of naming a value that fails."""
+    same = a_file(tmp_path, "C0012.mp4")
+    attach(studio(pool=media_pool(bins={"Angles": [a_clip(same), a_clip(same)]})))
+
+    result = inspect_clip("C0012.mp4", bin="Angles")
+
+    assert result["ok"] is False
+    assert result["error"]["code"] == "ambiguous_clip"
+    assert "bin=" not in result["error"]["fix"]
+    assert "Rename one in the Resolve GUI" in result["error"]["fix"]
 
 
 def test_naming_the_root_master_reaches_the_root_clip_only(

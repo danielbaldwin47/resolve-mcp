@@ -54,8 +54,9 @@ def list_media(
 ) -> dict[str, Any]:
     """Summarise media pool clips: name, bin, path, type, frames, fps, resolution, offline.
 
-    Without a bin this walks the whole pool; bin="" is the pool root alone. Every clip's
-    reported bin reads that clip back verbatim — pass it to any tool that takes a bin.
+    Without a bin this walks the whole pool, recursive says whether a named one includes
+    its subfolders, and the bin reported against each clip reads that clip back verbatim —
+    pass it to any tool that takes a bin, "" included.
     offline_only shows the clips whose media has
     moved away — the ones relink_media exists for. Past limit clips the full listing is
     written to disk and spilled_to holds the path, so a large pool never blows the token

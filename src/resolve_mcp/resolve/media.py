@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections import Counter
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any, NamedTuple
@@ -240,9 +241,27 @@ def _clips_under(where: LocatedBin, recursive: bool) -> Iterator[LocatedClip]:
 
 
 def _searched_label(bin_path: str | None, where: LocatedBin) -> str:
+    """What a clip_not_found says it looked in — the caller's own words for a named bin."""
     if bin_path is None:
         return "the media pool"
-    return f"the bin {where.path!r}" if where.path else "the media pool root"
+    return f"the bin {bin_path!r}" if where.path else "the media pool root"
+
+
+def _addressable(bins: list[str]) -> list[str]:
+    """Which bins holding a duplicated name would, passed on their own, reach one clip.
+
+    One entry per matching clip comes in, so a repeat means one bin holds two of the name —
+    passing it lands back on the same refusal. So does naming a bin whose subfolders hold
+    another copy, because a named bin is searched right through. The root is the exception:
+    ``""`` is the root folder alone, so a copy filed deeper never shadows it.
+    """
+    counted = Counter(bins)
+    return sorted(
+        path
+        for path, times in counted.items()
+        if times == 1
+        and not (path and any(other.startswith(f"{path}{BIN_SEPARATOR}") for other in bins))
+    )
 
 
 def find_clip(pool: Pool, name: str, bin_path: str | None = None) -> LocatedClip:
@@ -251,8 +270,8 @@ def find_clip(pool: Pool, name: str, bin_path: str | None = None) -> LocatedClip
     ``None`` searches the whole pool. A named bin searches that bin and everything nested
     inside it. ``""`` — or the root's own name — is the root folder *alone*, not the pool:
     naming the root recursively would be the whole-pool search again, which left a root
-    clip whose name is also used in a bin with no way to be addressed at all (#122). The
-    empty string is what :func:`summarise` reports for a root clip, so the ``bin`` value a
+    clip whose name a bin also used with no expressible address at all (#122). The empty
+    string is what :func:`summarise` reports for a root clip, so the ``bin`` value a
     listing gives back always reads the clip it described.
     """
     where = find_bin(pool, bin_path)
@@ -263,7 +282,8 @@ def find_clip(pool: Pool, name: str, bin_path: str | None = None) -> LocatedClip
         available = sorted({str(found.clip.GetName() or "") for found in searched})
         raise ClipNotFoundError(name, _searched_label(bin_path, where), available)
     if len(matches) > 1:
-        raise AmbiguousClipError(name, [found.bin_path for found in matches])
+        found_in = [found.bin_path for found in matches]
+        raise AmbiguousClipError(name, found_in, _addressable(found_in))
     return matches[0]
 
 
