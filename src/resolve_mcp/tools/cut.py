@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..analysis import virtual
+from ..analysis.transcript import DEFAULT_LOW_CONFIDENCE
 from ..resolve import build, cut, takes
 from ..resolve.connection import get_connection
 from .envelope import tool
@@ -39,6 +41,40 @@ def validate_cut(
     """
     connection = get_connection()
     return cut.validate_cut(connection, cut_file, min_segment_frames)
+
+
+@tool
+def virtual_transcript(
+    cut_file: str,
+    transcripts: dict[str, str] | None = None,
+    below: float = DEFAULT_LOW_CONFIDENCE,
+) -> dict[str, Any]:
+    """Read a cut file back as the words it will contain, before building it.
+
+    This is the rough-cut self-review. You assembled A-roll by reading transcripts and
+    choosing takes; this tells you what the assembly now says, so the quality bar is met
+    against the delivered words rather than against your memory of the plan. Needs no
+    project open and touches no timeline — a cut file and its transcripts are documents.
+
+    `transcripts` maps a source alias in the cut file to the transcript document
+    transcribe_audio wrote for that source. Aliases you leave out are reported (W3), not
+    guessed at: a b-roll clip with no speech belongs out of the mapping. `below` is the
+    confidence under which a surviving word is flagged as an uncertainty.
+
+    The result reads the cut back three ways: `text` is the whole thing as prose,
+    `segments` is the same split per shot, and `words` places each word at the frame it
+    lands on (spilled to disk past the inline cap). `seams` reports every join, which ones
+    put two shots of one source together, and the overlay covering each. There is no
+    `errors` list because this cannot produce one — everything it finds is a
+    warning: a word cut in half (W1), a run of words surviving on both sides of a seam
+    because two takes were kept (W2), a source with no transcript (W3), a low-confidence
+    word delivered (W4), and an uncovered same-source seam (W5).
+
+    Nothing here decides anything. Whether a repeat is a retake to drop or an echo you
+    meant, whether filler stays, whether a mid-word cut is sloppy or deliberate — that
+    reading is yours, and no cut is refused on the strength of it.
+    """
+    return virtual.virtual_transcript(cut_file, transcripts, below=below)
 
 
 @tool
@@ -95,8 +131,16 @@ def swap_take(
 TOOLS: tuple[Any, ...] = (
     get_cut_schema,
     validate_cut,
+    virtual_transcript,
     build_timeline,
     swap_take,
 )
 
-__all__ = ["TOOLS", "build_timeline", "get_cut_schema", "swap_take", "validate_cut"]
+__all__ = [
+    "TOOLS",
+    "build_timeline",
+    "get_cut_schema",
+    "swap_take",
+    "validate_cut",
+    "virtual_transcript",
+]

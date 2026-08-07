@@ -69,7 +69,9 @@ identify/cache/write pattern), `music` (beats + energy + gist job),
 `records` (sliceable record files), `silence` (RMS spans), `solos` (front
 of band changes), `structure` (tunes + solo changes job), `transcribe`
 (job), `transcript` (document + Word/Transcription/Transcriber vocabulary),
-`whisper` (default backend: faster-whisper large-v3).
+`virtual` (a cut file read back as the words it will contain — the P4
+self-review, warnings only, touches no Resolve handle), `whisper`
+(default backend: faster-whisper large-v3).
 
 `audio/` — concert audio out of Resolve onto disk: `acquire` (both routes),
 `ffmpeg` (per-source-clip route), `riff` (the WAV container itself: PCM,
@@ -144,15 +146,20 @@ references that exist only in annotations sit under `if TYPE_CHECKING`; that
 is what keeps the runtime import graph acyclic. Installed by the `attach` fixture in
 `tests/conftest.py` (autouse `_clean_globals` resets the seam and pins a
 hermetic `Config` around every test). Other helpers: `tests/cutfile.py`
-(miniature cut file + media pool), `tests/otio.py` (hand-edited OTIO with
-a dissolve), `tests/text_plus_probe.py` (Text+ probe fixtures).
+(miniature concert cut file + media pool), `tests/roughcut.py` (the P4
+substrate: one talking head said twice, its transcript, and the b-roll that
+covers the join), `tests/otio.py` (hand-edited OTIO with a dissolve),
+`tests/text_plus_probe.py` (Text+ probe fixtures).
 
 Test files pair 1:1 with the module they cover (`test_cut_validate.py` ↔
 `cut/validate.py`, `test_timeline_tools.py` ↔ `tools/timeline.py` +
 `resolve/timeline.py`, …). `test_wav_container.py` ↔ `audio/riff.py` is the
 exception that earns its keep: the headers it covers are read by `audio/wav.py`,
 `analysis/decode.py` and `analysis/silence.py` alike, and #110 was a bug in what
-all three agreed about. Live tier: `test_live_smoke.py` (module-level
+all three agreed about. `test_rough_cut_pillar.py` is the other exception: it
+covers no single module, walking the P4 pillar across `cut`, `build`, `takes`
+and `virtual` in one pass because the joins are what a per-module test cannot
+see. Live tier: `test_live_smoke.py` (module-level
 `pytest.mark.live`) and two `@pytest.mark.live` tests in
 `test_live_analysis.py`; everything else is fake-tier.
 
@@ -163,5 +170,7 @@ all three agreed about. Live tier: `test_live_smoke.py` (module-level
   content hash).
 - `docs/agents/` — issue-tracker conventions (wayfinder map ops), triage
   labels, domain-docs usage, the style layer (sidecar + profile formats,
-  provenance tags, how a corpus pass is run).
+  provenance tags, how a corpus pass is run), the rough-cut pillar
+  (`rough-cut.md`: the brief and b-roll catalog the agent owns, the
+  assembly loop, the `virtual_transcript` self-review and the cut report).
 - Wayfinder: map = issue #1, scope = #2, spec = #22, build tickets #23–#47.
