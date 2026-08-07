@@ -77,9 +77,8 @@ here as *one file per project, keyed to the project, kept out of the profile* �
 not as a file sitting beside the Resolve project on the media drive. A sidecar
 next to the footage is outside version control, and on an archived project it
 is on whichever drive that project was archived to; the labels are the agent's
-own document and their history is worth as much as the profiles'. If the
-director wants them beside the footage instead, only this path changes —
-nothing reads them but the agent.
+own document and their history is worth as much as the profiles'. **The
+director confirmed this reading on 2026-08-07** — sidecars stay in the repo.
 
 ```json
 {
@@ -108,9 +107,17 @@ nothing reads them but the agent.
   and the profile makes claims about each.
 - **`confidence`** and **`evidence`** are why a claim resting on this angle is
   thin or not: a `low` here is a reason a corpus claim downgrades.
-- **`confirmed_by_director`** — labelling is auto-labelled by Claude and
-  confirmed once by the director; reruns never re-ask (#13). Until that flip,
-  every claim resting on these labels is `[believed, unverified]`.
+- **`confirmed_by_director`** — `false` until confirmed, then the date it was
+  (`"2026-08-07"`). Labelling is auto-labelled by Claude and confirmed once;
+  reruns never re-ask (#13). Until that flip, every claim resting on these
+  labels is unverified in a second, sharper way than usual: not merely thin,
+  but possibly inverted.
+
+On a **multicam** project the confirmation is not optional politeness. Resolve
+exposes no angle→source mapping — `GetClipProperty("Angle")` comes back empty
+and a timeline item carries only the angle name — so which camera is behind
+`Video 1` can be guessed (the home angle usually holds the most screen time)
+but never read. Ask, before the roles are used for anything.
 
 An entry with no `role` is dropped by `correlate_timeline` rather than refused,
 so a half-labelled project still measures — its shots land under `unlabelled`.

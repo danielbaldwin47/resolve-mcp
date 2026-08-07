@@ -3,7 +3,7 @@
   "context": "concert",
   "labelled": "2026-08-06",
   "method": "frame grabs off the multicam's source clips, read by the agent",
-  "confirmed_by_director": false,
+  "confirmed_by_director": "2026-08-07",
   "note": "Zinc - Set 2 only. Monkfish Main is corpus entry 5 and is not labelled yet.",
   "angles": {
     "Zinc - Set 2 Multicam - Video 1": {
@@ -12,7 +12,7 @@
       "character": "wide",
       "note": "Front-of-house wide across the whole stage - piano and bass at house left, sax centre, drums at house right. Operated rather than locked off: the framing is not identical between grabs.",
       "camera": "FX6",
-      "confidence": "low",
+      "confidence": "high",
       "evidence": [
         "frames/A015C001_2606170J.MXF-346744bd6d0a.jpg",
         "frames/A015C001_2606170J.MXF-d56bbb4ba2fd.jpg"
@@ -24,7 +24,7 @@
       "character": "tight",
       "note": "Locked off at stage right, level with the kit: drummer in the foreground right, sax and bass beyond him, piano deep at frame left. Framing is the same in every grab.",
       "camera": "A7IV",
-      "confidence": "low",
+      "confidence": "high",
       "evidence": [
         "frames/20260617_D_A7IV_0006.MP4-7b06dd289e54.jpg",
         "frames/20260617_D_A7IV_0006.MP4-e924bd957d6e.jpg"
@@ -51,10 +51,9 @@
     }
   },
   "mapping_basis": {
-    "what_is_known": "What each camera is, read off its own frame grabs. That part is not in doubt.",
-    "what_is_inferred": "Which camera is multicam angle Video 1 and which is Video 2. Resolve's scripting API does not say: the multicam clip's 'Angle' property comes back empty, and a timeline item only carries the angle name, not the source behind it.",
-    "how_it_was_guessed": "Video 1 holds 68.5% of screen time over 188 cuts (13.8s a shot) and Video 2 holds 31.5% over 178 cuts (6.7s a shot). A two-camera concert cut that way has a home angle held long and a second angle cut to briefly, so the wide was assigned to Video 1.",
-    "how_to_settle_it": "Open Zinc - Set 2 Main, park on any shot, and say which camera is on screen. One look fixes it for good; until then every role-conditioned claim in styles/concert.md stays unverified.",
-    "if_it_is_backwards": "Swap the two role/subject/character/camera blocks. Nothing else in the corpus depends on the mapping - the timing measurements are angle-blind."
+    "what_is_known": "What each camera is, read off its own frame grabs; and which multicam angle number each one is, confirmed by the director on 2026-08-07.",
+    "why_it_needed_confirming": "Resolve's scripting API does not say which source is behind an angle: the multicam clip's 'Angle' property comes back empty, and a timeline item only carries the angle name. The mapping cannot be read, only inferred and then checked by eye.",
+    "how_it_was_first_guessed": "Video 1 holds 68.5% of screen time over 188 cuts (13.8s a shot) and Video 2 holds 31.5% over 178 cuts (6.7s a shot). A two-camera concert cut that way has a home angle held long and a second angle cut to briefly, so the wide was assigned to Video 1. The director confirmed this reading, so the screen-time heuristic held on this project - one data point, not a rule.",
+    "scope_of_the_confirmation": "This project only. Every other multicam project in the corpus needs its own look; nothing here transfers."
   }
 }
