@@ -23,24 +23,29 @@ that the grid is a live band's grid, so it moves.
   `[stated principle]` (#13, analysis workflow)
 - **Cuts land close to a transient without landing on one.** The median cut sits
   a few frames from the nearest transient and almost never on it: 33 ms on the
-  anchor (2 of 360 cuts on a transient), 34 ms on Freefall, 19 ms on Mercies,
-  17 ms on Sunshine. Four timelines, two projects, two rooms, four years apart,
-  and the median never leaves 17–34 ms — under a frame at 24fps in three of
-  them. That is the stated principle showing up as a number: near, not on.
-  `[measured — 2 projects]` (`corpus.md` entries 1 and 2)
-- **The direction bias is close to even, tipped early.** Anchor 195 early / 163
-  late; Freefall 25/18; Sunshine 22/26; Mercies 17/19. Early leads overall, but
-  two of the four tip late — so what is measured is the *absence* of a rule like
-  "always cut just before", not the presence of one.
-  `[measured — 2 projects]`
+  anchor (2 of 360 cuts on a transient), 34 ms on Freefall, 29 ms on Scullers,
+  19 ms on Mercies, 17 ms on Sunshine. Five timelines, three projects, three
+  rooms, four years apart, and the median never leaves 17–34 ms — under a frame
+  at 24fps in four of them. That is the stated principle showing up as a
+  number: near, not on.
+  `[measured — 3 projects, n=815 cuts, concert]` (`corpus.md` entries 1–3)
+- **There is no direction rule.** Anchor 195 early / 163 late; Freefall 25/18;
+  Sunshine 22/26; Mercies 17/19; Scullers 141/185. Three of five tip late, two
+  early, none decisively. What is measured is the *absence* of a habit like
+  "always cut just before the hit", not the presence of one — the placement is
+  about distance, not side.
+  `[measured — 3 projects, n=815 cuts, concert]`
 - Beat-grid position patterns, in frames and in beat-fraction, conditioned on
   context. *Open, and blocked rather than merely unmeasured. Every timeline so
-  far skews hard to the first beat of the bar — anchor 171:111:44:30, Mercies
-  25:6:2:3 — which would be a real finding if the grids were trustworthy, and
-  they are not: the anchor's reports `meter: 1` at 214 bpm over a jazz set, and
-  Mercies puts a cut in a bar 6. Rubato gating comes first, and until it lands
-  a consistent-looking histogram is the most misleading thing here, because it
-  looks like evidence.*
+  far skews hard to the first beat of the bar — anchor 171:111:44:30, Scullers
+  203:55:38:27, Mercies 25:6:2:3 — which would be a real finding if the grids
+  were trustworthy, and they are not: the anchor's reports `meter: 1` at 214 bpm
+  over a jazz set, Mercies puts a cut in a bar 6, and Scullers puts cuts in bars
+  5, 6 and 7. There is no such position in 4/4, so the grid is demonstrably
+  wrong where those cuts are — and it is the same grid the other 96% were
+  scored against. Rubato gating comes first, and until it lands a
+  consistent-looking histogram is the most misleading thing in this file,
+  because it looks like evidence.*
 
 ## 2. Energy — the master concept
 
@@ -55,15 +60,17 @@ that the grid is a live band's grid, so it moves.
 ## 3. Shot rhythm
 
 - **Shots are long, and their spread is enormous.** Medians run 6.8–12.0 s
-  (anchor 7.3, Freefall 6.8, Mercies 11.5, Sunshine 12.0) and every timeline
-  carries a hold far out past its median: 71 s on the anchor, 94 s on Sunshine,
-  146 s on Freefall, 184 s on Mercies. A concert cut here is not a montage, and
-  the long hold is not an outlier to be smoothed away — it appears in all four.
-  `[measured — 2 projects]`
+  (Freefall 6.8, anchor 7.3, Scullers 8.6, Mercies 11.5, Sunshine 12.0) and
+  every timeline carries a hold far out past its median: 71 s on the anchor,
+  94 s on Sunshine, 146 s on Freefall, 184 s on Mercies, 239 s on Scullers. A
+  concert cut here is not a montage, and the long hold is not an outlier to be
+  smoothed away — it appears in all five.
+  `[measured — 3 projects, n=847 shots, concert]`
 - **The mean sits well above the median, every time**: 10.4 vs 7.3, 15.5 vs
-  6.8, 18.3 vs 12.0, 18.5 vs 11.5. The distribution is skewed by design — most
-  shots middling, a few very long. Averaging shot length would describe a cut
-  that was never made. `[measured — 2 projects]`
+  6.8, 18.3 vs 12.0, 18.5 vs 11.5, 16.2 vs 8.6. The distribution is skewed by
+  design — most shots middling, a few very long. Averaging shot length would
+  describe a cut that was never made.
+  `[measured — 3 projects, n=847 shots, concert]`
 - Duration distributions conditioned on section type and energy band. *Open;
   the conditioning needs the structure analysis, which has not been run over
   the corpus.*
@@ -82,22 +89,28 @@ that the grid is a live band's grid, so it moves.
   the same time → cut between them.** The two are not in competition; the
   exchange is the content. `[stated principle]`
 - **There is a home angle, and it holds roughly three-quarters of the cut.**
-  Anchor 68.5%, Freefall 75.5%, Sunshine 76.3%, Mercies 74.4%. Four timelines,
-  two projects, and the home angle's share never drops below two thirds.
-  `[measured — 2 projects]`
-- **The home angle is whichever camera is on whoever is playing — not the
-  wide.** This is the claim the anchor got wrong on its own. With two cameras
-  the held angle *was* the wide (68.5%), which reads as a preference for the
-  wide; with an operated camera available, the wide drops to 14–17% and the
-  roaming `soloist-moving` camera takes 74–76%. The constant across both is not
-  the framing, it is the subject: the cut lives on the music being made and
-  visits everything else. `[measured — 2 projects]` — and the anchor is
-  re-read by it rather than contradicted: with nothing closer available, the
-  wide is where the soloist is.
+  Anchor 68.5%, Freefall 75.5%, Sunshine 76.3%, Mercies 74.4%, Scullers 74.3%.
+  Five timelines, three projects, and the share never drops below two thirds.
+  This one needs no labels — it is about the shape of the distribution, not
+  about which camera — which is why entry 3 supports it while supporting
+  nothing else in this section.
+  `[measured — 3 projects, n=847 shots, concert]`
+- **The home angle may be the camera on whoever is playing rather than the
+  wide.** On entry 2 the wide holds 14–17% while a roaming operated camera
+  holds 74–76%, so there the home angle is chosen by *subject*, not framing.
+  `[believed, unverified]` — entry 2 only, and the reason is worth stating: the
+  anchor cannot corroborate this even though its numbers look like they should.
+  Its home angle is its wide *and* its operated camera at once, so it has no
+  case where the two disagree and cannot tell which one the director was
+  following. Entry 3 is measured but unlabelled and cannot speak to it either.
+  One project deciding between two readings is exactly what #21 policy 4 is
+  about — so this is written down as the better reading, not as a finding, and
+  entry 4 or 5 is what would settle it.
 - **The drummer cam is cut to, not lived on.** It takes near-equal cut counts
   and a fraction of the hold: anchor 178 cuts for 31.5%, Freefall 13 for 10.1%,
   Sunshine 10 for 6.7%, Mercies 5 for 4.0%. Frequent and short is the shape.
-  `[measured — 2 projects]`
+  `[measured — 2 projects, n=498 shots, concert]` — two, not three: entry 3 is
+  unlabelled, so its 167 second-angle cuts cannot be attributed to a drummer.
 - **A second wide is a garnish, not a role.** Mercies is the only timeline with
   one (`room-wide`, from a seat rather than of the stage): 5 cuts, 5.2%.
   `[believed, unverified]` — one timeline.
@@ -136,13 +149,23 @@ Free prose, first-class.
   timelines carry many tunes, so per-cut sample counts run into the hundreds —
   the thin-corpus risk here is *project* count, not cut count, which is why the
   tag format names both.
-- One of seven concert entries is measured (the anchor). Every number above
-  therefore carries `[believed, unverified]` rather than `[measured — …]`, not
-  because the sample is small — 360 cuts is not small — but because one project
-  cannot tell this director's taste apart from this night's room. Entry 2
-  onward is what changes the tags.
-- The most useful thing the first pass produced was not a number but a
-  correction: two defects in `correlate_timeline` that only real footage
-  exposes (transitions counted as shots, multicam angles sharing one name).
+- **Five of seven concert timelines are measured, across three projects**:
+  the anchor, the three Judson's tunes (entry 2), and the Scullers full cut
+  (entry 3). Timing claims above therefore carry `[measured — …]`. Claims that
+  need *labels* to state — which role holds the cut — rest on two projects,
+  because entry 3 is measured but unlabelled; claims that separate framing from
+  subject rest on entry 2 alone, because the anchor's home angle is both its
+  wide and its operated camera and so cannot tell the two apart.
+- **Every timeline agrees about transients and none agrees about the beat
+  grid.** Five timelines, three projects, four years: the median cut sits
+  17–34 ms from the nearest transient every time. Over the same five, the
+  beat-offset mean runs two to fifteen times its own median and three of the
+  bar histograms contain positions that cannot exist in 4/4. The half of the
+  analysis that does not depend on a grid is the half that replicates.
+- The most useful thing each pass produced was not a number but a correction.
+  Entry 1: transitions counted as shots, and multicam angles sharing one name.
+  Entry 2: a second dissolve shape that swapped real shots for transitions
+  while keeping the count right, and an alignment that no timeline clip could
+  supply. Entry 3: a master mix the analyser could not read at all (#110).
   Everything above is measured with those fixed; nothing measured before them
   should be believed.

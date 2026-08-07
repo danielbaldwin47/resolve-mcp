@@ -365,6 +365,38 @@ def test_a_generator_on_the_cut_track_is_still_a_shot(attach: Attach, tmp_path: 
     assert result["cuts"] == 4
 
 
+def test_a_dissolve_into_a_generator_does_not_eat_the_generator(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Neither item has a pool item, so 'overlaps a real shot' cannot separate them.
+
+    What separates them is that a generator holds its stretch of track exclusively and a
+    transition does not — so the test is overlap with anything else, not with media.
+    """
+    timeline = FakeTimeline(
+        "sunset-set v3",
+        FPS,
+        start_frame=100,
+        video=[
+            FakeTrack(
+                "Video 1",
+                [
+                    _shot(*SHOTS[0]),
+                    _shot(*SHOTS[1]),
+                    _dissolve(start=299, duration=14),
+                    FakeTimelineItem("Solid Color", 299, 30, source_start=0),
+                ],
+            )
+        ],
+        audio=[FakeTrack("Master", [_shot("master_mix.wav", 100, 200, 0)])],
+    )
+    attach(studio(timeline=timeline))
+
+    result = _measured(tmp_path)
+
+    assert [one["clip"] for one in _rows(result)] == ["C0012.mp4", "C0031.mp4", "Solid Color"]
+
+
 def test_each_multicam_angle_is_its_own_clip(attach: Attach, tmp_path: Path) -> None:
     """Every angle of a multicam shares one pool item, so the pool name is not the angle.
 
