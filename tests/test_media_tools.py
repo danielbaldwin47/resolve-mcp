@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from resolve_mcp.tools.media import (
     import_media,
     inspect_clip,
@@ -366,6 +368,159 @@ def test_a_refused_camera_move_falls_back_to_the_footage_bin(
 
     assert result["ok"] is True
     assert result["imported"][0]["bin"] == "02_Footage"
+    assert result["imported"][0]["bin_source"] == "fallback"
+
+
+# --- the camera sidecar (#94) ----------------------------------------------------------
+#
+# Resolve reads camera metadata off the MXF wrapper and not off an MP4 on an M4ROOT card,
+# so A7-series footage reports no camera key at all and used to bin as bare 02_Footage.
+# The model is in an XML sidecar beside the clip. These use the real shape: namespaced,
+# because the namespace differs between camera generations and a literal tag match would
+# pass here and fail on the card.
+
+SIDECAR_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<NonRealTimeMeta xmlns="urn:schemas-professionalDisc:nonRealTimeMeta:ver.2.20">
+  <Duration value="24"/>
+  <Device manufacturer="Sony" modelName="{model}" serialNo="4294967295"/>
+  <VideoFormat><VideoFrame formatFps="23.98p"/></VideoFormat>
+</NonRealTimeMeta>
+"""
+
+
+def a_sidecar(clip: Path, model: str, tail: str = "M01.XML") -> Path:
+    target = clip.with_name(f"{clip.stem}{tail}")
+    target.write_text(SIDECAR_XML.format(model=model), encoding="utf-8")
+    return target
+
+
+def test_a_camera_sidecar_names_the_bin_when_resolve_reports_no_camera(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The A7 IV case this ticket failed on live: no camera key anywhere, model on disk."""
+    video = a_file(tmp_path, "20260617_D_A7IV_0001.MP4")
+    a_sidecar(video, "ILCE-7M4")
+    clip = FakeMediaPoolItem("20260617_D_A7IV_0001.MP4", str(video))
+    pool = media_pool()
+    pool.import_result = [clip]
+    attach(studio(pool=pool))
+
+    result = import_media(paths=[str(video)])
+
+    assert result["ok"] is True
+    assert result["bins"] == ["02_Footage/ILCE-7M4"]
+    assert result["imported"][0]["bin"] == "02_Footage/ILCE-7M4"
+    assert result["imported"][0]["bin_source"] == "camera_sidecar"
+    leaf = bin_named(pool, "02_Footage/ILCE-7M4")
+    assert [found.GetName() for found in leaf.GetClipList()] == ["20260617_D_A7IV_0001.MP4"]
+
+
+def test_what_resolve_reports_outranks_the_sidecar(attach: Attach, tmp_path: Path) -> None:
+    """The sidecar is the last look, not a preferred one: media Resolve reads is untouched."""
+    video = a_file(tmp_path, "A016C008_260618GD.MXF")
+    a_sidecar(video, "SOMETHING-ELSE")
+    clip = FakeMediaPoolItem(
+        "A016C008_260618GD.MXF", str(video), properties={"Camera TC Type": "ILME-FX6V"}
+    )
+    pool = media_pool()
+    pool.import_result = [clip]
+    attach(studio(pool=pool))
+
+    result = import_media(paths=[str(video)])
+
+    assert result["imported"][0]["bin"] == "02_Footage/ILME-FX6V"
+    assert result["imported"][0]["bin_source"] == "camera_metadata"
+
+
+def test_a_sidecar_index_and_extension_case_still_match(attach: Attach, tmp_path: Path) -> None:
+    """Both vary on real cards and neither changes which clip the sidecar belongs to."""
+    video = a_file(tmp_path, "C0500.MP4")
+    a_sidecar(video, "ILCE-7M4", tail="M02.xml")
+    clip = FakeMediaPoolItem("C0500.MP4", str(video))
+    pool = media_pool()
+    pool.import_result = [clip]
+    attach(studio(pool=pool))
+
+    result = import_media(paths=[str(video)])
+
+    assert result["imported"][0]["bin"] == "02_Footage/ILCE-7M4"
+    assert result["imported"][0]["bin_source"] == "camera_sidecar"
+
+
+def test_a_sidecar_for_a_different_clip_is_not_read(attach: Attach, tmp_path: Path) -> None:
+    """Cards hold every clip's sidecar in one directory; only this clip's may answer."""
+    video = a_file(tmp_path, "C0500.MP4")
+    a_sidecar(tmp_path / "C0501.MP4", "ILCE-7M4")
+    clip = FakeMediaPoolItem("C0500.MP4", str(video))
+    pool = media_pool()
+    pool.import_result = [clip]
+    attach(studio(pool=pool))
+
+    result = import_media(paths=[str(video)])
+
+    assert result["imported"][0]["bin"] == "02_Footage"
+    assert result["imported"][0]["bin_source"] == "fallback"
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        pytest.param("<NonRealTimeMeta><Device modelName=", id="truncated"),
+        pytest.param("not xml at all", id="not-xml"),
+        pytest.param(
+            '<NonRealTimeMeta><Device manufacturer="Sony"/></NonRealTimeMeta>', id="no-model"
+        ),
+        pytest.param(
+            '<NonRealTimeMeta><Device modelName="  "/></NonRealTimeMeta>', id="blank-model"
+        ),
+        pytest.param("<NonRealTimeMeta><Duration value='24'/></NonRealTimeMeta>", id="no-device"),
+    ],
+)
+def test_an_unusable_sidecar_falls_back_rather_than_failing_the_import(
+    attach: Attach, tmp_path: Path, content: str
+) -> None:
+    """A sidecar is untrusted input off a card: it can cost a suggestion, never an import."""
+    video = a_file(tmp_path, "C0500.MP4")
+    video.with_name("C0500M01.XML").write_text(content, encoding="utf-8")
+    clip = FakeMediaPoolItem("C0500.MP4", str(video))
+    pool = media_pool()
+    pool.import_result = [clip]
+    attach(studio(pool=pool))
+
+    result = import_media(paths=[str(video)])
+
+    assert result["ok"] is True
+    assert result["imported"][0]["bin"] == "02_Footage"
+    assert result["imported"][0]["bin_source"] == "fallback"
+
+
+def test_a_sidecar_model_with_a_slash_cannot_open_a_bin_level(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The sidecar is off a card, so its model gets the same folding a property's does."""
+    video = a_file(tmp_path, "C0500.MP4")
+    a_sidecar(video, "ILCE/7M4")
+    clip = FakeMediaPoolItem("C0500.MP4", str(video))
+    pool = media_pool()
+    pool.import_result = [clip]
+    attach(studio(pool=pool))
+
+    result = import_media(paths=[str(video)])
+
+    assert result["imported"][0]["bin"] == "02_Footage/ILCE-7M4"
+
+
+def test_a_clip_with_no_path_reads_no_sidecar(attach: Attach, tmp_path: Path) -> None:
+    """Multicam and compound clips are pathless, not offline — and have nothing beside them."""
+    video = a_file(tmp_path, "C0500.MP4")
+    clip = FakeMediaPoolItem("C0500.MP4", "")
+    pool = media_pool()
+    pool.import_result = [clip]
+    attach(studio(pool=pool))
+
+    result = import_media(paths=[str(video)])
+
+    assert result["ok"] is True
     assert result["imported"][0]["bin_source"] == "fallback"
 
 

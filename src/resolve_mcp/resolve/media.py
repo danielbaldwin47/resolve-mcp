@@ -57,6 +57,7 @@ from ..errors import (
 from ..logging_config import get_logger
 from ..spill import spill
 from ..timing import dual_time
+from .camera_sidecar import camera_model as recorded_camera_model
 from .connection import ResolveConnection
 
 log = get_logger("media")
@@ -72,8 +73,10 @@ ASSETS_BIN = "04_Assets"
 # Camera fields in priority order, each consulted in the clip's properties then its
 # metadata. Live-verified on real FX6 XAVC (2026-08-07, Resolve Studio, #94): the model
 # lives in "Camera TC Type" ("ILME-FX6V") while "Camera Type" holds the manufacturer
-# ("Sony"), so the model key must win or every camera bins as its make. An unreadable
-# camera falls back to the bare footage bin rather than guessing.
+# ("Sony"), so the model key must win or every camera bins as its make. Media that reports
+# no camera key at all — A7-series MP4 on an M4ROOT card — gets a second look in the
+# sidecar beside the clip (see :mod:`.sidecar`); only a camera unreadable both ways falls
+# back to the bare footage bin rather than guessing.
 CAMERA_KEYS = ("Camera TC Type", "Camera Type")
 SEQUENCE_TOKEN = "%"
 # Resolve paths an imported image sequence by folding the index range into the name —
@@ -588,14 +591,32 @@ def _suggested_bin(item: str | dict[str, Any]) -> str:
     return FOOTAGE_BIN
 
 
-def _camera_model(clip: Clip, reported: dict[str, str]) -> str | None:
-    """The camera model the clip reports, sanitised for bin use, or ``None``.
+class CameraModel(NamedTuple):
+    """The model that will name the bin, and which reading produced it.
+
+    Built through :meth:`read`, so the one rule about the name — a slash in it would read
+    as a bin separator — is applied once however the model was found.
+    """
+
+    name: str
+    source: str
+
+    @classmethod
+    def read(cls, model: str, source: str) -> CameraModel:
+        return cls(model.replace(BIN_SEPARATOR, "-"), source)
+
+
+def _camera_model(clip: Clip, reported: dict[str, str]) -> CameraModel | None:
+    """The camera model for this clip, sanitised for bin use, or ``None``.
 
     Read after import — the model is embedded data Resolve surfaces, nothing the file
     path could carry. Key priority outranks dict priority: a model found anywhere beats a
     manufacturer found anywhere (see ``CAMERA_KEYS``), with the spec's clip properties
-    consulted before metadata for each key. A slash in a model name would read as a bin
-    separator, so it is folded to a dash.
+    consulted before metadata for each key.
+
+    What Resolve knows always wins. The card's own sidecar is the last look rather than a
+    preferred one, so media Resolve reads properly keeps binning exactly as it did before
+    this existed, and the envelope says which reading answered.
     """
     metadata = clip.GetMetadata()
     dicts = [reported, metadata if isinstance(metadata, dict) else {}]
@@ -603,7 +624,10 @@ def _camera_model(clip: Clip, reported: dict[str, str]) -> str | None:
         for source in dicts:
             value = str(source.get(key) or "").strip()
             if value:
-                return value.replace(BIN_SEPARATOR, "-")
+                return CameraModel.read(value, "camera_metadata")
+    recorded = recorded_camera_model(reported.get(FILE_PATH, ""))
+    if recorded:
+        return CameraModel.read(recorded, "camera_sidecar")
     return None
 
 
@@ -625,12 +649,12 @@ def _placed(pool: Pool, clip: Clip, reported: dict[str, str], target: LocatedBin
     model = _camera_model(clip, reported)
     if model is None:
         return Placement(target.path, "fallback")
-    leaf = ensure_bin(pool, f"{FOOTAGE_BIN}{BIN_SEPARATOR}{model}")
+    leaf = ensure_bin(pool, f"{FOOTAGE_BIN}{BIN_SEPARATOR}{model.name}")
     if not pool.MoveClips([clip], leaf.folder):
         name = str(clip.GetName() or "")
         log.warning("Camera bin move refused for %r; leaving it in %r", name, target.path)
         return Placement(target.path, "fallback")
-    return Placement(leaf.path, "camera_metadata")
+    return Placement(leaf.path, model.source)
 
 
 def _clip_summary(
