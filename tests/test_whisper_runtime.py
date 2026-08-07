@@ -183,8 +183,26 @@ def test_a_device_the_backend_refuses_names_the_value_and_the_variable_that_set_
     assert raised.value.detail["device"] == "gpu"
 
 
+def test_a_stock_config_that_cannot_load_is_told_about_the_install_not_the_settings(
+    monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#128's own failure, on defaults: a missing CUDA runtime must not read as a typo."""
+
+    def _refuse(name: str, device: str, compute_type: str) -> object:
+        raise RuntimeError("Library cublas64_12.dll is not found or cannot be loaded")
+
+    monkeypatch.setattr(whisper, "_build", _refuse)
+    monkeypatch.setattr(cuda, "prepare", lambda: ())
+
+    with pytest.raises(TranscriptionError) as raised:
+        whisper._model("large-v3")
+
+    assert "uv sync --extra analysis" in raised.value.fix
+    assert "RESOLVE_MCP_WHISPER_DEVICE" not in raised.value.fix
+
+
 def test_a_missing_backend_still_says_it_is_missing_rather_than_blaming_the_device(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The unavailable-backend error is the older, more specific one; shaping must not eat it."""
 
