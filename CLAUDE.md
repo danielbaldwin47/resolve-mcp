@@ -123,8 +123,10 @@ gitignored; never commit a log). Never `| tail` — a tail caps one run and
 runs repeat. Delegate exploration to
 a read-only subagent; Read only what you will edit, ranged (grep first) on
 big files; do not re-read a file after editing it. The hooks in
-`.claude/hooks/` enforce the cat/tail rules and whole-file re-reads — a block
-from them is the rule firing, not an obstacle to route around.
+`.claude/hooks/` enforce the cat/tail rules, whole-file re-reads, and
+whole-file reads of code/config files over 400 lines (markdown exempt) — a
+block from them is the rule firing, not an obstacle to route around; the
+block message names the fix.
 
 The same scratch-file rule covers `gh` — issue bodies, comment threads,
 and PR diffs were the biggest single results in past sessions:
