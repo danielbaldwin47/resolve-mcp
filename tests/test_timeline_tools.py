@@ -248,15 +248,62 @@ def test_each_angle_carries_the_offset_that_maps_its_source_onto_the_timeline(
     assert offsets["Cam A"]["seconds"] == -16.683
 
 
-def test_the_source_start_is_read_before_the_left_offset_that_stands_in_for_it(
+def test_an_offset_that_is_not_source_frames_at_all_loses_to_the_absolute_start(
     attach: Attach,
 ) -> None:
+    """A still is where the left offset stops being a source frame and starts being noise.
+
+    #120 measured one: a still whose media is source frame 27 alone reported a left offset
+    of 86313 — the timeline's own clock, not the media's. Two getters that far apart are
+    not describing the same shot, so the absolute start is the only one still answering
+    the question, lossy or not.
+    """
     item = FakeTimelineItem("A.mp4", 120, 400, source_start=3000, left_offset=7)
     attach(studio(timeline=FakeTimeline("sync", video=[FakeTrack("Cam A", [item])])))
 
     result = inspect_timeline(detail="clips")
 
     assert result["tracks"][0]["items"][0]["source"]["in"]["frames"] == 3000
+
+
+def test_a_source_start_that_slipped_a_frame_loses_to_the_offset_that_did_not(
+    attach: Attach,
+) -> None:
+    """#120: ``GetSourceStartFrame`` lands a frame low, and reading it moved a whole shot.
+
+    Measured on 21.0.3.7 over a 23.976 timeline: across source frames 0 to 69001 the
+    absolute getter is either exact or one frame low, at scattered positions — 108 reads
+    107, 112 reads 111, while 100 and 110 read true. ``GetLeftOffset`` was exact at every
+    one of them. So a *one frame* disagreement is the lossy getter losing, and the offset
+    takes it; the numbers here are the ones the live box produced for a swapped take that
+    Resolve really had placed on source frame 108.
+    """
+    item = FakeTimelineItem("A.mp4", 0, 48, source_start=107, left_offset=108)
+    attach(studio(timeline=FakeTimeline("cut v1", video=[FakeTrack("Video 1", [item])])))
+
+    result = inspect_timeline(detail="clips")
+
+    source = result["tracks"][0]["items"][0]["source"]
+    assert source["in"]["frames"] == 108
+    assert source["out"]["frames"] == 156
+
+
+def test_an_exclusive_source_end_is_not_counted_as_a_frame_the_shot_plays(
+    attach: Attach,
+) -> None:
+    """The other half of #120: ``GetSourceEndFrame`` is already one past the last frame.
+
+    A 48-frame shot cut from source 100 reports 148 on 21.0.3.7, so adding one to reach a
+    half-open end reaches one frame past the media the shot actually covers.
+    """
+    item = FakeTimelineItem("A.mp4", 0, 48, source_start=100, left_offset=100, source_end=148)
+    attach(studio(timeline=FakeTimeline("cut v1", video=[FakeTrack("Video 1", [item])])))
+
+    result = inspect_timeline(detail="clips")
+
+    source = result["tracks"][0]["items"][0]["source"]
+    assert source["in"]["frames"] == 100
+    assert source["out"]["frames"] == 148
 
 
 def test_an_angle_on_a_resolve_without_source_frames_still_reports_its_offset(
@@ -318,8 +365,12 @@ def test_a_source_span_is_never_half_one_clock_and_half_another(attach: Attach) 
 
 
 def test_a_retimed_shot_reports_the_source_frames_it_really_covers(attach: Attach) -> None:
-    """Half speed: 400 timeline frames over 200 source frames, so duration will not do."""
-    item = FakeTimelineItem("A.mp4", 0, 400, source_start=1000, source_end=1199)
+    """Half speed: 400 timeline frames over 200 source frames, so duration will not do.
+
+    The end is 1200 rather than 1199 because #120 measured the getter exclusive; the span
+    it describes — 200 source frames under 400 of record — is the same retime as before.
+    """
+    item = FakeTimelineItem("A.mp4", 0, 400, source_start=1000, source_end=1200)
     attach(studio(timeline=FakeTimeline("cut v1", video=[FakeTrack("Video 1", [item])])))
 
     result = inspect_timeline(detail="clips")

@@ -169,7 +169,9 @@ see. Live tier: `test_live_smoke.py` (module-level
 
 - `docs/adr/` — 0001 interpreter must be a registered install; 0002
   analysis models are injected; 0003 stems fingerprinted (path is a
-  content hash).
+  content hash); 0004 editor-state getters answer only for the current
+  timeline; 0005 source frames are read off the left offset, not the
+  source start.
 - `docs/agents/` — issue-tracker conventions (wayfinder map ops), triage
   labels, domain-docs usage, the style layer (sidecar + profile formats,
   provenance tags, how a corpus pass is run), the rough-cut pillar
