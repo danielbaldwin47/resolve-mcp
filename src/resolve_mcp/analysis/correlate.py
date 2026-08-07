@@ -61,7 +61,7 @@ from ..resolve.timeline import (
 )
 from ..timing import SECONDS_PRECISION, dual_time, to_frames
 from . import decode, energy, records
-from .beats import nearest, trust
+from .beats import GridTrust, nearest, trust
 
 log = get_logger("analysis")
 
@@ -201,8 +201,9 @@ def correlate(
     transients = _transients(music.audio, onsets)
 
     progress(0.7, "measuring the cut against the music")
-    rows = measure(shots, clock, music, transients)
-    summary = _summary(rows, clock, transients, [float(one["t"]) for one in music.beats])
+    grid = trust(music.beats)
+    rows = measure(shots, clock, music, transients, grid)
+    summary = _summary(rows, clock, transients, [float(one["t"]) for one in music.beats], grid)
 
     target = config.analysis_dir / keyed_name(name, key, ".correlate.json", "correlate")
     # "count", not "cuts": the records themselves are the file's ``cuts`` field, and a header
@@ -575,6 +576,7 @@ def measure(
     clock: Clock,
     music: Music,
     transients: Sequence[float] | None,
+    grid: GridTrust | None = None,
 ) -> list[dict[str, Any]]:
     """One record per shot: where it starts in the music, and how far off everything it is.
 
@@ -587,7 +589,7 @@ def measure(
     tune_times = [float(row["t"]) for row in (music.tunes or ())]
     solo_times = [float(row["t"]) for row in (music.solos or ())]
     roles = music.roles or {}
-    trusted = trust(music.beats).trusted
+    trusted = (grid if grid is not None else trust(music.beats)).trusted
 
     rows: list[dict[str, Any]] = []
     for index, shot in enumerate(shots, start=1):
@@ -688,6 +690,7 @@ def _summary(
     clock: Clock,
     transients: Sequence[float] | None,
     grid: Sequence[float],
+    trusted: GridTrust,
 ) -> dict[str, Any]:
     """The list-free reading: what a style profile is written from, and a self-review read.
 
@@ -708,8 +711,14 @@ def _summary(
         "alignment": clock.reading(),
         "cuts": len(rows),
         "openings": sum(1 for row in rows if row["opening"]),
+        # ``outside_grid`` and ``gated`` are different refusals and neither implies the other:
+        # the first is a cut beyond the ends of the analysed span, which means the times and
+        # the audio are not the same recording; the second is a cut inside the span that the
+        # grid describes badly. A misaligned clock shows in the first, rubato in the second.
         "outside_grid": _outside(rows, grid),
         "gated": len(cut_to_music) - len(in_grid),
+        "grid_meter": trusted.meter,
+        "grid_refused": trusted.reasons,
         "beat_offsets": _offsets([row["beat_offset"] for row in in_grid]),
         "transient_offsets": transient_offsets,
         "bars": _histogram(row["in_bar"] for row in in_grid),

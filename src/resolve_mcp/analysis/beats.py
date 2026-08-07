@@ -27,7 +27,7 @@ INSTALL = "uv pip install 'beat_this @ git+https://github.com/CPJKU/beat_this'"
 DOWNBEAT_TOLERANCE = 0.005
 """How far a downbeat may sit from the beat it marks before it is a different beat."""
 
-UNSTEADY_INTERVAL = 0.15
+UNSTEADY_FRACTION = 0.15
 """How far a beat-to-beat interval may sit from its neighbours before the grid is guessing.
 
 Fifteen percent is roughly a swung eighth against a straight one: wide enough that ordinary
@@ -35,7 +35,7 @@ human time-keeping and the model's own rounding stay inside it, narrow enough th
 ballad head — where the interval wanders by half again — falls outside on the first beat.
 """
 
-DESCRIBES_BARS = 2
+MINIMUM_METER = 2
 """The smallest meter that is a meter at all.
 
 A grid reporting bars one beat long has not found a slow tune; it has marked every beat a
@@ -185,14 +185,13 @@ def gist(grid: BeatGrid, records: Sequence[dict[str, Any]]) -> dict[str, Any]:
         if later > earlier
     ]
     tempos = sorted(60.0 / interval for interval in intervals)
-    lengths = list(Counter(record["bar"] for record in records).values())
     return {
         "count": len(grid.beats),
         "downbeat_count": sum(1 for record in records if record["downbeat"]),
         "tempo_bpm": round(statistics.median(tempos), 2) if tempos else None,
         "tempo_min_bpm": round(tempos[0], 2) if tempos else None,
         "tempo_max_bpm": round(tempos[-1], 2) if tempos else None,
-        "meter": statistics.mode(lengths) if lengths else None,
+        "meter": _meter(records),
         "first_seconds": round(grid.beats[0], 3) if grid.beats else None,
         "last_seconds": round(grid.beats[-1], 3) if grid.beats else None,
     }
@@ -213,7 +212,7 @@ def trust(records: Sequence[dict[str, Any]]) -> GridTrust:
     its own (it returns two lists of times), so steadiness is derived from the intervals.
     """
     meter = _meter(records)
-    describes_bars = meter is not None and meter >= DESCRIBES_BARS
+    describes_bars = meter is not None and meter >= MINIMUM_METER
     steady = _steady_flags([float(record["t"]) for record in records])
     reasons: Counter[str] = Counter()
     trusted: list[bool] = []
@@ -234,7 +233,11 @@ def trust(records: Sequence[dict[str, Any]]) -> GridTrust:
 
 
 def _meter(records: Sequence[dict[str, Any]]) -> int | None:
-    """The meter the grid behaves as if it is in — the same statistic the gist reports."""
+    """The meter the grid behaves as if it is in: the commonest bar length it produced.
+
+    One definition, shared by the gist that reports it and the gate that judges bar positions
+    against it, so a grid can never be described as one meter and gated against another.
+    """
     lengths = list(Counter(record["bar"] for record in records).values())
     return statistics.mode(lengths) if lengths else None
 
@@ -266,4 +269,9 @@ def _local(intervals: Sequence[float], index: int) -> float:
 
 
 def _wanders(interval: float, local: float) -> bool:
-    return local <= 0 or abs(interval - local) > UNSTEADY_INTERVAL * local
+    """Whether one interval is too far from the tempo around it to be the same tempo.
+
+    A window with no length at all — a grid reporting the same time twice — is treated as
+    wandering rather than divided by, since nothing can be judged against it.
+    """
+    return local <= 0 or abs(interval - local) > UNSTEADY_FRACTION * local

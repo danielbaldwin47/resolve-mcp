@@ -854,6 +854,31 @@ def test_the_gate_leaves_the_transient_measurement_exactly_as_it_was(
     assert gated["beat_offsets"] != ungated["beat_offsets"]
 
 
+def test_a_cut_in_an_out_of_time_stretch_is_gated_though_its_bar_position_is_legal(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The check that matters at this seam: rubato carries positions 1..4 like anything else.
+
+    The bar-position gate cannot see this one — every position here is legal — so a cut that
+    survives the sound grid and falls out of this one has been gated on timing alone.
+    """
+    attach(studio(timeline=a_cut()))
+
+    # Steady to 1.5s, then the head goes out of time across where the second cut lands.
+    wandering = (0.0, 0.5, 1.0, 1.5, 2.4, 2.6, 3.6, 3.8, 4.9, 5.1, 6.1, 6.3)
+    result = _measured(
+        tmp_path,
+        beats=str(beats_file(tmp_path, seconds=wandering, name="rubato-beats.json")),
+    )
+
+    cuts = _rows(result)
+    assert cuts[2]["in_bar"] in {1, 2, 3, 4}  # nothing a bar-position check could object to
+    assert cuts[2]["in_grid"] is False
+    assert result["gated"] >= 1
+    assert result["grid_refused"].get("tempo", 0) > 0
+    assert result["grid_refused"].get("bar_position", 0) == 0
+
+
 def test_every_cut_carries_the_marker_even_when_the_grid_is_sound(
     attach: Attach, tmp_path: Path
 ) -> None:
