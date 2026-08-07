@@ -23,7 +23,7 @@ timelines. The server measures; Claude decides.
 - **spill** — oversized results written to disk for the agent to grep
   instead of truncating.
 - **the seam** — `resolve/connection.py` singleton, substituted by
-  `tests/fakes.py` via `set_connection()`; the only place fakes attach.
+  `tests/fakes/` via `set_connection()`; the only place fakes attach.
 - **fake tier / live tier** — `pytest -m 'not live'` against fakes (the
   default) vs `-m live` against a running Resolve Studio. See CLAUDE.md.
 - **stem** — separated audio (mix → vocals/drums/bass/other; drums →
@@ -100,12 +100,28 @@ name → file path + the clip's own frame numbering).
 
 ## Test map — `tests/`
 
-`tests/fakes.py` is the fake Resolve API (single file; grep the class name,
-then ranged-read). Classes in order: `DroppedHandleError`, `AnswersNone`,
-`FakeSpline`, `FakeFusionTool`, `FakeFusionComp`, `FakeTimelineItem`,
-`FakeTrack`, `FakeTimeline`, `FakeMediaPoolItem`, `FakeFolder`,
-`FakeMediaPool`, `FakeProject`, `FakeProjectManager`, `FakeResolve`,
-`FakeConnector`, `FakeSeparator`. Installed by the `attach` fixture in
+`tests/fakes/` is the fake Resolve API, one module per subsystem — open the
+module, not the package, and never the whole package at once:
+
+- `core.py` — `DroppedHandleError`, `AnswersNone` (the primitives)
+- `fusion.py` — `FakeSpline`, `FakeFusionInput`, `FakeFusionTool`,
+  `FakeFusionComp`
+- `timeline_item.py` — `FakeTimelineItem`
+- `timeline.py` — `FakeTrack`, `FakeTimeline`, `TrackSpec`
+- `media.py` — `FakeMediaPoolItem`, `FakeFolder`, `text_plus_template`, and
+  the helpers that build clips from paths
+- `pool.py` — `FakeMediaPool`, `media_pool()`
+- `project.py` — `FakeProject`, `FakeProjectManager`
+- `connection.py` — `FakeResolve`, `FakeConnector`, `EXPORT_TYPES`
+- `separator.py` — `FakeSeparator`
+- `fixtures.py` — `write_wav`/`write_clicks`/`write_hits`/`write_sections`/
+  `write_jpeg`, `ffmpeg_absent`, `ffmpeg_refusing`
+- `builders.py` — `studio()`, `sync_reference()`, `with_a_mix()`
+
+`__init__.py` re-exports every public name, so `from .fakes import X` works
+whatever module `X` lives in and no test file names a submodule. Cross-module
+references that exist only in annotations sit under `if TYPE_CHECKING`; that
+is what keeps the runtime import graph acyclic. Installed by the `attach` fixture in
 `tests/conftest.py` (autouse `_clean_globals` resets the seam and pins a
 hermetic `Config` around every test). Other helpers: `tests/cutfile.py`
 (miniature cut file + media pool), `tests/otio.py` (hand-edited OTIO with
