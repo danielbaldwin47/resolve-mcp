@@ -1,4 +1,4 @@
-"""The titles-file validation rules: 9 hard errors, 2 warnings, one implementation.
+"""The titles-file validation rules: 11 hard errors, 2 warnings, one implementation.
 
 The list is identical in the ``validate_titles`` dry run and in ``apply_titles``'
 pre-flight, so it lives here once and both call it. A failing file must abort before the
@@ -120,7 +120,7 @@ class Event:
 
     @property
     def is_png(self) -> bool:
-        """Which of the two routes places this event — the one branch the apply takes."""
+        """Which of the two routes places this event: a designed card, or a Text+ instance."""
         return self.route == PNG
 
     @property
@@ -446,18 +446,18 @@ def validate_assets(
 
     The resolved cards come back beside the findings for the same reason the templates do:
     the apply imports the very files the rules counted, so a card cannot be judged at one
-    length and placed at another. Events on the Text+ route are not represented at all.
+    length and placed at another. Events on the Text+ route are not represented at all, and
+    neither is a PNG event with no ``asset``: T6 has already said that is what is wrong with
+    it, and resolving an empty path would answer "nothing on disk" about the wrong thing.
     """
-    resolved = {
-        str(event["id"]): resolve_asset(event, str(song["key"]), base=base)
-        for song, event in _events(doc)
-        if route_of(event) == PNG
-    }
     findings: list[Finding] = []
-    for _song, event in _events(doc):
-        asset = resolved.get(str(event["id"]))
-        if asset is not None:
-            findings += _asset_errors(asset, int(event["out"]) - int(event["in"]), fades(event))
+    resolved: dict[str, Asset] = {}
+    for song, event in _events(doc):
+        if route_of(event) != PNG or not event.get("asset"):
+            continue
+        asset = resolve_asset(event, str(song["key"]), base=base)
+        resolved[asset.event] = asset
+        findings += _asset_errors(asset, int(event["out"]) - int(event["in"]), fades(event))
     return ordered(findings), resolved
 
 

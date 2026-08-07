@@ -167,9 +167,12 @@ project folder moves in one piece. Two forms:
 * **A `%0Nd` frame run** — `cards/<song>/personnel_%04d.png`. This is the full
   event: the fade-in ramp at the head, the hold in the middle, the fade-out ramp
   at the tail, all baked. Its frame count must equal `out - in` exactly (T11).
-  Trimming it would cut the fade-out off, and Resolve cannot stretch a clip past
-  its own media, so the length is the exporter's job and re-timing an event means
-  re-baking the card.
+  Both directions are refused for the same reason: the fade-out lives in the last
+  frames, so trimming a long card cuts it off, and a short one cannot be held out
+  to length either — the hold belongs *before* the ramp, and there is no way to
+  freeze a frame in the middle of a sequence from the API. So the length is the
+  exporter's job, and re-timing an event means re-baking the card. Baking the hold
+  on disk is what the titling spec (#14 §6) asks the exporter for.
 * **One still image** — `cards/<song>/title.png`. Freeze-extended to whatever
   duration the event asks for, so it retimes freely, but it carries no ramp: its
   fades must be zero (T11).

@@ -1286,14 +1286,30 @@ PNG_STILL_FRAMES = 45
 """What the one-image card is freeze-extended to — a length it does not have on disk."""
 
 
-def _write_png(path: Path, size: int = 64) -> None:
-    """A real RGBA PNG, built here so the live tier needs no image library and no fixture.
+def _ramp(index: int) -> int:
+    """The alpha of frame ``index``: up over the fade in, full, down over the fade out.
+
+    The same shape a real exporter bakes (#14 §6), so the sequence Resolve imports is a
+    card with ramps in it rather than sixty identical squares.
+    """
+    if index <= FADE_FRAMES:
+        return round(255 * index / FADE_FRAMES)
+    if index > PNG_SEQUENCE_FRAMES - FADE_FRAMES:
+        return round(255 * (PNG_SEQUENCE_FRAMES - index + 1) / FADE_FRAMES)
+    return 255
+
+
+def _write_png(path: Path, alpha: int = 255, size: int = 64) -> None:
+    """A real RGBA PNG at the given opacity, so the frames carry an actual alpha channel.
 
     Hand-rolled rather than a checked-in blob because the sequence needs *many* files and
     Resolve has to read them as an image sequence: a wrong byte would look like a Resolve
-    refusal, which is the one failure this test must not be able to fake.
+    refusal, which is the one failure this test must not be able to fake. ``alpha`` is what
+    makes the baked ramp real rather than nominal — whether Resolve *keys* it is a visual
+    check no API call can make, and belongs to a human looking at the timeline.
     """
-    raw = b"".join(b"\x00" + b"\x00\x00\x00\xff" * size for _ in range(size))
+    pixel = bytes((255, 255, 255, alpha))
+    raw = b"".join(b"\x00" + pixel * size for _ in range(size))
 
     def chunk(kind: bytes, body: bytes) -> bytes:
         return (
@@ -1336,7 +1352,7 @@ def test_apply_titles_places_png_cards_at_the_exact_duration_asked_for(tmp_path:
 
     cards = tmp_path / "cards" / PNG_SONG
     for index in range(1, PNG_SEQUENCE_FRAMES + 1):
-        _write_png(cards / f"card_{index:04d}.png")
+        _write_png(cards / f"card_{index:04d}.png", alpha=_ramp(index))
     _write_png(cards / "still.png")
 
     connection = get_connection()

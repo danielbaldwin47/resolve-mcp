@@ -100,8 +100,9 @@ def preflight(connection: ResolveConnection, titles_file: str) -> Preflight:
         return Preflight(loaded, findings)
 
     doc: dict[str, Any] = loaded.doc
-    # The cards are judged before the connection is opened: a card that was never exported
-    # is worth saying so on a machine that cannot reach Resolve at all.
+    # The cards are judged off disk alone — no project, no pool — so a card that was never
+    # exported is named in the same pass as a malformed one, and named before anything is
+    # looked up in Resolve rather than after a lookup that would have to succeed first.
     asset_findings, assets = validate_assets(doc, base=loaded.path.parent)
     findings = [*findings, *asset_findings]
 
@@ -125,7 +126,14 @@ def preflight(connection: ResolveConnection, titles_file: str) -> Preflight:
         *validate_project(doc, anchors=anchors, templates=facts, span=_span(timeline)),
     ]
     return Preflight(
-        loaded, findings, project, timeline, fps, located, assets, plan(doc, anchors)
+        loaded,
+        findings,
+        project=project,
+        timeline=timeline,
+        fps=fps,
+        templates=located,
+        assets=assets,
+        events=plan(doc, anchors),
     )
 
 

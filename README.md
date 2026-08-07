@@ -10,9 +10,8 @@ Build contract: [issue #22](https://github.com/danielbaldwin47/resolve-mcp/issue
 P1 in progress, P2 titling started. Shipped so far: the server skeleton, the
 session/project tools, the media pool tools, the timeline read, marker and interchange
 tools, the declarative cut file and `build_timeline`, the titling tools on both the Text+
-and PNG routes, the
-background-job infrastructure with audio acquisition, frame grabs and scene-cut
-detection, the render/deliver tools, and the `run_python` escape hatch.
+and PNG routes, the background-job infrastructure with audio acquisition, frame grabs and
+scene-cut detection, the render/deliver tools, and the `run_python` escape hatch.
 
 | Tool | What it does |
 | --- | --- |
