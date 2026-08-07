@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
 
 from resolve_mcp.tools.media import (
     import_media,
@@ -16,7 +15,7 @@ from resolve_mcp.tools.media import (
 )
 
 from .conftest import Attach
-from .fakes import FakeMediaPoolItem, media_pool, studio
+from .fakes import FakeFolder, FakeMediaPool, FakeMediaPoolItem, media_pool, studio
 
 AUDIO_MAPPING = json.dumps(
     {
@@ -145,8 +144,7 @@ def test_import_applies_the_still_duration_workaround_to_image_media(
 
     assert result["ok"] is True
     assert result["imported"][0]["still_duration_workaround"] is True
-    [assets] = [sub for sub in pool.GetRootFolder().GetSubFolderList() if "Assets" in sub.GetName()]
-    clip = assets.GetClipList()[0]
+    clip = bin_named(pool, "04_Assets").GetClipList()[0]
     assert clip.property_writes == [("Out", "0")]
 
 
@@ -157,10 +155,7 @@ def test_import_does_not_touch_the_out_point_of_a_video(attach: Attach, tmp_path
     result = import_media(paths=[str(a_file(tmp_path, "C0012.mp4"))])
 
     assert result["imported"][0]["still_duration_workaround"] is False
-    [footage] = [
-        sub for sub in pool.GetRootFolder().GetSubFolderList() if "Footage" in sub.GetName()
-    ]
-    assert footage.GetClipList()[0].property_writes == []
+    assert bin_named(pool, "02_Footage").GetClipList()[0].property_writes == []
 
 
 def test_import_reports_the_paths_resolve_refused_and_keeps_the_rest(
@@ -222,7 +217,7 @@ def test_import_restores_the_folder_that_was_current_before_it(
 # --- import: suggested bins (#94) ------------------------------------------------------
 
 
-def bin_named(pool: Any, path: str) -> Any:
+def bin_named(pool: FakeMediaPool, path: str) -> FakeFolder:
     """Walk a slash path down from the root, or fail the test that asked."""
     folder = pool.GetRootFolder()
     for segment in path.split("/"):
@@ -290,6 +285,34 @@ def test_no_bin_sequence_is_suggested_into_assets(attach: Attach, tmp_path: Path
     assert result["ok"] is True
     assert result["imported"][0]["bin"] == "04_Assets"
     assert result["imported"][0]["bin_source"] == "media_type"
+
+
+def test_no_bin_graphics_are_suggested_into_assets(attach: Attach, tmp_path: Path) -> None:
+    """Graphics ride with stills in #57: a .psd is an asset, not footage."""
+    graphic = a_file(tmp_path, "lower-third.psd")
+    attach(studio(pool=media_pool()))
+
+    result = import_media(paths=[str(graphic)])
+
+    assert result["ok"] is True
+    assert result["imported"][0]["bin"] == "04_Assets"
+    assert result["imported"][0]["bin_source"] == "media_type"
+
+
+def test_a_camera_model_in_clip_properties_also_lands_the_leaf(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The spec words the source as clip properties; metadata is the second look."""
+    video = a_file(tmp_path, "C0500.mp4")
+    clip = FakeMediaPoolItem("C0500.mp4", str(video), properties={"Camera Type": "ILCE-7M4"})
+    pool = media_pool()
+    pool.import_result = [clip]
+    attach(studio(pool=pool))
+
+    result = import_media(paths=[str(video)])
+
+    assert result["imported"][0]["bin"] == "02_Footage/ILCE-7M4"
+    assert result["imported"][0]["bin_source"] == "camera_metadata"
 
 
 def test_an_explicit_bin_bypasses_suggestion_entirely(attach: Attach, tmp_path: Path) -> None:

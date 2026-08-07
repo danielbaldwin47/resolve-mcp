@@ -64,12 +64,14 @@ BIN_SEPARATOR = "/"
 DEFAULT_LIST_LIMIT = 200
 IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".tif", ".tiff", ".exr", ".dpx", ".tga"})
 AUDIO_SUFFIXES = frozenset({".aac", ".aif", ".aiff", ".flac", ".m4a", ".mp3", ".ogg", ".wav"})
+GRAPHIC_SUFFIXES = frozenset({".ai", ".eps", ".psd", ".svg"})
 FOOTAGE_BIN = "02_Footage"
 AUDIO_BIN = "03_Audio"
 ASSETS_BIN = "04_Assets"
-# The metadata field Resolve fills with the recording device's model name. One key on
-# purpose: which fields real cards populate is a live question (#94 live smoke), and an
-# unreadable camera falls back to the bare footage bin rather than guessing.
+# The field Resolve fills with the recording device's model name, consulted in the clip's
+# properties first, then its metadata. One key on purpose: which fields real cards
+# populate is a live question (#94 live smoke), and an unreadable camera falls back to
+# the bare footage bin rather than guessing.
 CAMERA_KEYS = ("Camera Type",)
 SEQUENCE_TOKEN = "%"
 # Resolve paths an imported image sequence by folding the index range into the name —
@@ -494,7 +496,7 @@ def import_media(
     summaries: list[dict[str, Any]] = []
     landed: set[str] = set()
     for clip in imported:
-        summaries.append(_clip_summary(clip, target.path, "explicit", landed))
+        summaries.append(_clip_summary(clip, properties(clip), target.path, "explicit", landed))
 
     refused = _refused_or_fail(items, imported, landed, summaries)
     log.info("Imported %d clip(s) into %r", len(summaries), target.path or "the root")
@@ -521,8 +523,9 @@ def _import_suggested(pool: Pool, items: list[str | dict[str, Any]]) -> dict[str
         arrived = import_into(pool, group, target)
         imported.extend(arrived)
         for clip in arrived:
-            where, source = _placed(pool, clip, target)
-            summaries.append(_clip_summary(clip, where, source, landed))
+            reported = properties(clip)
+            placed = _placed(pool, clip, reported, target)
+            summaries.append(_clip_summary(clip, reported, placed.path, placed.source, landed))
 
     refused = _refused_or_fail(items, imported, landed, summaries)
     bins = sorted({str(summary["bin"]) for summary in summaries})
@@ -539,53 +542,68 @@ def _suggested_bin(item: str | dict[str, Any]) -> str:
     """
     if isinstance(item, dict):
         return ASSETS_BIN
+    if _looks_like_image(item):
+        return ASSETS_BIN
     suffix = Path(item).suffix.lower()
-    if suffix in IMAGE_SUFFIXES:
+    if suffix in GRAPHIC_SUFFIXES:
         return ASSETS_BIN
     if suffix in AUDIO_SUFFIXES:
         return AUDIO_BIN
     return FOOTAGE_BIN
 
 
-def camera_model(clip: Clip) -> str | None:
-    """The camera model the clip's metadata reports, sanitised for bin use, or ``None``.
+def _camera_model(clip: Clip, reported: dict[str, str]) -> str | None:
+    """The camera model the clip reports, sanitised for bin use, or ``None``.
 
-    Read after import — the model is embedded metadata Resolve surfaces, nothing the file
-    path could carry. A slash in a model name would read as a bin separator, so it is
-    folded to a dash.
+    Read after import — the model is embedded data Resolve surfaces, nothing the file
+    path could carry. Properties are consulted before metadata because the spec words the
+    source as clip properties; which dict real cards populate is the #94 live question.
+    A slash in a model name would read as a bin separator, so it is folded to a dash.
     """
     metadata = clip.GetMetadata()
-    if not isinstance(metadata, dict):
-        return None
-    for key in CAMERA_KEYS:
-        value = str(metadata.get(key) or "").strip()
-        if value:
-            return value.replace(BIN_SEPARATOR, "-")
+    dicts = [reported, metadata if isinstance(metadata, dict) else {}]
+    for source in dicts:
+        for key in CAMERA_KEYS:
+            value = str(source.get(key) or "").strip()
+            if value:
+                return value.replace(BIN_SEPARATOR, "-")
     return None
 
 
-def _placed(pool: Pool, clip: Clip, target: LocatedBin) -> tuple[str, str]:
-    """Where a suggested clip ends up, and what the suggestion drew on.
+class Placement(NamedTuple):
+    """Where a suggested-mode clip ended up, and what the suggestion drew on."""
 
-    Footage is the one category with a second hop: the camera leaf can only be known
-    after import, once the clip's metadata is readable.
+    path: str
+    source: str
+
+
+def _placed(pool: Pool, clip: Clip, reported: dict[str, str], target: LocatedBin) -> Placement:
+    """Place one suggested clip: footage gets a second hop into its camera leaf.
+
+    Footage is the one category whose final bin can only be known after import, once the
+    clip's properties and metadata are readable.
     """
     if target.path != FOOTAGE_BIN:
-        return target.path, "media_type"
-    model = camera_model(clip)
+        return Placement(target.path, "media_type")
+    model = _camera_model(clip, reported)
     if model is None:
-        return target.path, "fallback"
+        return Placement(target.path, "fallback")
     leaf = ensure_bin(pool, f"{FOOTAGE_BIN}{BIN_SEPARATOR}{model}")
     if not pool.MoveClips([clip], leaf.folder):
         name = str(clip.GetName() or "")
         log.warning("Camera bin move refused for %r; leaving it in %r", name, target.path)
-        return target.path, "fallback"
-    return leaf.path, "camera_metadata"
+        return Placement(target.path, "fallback")
+    return Placement(leaf.path, "camera_metadata")
 
 
-def _clip_summary(clip: Clip, bin_used: str, source: str, landed: set[str]) -> dict[str, Any]:
+def _clip_summary(
+    clip: Clip,
+    reported: dict[str, str],
+    bin_used: str,
+    source: str,
+    landed: set[str],
+) -> dict[str, Any]:
     """One imported clip's envelope line: the summary, the bin, and how the bin was chosen."""
-    reported = properties(clip)
     landed.add(reported.get(FILE_PATH, ""))
     landed.add(str(clip.GetName() or ""))
     summary = summarise(bin_used, clip, reported)
