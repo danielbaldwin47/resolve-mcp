@@ -8,7 +8,7 @@ ready to build — that is the thing to resolve first. Spec #22 already names
 each ticket's seam inline; keep that habit.
 
 **1. Fake tier — `uv run pytest -m 'not live'` (the default).**
-`tests/fakes.py` substitutes the Resolve singleton at the connection manager —
+`tests/fakes/` substitutes the Resolve singleton at the connection manager —
 the single seam. The fakes deliberately mimic the real API's quirks (getters
 return `None`, `LoadProject` returns `None`, settings come back as strings,
 `die_after` drops the handle mid-call), so everything that is a *decision*
