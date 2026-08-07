@@ -86,7 +86,8 @@ that the grid is a live band's grid, so it moves.
   about how far the edit got rather than about how the director holds a shot.
 - **The skew has an address: it is the operated camera.** Splitting the same
   shots by role, the locked cameras are nearly symmetric (drums 5.5 s median
-  against a 6.6 s mean) while the operated ones carry the whole tail
+  against a 6.6 s mean, over the 206 shots in this Monkfish-excluded set)
+  while the operated ones carry the whole tail
   (`soloist-moving` 14.4 s median against a 24.6 s mean). The long holds in the
   bullet above are not scattered across the cut — every one of them is on a
   camera somebody was running. See §4.
@@ -147,7 +148,7 @@ that the grid is a live band's grid, so it moves.
 
   | Role | n | median | >30 s | longest |
   | --- | --- | --- | --- | --- |
-  | `drums-tight` (locked) | 314 | 5.5 s | **0 (0.0%)** | **21.5 s** |
+  | `drums-tight` (locked) | 314 | 5.25 s | **0 (0.0%)** | **21.5 s** |
   | `ensemble-wide`, locked instances | 206 | 7.3 s | 2 (1.0%) | 57.4 s |
   | `ensemble-wide`, the one operated instance (anchor) | 188 | 10.7 s | 17 (9.0%) | 71.1 s |
   | `soloist-moving` | 242 | 14.4 s | 58 (24.0%) | 238.9 s |
@@ -160,8 +161,11 @@ that the grid is a live band's grid, so it moves.
   cameras (9.0% past 30 s) while the four locked `ensemble-wide`s behave like
   drum cams (1.0%). Same role name, opposite behaviour, and operation is what
   differs.
-  `[measured — 3 projects, n=847 shots, concert]` (Monkfish excluded from the
-  rates; its drum shots are counted in the 314 and its longest is 13.7 s.)
+  `[measured — 3 projects, n=847 shots, concert]` — the `drums-tight` row is
+  all six timelines (n=314) and every other row excludes Monkfish, because
+  Monkfish's uncut passages sit on `soloist-moving` and so compromise that role
+  without touching its drum camera. Its 108 drum shots are clean, and their
+  longest is 13.7 s.
   *Caveat: in this corpus the operated camera is always also the home angle, so
   "operated" and "home" cannot be separated. What is separable, and separated
   above, is framing.*

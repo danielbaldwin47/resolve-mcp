@@ -337,14 +337,18 @@ That account predicts something checkable, so it was checked. Splitting all
 
 | Role | n | median | mean | >30 s | longest |
 | --- | --- | --- | --- | --- | --- |
-| `drums-tight` (locked, all 6 timelines) | 314 | 5.5 s | — | **0 (0.0%)** | **21.5 s** |
+| `drums-tight` (locked, all 6 timelines) | 314 | 5.25 s | 6.1 s | **0 (0.0%)** | **21.5 s** |
 | `ensemble-wide`, the 4 locked instances | 206 | 7.3 s | 8.7 s | 2 (1.0%) | 57.4 s |
 | `ensemble-wide`, the 1 operated instance (anchor) | 188 | 10.7 s | 13.9 s | 17 (9.0%) | 71.1 s |
 | `room-wide` (locked, Mercies) | 5 | 7.5 s | 7.4 s | 0 (0.0%) | 12.9 s |
 | `soloist-moving` | 242 | 14.4 s | 24.6 s | 58 (24.0%) | 238.9 s |
 
-Rates exclude Monkfish, whose uncut passages would swamp them; its drum shots
-are counted in the 314 and its longest is 13.7 s.
+**The `drums-tight` row is all six timelines; every other row excludes
+Monkfish.** That is not a convenience: Monkfish's five uncut passages all sit
+on `soloist-moving`, so they distort that role's numbers and cannot touch the
+drum camera's. Excluding a timeline wholesale where only one of its roles is
+compromised would have thrown away 108 clean shots — and they are the ones that
+carry the ceiling below.
 
 **No drummer shot anywhere in this corpus reaches 22 seconds.** 314 shots, six
 timelines, four rooms, four years, zero exceptions — the hardest boundary the
