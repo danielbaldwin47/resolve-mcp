@@ -158,3 +158,9 @@ The five canonical triage roles, each label string equal to its role name. See `
 
 Single-context — `CONTEXT.md` (repo map + vocabulary) and `docs/adr/` at
 the repo root. See `docs/agents/domain.md`.
+
+### The style layer
+
+`styles/` — profiles and angle sidecars, agent-authored and never touched by
+server code. Provenance tags, sidecar format, and how a corpus pass is run:
+`docs/agents/style-layer.md`.

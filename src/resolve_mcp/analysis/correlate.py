@@ -48,6 +48,7 @@ from ..resolve.session import frame_rate
 from ..resolve.timeline import (
     FIRST_TRACK,
     Reader,
+    angle_name,
     clip_name,
     find_timeline,
     fingerprint,
@@ -263,9 +264,39 @@ def _shots(reader: Reader, timeline: Any, track: int) -> list[Shot]:
         if record_in is None or duration is None:
             log.warning("Skipped a shot on video track %d: Resolve gave no position", track)
             continue
-        name = clip_name(reader, item) or str(item.GetName() or "")
+        name = angle_name(reader, item) or str(item.GetName() or "")
         found.append(Shot(clip=name, record_in=record_in, duration=duration))
-    return sorted(found, key=lambda shot: shot.record_in)
+    return _without_transitions(sorted(found, key=lambda shot: shot.record_in), track)
+
+
+def _without_transitions(shots: Sequence[Shot], track: int) -> list[Shot]:
+    """Drop the transitions Resolve hands back alongside the shots.
+
+    ``GetItemListInTrack`` returns a dissolve as an item of its own, sitting across the
+    boundary it softens: on a hand-edited concert that is a short item every time the
+    editor did anything other than a straight cut, and one real corpus timeline came back
+    159 of them in 525 items. Left in, each one is a shot that was never cut — its start is
+    half a transition *before* the cut it belongs to, which lands in the offset
+    distribution as a cut the editor did not make, and its length lands in the duration
+    stats as a shot nobody held.
+
+    Two items cannot overlap on one video track, so overlapping the shot before it is what
+    a transition is and a shot is not. That is a fact about tracks rather than about any
+    getter, which is why it is the test rather than the absence of a media pool item — a
+    generator has none of those either, and a generator on the cut track is a shot.
+    """
+    kept: list[Shot] = []
+    dropped = 0
+    for shot in shots:
+        if kept and shot.record_in < kept[-1].record_out:
+            dropped += 1
+            continue
+        kept.append(shot)
+    if dropped:
+        log.info(
+            "Video track %d: %d transitions read past, %d shots kept", track, dropped, len(kept)
+        )
+    return kept
 
 
 def _clock(reader: Reader, timeline: Any, fps: float, mix: Path | None) -> Clock:
