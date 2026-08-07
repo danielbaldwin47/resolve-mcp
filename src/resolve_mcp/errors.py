@@ -166,11 +166,26 @@ class ClipNotFoundError(ResolveMcpError):
 class AmbiguousClipError(ResolveMcpError):
     code = "ambiguous_clip"
 
-    def __init__(self, name: str, bins: list[str]) -> None:
-        listed = ", ".join(bin_path or "the root" for bin_path in bins)
+    def __init__(self, name: str, bins: list[str], addressable: list[str]) -> None:
+        """``bins`` is the bin of every matching clip; ``addressable`` those that work.
+
+        Only an addressable bin is offered. A value that lands back on this same refusal is
+        not a fix (#122), and the empty string is offered like any other because it
+        addresses the pool root itself.
+        """
+        if addressable:
+            listed = ", ".join(f'bin="{path}"' for path in addressable)
+            root = ' (bin="" is the pool root itself)' if "" in addressable else ""
+            fix = f"Pass one of these to say which: {listed}{root}."
+        else:
+            fix = (
+                "No bin singles one out — they share a bin, or the one holding each also "
+                "holds another of the name. Rename one in the Resolve GUI, or work from "
+                "the file paths list_media reports."
+            )
         super().__init__(
             cause=f"{len(bins)} clips are named {name!r}, so the reference is ambiguous.",
-            fix=f"Pass bin= to say which one: {listed}.",
+            fix=fix,
             detail={"requested": name, "bins": bins},
         )
 

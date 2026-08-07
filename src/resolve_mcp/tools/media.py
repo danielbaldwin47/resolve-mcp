@@ -54,7 +54,10 @@ def list_media(
 ) -> dict[str, Any]:
     """Summarise media pool clips: name, bin, path, type, frames, fps, resolution, offline.
 
-    Without a bin this walks the whole pool. offline_only shows the clips whose media has
+    Without a bin this walks the whole pool, recursive says whether a named one includes
+    its subfolders, and the bin reported against each clip reads that clip back verbatim —
+    pass it to any tool that takes a bin, "" included.
+    offline_only shows the clips whose media has
     moved away — the ones relink_media exists for. Past limit clips the full listing is
     written to disk and spilled_to holds the path, so a large pool never blows the token
     budget: read or grep that file for the rest.
@@ -81,6 +84,10 @@ def inspect_clip(
     [in, out), the same convention the cut file uses. audio_mapping carries the linked-audio
     paths and sample offsets for externally synced audio; markers are the clip's own,
     numbered relative to the clip.
+
+    bin: omit it to search the whole pool, name a bin to search it and its subfolders, or
+    pass "" for the pool root alone — the form that names a root clip whose name is also
+    used inside a bin. list_media's reported bin is always the value to pass here.
     """
     connection = get_connection()
     return media.inspect_clip(connection, clip, bin_path=bin)
