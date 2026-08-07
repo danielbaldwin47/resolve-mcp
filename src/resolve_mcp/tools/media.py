@@ -27,6 +27,16 @@ def import_media(
     "end_index": 96}. Image media gets the still-duration workaround applied at import, so
     later timeline appends honour the exact durations you ask for.
 
+    With no bin, each item gets a bin suggested by media type: video into
+    02_Footage/<Camera> (camera model read from clip metadata after import; plain
+    02_Footage when unreadable), audio into 03_Audio, stills and image sequences into
+    04_Assets — bins created on demand. Each imported clip reports the bin used and
+    bin_source (camera_metadata, fallback, media_type, or explicit). Suggestions are
+    category-from-root; in a multi-gig project supply the <Gig>/ prefix yourself via bin=.
+    In a project that already has its own bin structure, check that structure first and
+    pass bin= to follow it rather than accepting a suggestion — a suggestion is never
+    enforcement, and an explicit bin (any path at all) bypasses it entirely.
+
     Returns a summary per imported clip, plus not_imported for anything Resolve refused —
     usually a path that is not readable from the machine Resolve runs on.
     """
