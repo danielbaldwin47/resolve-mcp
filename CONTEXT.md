@@ -1,10 +1,7 @@
 # CONTEXT.md
 
-Repo map and vocabulary for agents. Read this instead of exploring the tree;
-spawn an Explore agent only for what this file can't hold — exact signatures,
-current line numbers, behaviour. Structural only, no signatures: those go
-stale silently. **Maintenance rule: a PR that adds, moves, or deletes a
-module updates this map in the same PR.**
+Repo map and vocabulary for agents. Structural on purpose — module names
+and responsibilities, no signatures or line numbers: those rot silently.
 
 ## What this project is
 
