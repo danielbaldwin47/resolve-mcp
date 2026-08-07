@@ -56,8 +56,8 @@ from ..errors import (
 from ..logging_config import get_logger
 from ..spill import spill
 from ..timing import dual_time
+from .camera_sidecar import camera_model as recorded_camera_model
 from .connection import ResolveConnection
-from .sidecar import camera_model as sidecar_camera_model
 
 log = get_logger("media")
 
@@ -557,10 +557,18 @@ def _suggested_bin(item: str | dict[str, Any]) -> str:
 
 
 class CameraModel(NamedTuple):
-    """The model that will name the bin, and which reading produced it."""
+    """The model that will name the bin, and which reading produced it.
+
+    Built through :meth:`read`, so the one rule about the name — a slash in it would read
+    as a bin separator — is applied once however the model was found.
+    """
 
     name: str
     source: str
+
+    @classmethod
+    def read(cls, model: str, source: str) -> CameraModel:
+        return cls(model.replace(BIN_SEPARATOR, "-"), source)
 
 
 def _camera_model(clip: Clip, reported: dict[str, str]) -> CameraModel | None:
@@ -569,12 +577,11 @@ def _camera_model(clip: Clip, reported: dict[str, str]) -> CameraModel | None:
     Read after import — the model is embedded data Resolve surfaces, nothing the file
     path could carry. Key priority outranks dict priority: a model found anywhere beats a
     manufacturer found anywhere (see ``CAMERA_KEYS``), with the spec's clip properties
-    consulted before metadata for each key. A slash in a model name would read as a bin
-    separator, so it is folded to a dash.
+    consulted before metadata for each key.
 
-    What Resolve knows always wins. The sidecar is the last look rather than a preferred
-    one, so media Resolve reads properly keeps binning exactly as it did before this
-    existed, and the envelope says which reading answered.
+    What Resolve knows always wins. The card's own sidecar is the last look rather than a
+    preferred one, so media Resolve reads properly keeps binning exactly as it did before
+    this existed, and the envelope says which reading answered.
     """
     metadata = clip.GetMetadata()
     dicts = [reported, metadata if isinstance(metadata, dict) else {}]
@@ -582,10 +589,10 @@ def _camera_model(clip: Clip, reported: dict[str, str]) -> CameraModel | None:
         for source in dicts:
             value = str(source.get(key) or "").strip()
             if value:
-                return CameraModel(value.replace(BIN_SEPARATOR, "-"), "camera_metadata")
-    recorded = sidecar_camera_model(reported.get(FILE_PATH, ""))
+                return CameraModel.read(value, "camera_metadata")
+    recorded = recorded_camera_model(reported.get(FILE_PATH, ""))
     if recorded:
-        return CameraModel(recorded.replace(BIN_SEPARATOR, "-"), "camera_sidecar")
+        return CameraModel.read(recorded, "camera_sidecar")
     return None
 
 

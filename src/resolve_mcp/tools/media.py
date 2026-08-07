@@ -33,8 +33,8 @@ def import_media(
     Sony mirrorless MP4; plain 02_Footage when neither is readable), audio into 03_Audio,
     stills and image sequences into 04_Assets — bins created on demand. Each imported clip
     reports the bin used and bin_source (camera_metadata, camera_sidecar, fallback,
-    media_type, or explicit). Suggestions are
-    category-from-root; in a multi-gig project supply the <Gig>/ prefix yourself via bin=.
+    media_type, or explicit). Suggestions are category-from-root; in a multi-gig project
+    supply the <Gig>/ prefix yourself via bin=.
     In a project that already has its own bin structure, check that structure first and
     pass bin= to follow it rather than accepting a suggestion — a suggestion is never
     enforcement, and an explicit bin (any path at all) bypasses it entirely.

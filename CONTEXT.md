@@ -91,10 +91,10 @@ contract), `fusion` (Text+ node, text, opacity fade spline), `interchange`
 (timeline export/import), `loader` (import DaVinciResolveScript +
 direct-attach), `markers` (read/write, review-loop transport), `media`
 (media pool: import, list, inspect, bins, relink), `render` (render
-queue), `scripting` (`run_python` with handles pre-bound), `session`
-(session/project wrappers), `sidecar` (camera model from the card's XML,
-for media Resolve reports no camera metadata for — #94),
-`takes` (take selectors + in-place swap),
+queue), `camera_sidecar` (camera model off the card's own XML, for media
+Resolve reports no camera metadata for — #94; not an **angle sidecar**),
+`scripting` (`run_python` with handles pre-bound), `session`
+(session/project wrappers), `takes` (take selectors + in-place swap),
 `timeline` (timeline read wrappers), `titles` (titles file against a
 project + dry run).
 
