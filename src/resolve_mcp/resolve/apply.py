@@ -355,6 +355,12 @@ def _card_clip(pool: Pool, card: Asset, track: OwnedTrack) -> media.LocatedClip:
     # The out point is written on every apply, not only on the import: a card put into the
     # pool by hand has never had one, and without it Resolve ignores ``endFrame`` outright
     # and lands the card at the project's default still duration instead of the event's.
+    #
+    # Nothing is written about the card's alpha, and that is deliberate. Resolve reports
+    # ``Alpha mode: Straight`` on a freshly imported PNG (probed on Studio 21.0.3), which
+    # is what an HTML export writes — the ramps composite correctly untouched. The property
+    # is settable if that ever stops being true; writing it now would only be a chance to
+    # premultiply a card that was not.
     media.apply_still_workaround(standing.clip, media.properties(standing.clip))
     return standing
 
