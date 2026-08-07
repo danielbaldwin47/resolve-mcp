@@ -357,10 +357,10 @@ def _card_clip(pool: Pool, card: Asset, track: OwnedTrack) -> media.LocatedClip:
     # and lands the card at the project's default still duration instead of the event's.
     #
     # Nothing is written about the card's alpha, and that is deliberate. Resolve reports
-    # ``Alpha mode: Straight`` on a freshly imported PNG (probed on Studio 21.0.3), which
-    # is what an HTML export writes — the ramps composite correctly untouched. The property
-    # is settable if that ever stops being true; writing it now would only be a chance to
-    # premultiply a card that was not.
+    # ``Alpha mode: Straight`` on a freshly imported PNG (probed on Studio 21.0.3.7), which
+    # is what an HTML export writes — so the baked ramps composite correctly untouched.
+    # ``SetClipProperty("Alpha mode", …)`` is accepted if that ever stops being true;
+    # writing it now would only be a chance to premultiply a card that was not.
     media.apply_still_workaround(standing.clip, media.properties(standing.clip))
     return standing
 
