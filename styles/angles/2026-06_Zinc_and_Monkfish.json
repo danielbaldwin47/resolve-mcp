@@ -1,10 +1,10 @@
 {
   "project": "2026-06_Zinc_and_Monkfish",
   "context": "concert",
-  "labelled": "2026-08-06",
-  "method": "frame grabs off the multicam's source clips, read by the agent",
+  "labelled": "2026-08-06 (Zinc), 2026-08-07 (Monkfish)",
+  "method": "Zinc: frame grabs off the multicam's source clips, read by the agent, then confirmed. Monkfish: stated by the director, nothing looked at.",
   "confirmed_by_director": "2026-08-07",
-  "note": "Zinc - Set 2 only. Monkfish Main is corpus entry 5 and is not labelled yet.",
+  "note": "Two nights in one project: Zinc - Set 2 (corpus entry 1) and Monkfish Main (entry 5), each with its own multicam and its own angle numbers. Both nights happen to put the operated camera on Video 1 and the drums on Video 2, but Video 1 is a wide at Zinc and a moving camera at Monkfish - the angle number does not carry the framing, which is why both nights are labelled separately rather than once.",
   "angles": {
     "Zinc - Set 2 Multicam - Video 1": {
       "role": "ensemble-wide",
@@ -29,6 +29,29 @@
         "frames/20260617_D_A7IV_0006.MP4-7b06dd289e54.jpg",
         "frames/20260617_D_A7IV_0006.MP4-e924bd957d6e.jpg"
       ]
+    },
+    "Monkfish Multicam - Video 1": {
+      "role": "soloist-moving",
+      "subject": "soloist",
+      "character": "moving",
+      "note": "The moving camera. The home angle of this cut by both measures - 125 cuts and 89.3% of screen time - though the share is not usable as taste: three fifths of this timeline is passages nobody has cut yet, and they sit on this angle.",
+      "confidence": "high",
+      "subject_is_primary_not_exclusive": true,
+      "stated_by_director": "angle 1 is the moving camera; and separately, that the moving camera generally follows the soloist but also roams the band for interesting movement",
+      "inferred": [],
+      "inference_basis": "Both axes are now stated rather than inferred. The subject is soloist-PRIMARY by design: the director's account is that this camera goes to whoever is soloing and also moves around the band for visual interest. Enough for role-level claims; not enough to attribute any single shot, since no frames from this night have been looked at."
+    },
+    "Monkfish Multicam - Video 2": {
+      "role": "drums-tight",
+      "subject": "drums",
+      "character": "tight",
+      "note": "Fixed drum camera. 108 cuts for 10.7% of the time, and not one of those shots reaches 14 seconds - the frequent-and-short shape every drum cam in the corpus has. The director's rationale: the locked camera is spent on the drums, the rhythm section's most watchable instrument, which frees the operated camera for the soloist.",
+      "confidence": "medium",
+      "stated_by_director": "angle 2 is the fixed drum angle",
+      "inferred": [
+        "character"
+      ],
+      "inference_basis": "Subject is stated. 'tight' is inferred: a camera dedicated to the drums is not a stage wide, and the other locked drum cameras in the corpus - Zinc Video 2, and all three Judson's tunes - are all tight on the kit. Inferred from the rig, not seen."
     }
   },
   "sources": {
@@ -54,6 +77,8 @@
     "what_is_known": "What each camera is, read off its own frame grabs; and which multicam angle number each one is, confirmed by the director on 2026-08-07.",
     "why_it_needed_confirming": "Resolve's scripting API does not say which source is behind an angle: the multicam clip's 'Angle' property comes back empty, and a timeline item only carries the angle name. The mapping cannot be read, only inferred and then checked by eye.",
     "how_it_was_first_guessed": "Video 1 holds 68.5% of screen time over 188 cuts (13.8s a shot) and Video 2 holds 31.5% over 178 cuts (6.7s a shot). A two-camera concert cut that way has a home angle held long and a second angle cut to briefly, so the wide was assigned to Video 1. The director confirmed this reading, so the screen-time heuristic held on this project - one data point, not a rule.",
-    "scope_of_the_confirmation": "This project only. Every other multicam project in the corpus needs its own look; nothing here transfers."
+    "scope_of_the_confirmation": "The Zinc night only. Every other multicam night in the corpus needs its own look; nothing here transfers, including to Monkfish in this same project.",
+    "monkfish": "Stated by the director on 2026-08-07, not read: Video 1 is the moving camera, Video 2 the fixed drum angle. No render and no frame grabs, so the subject of the moving camera is unknown and 'sources' below - which body shot which angle - is not established for this night. It need not be the same two cameras as Zinc, five months earlier in a different room.",
+    "sources_scope": "The 'sources' block is the Zinc night only."
   }
 }

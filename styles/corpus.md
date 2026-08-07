@@ -20,9 +20,9 @@ recency breaks ties).
 | --- | --- | --- | --- | --- | --- |
 | 1 | `2026-06_Zinc_and_Monkfish` | Zinc - Set 2 Main | concert | **measured, labelled** | **Anchor** — strongest current-taste exemplar; two-camera, 2026 |
 | 2 | `Archive/Client/Ryan and Hang Main - 9-23-24 gene edit` | Freefall Timeline, Sunshine Timeline, Mercies Timeline | concert | **measured, labelled** | Canonical snapshot for Ryan and Hang; music-performance cuts only |
-| 3 | `Mike Tucker Scullers` | Concert Full Cut | concert | **measured, unlabelled** | Good two-camera concert; older, so recency weighting applies |
+| 3 | `Mike Tucker Scullers` | Concert Full Cut | concert | **measured, labelled** | Good two-camera concert; older, so recency weighting applies |
 | 4 | `Archive/Client/Ryan and Hang Main - 9-23-24 gene edit` | Stablemates | concert | not started | Older but explicitly taste-endorsed. Read from the Ryan and Hang project, not `Ryan Devlin Projects Current` — same timeline, one project to open |
-| 5 | `2026-06_Zinc_and_Monkfish` | Monkfish Main | concert | **measured, unlabelled** | **Partial** — only a couple of tunes cut; measure those tunes only |
+| 5 | `2026-06_Zinc_and_Monkfish` | Monkfish Main | concert | **measured, labelled** | **Partial** — only a couple of tunes cut; measure those tunes only |
 | 6 | `Archive/Client/Side Step Blues Clues Album` | Blues Clues Main, Devlin Time Main, For All The Other Times Main, Intro Main, Outro Main, People We Love Main, Walk Spirit Talk Spirit Main, EJ's Blues Main | studio-session | **deferred** | Footage not on the box; and studio-session is a different cutting context from the concert work this pass is about. Revisit when the concert profile is settled |
 | 7 | ~~`…Ryan and Hang…` Blues for Alice, Three Card Molly~~ | — | — | **dropped** | Confirmed single-camera (director, 2026-08-07) — no angle switches, so nothing to measure |
 
@@ -37,6 +37,15 @@ many tunes, so per-cut counts run into the hundreds.
 Entries 4, 6 and 7 were settled by the director on 2026-08-07: Stablemates
 reachable from the entry-2 project, Side Step deferred, and the conditional
 entry resolved single-camera without needing a pre-flight.
+
+**Every measured timeline is now labelled.** The director supplied the two
+mappings that no render or frame grab could give (2026-08-07): Scullers Angle 1
+is the moving, tighter camera and Angle 2 the fixed wide side-view; Monkfish
+Video 1 is the moving camera and Video 2 the fixed drum angle. Both timelines
+were re-measured with the sidecars attached, and **every timing number came
+back identical** — same cut counts, same offsets, same shot lengths — which is
+the point of re-running rather than naming the shares by hand: labels are
+supposed to add names and nothing else, and here they demonstrably did.
 
 **Entry 4 is the only one left, and it is blocked on a clock rather than on
 access.** Stablemates has no render, and its A1 audio items disagree about
@@ -104,8 +113,13 @@ the right one.
 | 2 | Freefall Timeline | concert | 44 (43 measured, 1 opening) | `given` @ 86400 | `angles/Ryan-and-Hang-Main-9-23-24-gene-edit.json` | `…/analysis/Freefall-Timeline-a82bc5a80bcd.correlate.json` |
 | 2 | Sunshine Timeline | concert | 50 (49 measured, 1 opening) | `given` @ 86400 | same | `…/analysis/Sunshine-Timeline-edbbc561a240.correlate.json` |
 | 2 | Mercies Timeline | concert | 38 (37 measured, 1 opening) | `given` @ 86400 | same | `…/analysis/Mercies-Timeline-622d697cfd3e.correlate.json` |
-| 3 | Concert Full Cut | concert | 349 (326 measured, 23 openings) | `given` @ 75903 | **none — unlabelled** | `…/analysis/Concert-Full-Cut-bc11cb456a36.correlate.json` |
-| 5 | Monkfish Main | concert | 233 (228 measured, 5 openings) | `audio_clip`, matched | **none — unlabelled** | `…/analysis/Monkfish-Main-a14547f8db48.correlate.json` |
+| 3 | Concert Full Cut | concert | 349 (326 measured, 23 openings) | `given` @ 75903 | `angles/Mike-Tucker-Scullers.json` (director, 2026-08-07) | `…/analysis/Concert-Full-Cut-fcbbcd2a1999.correlate.json` |
+| 5 | Monkfish Main | concert | 233 (228 measured, 5 openings) | `audio_clip`, matched | `angles/2026-06_Zinc_and_Monkfish.json` (director, 2026-08-07) | `…/analysis/Monkfish-Main-8aaccfcad94d.correlate.json` |
+
+Entries 3 and 5 have new result filenames because `angles` is part of the cache
+key: the unlabelled runs are still on disk as `Concert-Full-Cut-bc11cb456a36`
+and `Monkfish-Main-a14547f8db48`, and diffing them against the rows above is
+how "the labels changed no number" was checked.
 
 **Entry 1, measured 2026-08-06.** Against `Zinc Set 2 Reaper v4.wav` (74:10,
 48 kHz, the Reaper master mix on A3), beats from `analyze_music` (11,130 beats,
@@ -136,7 +150,8 @@ Two cautions on this row:
   places and wanders in others. The bar-position histogram is derived from that
   grid, so it says nothing yet, and the beat-offset numbers are worth much less
   than the transient ones. This is the rubato gating #13 calls for, not yet
-  applied.
+  applied — now tracked as **#112**, which is scoped to settle the question in
+  either direction.
 - **The transient numbers do not depend on the grid.** Onsets are measured off
   the mix directly, which is why they are the row's trustworthy half — and
   they are also the half the profile's core principle is about.
@@ -187,9 +202,19 @@ Cautions on these rows:
   choice, and it is the one term here that did not come from the anchor.
 
 **Entry 3, measured 2026-08-07.** `Mike Tucker Scullers` / `Concert Full Cut`,
-349 shots over 95 minutes, two angles. **Unlabelled** — this project has no
-render, so the angle→camera mapping cannot be read, only guessed; the timing
-numbers below need no labels and stand on their own.
+349 shots over 95 minutes, two angles. **Labelled by the director on
+2026-08-07** — this project has no render and no reachable source frames, so
+the mapping could not be read the way entries 1 and 2 were, and a sentence is
+all the evidence there is. Angle 1 is the moving, tighter camera; Angle 2 the
+fixed wide from the side of the room.
+
+That makes this **the only labelled rig in the corpus without a drummer
+camera**, and the one place where the home angle and the wide are demonstrably
+different cameras: the wide is fixed and holds a quarter of the cut, while the
+moving camera holds three quarters. The sidecar records that "moving" and
+"fixed wide" are stated while the moving camera's *subject* is not — nobody has
+looked at what it points at — so this timeline supports claims about framing
+and operation and is deliberately not counted toward claims about subject.
 
 The master mix is 32-bit float, which `analyze_music` refuses outright
 (#110 — and its `fix` line tells the caller to delete the file, which here is
@@ -209,7 +234,7 @@ before the timeline's own first frame.
 | Offset to nearest beat | median 97 ms, mean 846 ms, max 22.7 s |
 | Shot length | median 8.59 s, mean 16.22 s, min 0.38 s, max 238.9 s |
 | Bar position | 1:203, 2:55, 3:38, 4:27, 5:1, 6:1, 7:1 — **not usable** |
-| Angles | Angle 1: 182 cuts, 74.3%; Angle 2: 167 cuts, 25.7% |
+| Angles | `soloist-moving` (Angle 1): 182 cuts, 74.3%; `ensemble-wide` (Angle 2): 167 cuts, 25.7% |
 
 Three things worth carrying forward:
 
@@ -217,16 +242,32 @@ Three things worth carrying forward:
   tunes, 6 on the anchor). A full-set timeline has gaps between tunes, and a
   shot after a gap has no outgoing angle — so the opening count is roughly the
   tune count, and it is a free structural signal nothing is using yet.
-- The **home angle share is 74.3%**, in line with every other entry, and this
-  one was arrived at with no labels at all. The share is a fact about the
-  distribution; only the *name* of the angle needs a sidecar.
+- The **home angle share is 74.3%**, in line with every other entry, and it was
+  arrived at before any label existed. The share is a fact about the
+  distribution; only the *name* of the angle needs a sidecar — which is exactly
+  why the label, when it arrived, moved no number.
+- **The second angle here is a wide, and it behaves like the drummer cams do
+  elsewhere**: 167 cuts against the home angle's 182, on a quarter of the time.
+  Frequent-and-short is a property of being the *other* angle, not of pointing
+  at the drums — which only became visible once a rig without a drum camera was
+  labelled.
 - The bar histogram has positions 5, 6 and 7 in it. There is no such thing in
-  4/4. Same conclusion as entries 1 and 2: rubato gating first.
+  4/4. Same conclusion as entries 1 and 2: rubato gating first (#112).
 
 **Entry 5, measured 2026-08-07.** `Monkfish Main`, 233 cuts over 87 minutes,
-two angles, **unlabelled** — same project as the anchor but a different venue
-and no render, so the angle→camera mapping is not carried over from the Zinc
-sidecar and is not guessed. Alignment is the cleanest of any entry:
+two angles, **labelled by the director on 2026-08-07** — same project as the
+anchor but a different venue five months earlier, and no render, so the mapping
+was neither carried over from the Zinc sidecar nor guessed. Video 1 is the
+moving camera, Video 2 the fixed drum angle.
+
+Both nights in this project happen to put the operated camera on Video 1 and
+the drums on Video 2, so the *numbering* did survive the five months — but
+**Video 1 is a wide at Zinc and a moving camera at Monkfish**, which is the
+thing the number cannot tell you and the reason the sidecar labels the two
+nights separately rather than once. Guessing from the anchor would have got the
+home angle right here and its framing wrong.
+
+Alignment is the cleanest of any entry:
 `audio_clip`, matched, against `140111-061037.WAV` on A1 with its zero exactly
 at the timeline's first frame. Nothing had to be named or transcoded.
 
@@ -241,7 +282,8 @@ shots anybody chose to hold.
 | Offset to nearest transient | median 41 ms, mean 54 ms, max 433 ms; 118 early / 110 late / 0 on | **yes** — each of the 228 is a cut somebody made |
 | Shot length, median | 6.30 s | **yes** — a median over 233 shots is untroubled by five outliers |
 | Shot length, mean | 22.49 s (max 1953 s) | **no** — the held stretches are most of the running time |
-| Angle share | Video 1 89.3%, Video 2 10.7% | **no** — share is time, and the uncut time is all Video 1 |
+| Angle share | `soloist-moving` (Video 1) 89.3%, `drums-tight` (Video 2) 10.7% | **no** — share is time, and the uncut time is all Video 1 |
+| Angle cut counts | 125 vs 108 | **yes** — a cut count is not inflated by an uncut passage |
 | Bar position | 1:96, 2:57, 3:36, 4:39 | see below |
 
 Two notes:
@@ -253,6 +295,84 @@ Two notes:
   grids are demonstrably broken show the *strongest* beat-1 skew, which is what
   you would expect if part of that skew is the detector snapping to cuts rather
   than the director cutting to beats. Another reason no beat-position claim
-  goes in the profile before rubato gating.
+  goes in the profile before rubato gating (#112).
 - The transient median (41 ms) is the highest in the corpus and still inside
   two frames. Six timelines now span 17–41 ms.
+
+## What the labels settled: operation, not framing
+
+With entries 3 and 5 labelled, all six measured timelines have roles, and one
+question that had been stuck on a single project comes free. Review had already
+knocked the claim "the home angle is the camera on whoever is playing rather
+than the wide" down to `[believed, unverified]`, because the anchor's home
+angle is its wide *and* its operated camera at once and so cannot tell the two
+readings apart. The two new labels break that tie — not by adding a third vote
+for one reading, but by supplying the cases where framing and operation
+disagree.
+
+| # | Timeline(s) | Home angle | Framing | Operated? | Other angle | Framing | Operated? |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | Zinc - Set 2 | `ensemble-wide` 68.5% | wide | **yes** | `drums-tight` 31.5% | tight | no |
+| 2 | Freefall, Sunshine, Mercies | `soloist-moving` 74–76% | moving | **yes** | `ensemble-wide` 14–17% | wide | no |
+| 3 | Concert Full Cut | `soloist-moving` 74.3% | moving | **yes** | `ensemble-wide` 25.7% | wide | no |
+| 5 | Monkfish Main | `soloist-moving` (89.3%, share not usable) | moving | **yes** | `drums-tight` 10.7% | tight | no |
+
+**Framing does not predict the home angle: a wide holds 68.5% on entry 1 and
+25.7% on entry 3.** Operation predicts it every time — six timelines, three
+projects, and **no locked-off camera is ever the home angle**. Entry 3 is what
+makes this checkable at all, being the only rig whose fixed camera is a wide;
+without it, "wide" and "locked off" name the same cameras throughout the corpus
+and no evidence could separate them.
+
+### The mechanism, and the hardest number in the corpus
+
+The director's account of *why* (2026-08-07): the locked camera is spent on the
+drums because the drums are the rhythm section's most watchable instrument,
+which frees the operated camera to stay with the soloist — and to roam the band
+for movement and interesting shots, since that is where interesting shots come
+from.
+
+That account predicts something checkable, so it was checked. Splitting all
+1080 shots by role:
+
+| Role | n | median | mean | >30 s | longest |
+| --- | --- | --- | --- | --- | --- |
+| `drums-tight` (locked, all 6 timelines) | 314 | 5.25 s | 6.1 s | **0 (0.0%)** | **21.5 s** |
+| `ensemble-wide`, the 4 locked instances | 206 | 7.3 s | 8.7 s | 2 (1.0%) | 57.4 s |
+| `ensemble-wide`, the 1 operated instance (anchor) | 188 | 10.7 s | 13.9 s | 17 (9.0%) | 71.1 s |
+| `room-wide` (locked, Mercies) | 5 | 7.5 s | 7.4 s | 0 (0.0%) | 12.9 s |
+| `soloist-moving` | 242 | 14.4 s | 24.6 s | 58 (24.0%) | 238.9 s |
+
+**The `drums-tight` row is all six timelines; every other row excludes
+Monkfish.** That is not a convenience: Monkfish's five uncut passages all sit
+on `soloist-moving`, so they distort that role's numbers and cannot touch the
+drum camera's. Excluding a timeline wholesale where only one of its roles is
+compromised would have thrown away 108 clean shots — and they are the ones that
+carry the ceiling below.
+
+**No drummer shot anywhere in this corpus reaches 22 seconds.** 314 shots, six
+timelines, four rooms, four years, zero exceptions — the hardest boundary the
+corpus has produced, and a usable rule rather than a tendency.
+
+The sharpest evidence sits *inside* one role. `ensemble-wide` appears five
+times; the anchor's instance is operated and the other four are locked. The
+operated one puts 9.0% of its shots past 30 s, the locked ones 1.0%. Same role
+name, same framing, opposite behaviour — and operation is the only thing that
+differs. A locked shot has given everything it has within a few seconds; an
+operated camera renews itself by moving, which is exactly the director's
+reason, arrived at from the other end.
+
+Two limits worth keeping attached to that:
+
+- **It is a claim about the shape of the rig, not about intent.** The operated
+  camera is the one that can follow anything, so it is also the one an editor
+  can stay on. That may be why it holds the cut, and this corpus cannot say.
+- **The subject question is answered, but as a principle rather than a
+  measurement.** The director's account (2026-08-07) is that the moving camera
+  generally follows the soloist *and* roams the band for interesting movement —
+  soloist-primary, not soloist-only, by design. That is `[stated principle]`
+  in the profile, corroborated by entry 2's frame grabs, and it is a different
+  and in some ways better kind of evidence than three projects of inferred
+  labels would have been. What remains unmeasurable is per-shot subject: no
+  analysis in this corpus can see who is on screen, so no claim should ever
+  rest on attributing a *particular* shot.

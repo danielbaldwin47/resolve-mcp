@@ -112,6 +112,16 @@ director confirmed this reading on 2026-08-07** — sidecars stay in the repo.
   reruns never re-ask (#13). Until that flip, every claim resting on these
   labels is unverified in a second, sharper way than usual: not merely thin,
   but possibly inverted.
+- **`stated_by_director`**, **`inferred`** and **`inference_basis`** — for a
+  label that came from a sentence rather than from a frame. Quote what was
+  actually said, list which of `subject`/`character` was *not* in it, and say
+  what the rest was filled in from. A description is strong evidence for what a
+  camera **is** ("the fixed wide side-view") and no evidence at all for what it
+  **points at** moment to moment — so an angle carrying `"inferred":
+  ["subject"]` must not be counted toward a claim that turns on subject. This
+  is finer-grained than `confidence`, which grades the whole entry: an angle can
+  be certain about its framing and a guess about its subject at the same time.
+  Entries 3 and 5 in the corpus are labelled this way.
 
 ### Labelling a multicam: grab the render, not the sources
 
@@ -137,10 +147,22 @@ Nothing is inferred, and `confirmed_by_director` is not needed to trust it.
    timeline would not, and would put every label on the wrong angle.
 4. Read the frames and write the labels.
 
-Where there is no render — the anchor, and `Mike Tucker Scullers` — the gap is
-real and the director's eye is the only way to close it. Ask before the roles
-are used for anything, and note that timing claims need no labels at all: a
-timeline can be measured while its angles are still unlabelled.
+Where there is no render — the anchor, `Mike Tucker Scullers`, `Monkfish Main`
+— the gap is real and the director's eye is the only way to close it. Ask
+before the roles are used for anything, and note that timing claims need no
+labels at all: a timeline can be measured while its angles are still
+unlabelled, which is what makes asking cheap. Measure first, ask once, and
+**re-run with the sidecar attached rather than writing the role shares in by
+hand** — `angles` is part of the cache key, so a labelled run is a new result
+file that can be diffed against the unlabelled one. On entries 3 and 5 every
+number was identical, which is the only way to know the labels added names and
+nothing else.
+
+An answer in words closes less than a frame does. It fixes what each camera is
+and which angle number it is; it does not say what a moving camera was
+following at any given moment. Record the difference in the entry
+(`stated_by_director` / `inferred`) instead of flattening it, or the corpus
+will use a sentence as though it were a look.
 
 Angle *numbers* are per-multicam and do not carry across timelines even inside
 one project: on the Judson's show `Angle 10` is the drummer on one tune and the
