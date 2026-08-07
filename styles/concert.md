@@ -73,13 +73,13 @@ that the grid is a live band's grid, so it moves.
   the anchor the wide holds 68.5% of screen time across 188 cuts (13.8 s a
   shot) against the drummer cam's 31.5% across 178 cuts (6.7 s a shot):
   near-equal cut counts, roughly double the hold. Two angles traded evenly
-  would not look like this. `[believed, unverified]` — one project, and the
-  angle-number-to-camera mapping is inferred rather than read (see the
-  sidecar's `mapping_basis`), so this claim is one director glance away from
-  being either confirmed or exactly inverted.
+  would not look like this. `[believed, unverified]` — the direction is no
+  longer in doubt (the director confirmed the angle mapping on 2026-08-07, so
+  the wide really is the held angle), but it is still one project: this is
+  how one room was cut, not yet a demonstrated habit.
 - Wide-as-reset patterns, transition habits between roles, and hold length per
-  role. *Open — needs the angle sidecar; `roles` came back null on the anchor
-  because nothing is labelled yet.*
+  role. *Open — the anchor is labelled now, but a role-transition claim needs
+  more than one night to be worth stating.*
 - The role vocabulary a given night supports is whatever its sidecar says. Spec
   #22 describes the rig as a static wide, a drummer cam and a roaming soloist
   cam — but the anchor night ran **two** cameras and the other way round: the

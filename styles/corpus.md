@@ -18,16 +18,21 @@ recency breaks ties).
 
 | # | Project | Timeline(s) | Context | Status | Notes |
 | --- | --- | --- | --- | --- | --- |
-| 1 | `2026-06_Zinc_and_Monkfish` | Zinc - Set 2 Main | concert | **measured, unlabelled** | **Anchor** — strongest current-taste exemplar; two-camera, 2026 |
+| 1 | `2026-06_Zinc_and_Monkfish` | Zinc - Set 2 Main | concert | **measured, labelled** | **Anchor** — strongest current-taste exemplar; two-camera, 2026 |
 | 2 | `Archive/Client/Ryan and Hang Main - 9-23-24 gene edit` | Freefall Timeline, Sunshine Timeline, Mercies Timeline | concert | not started | Canonical snapshot for Ryan and Hang; music-performance cuts only |
 | 3 | `Mike Tucker Scullers` | Concert Full Cut | concert | not started | Good two-camera concert; older, so recency weighting applies |
-| 4 | `Archive/Client/Ryan Devlin Projects Current` | Stablemates | concert | not started | Older but explicitly taste-endorsed |
+| 4 | `Archive/Client/Ryan and Hang Main - 9-23-24 gene edit` | Stablemates | concert | not started | Older but explicitly taste-endorsed. Read from the Ryan and Hang project, not `Ryan Devlin Projects Current` — same timeline, one project to open |
 | 5 | `2026-06_Zinc_and_Monkfish` | Monkfish Main | concert | not started | **Partial** — only a couple of tunes cut; measure those tunes only |
-| 6 | `Archive/Client/Side Step Blues Clues Album` | Blues Clues Main, Devlin Time Main, For All The Other Times Main, Intro Main, Outro Main, People We Love Main, Walk Spirit Talk Spirit Main, EJ's Blues Main | studio-session | not started | Multi-camera studio album shoot — a distinct cutting context |
-| 7 | `Archive/Client/Ryan and Hang Main - 9-23-24 gene edit` | Blues for Alice timeline, Three Card Molly timeline | concert | conditional | Include **only if** pre-flight shows 2+ cameras; suspected single-camera |
+| 6 | `Archive/Client/Side Step Blues Clues Album` | Blues Clues Main, Devlin Time Main, For All The Other Times Main, Intro Main, Outro Main, People We Love Main, Walk Spirit Talk Spirit Main, EJ's Blues Main | studio-session | **deferred** | Footage not on the box; and studio-session is a different cutting context from the concert work this pass is about. Revisit when the concert profile is settled |
+| 7 | ~~`…Ryan and Hang…` Blues for Alice, Three Card Molly~~ | — | — | **dropped** | Confirmed single-camera (director, 2026-08-07) — no angle switches, so nothing to measure |
 
-~7 concert-context timelines + 8 studio-session timelines. Full-set timelines
-carry many tunes, so per-cut counts run into the hundreds.
+7 concert-context timelines across 4 projects. The 8 studio-session timelines
+are deferred, not excluded. Full-set timelines carry many tunes, so per-cut
+counts run into the hundreds.
+
+Entries 4, 6 and 7 were settled by the director on 2026-08-07: Stablemates
+reachable from the entry-2 project, Side Step deferred, and the conditional
+entry resolved single-camera without needing a pre-flight.
 
 ## Excluded, and why
 
@@ -59,8 +64,11 @@ status is only verifiable live through the scripting API.
       clips; relink if archived media moved. Everything under `Archive/Client`
       is a likely relink candidate; entries 1 and 5 are recent and expected
       clean.
-- [ ] 2+ source angles — gates the conditional entry, and drops any timeline
-      that turns out single-camera.
+- [ ] 2+ source angles — drops any timeline that turns out single-camera.
+- [ ] Angle→camera mapping confirmed by the director. Resolve will not say
+      which source is behind an angle number, so every multicam project needs
+      one look before its role claims mean anything; the screen-time heuristic
+      that worked on entry 1 is a starting guess, not an answer.
 - [ ] Concert / master audio reachable for the analysis pipeline (#19).
 - [ ] Frame grabs render and the sidecar can be written (#13).
 
@@ -78,7 +86,7 @@ the right one.
 
 | # | Timeline | Context | Cuts | Alignment | Sidecar | Result |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | Zinc - Set 2 Main | concert | 366 (360 measured, 6 openings) | `audio_clip`, matched | `angles/2026-06_Zinc_and_Monkfish.json` (unconfirmed) | `…/analysis/Zinc---Set-2-Main-dcb16e19eca1.correlate.json` |
+| 1 | Zinc - Set 2 Main | concert | 366 (360 measured, 6 openings) | `audio_clip`, matched | `angles/2026-06_Zinc_and_Monkfish.json` (confirmed 2026-08-07) | `…/analysis/Zinc---Set-2-Main-dcb16e19eca1.correlate.json` |
 
 **Entry 1, measured 2026-08-06.** Against `Zinc Set 2 Reaper v4.wav` (74:10,
 48 kHz, the Reaper master mix on A3), beats from `analyze_music` (11,130 beats,
@@ -88,11 +96,11 @@ shot) — a home angle held long against an angle cut to briefly.
 
 Labelled from frame grabs off the multicam's source clips: an operated
 front-of-house **wide** on the FX6, and a locked-off **drummer cam** on the
-A7IV at stage right. **Which angle number is which camera is inferred, not
-read** — Resolve's API does not expose the multicam's angle mapping, so the
-sidecar assigns the wide to Video 1 from the screen-time shape and marks both
-`confidence: "low"`. One look at the timeline settles it; until then every
-role-conditioned claim is unverified.
+A7IV at stage right. **Which angle number is which camera could not be read** —
+Resolve's API does not expose the multicam's angle mapping — so the sidecar
+assigned the wide to Video 1 from the screen-time shape, and the director
+confirmed that reading on 2026-08-07. The screen-time heuristic was right here;
+it is one data point, and every other multicam project still needs its own look.
 
 | Measure | Value |
 | --- | --- |
