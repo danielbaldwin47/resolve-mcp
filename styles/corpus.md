@@ -19,7 +19,7 @@ recency breaks ties).
 | # | Project | Timeline(s) | Context | Status | Notes |
 | --- | --- | --- | --- | --- | --- |
 | 1 | `2026-06_Zinc_and_Monkfish` | Zinc - Set 2 Main | concert | **measured, labelled** | **Anchor** — strongest current-taste exemplar; two-camera, 2026 |
-| 2 | `Archive/Client/Ryan and Hang Main - 9-23-24 gene edit` | Freefall Timeline, Sunshine Timeline, Mercies Timeline | concert | not started | Canonical snapshot for Ryan and Hang; music-performance cuts only |
+| 2 | `Archive/Client/Ryan and Hang Main - 9-23-24 gene edit` | Freefall Timeline, Sunshine Timeline, Mercies Timeline | concert | **measured, labelled** | Canonical snapshot for Ryan and Hang; music-performance cuts only |
 | 3 | `Mike Tucker Scullers` | Concert Full Cut | concert | not started | Good two-camera concert; older, so recency weighting applies |
 | 4 | `Archive/Client/Ryan and Hang Main - 9-23-24 gene edit` | Stablemates | concert | not started | Older but explicitly taste-endorsed. Read from the Ryan and Hang project, not `Ryan Devlin Projects Current` — same timeline, one project to open |
 | 5 | `2026-06_Zinc_and_Monkfish` | Monkfish Main | concert | not started | **Partial** — only a couple of tunes cut; measure those tunes only |
@@ -87,6 +87,9 @@ the right one.
 | # | Timeline | Context | Cuts | Alignment | Sidecar | Result |
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | Zinc - Set 2 Main | concert | 366 (360 measured, 6 openings) | `audio_clip`, matched | `angles/2026-06_Zinc_and_Monkfish.json` (confirmed 2026-08-07) | `…/analysis/Zinc---Set-2-Main-dcb16e19eca1.correlate.json` |
+| 2 | Freefall Timeline | concert | 44 (43 measured, 1 opening) | `given` @ 86400 | `angles/Ryan-and-Hang-Main-9-23-24-gene-edit.json` | `…/analysis/Freefall-Timeline-*.correlate.json` |
+| 2 | Sunshine Timeline | concert | 50 (49 measured, 1 opening) | `given` @ 86400 | same | `…/analysis/Sunshine-Timeline-*.correlate.json` |
+| 2 | Mercies Timeline | concert | 38 (37 measured, 1 opening) | `given` @ 86400 | same | `…/analysis/Mercies-Timeline-622d697cfd3e.correlate.json` |
 
 **Entry 1, measured 2026-08-06.** Against `Zinc Set 2 Reaper v4.wav` (74:10,
 48 kHz, the Reaper master mix on A3), beats from `analyze_music` (11,130 beats,
@@ -121,3 +124,48 @@ Two cautions on this row:
 - **The transient numbers do not depend on the grid.** Onsets are measured off
   the mix directly, which is why they are the row's trustworthy half — and
   they are also the half the profile's core principle is about.
+
+**Entry 2, measured 2026-08-07.** The three Judson's quartet tunes. Each was
+measured against the audio of its own finished render rather than a master mix
+file: the masters for Sunshine and Mercies are offline (`C:\…\REAPER Media\`),
+and more to the point *no* clip on these timelines is the mix — the music
+reaches the cut through the multicam's own audio angle, whose in point belongs
+to the multicam's timebase. Alignment is `given` at frame 86400, the timeline's
+first frame, which is exact because each render's duration matches its timeline
+to within 0.02 s — under a frame at 23.976.
+
+| Measure | Freefall | Sunshine | Mercies |
+| --- | --- | --- | --- |
+| Cuts measured | 43 | 49 | 37 |
+| Offset to nearest transient | median 34 ms, mean 53 ms, max 340 ms | median **17 ms**, mean 34 ms, max 263 ms | median 19 ms, mean 27 ms, max 94 ms |
+| Direction | 25 early / 18 late / 0 on | 22 early / 26 late / 1 on | 17 early / 19 late / 1 on |
+| Offset to nearest beat | median 63 ms, mean 228 ms, max 6.08 s | median 124 ms, mean 307 ms, max 6.34 s | median 135 ms, mean 146 ms, max 434 ms |
+| Shot length | median 6.82 s, mean 15.51 s, 2.54–146.4 s | median 12.01 s, mean 18.34 s, 2.75–93.6 s | median 11.53 s, mean 18.52 s, 1.59–183.9 s |
+| Bar position | 1:18, 2:17, 3:4, 4:4 | 1:21, 2:12, 3:10, 4:6 | 1:25, 2:6, 3:2, 4:3, 6:1 |
+
+Angles labelled by **reading the render**, not by inferring from the sources:
+a frame of the finished cut at a moment a given angle is on screen *is* that
+angle. This is the method the anchor could not use — it has no render — and it
+removes the guesswork that made entry 1's mapping need a director's eye.
+
+Three roles, and they recur in all three tunes:
+
+| Role | Freefall | Sunshine | Mercies |
+| --- | --- | --- | --- |
+| `soloist-moving` — operated camera following whoever is playing | 19 cuts, **75.5%** | 24 cuts, **76.3%** | 17 cuts, **74.4%** |
+| `ensemble-wide` — locked full-stage wide | 12 cuts, 14.4% | 16 cuts, 17.0% | 11 cuts, 16.3% |
+| `drums-tight` — drummer cam at house right | 13 cuts, 10.1% | 10 cuts, 6.7% | 5 cuts, 4.0% |
+| `room-wide` — second wide, from a seat | — | — | 5 cuts, 5.2% |
+
+Cautions on these rows:
+
+- **The beat grid fits better here than on the anchor but is still not gated.**
+  Freefall's histogram is strictly 1–4, which is what a grid that fits looks
+  like; Mercies puts one cut in a bar 6, which is what one that slips looks
+  like. Beat-offset means still run two to five times their medians. Treat the
+  bar histograms as suggestive and the transient numbers as evidence, exactly
+  as on entry 1.
+- **The role names are a judgement, the mapping is not.** Which angle is which
+  camera was read off the render and is not in doubt. Whether an operated
+  camera that follows the music is best called `soloist-moving` is a vocabulary
+  choice, and it is the one term here that did not come from the anchor.

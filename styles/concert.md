@@ -21,19 +21,26 @@ that the grid is a live band's grid, so it moves.
   drops — free intros, out-of-time codas — cut placement there says nothing
   about taste and is gated out of the evidence rather than averaged in.
   `[stated principle]` (#13, analysis workflow)
-- **Cuts land close to a transient without landing on one.** On the anchor, the
-  median cut sits 33 ms from the nearest transient (mean 46 ms, max 345 ms) and
-  exactly **2 of 360 cuts land on one**. That is the stated principle showing up
-  as a number: near, not on. `[believed, unverified]` — n=360 cuts but a single
-  project, so #21 policy 4 downgrades it; `corpus.md` entry 1 has the evidence.
-- **The direction bias is close to even, tipped early**: 195 cuts early against
-  163 late. Not the lopsided distribution a rule like "always cut just before"
-  would leave. `[believed, unverified]` — same single project.
+- **Cuts land close to a transient without landing on one.** The median cut sits
+  a few frames from the nearest transient and almost never on it: 33 ms on the
+  anchor (2 of 360 cuts on a transient), 34 ms on Freefall, 19 ms on Mercies,
+  17 ms on Sunshine. Four timelines, two projects, two rooms, four years apart,
+  and the median never leaves 17–34 ms — under a frame at 24fps in three of
+  them. That is the stated principle showing up as a number: near, not on.
+  `[measured — 2 projects]` (`corpus.md` entries 1 and 2)
+- **The direction bias is close to even, tipped early.** Anchor 195 early / 163
+  late; Freefall 25/18; Sunshine 22/26; Mercies 17/19. Early leads overall, but
+  two of the four tip late — so what is measured is the *absence* of a rule like
+  "always cut just before", not the presence of one.
+  `[measured — 2 projects]`
 - Beat-grid position patterns, in frames and in beat-fraction, conditioned on
-  context. *Open, and blocked rather than merely unmeasured: the anchor's grid
-  does not fit its music (`meter: 1` at 214 bpm over a jazz set), so the bar
-  histogram and the beat offsets from it are not yet evidence. Rubato gating
-  comes first — see `corpus.md` entry 1.*
+  context. *Open, and blocked rather than merely unmeasured. Every timeline so
+  far skews hard to the first beat of the bar — anchor 171:111:44:30, Mercies
+  25:6:2:3 — which would be a real finding if the grids were trustworthy, and
+  they are not: the anchor's reports `meter: 1` at 214 bpm over a jazz set, and
+  Mercies puts a cut in a bar 6. Rubato gating comes first, and until it lands
+  a consistent-looking histogram is the most misleading thing here, because it
+  looks like evidence.*
 
 ## 2. Energy — the master concept
 
@@ -47,11 +54,16 @@ that the grid is a live band's grid, so it moves.
 
 ## 3. Shot rhythm
 
-- **Shots are long, and their spread is enormous.** On the anchor: median
-  7.3 s, mean 10.4 s, from 0.46 s to 71 s. A concert cut here is not a montage
-  — half the shots run longer than seven seconds — and the 71-second hold says
-  the variation instinct has a very wide range to play in.
-  `[believed, unverified]` — n=366 shots, one project (#21 policy 4).
+- **Shots are long, and their spread is enormous.** Medians run 6.8–12.0 s
+  (anchor 7.3, Freefall 6.8, Mercies 11.5, Sunshine 12.0) and every timeline
+  carries a hold far out past its median: 71 s on the anchor, 94 s on Sunshine,
+  146 s on Freefall, 184 s on Mercies. A concert cut here is not a montage, and
+  the long hold is not an outlier to be smoothed away — it appears in all four.
+  `[measured — 2 projects]`
+- **The mean sits well above the median, every time**: 10.4 vs 7.3, 15.5 vs
+  6.8, 18.3 vs 12.0, 18.5 vs 11.5. The distribution is skewed by design — most
+  shots middling, a few very long. Averaging shot length would describe a cut
+  that was never made. `[measured — 2 projects]`
 - Duration distributions conditioned on section type and energy band. *Open;
   the conditioning needs the structure analysis, which has not been run over
   the corpus.*
@@ -69,17 +81,29 @@ that the grid is a live band's grid, so it moves.
 - **Soloist doing something worth seeing → show him. Drummer lighting up at
   the same time → cut between them.** The two are not in competition; the
   exchange is the content. `[stated principle]`
-- **The wide is the home angle; the drummer cam is cut to, not lived on.** On
-  the anchor the wide holds 68.5% of screen time across 188 cuts (13.8 s a
-  shot) against the drummer cam's 31.5% across 178 cuts (6.7 s a shot):
-  near-equal cut counts, roughly double the hold. Two angles traded evenly
-  would not look like this. `[believed, unverified]` — the direction is no
-  longer in doubt (the director confirmed the angle mapping on 2026-08-07, so
-  the wide really is the held angle), but it is still one project: this is
-  how one room was cut, not yet a demonstrated habit.
-- Wide-as-reset patterns, transition habits between roles, and hold length per
-  role. *Open — the anchor is labelled now, but a role-transition claim needs
-  more than one night to be worth stating.*
+- **There is a home angle, and it holds roughly three-quarters of the cut.**
+  Anchor 68.5%, Freefall 75.5%, Sunshine 76.3%, Mercies 74.4%. Four timelines,
+  two projects, and the home angle's share never drops below two thirds.
+  `[measured — 2 projects]`
+- **The home angle is whichever camera is on whoever is playing — not the
+  wide.** This is the claim the anchor got wrong on its own. With two cameras
+  the held angle *was* the wide (68.5%), which reads as a preference for the
+  wide; with an operated camera available, the wide drops to 14–17% and the
+  roaming `soloist-moving` camera takes 74–76%. The constant across both is not
+  the framing, it is the subject: the cut lives on the music being made and
+  visits everything else. `[measured — 2 projects]` — and the anchor is
+  re-read by it rather than contradicted: with nothing closer available, the
+  wide is where the soloist is.
+- **The drummer cam is cut to, not lived on.** It takes near-equal cut counts
+  and a fraction of the hold: anchor 178 cuts for 31.5%, Freefall 13 for 10.1%,
+  Sunshine 10 for 6.7%, Mercies 5 for 4.0%. Frequent and short is the shape.
+  `[measured — 2 projects]`
+- **A second wide is a garnish, not a role.** Mercies is the only timeline with
+  one (`room-wide`, from a seat rather than of the stage): 5 cuts, 5.2%.
+  `[believed, unverified]` — one timeline.
+- Wide-as-reset patterns and transition habits between roles — which role
+  follows which. *Open. Four labelled timelines is enough to start; the shot
+  records hold the sequence, and nothing has read it yet.*
 - The role vocabulary a given night supports is whatever its sidecar says. Spec
   #22 describes the rig as a static wide, a drummer cam and a roaming soloist
   cam — but the anchor night ran **two** cameras and the other way round: the
