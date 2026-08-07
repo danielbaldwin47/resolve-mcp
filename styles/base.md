@@ -1,54 +1,83 @@
 # Base style profile
 
-Claims that hold for every kind of edit in this project. `concert.md` is read
-on top of this and wins where the two speak to the same thing.
+Cross-domain taste: what holds whatever is being cut. Claude loads this plus
+the relevant domain doc (`concert.md` in v1) at cut time; where the two speak
+to the same thing, the domain doc wins.
 
-Every claim carries a provenance tag; the vocabulary and the rules for earning
-one are in `docs/agents/style-layer.md`. **A claim with no tag is a bug in this
-document** — it means someone wrote down a preference without saying how it is
+Every claim carries a provenance tag — `[stated principle]`,
+`[measured — N projects, n=…, context]`, `[review feedback, YYYY-MM]`,
+`[believed, unverified]`. The vocabulary and the rules for earning one are in
+`docs/agents/style-layer.md`. **A claim with no tag is a bug in this
+document**: it means a preference got written down without saying how it is
 known, which is the black box this file exists to replace.
 
-This profile is deliberately thin. What is not here is not "no opinion" — it is
-"not yet measured", and the corpus pass in `corpus.md` is what fills it.
+This is principles plus evidence, not a rulebook. Feel is subjective; the
+measurements exist to absorb it from the corpus, not to reduce it to rules. Where
+a measurement disagrees with a principle below, both stay and the disagreement
+is written down — a measured deviation is a fact about the edits, the principle
+is a fact about the intent, and dropping either loses the interesting part.
 
-## What a cut is for
+Sections that are still open name what would settle them. That is not "no
+opinion" — it is "not yet measured", and `corpus.md` is where it gets filled.
 
-- **The cut follows where the attention already is, rather than directing it.**
-  In a performance the audience is already looking somewhere; the edit's job is
-  to be there, not to argue. `[director]` — spec #22, story 45: "follows
-  where-the-attention-is energy, so that the edit feels like a musician cut
-  it."
-- **Nothing about a cut is a rule about a number.** `correlate_timeline`
-  reports a shot two frames late as two frames late; whether that is musical is
-  a claim in this document, and a claim in this document is answerable to the
-  corpus. `[director]` — spec #22, story 32.
+## Transparency
 
-## Timing
+- **Nothing sticks out unless it is meant to.** The edit is not the
+  performance; a viewer who notices a cut was either meant to notice it or was
+  pulled out of the room. Everything else in this document is downstream of
+  this. `[stated principle]`
+- Emphasis is the exception that proves it: a cut that *is* meant to be felt is
+  a deliberate move, and the profile says so where it makes one.
+  `[stated principle]`
 
-- **Transients, not the beat grid, are the fourth-wall risk.** A cut that lands
-  exactly on an attack reads as a machine's decision, because the attack is the
-  thing the ear is already committed to. Measure against the transient column
-  first and the beat column second. `[director]` — spec #22 implementation
-  decisions: "Core principle: transients, not the beat grid, are the fourth-wall
-  risk."
-- Cut-offset distribution across the corpus — the shape of where cuts actually
-  land relative to the nearest transient and the nearest beat. *Awaiting the
-  corpus pass; see `corpus.md`.*
-- Shot-duration floor and typical range. *Awaiting the corpus pass.*
+## Transients
 
-## Angles
+- **Transients, not the beat grid, are the fourth-wall risk.** A cut landing
+  directly on a big transient — an obvious snare hit — reads as the *sound
+  having triggered the edit*, and that is the thing that breaks transparency.
+  `[stated principle]`
+- **The downbeat itself is fine**, and rhythmic grid positions (beat 2, a
+  mid-beat) are good when the music grooves. The risk is the attack, not the
+  grid. `[stated principle]`
+- Cutting on a big moment is an emphasis move, made on purpose or not at all.
+  `[stated principle]`
+- The offset distribution the corpus actually shows — signed, early against
+  late, and how it conditions on context. *Open; see `corpus.md`.*
 
-- **An angle is chosen for what it is for, not for what it shows.** Sidecars
-  carry `subject` and `character` separately because "the drum kit" and "the
-  thing I cut to when the horn player is between phrases" are different facts
-  about the same camera. `[believed, unverified]` — this is how the sidecar
-  format was designed (#45), not yet something the corpus has confirmed about
-  the edits themselves.
-- Angle-share and role-share distributions; which roles open a piece and which
-  close it. *Awaiting the corpus pass.*
+## Energy
 
-## Review
+- **Energy is where the attention is** — band-member interactions,
+  expressions, fills, the moment it simply feels right. `[stated principle]`
+- **Loudness and onset density are proxies for energy, never its definition.**
+  A number that correlates with attention is not attention, and a cut that
+  chases the meter instead of the room is the failure mode this distinction
+  exists to name. `[stated principle]`
 
-- **A style-level note from the director lands here the round it arrives**, not
-  at the end of the project, so the next cut is already better.
-  `[director]` — spec #22, story 49.
+## Variation
+
+- **Avoid runs of similar shot lengths.** Sameness is itself a thing that
+  sticks out, which puts this downstream of transparency rather than beside it.
+  `[stated principle]`
+- **Spectacle earns a hold** — and especially so on a moving camera, where the
+  move is the reason to stay. `[stated principle]`
+- Shot-duration distributions, conditioned on section type and energy band.
+  *Open; see `corpus.md`.*
+
+## Angle roles
+
+- **Every angle carries two axes: subject × character.** Subject is who or
+  what (drummer, keys, ensemble); character is `wide`, `tight` or `moving`.
+  This document speaks in roles; which camera *is* which role is a fact about a
+  project and lives in that project's sidecar. `[stated principle]`
+- Wide-as-reset, and hold lengths per role. *Open; see `corpus.md`.*
+
+## Observations
+
+Free prose, first-class, anywhere in this document. Nothing here is waiting for
+a number to be allowed to be said.
+
+- The corpus is not yet measured, so every distribution above is open and the
+  profile currently runs on stated principle alone. That is the intended state
+  for a first pass (#21 policy 4: no minimum-n gate blocks the first analysis
+  run) — but it does mean nothing here has yet been checked against a real
+  edit.

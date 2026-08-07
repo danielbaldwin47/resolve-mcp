@@ -1,29 +1,39 @@
 # The style layer
 
-`styles/` is the agent's half of the project: angle sidecars and style
-profiles, both authored by Claude and editable by the director, both invisible
-to server code. Nothing under `src/resolve_mcp/` reads or writes anything in
-this directory — that is story 59 of spec #22 and the guard test
+`styles/` is the agent's half of the project: style profiles and angle
+sidecars, both authored by Claude, both reviewed by the director, both
+invisible to server code. Nothing under `src/resolve_mcp/` reads or writes
+anything in this directory — that is story 59 of spec #22, and
 `tests/test_style_layer.py` holds it.
 
 The server measures; these documents decide. `correlate_timeline` reports that
 a shot starts 47 ms after the nearest transient; whether 47 ms is musical is a
 sentence in `styles/concert.md`.
 
+The decisions behind everything here: **#13** (what a style profile is, its
+section schema, the analysis workflow) and **#21** (which projects form the
+corpus, and the corpus policies). Read those before changing a format; this
+file is their working form, not a second opinion.
+
 ## Layout
 
 ```
 styles/
-├── base.md              claims that hold for every kind of edit
-├── concert.md           claims that hold for concert style-cuts (overrides base)
-├── corpus.md            what was measured, in what order, with what context tags
-└── angles/<project>.json   one angle sidecar per Resolve project
+├── base.md                 cross-domain taste
+├── concert.md              the concert domain (v1 authors this one only)
+├── corpus.md               which timelines were measured, in what order
+└── angles/<project>.json   one angle sidecar per corpus project
 ```
 
-Profiles are **layered**: `concert.md` is read on top of `base.md`, and where
-the two speak to the same thing, concert wins. A claim only belongs in
-`concert.md` if it would be wrong in a studio-session edit; otherwise it is a
-base claim and every pillar gets it.
+Profiles are **layered**: Claude loads `base.md` plus the relevant domain doc
+at cut time. Base holds cross-domain taste — the transparency principle,
+transient philosophy, variation instinct, pacing taste. A claim belongs in a
+domain doc only if it would be wrong outside that domain. Per-band or
+per-person variants live as sections inside a domain doc until they outgrow it.
+Git history is the style-evolution record, which is why these are committed
+files and not cache.
+
+Future domains (vlog, talking-head) are the same structure and out of v1 scope.
 
 ## Provenance tags
 
@@ -31,112 +41,113 @@ base claim and every pillar gets it.
 how well they are known is a black box with extra steps — the tags are the
 whole reason this is a document rather than a prompt.
 
-| Tag | Means | Earned by |
-| --- | --- | --- |
-| `[measured: <corpus>, n=<cuts>]` | The corpus says so, and the numbers are in `corpus.md` | a `correlate_timeline` pass over named timelines |
-| `[believed, unverified]` | Held on thin evidence — a handful of cuts, one timeline, or reasoning from the instrument rather than from the corpus | anything the corpus has not yet confirmed |
-| `[director]` | The director said so in a review round | a review note, quoted in the claim |
+| Tag | Means |
+| --- | --- |
+| `[stated principle]` | The director said so. Principles are the defaults. |
+| `[measured — N projects, n=<cuts>, <context>]` | The corpus says so; the evidence row is in `corpus.md`. Sample size and context are part of the tag (#21 policy 4). |
+| `[review feedback, YYYY-MM]` | Landed from a cut-review round, dated. |
+| `[believed, unverified]` | Held on thin evidence — reasoning from the instrument, one project, or a handful of cuts. |
 
-Two rules keep the tags honest:
+Four rules keep the tags honest:
 
-- **Thin claims downgrade.** A claim measured over fewer than ~30 cuts, or over
-  a single timeline, is `[believed, unverified]` regardless of how clean the
-  number looked. Corpus breadth is what a measured tag asserts.
-- **A rerun can demote.** When a corpus pass contradicts a `[measured]` claim,
-  the claim moves down to `[believed, unverified]` with the disagreement noted
-  — it does not quietly keep its tag, and it does not quietly vanish.
-
-`[director]` outranks both: a director note lands in the profile the round it
-arrives (story 49), and a later corpus pass that disagrees with it gets written
-up as a disagreement rather than overwriting it.
+- **Measurement never sands off a principle.** Where the corpus disagrees with
+  a stated principle, both stay and the conflict is written down as a conflict
+  (#13). A measured deviation is a fact about the edits; the principle is a
+  fact about the intent, and losing either one loses the interesting part.
+- **Thin support downgrades.** Few instances, or support from a single
+  project, means `[believed, unverified]` with the partial evidence noted —
+  however clean the number looked. No minimum-n gate blocks a first analysis
+  run; the tag carries the weakness instead (#21 policy 4).
+- **Context is attributed, agreement graduates.** A measured claim names its
+  context (`concert` or `studio-session`). A claim that holds across both
+  graduates to `base.md` (#21 policy 3).
+- **Taste beats recency, and recent work breaks ties.** Membership is "would
+  you cut it the same way today?", not a date cutoff; where old and new work
+  disagree, the profile resolves toward the recent (#21 policy 2).
 
 ## Angle sidecars
 
-One JSON file per Resolve project, named for the project, holding what each
-camera actually is. This is what stops the agent re-deriving "which one is the
-drummer cam" from frame grabs every session.
+One JSON file per corpus project, labelling each camera on **two axes**:
+**subject** (who or what — drummer, keys, ensemble) × **character** (`wide`,
+`tight`, `moving`). The style profile speaks in roles; the camera→role mapping
+for a given project lives here, with the project, not in the profile (#13).
 
 ```json
 {
-  "project": "Jaded Symphony - The Sinclair",
+  "project": "2026-06_Zinc_and_Monkfish",
   "context": "concert",
   "labelled": "2026-08-06",
-  "method": "frame grabs at 3 times per angle, read by the agent",
+  "confirmed_by_director": false,
   "angles": {
     "A001_C012.mov": {
-      "role": "drums",
-      "subject": "drum kit, three-quarters from house left",
-      "character": "reaction",
-      "framing": "medium",
-      "motion": "static",
+      "role": "drums-tight",
+      "subject": "drums",
+      "character": "tight",
+      "note": "drum kit three-quarters from house left; locked off",
       "confidence": "high",
-      "evidence": ["frames/A001_C012_00-01-30.jpg"]
+      "evidence": ["…/frames/A001_C012_00-01-30.jpg"]
     }
   }
 }
 ```
 
-`role` is the only key `correlate_timeline` consumes; the rest is for the agent
-and the director. The keys mean:
-
-- **`role`** — the short handle the measurement groups by (`drums`, `wide`,
-  `soloist`, `piano`, `bass`, `audience`). Keep the vocabulary small and reuse
-  it across projects, because cross-project claims are grouped on this string.
-- **`subject`** — what the camera is pointed at, in words. The half of
-  "subject × character" that says *who*.
-- **`character`** — what the angle is *for* in a cut: `establishing`,
-  `hero` (carries a solo), `reaction`, `detail` (hands, sticks, keys),
-  `texture` (audience, room, atmosphere). The half that says *why cut to it*.
-- **`framing`**, **`motion`** — `wide`/`medium`/`tight`, `static`/`roaming`.
-- **`confidence`**, **`evidence`** — how sure the label is and the frame grabs
-  it was read from; a `low` here is why a corpus claim about that angle is
-  thin.
+- **`role`** is the only key `correlate_timeline` consumes, and it is what
+  cross-project claims group on — so keep the vocabulary small and reuse it
+  across projects. `<subject>-<character>` is the default shape.
+- **`subject`** and **`character`** are the two axes kept apart, because
+  "the drummer" and "a moving shot" are different facts about the same camera
+  and the profile makes claims about each.
+- **`confidence`** and **`evidence`** are why a claim resting on this angle is
+  thin or not: a `low` here is a reason a corpus claim downgrades.
+- **`confirmed_by_director`** — labelling is auto-labelled by Claude and
+  confirmed once by the director; reruns never re-ask (#13). Until that flip,
+  every claim resting on these labels is `[believed, unverified]`.
 
 An entry with no `role` is dropped by `correlate_timeline` rather than refused,
 so a half-labelled project still measures — its shots land under `unlabelled`.
 
-Pass a sidecar to the tool by lifting the `angles` object straight through:
+Pass a sidecar by lifting its `angles` object straight through; the tool takes
+labels, never a path:
 
 ```python
 angles = json.loads(Path("styles/angles/<project>.json").read_text())["angles"]
 correlate_timeline(beats=..., timeline=..., angles=angles)
 ```
 
-## Labelling a project
+## The analysis workflow, per corpus project
 
-1. `inspect_timeline` for the distinct clip names on the angle tracks (or the
-   sidecar's own last pass, when you are only filling gaps).
-2. `grab_frames` on each clip at three well-separated times — one is a lens cap
-   or a black frame more often than you would think.
-3. Read the grabs. Write the sidecar. Every angle gets `subject` **and**
-   `character`; a camera you cannot identify gets `confidence: "low"` and says
-   what it looks like, rather than a guess that reads as fact.
+Per #13, and in this order:
 
-## Running a corpus pass
+1. **Pre-flight** (#21). Open the project. Spot-check `GetClipProperty("File
+   Path")` on timeline clips — archived projects under `Archive/Client` are
+   the likely relink candidates. Confirm **2+ source angles**: single-camera
+   timelines leave the corpus at labelling time without a re-decision, because
+   angle-switch behaviour is the core signal. Confirm the concert audio is
+   reachable and that frame grabs render.
+2. **Angle labelling.** `inspect_timeline` for the distinct source clips,
+   `grab_frames` on each at three well-separated times — one grab in three is
+   a lens cap or a black frame — then read the grabs and write the sidecar.
+   Clip and file names are a hint layer when they cooperate, never the label.
+   The director confirms or corrects once.
+3. **Music analysis.** `analyze_music` on the concert audio for beats,
+   downbeats and energy; `analyze_structure` for tunes and solo changes. A
+   concert cut to a director-supplied master mix uses that file; otherwise the
+   timeline's own mix has to be exported, and `separate_stems(scope="timeline")`
+   acquires it on the way. **Rubato regions are excluded from cut-placement
+   evidence** via beat-confidence gating — a grid fitted to free time measures
+   nothing.
+4. **`correlate_timeline`** with the sidecar's labels. This is the one tested
+   measurement path: Claude interprets its records and never recomputes
+   statistics ad hoc.
+5. **Draft.** Update the profile sections from the records, tag every claim,
+   record the row in `corpus.md`. The director reviews; then commit.
 
-The corpus is **ordered** — timelines newest-last — because taste drifts and a
-claim that holds only in the last three edits is a different claim from one
-that holds across all fifteen. Each timeline is **context-tagged** (`concert`,
-`studio-session`) so base and concert claims can be told apart.
-
-Per timeline:
-
-1. Get a WAV and run `analyze_music` on it for the beat grid. A concert cut to
-   a director-supplied master mix takes that file directly; otherwise the
-   timeline's own mix has to be exported — `separate_stems(scope="timeline")`
-   acquires it on the way, and its job result names the acquired audio.
-2. `correlate_timeline(beats=…, timeline=…, angles=…)` with the project's
-   sidecar.
-3. Record the result path and its gist in `styles/corpus.md`, with the
-   timeline's order index and context tag.
-
-Then read across the results — not one at a time — and write the profile.
-Aggregate before claiming: the number that matters is the distribution over the
-corpus, and the tag you are entitled to is set by how many cuts and how many
-timelines stand behind it.
+Read **across** the corpus before claiming, not one project at a time: the
+number that matters is the distribution, and the tag a claim is entitled to is
+set by how many cuts and how many projects stand behind it.
 
 **`alignment.mode` decides whether a result is usable at all.** `audio_clip`
-means the times were read through the audio the analysis was run on;
+means the times were read through the audio the analysis ran on;
 `timeline_start` means the timeline said nothing about where the mix sits and
 the times count from its own first frame instead. A whole file measured against
 the wrong zero looks exactly like a whole file measured against the right one,

@@ -75,6 +75,27 @@ def _shot(name: str, start: int, duration: int, source_start: int) -> FakeTimeli
     )
 
 
+def _a_cut_with(extra: FakeTimelineItem) -> FakeTimeline:
+    """The fixture cut with one more item on the cut track — a transition, or a generator."""
+    return FakeTimeline(
+        "sunset-set v3",
+        FPS,
+        start_frame=100,
+        video=[FakeTrack("Video 1", [_shot(*shot) for shot in SHOTS] + [extra])],
+        audio=[FakeTrack("Master", [_shot("master_mix.wav", 100, 200, 0)])],
+    )
+
+
+def _angle(name: str, start: int, duration: int, source_start: int, clip: Any) -> FakeTimelineItem:
+    """One shot of a multicam: its own name is the angle, its pool item is shared."""
+    return FakeTimelineItem(name, start, duration, source_start=source_start, media_item=clip)
+
+
+def _dissolve(start: int, duration: int) -> FakeTimelineItem:
+    """A transition as Resolve hands it back: no pool item, and it overlaps both neighbours."""
+    return FakeTimelineItem("Cross Dissolve", start, duration)
+
+
 def beats_file(tmp_path: Path, seconds: Sequence[float] = BEAT_SECONDS) -> Path:
     """A beats file in the shape analyze_music writes: header, then one record per line.
 
@@ -280,6 +301,93 @@ def test_an_entry_with_no_role_in_it_is_dropped_rather_than_refused(
     result = _measured(tmp_path, angles={"C0012.mp4": {"subject": "the room"}})
 
     assert result["roles"] is None
+
+
+def test_a_dissolve_is_not_a_shot(attach: Attach, tmp_path: Path) -> None:
+    """Resolve hands transitions back in the item list, sitting across the cut they soften.
+
+    Live on the corpus anchor (#45) that was 159 of them in 525 items. Counted as shots
+    they would add a cut the editor never made — half a transition early — and a run of
+    identical short durations to the shot stats.
+    """
+    attach(studio(timeline=_a_cut_with(_dissolve(start=155, duration=14))))
+
+    result = _measured(tmp_path)
+
+    assert [one["clip"] for one in _rows(result)] == ["C0012.mp4", "C0031.mp4", "C0012.mp4"]
+    assert result["cuts"] == 3
+
+
+def test_a_generator_on_the_cut_track_is_still_a_shot(attach: Attach, tmp_path: Path) -> None:
+    """The transition test is overlap, not the absence of a pool item — a generator has none."""
+    slate = FakeTimelineItem("Solid Color", 299, 30, source_start=0)
+    attach(studio(timeline=_a_cut_with(slate)))
+
+    result = _measured(tmp_path)
+
+    assert [one["clip"] for one in _rows(result)][-1] == "Solid Color"
+    assert result["cuts"] == 4
+
+
+def test_each_multicam_angle_is_its_own_clip(attach: Attach, tmp_path: Path) -> None:
+    """Every angle of a multicam shares one pool item, so the pool name is not the angle.
+
+    Live on the corpus anchor (#45): both cameras answered "Zinc - Set 2 Multicam", which
+    reads as an hour of concert with no angle switch in it — the one signal the corpus is
+    measured for (#21).
+    """
+    multicam = FakeMediaPoolItem("Zinc - Set 2 Multicam", properties={"Type": "Multicam"})
+    angles = FakeTimeline(
+        "zinc v1",
+        FPS,
+        start_frame=100,
+        video=[
+            FakeTrack(
+                "Video 1",
+                [
+                    _angle("Zinc - Set 2 Multicam - Video 1", 100, 62, 1000, multicam),
+                    _angle("Zinc - Set 2 Multicam - Video 2", 162, 87, 4200, multicam),
+                ],
+            )
+        ],
+        audio=[FakeTrack("Master", [_shot("master_mix.wav", 100, 200, 0)])],
+    )
+    attach(studio(timeline=angles))
+
+    result = _measured(tmp_path)
+
+    assert set(result["clips"]) == {
+        "Zinc - Set 2 Multicam - Video 1",
+        "Zinc - Set 2 Multicam - Video 2",
+    }
+
+
+def test_a_multicam_angle_can_be_labelled_in_the_sidecar(attach: Attach, tmp_path: Path) -> None:
+    """Which is the point of telling them apart: the sidecar keys on what the shot answers."""
+    multicam = FakeMediaPoolItem("Zinc - Set 2 Multicam", properties={"Type": "Multicam"})
+    angles = FakeTimeline(
+        "zinc v1",
+        FPS,
+        start_frame=100,
+        video=[
+            FakeTrack(
+                "Video 1",
+                [
+                    _angle("Zinc - Set 2 Multicam - Video 1", 100, 62, 1000, multicam),
+                    _angle("Zinc - Set 2 Multicam - Video 2", 162, 87, 4200, multicam),
+                ],
+            )
+        ],
+        audio=[FakeTrack("Master", [_shot("master_mix.wav", 100, 200, 0)])],
+    )
+    attach(studio(timeline=angles))
+
+    result = _measured(
+        tmp_path, angles={"Zinc - Set 2 Multicam - Video 2": {"role": "drums-tight"}}
+    )
+
+    assert result["roles"]["drums-tight"]["cuts"] == 1
+    assert result["roles"]["unlabelled"]["cuts"] == 1
 
 
 def test_shots_are_counted_per_clip_even_without_a_sidecar(

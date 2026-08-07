@@ -55,6 +55,12 @@ DEFAULT_ITEM_LIMIT = 100
 DETAIL_LEVELS = ("summary", "tracks", "clips")
 TRACK_TYPES = ("video", "audio", "subtitle")
 
+CLIP_TYPE = "Type"
+"""The media pool property naming what kind of clip it is."""
+
+MULTICAM_TYPE = "Multicam"
+"""The one clip kind whose angles all share a single pool item — see :func:`angle_name`."""
+
 VERSION = re.compile(r"^(?P<base>.*?)[\s_-]*v(?P<number>\d+)$", re.IGNORECASE)
 
 Project = Any
@@ -763,5 +769,30 @@ def clip_name(reader: Reader, item: TimelineItem) -> str | None:
     clip = reader.optional(item, "GetMediaPoolItem", None)
     if clip is None:
         return None
+    name = reader.optional(clip, "GetName", None)
+    return None if name is None else str(name)
+
+
+def angle_name(reader: Reader, item: TimelineItem) -> str | None:
+    """What to call the angle a shot came from, which is not always its pool clip.
+
+    A multicam clip is the exception, and the reason this is not just :func:`clip_name`:
+    every angle of a multicam shares *one* media pool item, so the pool name is the same
+    string for the drummer cam and the wide. A cut measured by it has no angle switches in
+    it at all — which is the one signal a style corpus is read for (#21), so getting this
+    wrong does not look like an error, it looks like an editor who never cut away.
+
+    Resolve puts the angle in the timeline item's own name instead ("<clip> - Video 2"), so
+    that is what a multicam shot answers. Everything else keeps the pool name, which
+    survives a shot being renamed on the timeline.
+    """
+    clip = reader.optional(item, "GetMediaPoolItem", None)
+    if clip is None:
+        return None
+    kind = reader.optional(clip, "GetClipProperty", None, CLIP_TYPE)
+    if str(kind or "") == MULTICAM_TYPE:
+        angle = reader.optional(item, "GetName", None)
+        if angle is not None:
+            return str(angle)
     name = reader.optional(clip, "GetName", None)
     return None if name is None else str(name)
