@@ -5,11 +5,23 @@ from __future__ import annotations
 import contextlib
 import math
 import random
+import struct
 import wave
 from collections.abc import Sequence
 from pathlib import Path
 
 from resolve_mcp.ffmpeg import Completed, Runner
+
+# The format tags a WAV header can carry, spelled out again rather than imported from
+# resolve_mcp.audio.riff: a fixture that took its constants from the parser under test would
+# agree with that parser about a wrong number, and prove nothing.
+PCM_TAG = 0x0001
+FLOAT_TAG = 0x0003
+EXTENSIBLE_TAG = 0xFFFE
+FLOAT32_BITS = 32
+
+# The tail of KSDATAFORMAT_SUBTYPE_*, the GUID an extensible header carries in place of a tag.
+SUBFORMAT_TAIL = b"\x00\x00\x10\x00\x80\x00\x00\xaa\x00\x38\x9b\x71"
 
 
 def write_wav(
@@ -134,6 +146,139 @@ def write_sections(
     return _write_samples(path, samples, sample_rate, bit_depth, channels)
 
 
+def write_float_wav(
+    path: Path,
+    seconds: float = 2.0,
+    sample_rate: int = 48_000,
+    bit_depth: int = 32,
+    channels: int = 2,
+    frequency: float = 440.0,
+    amplitude: float = 0.3,
+    silence: Sequence[tuple[float, float]] = (),
+    extensible: bool = False,
+) -> Path:
+    """``write_wav``'s tone, written as IEEE float — what a mastering chain hands you.
+
+    The standard library cannot write one of these any more than it can read one, so the
+    header is built by hand. ``amplitude`` is in full-scale units and is *not* clamped:
+    passing more than 1.0 writes the above-full-scale peaks a float master is allowed to
+    carry, which is the thing a fixed-point fixture cannot express.
+    """
+    quiet = [(start * sample_rate, end * sample_rate) for start, end in silence]
+    samples = [
+        0.0
+        if any(start <= index < end for start, end in quiet)
+        else amplitude * math.sin(2 * math.pi * frequency * index / sample_rate)
+        for index in range(int(seconds * sample_rate))
+    ]
+    frames = _interleaved_floats(samples, bit_depth, channels)
+    return _write_riff(path, frames, sample_rate, bit_depth, channels, FLOAT_TAG, extensible)
+
+
+def write_extensible_pcm_wav(
+    path: Path,
+    seconds: float = 2.0,
+    sample_rate: int = 48_000,
+    bit_depth: int = 24,
+    channels: int = 2,
+    frequency: float = 440.0,
+    amplitude: float = 0.3,
+) -> Path:
+    """PCM samples behind an extensible header — ordinary audio the standard library refuses.
+
+    Anything with more than two channels, and plenty of two-channel exports besides, comes
+    out of a professional tool tagged ``WAVE_FORMAT_EXTENSIBLE`` with PCM named in a GUID.
+    The samples are the same ones ``write_wav`` writes; only the header differs.
+    """
+    peak = 2 ** (bit_depth - 1) * amplitude
+    samples = [
+        int(peak * math.sin(2 * math.pi * frequency * index / sample_rate))
+        for index in range(int(seconds * sample_rate))
+    ]
+    frames = _interleaved_ints(samples, bit_depth, channels)
+    return _write_riff(path, frames, sample_rate, bit_depth, channels, PCM_TAG, extensible=True)
+
+
+def write_tagged_wav(
+    path: Path,
+    tag: int,
+    bit_depth: int = 16,
+    sample_rate: int = 48_000,
+    channels: int = 2,
+    frames: bytes = b"\x00" * 64,
+    riff_id: bytes = b"RIFF",
+) -> Path:
+    """A structurally sound WAV carrying whatever format tag is asked for.
+
+    For the refusals: a compressed tag the readers cannot decode, and an ``RF64`` file,
+    both of which have to be told apart from a damaged file rather than lumped in with one.
+    """
+    return _write_riff(
+        path, frames, sample_rate, bit_depth, channels, tag, extensible=False, riff_id=riff_id
+    )
+
+
+def _interleaved_ints(samples: list[int], bit_depth: int, channels: int) -> bytes:
+    """One mono signal laid out as interleaved fixed-point frames: every channel the same."""
+    width = bit_depth // 8
+    frames = bytearray()
+    for sample in samples:
+        frames.extend(sample.to_bytes(width, "little", signed=True) * channels)
+    return bytes(frames)
+
+
+def _interleaved_floats(samples: list[float], bit_depth: int, channels: int) -> bytes:
+    """The same, in single or double precision — the layouts ``wave`` will not write."""
+    code = "<f" if bit_depth == FLOAT32_BITS else "<d"
+    frames = bytearray()
+    for sample in samples:
+        frames.extend(struct.pack(code, sample) * channels)
+    return bytes(frames)
+
+
+def _write_riff(
+    path: Path,
+    frames: bytes,
+    sample_rate: int,
+    bit_depth: int,
+    channels: int,
+    tag: int,
+    extensible: bool,
+    riff_id: bytes = b"RIFF",
+) -> Path:
+    """A WAV assembled chunk by chunk, including the ``fact`` chunk a non-PCM file carries.
+
+    ``fact`` is here because it sits *between* ``fmt `` and ``data`` in a real float export:
+    a reader that assumed the samples follow the header immediately would pass every test
+    written without it and fail on the first file off a mastering desk.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    block_align = bit_depth // 8 * channels
+    header = struct.pack(
+        "<HHIIHH",
+        EXTENSIBLE_TAG if extensible else tag,
+        channels,
+        sample_rate,
+        sample_rate * block_align,
+        block_align,
+        bit_depth,
+    )
+    if extensible:
+        header += struct.pack("<HHI", 22, bit_depth, 0) + struct.pack("<I", tag) + SUBFORMAT_TAIL
+    body = (
+        _chunk(b"fmt ", header)
+        + _chunk(b"fact", struct.pack("<I", len(frames) // max(block_align, 1)))
+        + _chunk(b"data", frames)
+    )
+    path.write_bytes(riff_id + struct.pack("<I", 4 + len(body)) + b"WAVE" + body)
+    return path
+
+
+def _chunk(name: bytes, body: bytes) -> bytes:
+    """One RIFF chunk, padded to an even length the way the container requires."""
+    return name + struct.pack("<I", len(body)) + body + (b"\x00" if len(body) % 2 else b"")
+
+
 def _write_samples(
     path: Path,
     samples: list[int],
@@ -142,15 +287,11 @@ def _write_samples(
     channels: int,
 ) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    width = bit_depth // 8
-    frames = bytearray()
-    for sample in samples:
-        frames.extend(sample.to_bytes(width, "little", signed=True) * channels)
     with contextlib.closing(wave.open(str(path), "wb")) as handle:
         handle.setnchannels(channels)
-        handle.setsampwidth(width)
+        handle.setsampwidth(bit_depth // 8)
         handle.setframerate(sample_rate)
-        handle.writeframes(bytes(frames))
+        handle.writeframes(_interleaved_ints(samples, bit_depth, channels))
     return path
 
 

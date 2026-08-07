@@ -55,9 +55,12 @@ from .core import DroppedHandleError as DroppedHandleError
 from .fixtures import ffmpeg_absent as ffmpeg_absent
 from .fixtures import ffmpeg_refusing as ffmpeg_refusing
 from .fixtures import write_clicks as write_clicks
+from .fixtures import write_extensible_pcm_wav as write_extensible_pcm_wav
+from .fixtures import write_float_wav as write_float_wav
 from .fixtures import write_hits as write_hits
 from .fixtures import write_jpeg as write_jpeg
 from .fixtures import write_sections as write_sections
+from .fixtures import write_tagged_wav as write_tagged_wav
 from .fixtures import write_wav as write_wav
 from .fusion import FakeFusionComp as FakeFusionComp
 from .fusion import FakeFusionInput as FakeFusionInput

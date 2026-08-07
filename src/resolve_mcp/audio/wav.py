@@ -1,57 +1,64 @@
-"""Reading back what we just wrote.
+"""Reading back what we just wrote — and what the director handed over.
 
-Everything this server acquires is a WAV, and the standard library reads WAV headers — so
-duration, sample rate and channel count come from ``wave`` rather than from shelling out to
-ffprobe. One less external binary on the critical path, and it works for the render-queue
-route on a machine with no ffmpeg at all.
+Everything this server acquires is a WAV, so duration, sample rate and channel count come
+off the header rather than out of ffprobe: one less external binary on the critical path,
+and it works for the render-queue route on a machine with no ffmpeg at all. The header is
+parsed by ``riff`` rather than by the standard library, which opens PCM only (#110).
+
+The reading is left to the caller; what lives here is the one failure every reader of a WAV
+has to report, phrased for a file this server did not necessarily write.
 """
 
 from __future__ import annotations
 
 import contextlib
-import wave
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
 from ..errors import AudioExtractionError
-
-BITS_PER_BYTE = 8
+from . import riff
 
 
 @contextlib.contextmanager
-def opened(path: Path | str) -> Iterator[wave.Wave_read]:
+def opened(path: Path | str) -> Iterator[riff.Reader]:
     """An open WAV, or the one failure every reader of one should report.
 
-    Anything that reads a WAV this server wrote reads a file the server can also delete and
-    make again, so the advice is the same wherever the read happens — which is why the
-    reading itself is the only part left to the caller.
+    The advice deliberately does not say to delete the file. This path reads two kinds of
+    WAV — one the server cached and can make again, and one the caller passed in with
+    ``audio_at``, which is their own master sitting on a media drive — and it cannot tell
+    them apart from here. Telling an agent to delete the second is worse than saying nothing
+    at all, so the fix names the check that is safe either way (#110).
     """
     target = Path(path)
     try:
-        with contextlib.closing(wave.open(str(target), "rb")) as handle:
+        with riff.opened(target) as handle:
             yield handle
-    except (OSError, wave.Error) as exc:
+    except (OSError, riff.RiffError) as exc:
         raise AudioExtractionError(
             cause=f"{target.name} is not a readable WAV file ({exc}).",
-            fix="Delete it from the cache directory and run the job again.",
+            fix=(
+                "Check the path points at a WAV this reader decodes — PCM or IEEE float. "
+                "If the server acquired this file, run the acquisition again to rewrite it; "
+                "if it is your own master, convert a copy to PCM WAV and analyse that."
+            ),
             detail={"path": str(target)},
         ) from exc
 
 
 def describe(path: Path | str) -> dict[str, Any]:
-    """Duration, sample rate, channels and bit depth of a WAV on disk."""
+    """Duration, sample rate, channels, bit depth and encoding of a WAV on disk."""
     target = Path(path)
     with opened(target) as handle:
-        frames = handle.getnframes()
-        rate = handle.getframerate()
-        channels = handle.getnchannels()
-        width = handle.getsampwidth()
+        header = handle.format
     return {
         "path": str(target),
-        "duration_seconds": round(frames / rate, 3) if rate else None,
-        "sample_rate": rate,
-        "channels": channels,
-        "bit_depth": width * BITS_PER_BYTE,
+        "duration_seconds": round(header.duration_seconds, 3) if header.sample_rate else None,
+        "sample_rate": header.sample_rate,
+        "channels": header.channels,
+        "bit_depth": header.bit_depth,
+        # Depth alone stopped identifying a file the moment float became readable: 32-bit
+        # PCM and 32-bit float are different audio behind the same number (#110).
+        "encoding": header.encoding,
         "bytes": target.stat().st_size,
     }

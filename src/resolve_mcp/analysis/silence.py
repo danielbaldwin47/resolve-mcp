@@ -20,9 +20,11 @@ Two implementation constraints shape this module:
 from __future__ import annotations
 
 import math
+import struct
+from collections.abc import Callable
 from pathlib import Path
 
-from ..audio import wav
+from ..audio import riff, wav
 from ..errors import AudioExtractionError
 
 DEFAULT_WINDOW_SECONDS = 0.05
@@ -55,18 +57,16 @@ def levels(path: Path | str, window_seconds: float = DEFAULT_WINDOW_SECONDS) -> 
     """RMS per window in dBFS, oldest first — the curve everything else here reads."""
     target = Path(path)
     with wav.opened(target) as handle:
-        width = handle.getsampwidth()
-        rate = handle.getframerate()
-        channels = handle.getnchannels()
-        _refuse_unsigned(target, width)
-        per_window = max(1, round(window_seconds * rate))
+        header = handle.format
+        _refuse_unsigned(target, header)
+        per_window = max(1, round(window_seconds * header.sample_rate))
         measured: list[float] = []
         while True:
-            raw = handle.readframes(per_window)
+            raw = handle.read_frames(per_window)
             if not raw:
                 return measured
-            measured.append(_window_db(raw, width, channels))
-            if len(raw) < per_window * width * channels:
+            measured.append(_window_db(raw, header))
+            if len(raw) < per_window * header.block_align:
                 return measured
 
 
@@ -109,7 +109,7 @@ def _span(
     }
 
 
-def _window_db(raw: bytes, width: int, channels: int) -> float:
+def _window_db(raw: bytes, header: riff.Format) -> float:
     """One window's RMS in dBFS, from a decimated read of its samples.
 
     The stride walks *interleaved* samples, so it has to be coprime with the channel count
@@ -119,34 +119,51 @@ def _window_db(raw: bytes, width: int, channels: int) -> float:
     carrying the band. Stepping up to the next coprime stride costs at most a few samples
     of the 64 and visits every channel in turn.
     """
-    count = len(raw) // width
+    count = len(raw) // header.sample_width
     if count == 0:
         return SILENT_FLOOR_DB
     stride = max(1, count // MAX_SAMPLES_PER_WINDOW)
-    while channels > 1 and math.gcd(stride, channels) != 1:
+    while header.channels > 1 and math.gcd(stride, header.channels) != 1:
         stride += 1
+    read_one = _sample_reader(header)
     total = 0.0
     taken = 0
     for index in range(0, count, stride):
-        offset = index * width
-        sample = int.from_bytes(raw[offset : offset + width], "little", signed=True)
-        total += float(sample) * float(sample)
+        sample = read_one(raw, index * header.sample_width)
+        total += sample * sample
         taken += 1
-    full_scale = float(1 << (width * wav.BITS_PER_BYTE - 1))
-    rms = math.sqrt(total / taken) / full_scale
+    rms = math.sqrt(total / taken)
     return SILENT_FLOOR_DB if rms <= 0.0 else max(SILENT_FLOOR_DB, 20.0 * math.log10(rms))
 
 
-def _refuse_unsigned(target: Path, width: int) -> None:
+def _sample_reader(header: riff.Format) -> Callable[[bytes, int], float]:
+    """One sample as a fraction of full scale, however the file happens to store them.
+
+    A float WAV's bytes read as a signed integer are not a quiet version of the signal, they
+    are a different signal — the exponent bits land in the high bytes, so a steady tone reads
+    as noise and digital silence reads as full scale. Picking the reader once per window
+    keeps that branch out of the decimation loop, which runs per sample over a whole concert.
+    """
+    if header.is_float:
+        code = "<f" if header.sample_width == riff.FLOAT32_BYTES else "<d"
+        return lambda raw, offset: float(struct.unpack_from(code, raw, offset)[0])
+    width = header.sample_width
+    full_scale = header.full_scale
+    return lambda raw, offset: (
+        int.from_bytes(raw[offset : offset + width], "little", signed=True) / full_scale
+    )
+
+
+def _refuse_unsigned(target: Path, header: riff.Format) -> None:
     """8-bit WAV samples are unsigned, and reading them as signed inverts loud and quiet.
 
     Nothing this server acquires is 8-bit — both acquisition routes write 16, 24 or 32 —
     so this is a file someone else put in the cache, and guessing at it would report a loud
-    tone as breathing room.
+    tone as breathing room. Float depths are never 8-bit, so this only ever catches PCM.
     """
-    if width == 1:
+    if header.sample_width == 1:
         raise AudioExtractionError(
             cause=f"{target.name} is 8-bit audio, which this reader does not measure.",
             fix="Re-acquire the audio (the acquisition jobs write 24-bit WAV) and retry.",
-            detail={"path": str(target), "bit_depth": width * wav.BITS_PER_BYTE},
+            detail={"path": str(target), "bit_depth": header.bit_depth},
         )

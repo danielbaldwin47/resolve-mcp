@@ -1,29 +1,34 @@
 """WAV on disk to samples in memory.
 
 Everything analysed here is a WAV this server acquired or the director handed over, so the
-standard library opens it and numpy does the arithmetic — no soundfile, no librosa, no third
-decoder to disagree with the two the repo already depends on.
+container is parsed in-repo by ``audio.riff`` and numpy does the arithmetic — no soundfile,
+no librosa, no third decoder to disagree with the two the repo already depends on. ``riff``
+rather than the standard library's ``wave`` because ``wave`` opens PCM and nothing else, and
+a 32-bit float master is what a mastering chain hands you (#110).
 
-Samples are ``float32`` in [-1, 1], shaped ``(channels, frames)``. float32 rather than
-float64 because an hour of 48k stereo is 173 million frames: 1.4 GB of the former is already
-a lot to hold, and 2.8 GB of the latter is a lot to hold twice. The loudness filter widens
-one channel at a time to float64 where the arithmetic wants the headroom.
+Samples are ``float32``, shaped ``(channels, frames)``. float32 rather than float64 because
+an hour of 48k stereo is 173 million frames: 1.4 GB of the former is already a lot to hold,
+and 2.8 GB of the latter is a lot to hold twice. The loudness filter widens one channel at a
+time to float64 where the arithmetic wants the headroom.
+
+Fixed-point sources land in [-1, 1] because that is the whole range they have. Float sources
+are passed through unscaled and may exceed it: a float master is allowed peaks above full
+scale, and clamping them here would report a true peak, and a loudness, that the master does
+not have.
 """
 
 from __future__ import annotations
 
-import contextlib
-import wave
 from pathlib import Path
 from typing import NamedTuple
 
 import numpy as np
 from numpy.typing import NDArray
 
+from ..audio import riff
 from ..errors import AudioExtractionError
 
 SUPPORTED_WIDTHS = (2, 3, 4)
-BITS_PER_BYTE = 8
 
 
 class Audio(NamedTuple):
@@ -57,42 +62,46 @@ def read(path: Path | str) -> Audio:
     """Decode a WAV, or say which file could not be decoded and why."""
     target = Path(path)
     try:
-        with contextlib.closing(wave.open(str(target), "rb")) as handle:
-            width = handle.getsampwidth()
-            channels = handle.getnchannels()
-            rate = handle.getframerate()
-            raw = handle.readframes(handle.getnframes())
-    except (OSError, wave.Error, EOFError) as exc:
+        header, raw = riff.read(target)
+    except (OSError, riff.RiffError) as exc:
         raise AudioExtractionError(
             cause=f"{target.name} is not a readable WAV file ({exc}).",
             fix=(
-                "Analysis reads WAV only. Acquire the audio with acquire_timeline_audio, or "
-                "convert the master mix to WAV first."
+                "Analysis reads PCM and IEEE float WAV. Acquire the audio with "
+                "acquire_timeline_audio, or convert a copy of the master mix to PCM WAV "
+                "and analyse that."
             ),
             detail={"path": str(target)},
         ) from exc
 
-    if width not in SUPPORTED_WIDTHS:
+    if not header.is_float and header.sample_width not in SUPPORTED_WIDTHS:
         raise AudioExtractionError(
-            cause=f"{target.name} is {width * BITS_PER_BYTE}-bit PCM, which is not supported.",
+            cause=f"{target.name} is {header.bit_depth}-bit PCM, which is not supported.",
             fix="Convert it to 16-, 24- or 32-bit PCM WAV and analyse that.",
-            detail={"path": str(target), "bit_depth": width * BITS_PER_BYTE},
+            detail={"path": str(target), "bit_depth": header.bit_depth},
         )
 
-    samples = _samples(raw, width)
-    usable = samples.size - samples.size % channels
-    return Audio(samples=samples[:usable].reshape(-1, channels).T.copy(), sample_rate=rate)
+    samples = _samples(raw, header)
+    usable = samples.size - samples.size % header.channels
+    reshaped = samples[:usable].reshape(-1, header.channels).T
+    return Audio(samples=reshaped.copy(), sample_rate=header.sample_rate)
 
 
-def _samples(raw: bytes, width: int) -> NDArray[np.float32]:
-    """Interleaved PCM bytes to interleaved floats, scaled by the depth's full scale."""
-    if width == 3:
+def _samples(raw: bytes, header: riff.Format) -> NDArray[np.float32]:
+    """Interleaved sample bytes to interleaved floats, in full-scale units.
+
+    Float sources are only narrowed to float32: they are already stored in those units, so
+    the header's full scale is 1.0 and the division is the no-op that says so.
+    """
+    if header.is_float:
+        precision = "<f4" if header.sample_width == riff.FLOAT32_BYTES else "<f8"
+        return np.asarray(np.frombuffer(raw, dtype=np.dtype(precision)), dtype=np.float32)
+    if header.sample_width == 3:
         ints = _from_24_bit(raw)
     else:
-        dtype = np.dtype("<i2") if width == 2 else np.dtype("<i4")
-        ints = np.frombuffer(raw, dtype=dtype).astype(np.int32)
-    full_scale = float(2 ** (width * BITS_PER_BYTE - 1))
-    return np.asarray(ints.astype(np.float32) / full_scale, dtype=np.float32)
+        signed = np.dtype("<i2") if header.sample_width == 2 else np.dtype("<i4")
+        ints = np.frombuffer(raw, dtype=signed).astype(np.int32)
+    return np.asarray(ints.astype(np.float32) / header.full_scale, dtype=np.float32)
 
 
 def _from_24_bit(raw: bytes) -> NDArray[np.int32]:
