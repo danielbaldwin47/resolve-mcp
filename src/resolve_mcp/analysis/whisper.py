@@ -53,8 +53,8 @@ def transcribe(audio: Path, params: Mapping[str, Any]) -> Transcription:
 
 def _model(name: str) -> Any:
     config = get_config()
-    # Before the import, never after: CTranslate2 resolves its CUDA libraries as the
-    # extension module loads, and by then there is nothing left to prepare (#128).
+    # Before the model is built, never after: CTranslate2 loads its CUDA libraries at the
+    # first allocation on the device, and by then there is nothing left to prepare (#128).
     cuda.prepare()
     return _build(name, config.whisper_device, config.whisper_compute_type)
 

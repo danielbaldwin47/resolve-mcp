@@ -144,7 +144,7 @@ you pass `refresh`.
 - **`uv sync --extra analysis`** for transcription. The extra carries faster-whisper *and*
   the CUDA 12 runtime it needs (~1.3 GiB): the transcriber takes the GPU by default, and a
   runtime nobody installed is the one thing that breaks it. No hand-installed wheels, no
-  `PATH` set before launch — the server preloads the runtime out of the venv itself. A box
+  `PATH` set before launch — the server puts the venv's own copy within reach. A box
   without an NVIDIA card still transcribes; set `RESOLVE_MCP_WHISPER_DEVICE=cpu` and expect
   it to be slow.
 

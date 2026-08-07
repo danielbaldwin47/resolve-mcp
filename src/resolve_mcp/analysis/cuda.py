@@ -2,28 +2,30 @@
 
 ``uv sync --extra analysis`` installs the runtime as wheels (#128): the DLLs land under
 ``site-packages/nvidia/<package>/bin``, which is on nobody's search path. CTranslate2 —
-faster-whisper's backend — then fails to resolve ``cublas64_12.dll`` at import and the
-transcriber is broken on exactly the machines a GPU makes it useful on.
+faster-whisper's backend — loads them by bare name the first time a model touches the
+GPU, and without help fails with ``Library cublas64_12.dll is not found or cannot be
+loaded``. Note *when*: not at import, but at the first CUDA allocation, which is why the
+preparation has to be in place before the model is built rather than merely before the
+backend is imported.
 
-Three mechanisms were considered; what is known about each (#35's live pass, #128):
+Measured on the live box (RTX, CUDA 12.9 wheels, ctranslate2 4.8.1, faster-whisper 1.2.1)
+by building ``tiny`` on ``device="cuda"`` under each candidate mechanism in turn:
 
-* Those directories on ``PATH`` **before the process starts** — verified working.
-* ``os.add_dll_directory()`` on them — verified *not* working. CTranslate2's loader does
-  not consult the added-directory list; it still failed on ``cublas64_12.dll``.
-* Mutating ``os.environ["PATH"]`` in-process — a hypothesis. Python ≥3.8 loads extension
-  modules with ``LOAD_LIBRARY_SEARCH_DEFAULT_DIRS``, which excludes ``PATH`` when the
-  loader resolves an extension's dependencies, so it may fail the way the second did.
+===========================  ======================================================
+``PATH`` prepended in-proc   **works** — the mechanism shipped here
+``ctypes.WinDLL`` preload    works, by absolute path; the fallback if the above ever
+                             stops (it does not depend on the loader's search order)
+``os.add_dll_directory()``   fails — ``cublas64_12.dll`` still not found (also #35)
+nothing at all               fails — this is the bug #128 was filed for
+===========================  ======================================================
 
-So the mechanism shipped here is the one that does not depend on the loader's search
-order at all: preload each library by absolute path before faster-whisper is imported.
-A DLL already in the process is matched by base name, so CTranslate2's own resolution
-finds it whatever flags it uses. ``PATH`` is prepended too — it is free, it costs one
-string, and it is what any child process would need — but nothing rests on it.
-
-Preloading by path also carries ``LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR``, so each library's
-own directory is searched for *its* dependencies. That is why the list below stops at
-the entry points: cuDNN's multi-hundred-megabyte engine libraries are loaded by
-``cudnn64_9`` itself, out of the directory we just loaded it from.
+``PATH`` wins on cost rather than on principle: preloading means mapping ~1.4 GiB of DLLs
+(``cublasLt64_12.dll`` alone is 668 MB) into every job, including on a box that will
+transcribe on the CPU and never touch one of them. That CTranslate2 reads ``PATH`` at all
+is what the table above establishes — Python ≥3.8 excludes ``PATH`` when *it* resolves an
+extension module's dependencies, but CTranslate2 does its own ``LoadLibrary`` at runtime,
+which is the plain Windows search order. The same fact explains why ``add_dll_directory``
+does nothing here: that list is consulted for the flag-controlled search, not this one.
 
 Nothing here can observe whether CUDA subsequently initialises — the same shape as ADR
 0001's attach problem. The decisions (which directories, in what order, on which
@@ -35,29 +37,15 @@ from __future__ import annotations
 import os
 import sys
 import sysconfig
-from collections.abc import Callable
 from pathlib import Path
 
 from ..logging_config import get_logger
 
 log = get_logger("analysis")
 
-# In the order the loader would want them, and the order #128 records.
+# Installed by nvidia-cublas-cu12 and nvidia-cudnn-cu12; cuda_nvrtc arrives as a
+# dependency of cuDNN. Listed in the order the runtime layers on top of itself.
 NVIDIA_PACKAGES = ("cublas", "cudnn", "cuda_nvrtc")
-
-# Matched by pattern rather than by pinned name so a cuDNN 9 → 10 bump is an install, not
-# a code change. Deliberately absent: cudnn_engines_* and cudnn_heuristic*, which cuDNN
-# loads itself, and nvrtc-builtins, which nvrtc loads itself.
-PRELOAD_PATTERNS = (
-    "cublas64_*.dll",
-    "cublasLt64_*.dll",
-    "cudnn64_*.dll",
-    "cudnn_adv*.dll",
-    "cudnn_cnn*.dll",
-    "cudnn_graph*.dll",
-    "cudnn_ops*.dll",
-    "nvrtc64_*.dll",
-)
 
 _prepared = False
 
@@ -71,7 +59,8 @@ def dll_directories(root: Path, platform: str | None = None) -> tuple[Path, ...]
     """The nvidia ``bin`` directories present under ``root``, in load order.
 
     Empty off Windows: every other platform's loader finds these through the wheel's own
-    ``RPATH``, and there is nothing to prepare.
+    ``RPATH``, and there is nothing to prepare. Empty too when the wheels are simply not
+    installed — a CPU-only install is a supported one.
     """
     if (platform or sys.platform) != "win32":
         return ()
@@ -80,24 +69,11 @@ def dll_directories(root: Path, platform: str | None = None) -> tuple[Path, ...]
     return tuple(one for one in candidates if one.is_dir())
 
 
-def preloadable_libraries(root: Path, platform: str | None = None) -> tuple[Path, ...]:
-    """Every runtime library worth loading up front, deduplicated, in a stable order."""
-    found: list[Path] = []
-    for directory in dll_directories(root, platform=platform):
-        for pattern in PRELOAD_PATTERNS:
-            found.extend(sorted(directory.glob(pattern)))
-    return tuple(dict.fromkeys(found))
+def prepare(root: Path | None = None, platform: str | None = None) -> tuple[Path, ...]:
+    """Put the bundled CUDA runtime on the search path, once per process.
 
-
-def prepare(
-    root: Path | None = None,
-    platform: str | None = None,
-    load: Callable[[str], object] | None = None,
-) -> tuple[Path, ...]:
-    """Put the CUDA runtime within reach, once per process. Returns what actually loaded.
-
-    A library that refuses to load is a warning, not a failure: a box with the wheels and
-    no GPU should transcribe slowly on the CPU rather than not at all.
+    Returns the directories prepended — empty when there is nothing to do, and empty on
+    every call after the first, so a second job does not lengthen ``PATH`` again.
     """
     global _prepared
     if _prepared:
@@ -107,50 +83,17 @@ def prepare(
     root = site_packages() if root is None else Path(root)
     directories = dll_directories(root, platform=platform)
     if not directories:
-        log.debug("No bundled CUDA runtime under %s; leaving the loader alone", root)
+        log.debug("No bundled CUDA runtime under %s; leaving the search path alone", root)
         return ()
 
-    _prepend_to_path(directories)
-    loader = _load if load is None else load
-    loaded: list[Path] = []
-    for library in preloadable_libraries(root, platform=platform):
-        try:
-            loader(str(library))
-        except OSError as exc:
-            log.warning(
-                "CUDA runtime library %s did not load (%s) — transcription will be slow "
-                "or CPU-bound rather than broken",
-                library.name,
-                exc,
-            )
-            continue
-        loaded.append(library)
-    log.info(
-        "CUDA runtime prepared: %d director(y/ies) prepended to PATH, %d librar(y/ies) preloaded",
-        len(directories),
-        len(loaded),
-    )
-    return tuple(loaded)
+    ahead = [str(one) for one in directories]
+    behind = [one for one in os.environ.get("PATH", "").split(os.pathsep) if one not in ahead]
+    os.environ["PATH"] = os.pathsep.join([*ahead, *behind])
+    log.info("CUDA runtime on the search path: %s", os.pathsep.join(ahead))
+    return directories
 
 
 def reset_preparation() -> None:
     """Forget that preparation happened. For tests; the server prepares once and stays."""
     global _prepared
     _prepared = False
-
-
-def _prepend_to_path(directories: tuple[Path, ...]) -> None:
-    ahead = [str(one) for one in directories]
-    behind = [one for one in os.environ.get("PATH", "").split(os.pathsep) if one not in ahead]
-    os.environ["PATH"] = os.pathsep.join([*ahead, *behind])
-
-
-def _load(path: str) -> object:
-    """Load one DLL by absolute path, keeping it in the process for whoever needs it next."""
-    import ctypes
-
-    # WinDLL and CDLL load identically — the difference is the calling convention of the
-    # functions inside, and nothing here calls one. CDLL is the spelling that type-checks
-    # on the Linux runner as well.
-    loader = getattr(ctypes, "WinDLL", ctypes.CDLL)
-    return loader(path)

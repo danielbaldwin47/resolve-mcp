@@ -1,10 +1,9 @@
 """What the transcriber decides before a single sample is read: device, precision, DLLs.
 
 The decisions are testable; the consequence is not. Which directories go on the search
-path, in what order, on which platform, and which libraries are preloaded by absolute
-path — all of that is a pure function of the venv layout and asserts here without a GPU.
-Whether CUDA then initialises is invisible at every seam (the same shape as ADR 0001's
-attach), so it belongs to the live smoke and nowhere else.
+path, in what order, on which platform — all of that is a pure function of the venv layout
+and asserts here without a GPU. Whether CUDA then initialises is invisible at every seam
+(the same shape as ADR 0001's attach), so it belongs to the live smoke and nowhere else.
 """
 
 from __future__ import annotations
@@ -22,19 +21,10 @@ from resolve_mcp import config as config_module
 from resolve_mcp.analysis import cuda, whisper
 from resolve_mcp.config import Config
 
+SYSTEM32 = r"C:\Windows\system32"
 CUBLAS = ("cublas64_12.dll", "cublasLt64_12.dll")
-CUDNN = (
-    "cudnn64_9.dll",
-    "cudnn_adv64_9.dll",
-    "cudnn_cnn64_9.dll",
-    "cudnn_graph64_9.dll",
-    "cudnn_ops64_9.dll",
-    # The two that are hundreds of megabytes each. cudnn64_9 loads them itself, out of
-    # its own directory, so preloading them would cost the memory for nothing.
-    "cudnn_engines_precompiled64_9.dll",
-    "cudnn_heuristic64_9.dll",
-)
-NVRTC = ("nvrtc64_120_0.dll", "nvrtc-builtins64_120.dll")
+CUDNN = ("cudnn64_9.dll", "cudnn_ops64_9.dll", "cudnn_engines_precompiled64_9.dll")
+NVRTC = ("nvrtc64_120_0.dll", "nvrtc-builtins64_129.dll")
 
 
 def _site_packages(root: Path, **packages: tuple[str, ...]) -> Path:
@@ -73,88 +63,51 @@ def test_a_wheel_that_is_not_installed_is_skipped_rather_than_offered(tmp_path: 
 
 @pytest.mark.parametrize("platform", ["linux", "darwin"])
 def test_nothing_is_prepared_off_windows_where_the_loader_needs_no_help(
-    tmp_path: Path, platform: str
+    tmp_path: Path, platform: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     site = _site_packages(tmp_path, cublas=CUBLAS, cudnn=CUDNN, cuda_nvrtc=NVRTC)
+    monkeypatch.setenv("PATH", SYSTEM32)
 
     assert cuda.dll_directories(site, platform=platform) == ()
-    assert cuda.preloadable_libraries(site, platform=platform) == ()
+    assert cuda.prepare(site, platform=platform) == ()
+    assert os.environ["PATH"] == SYSTEM32
 
 
-def test_the_libraries_are_matched_by_pattern_so_a_version_bump_is_not_a_code_change(
-    tmp_path: Path,
-) -> None:
-    site = _site_packages(tmp_path, cublas=CUBLAS, cudnn=CUDNN, cuda_nvrtc=NVRTC)
-
-    names = [one.name for one in cuda.preloadable_libraries(site, platform="win32")]
-
-    assert names == [
-        "cublas64_12.dll",
-        "cublasLt64_12.dll",
-        "cudnn64_9.dll",
-        "cudnn_adv64_9.dll",
-        "cudnn_cnn64_9.dll",
-        "cudnn_graph64_9.dll",
-        "cudnn_ops64_9.dll",
-        "nvrtc64_120_0.dll",
-    ]
-
-
-def test_preparation_prepends_the_directories_and_preloads_by_absolute_path(
+def test_preparation_prepends_the_directories_ahead_of_everything_already_there(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     site = _site_packages(tmp_path, cublas=CUBLAS, cudnn=CUDNN, cuda_nvrtc=NVRTC)
-    monkeypatch.setenv("PATH", r"C:\Windows\system32")
-    loaded: list[str] = []
+    monkeypatch.setenv("PATH", SYSTEM32)
 
-    prepared = cuda.prepare(site, platform="win32", load=loaded.append)
+    prepared = cuda.prepare(site, platform="win32")
 
-    assert prepared == cuda.preloadable_libraries(site, platform="win32")
-    assert loaded == [str(one) for one in prepared]
+    assert prepared == cuda.dll_directories(site, platform="win32")
     assert all(one.is_absolute() for one in prepared)
-
-    search = os.environ["PATH"].split(os.pathsep)
-    assert search == [
-        str(one) for one in cuda.dll_directories(site, platform="win32")
-    ] + [r"C:\Windows\system32"]
+    assert os.environ["PATH"].split(os.pathsep) == [str(one) for one in prepared] + [SYSTEM32]
 
 
-def test_a_second_preparation_neither_reloads_nor_lengthens_the_path(
+def test_a_second_preparation_does_not_lengthen_the_path_again(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """One process transcribes many jobs; the search path must not grow a copy per job."""
     site = _site_packages(tmp_path, cublas=CUBLAS, cudnn=CUDNN, cuda_nvrtc=NVRTC)
-    monkeypatch.setenv("PATH", r"C:\Windows\system32")
-    loaded: list[str] = []
+    monkeypatch.setenv("PATH", SYSTEM32)
 
-    cuda.prepare(site, platform="win32", load=loaded.append)
+    cuda.prepare(site, platform="win32")
     once = os.environ["PATH"]
-    assert cuda.prepare(site, platform="win32", load=loaded.append) == ()
 
-    assert len(loaded) == 8
+    assert cuda.prepare(site, platform="win32") == ()
     assert os.environ["PATH"] == once
 
 
-def test_a_library_that_refuses_to_load_is_logged_rather_than_failing_the_job(
+def test_a_venv_without_the_cuda_wheels_is_a_quiet_no_op(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A machine with no GPU has the wheels and cannot load them; that is 'slow', not 'broken'."""
-    site = _site_packages(tmp_path, cublas=CUBLAS)
-    monkeypatch.setenv("PATH", r"C:\Windows\system32")
+    """A CPU-only install is a supported install: nothing to prepare, nothing to say."""
+    monkeypatch.setenv("PATH", SYSTEM32)
 
-    def _refuse(path: str) -> None:
-        raise OSError("[WinError 126] The specified module could not be found")
-
-    assert cuda.prepare(site, platform="win32", load=_refuse) == ()
-
-
-def test_no_nvidia_wheels_at_all_is_a_quiet_no_op(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv("PATH", r"C:\Windows\system32")
-    loaded: list[str] = []
-
-    assert cuda.prepare(tmp_path, platform="win32", load=loaded.append) == ()
-    assert loaded == []
+    assert cuda.prepare(tmp_path, platform="win32") == ()
+    assert os.environ["PATH"] == SYSTEM32
 
 
 def test_the_device_and_precision_default_to_the_backends_own_choice() -> None:
@@ -221,9 +174,10 @@ def test_the_model_is_built_with_the_configured_device_and_precision(
     ]
 
 
-def test_the_cuda_runtime_is_prepared_before_the_backend_is_imported(
+def test_the_cuda_runtime_is_prepared_before_the_model_is_built(
     tmp_path: Path, recording_backend: type[_RecordingModel], monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """CTranslate2 loads cuBLAS at the first CUDA allocation — after this point is too late."""
     order: list[str] = []
 
     def _prepare() -> tuple[Path, ...]:
@@ -231,7 +185,7 @@ def test_the_cuda_runtime_is_prepared_before_the_backend_is_imported(
         return ()
 
     def _build(name: str, device: str, compute_type: str) -> object:
-        order.append("import")
+        order.append("build")
         return object()
 
     monkeypatch.setattr(cuda, "prepare", _prepare)
@@ -239,4 +193,4 @@ def test_the_cuda_runtime_is_prepared_before_the_backend_is_imported(
 
     whisper._model("large-v3")
 
-    assert order == ["prepare", "import"]
+    assert order == ["prepare", "build"]
