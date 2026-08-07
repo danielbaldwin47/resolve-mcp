@@ -22,7 +22,7 @@ recency breaks ties).
 | 2 | `Archive/Client/Ryan and Hang Main - 9-23-24 gene edit` | Freefall Timeline, Sunshine Timeline, Mercies Timeline | concert | **measured, labelled** | Canonical snapshot for Ryan and Hang; music-performance cuts only |
 | 3 | `Mike Tucker Scullers` | Concert Full Cut | concert | **measured, unlabelled** | Good two-camera concert; older, so recency weighting applies |
 | 4 | `Archive/Client/Ryan and Hang Main - 9-23-24 gene edit` | Stablemates | concert | not started | Older but explicitly taste-endorsed. Read from the Ryan and Hang project, not `Ryan Devlin Projects Current` — same timeline, one project to open |
-| 5 | `2026-06_Zinc_and_Monkfish` | Monkfish Main | concert | not started | **Partial** — only a couple of tunes cut; measure those tunes only |
+| 5 | `2026-06_Zinc_and_Monkfish` | Monkfish Main | concert | **measured, unlabelled** | **Partial** — only a couple of tunes cut; measure those tunes only |
 | 6 | `Archive/Client/Side Step Blues Clues Album` | Blues Clues Main, Devlin Time Main, For All The Other Times Main, Intro Main, Outro Main, People We Love Main, Walk Spirit Talk Spirit Main, EJ's Blues Main | studio-session | **deferred** | Footage not on the box; and studio-session is a different cutting context from the concert work this pass is about. Revisit when the concert profile is settled |
 | 7 | ~~`…Ryan and Hang…` Blues for Alice, Three Card Molly~~ | — | — | **dropped** | Confirmed single-camera (director, 2026-08-07) — no angle switches, so nothing to measure |
 
@@ -91,6 +91,7 @@ the right one.
 | 2 | Sunshine Timeline | concert | 50 (49 measured, 1 opening) | `given` @ 86400 | same | `…/analysis/Sunshine-Timeline-edbbc561a240.correlate.json` |
 | 2 | Mercies Timeline | concert | 38 (37 measured, 1 opening) | `given` @ 86400 | same | `…/analysis/Mercies-Timeline-622d697cfd3e.correlate.json` |
 | 3 | Concert Full Cut | concert | 349 (326 measured, 23 openings) | `given` @ 75903 | **none — unlabelled** | `…/analysis/Concert-Full-Cut-bc11cb456a36.correlate.json` |
+| 5 | Monkfish Main | concert | 233 (228 measured, 5 openings) | `audio_clip`, matched | **none — unlabelled** | `…/analysis/Monkfish-Main-a14547f8db48.correlate.json` |
 
 **Entry 1, measured 2026-08-06.** Against `Zinc Set 2 Reaper v4.wav` (74:10,
 48 kHz, the Reaper master mix on A3), beats from `analyze_music` (11,130 beats,
@@ -207,3 +208,37 @@ Three things worth carrying forward:
   distribution; only the *name* of the angle needs a sidecar.
 - The bar histogram has positions 5, 6 and 7 in it. There is no such thing in
   4/4. Same conclusion as entries 1 and 2: rubato gating first.
+
+**Entry 5, measured 2026-08-07.** `Monkfish Main`, 233 cuts over 87 minutes,
+two angles, **unlabelled** — same project as the anchor but a different venue
+and no render, so the angle→camera mapping is not carried over from the Zinc
+sidecar and is not guessed. Alignment is the cleanest of any entry:
+`audio_clip`, matched, against `140111-061037.WAV` on A1 with its zero exactly
+at the timeline's first frame. Nothing had to be named or transcoded.
+
+**This timeline is only partly cut, and that decides which of its numbers
+count.** #21 flagged it and the shots confirm it: five held stretches on
+Video 1 — 32.5 min at 17.8 min in, then 10 min, 5 min, 2.6 min and 2.1 min —
+account for 3126 s of the 5241 s. They are passages nobody has cut yet, not
+shots anybody chose to hold.
+
+| Measure | Value | Comparable? |
+| --- | --- | --- |
+| Offset to nearest transient | median 41 ms, mean 54 ms, max 433 ms; 118 early / 110 late / 0 on | **yes** — each of the 228 is a cut somebody made |
+| Shot length, median | 6.30 s | **yes** — a median over 233 shots is untroubled by five outliers |
+| Shot length, mean | 22.49 s (max 1953 s) | **no** — the held stretches are most of the running time |
+| Angle share | Video 1 89.3%, Video 2 10.7% | **no** — share is time, and the uncut time is all Video 1 |
+| Bar position | 1:96, 2:57, 3:36, 4:39 | see below |
+
+Two notes:
+
+- **This is the second grid that looks structurally sound** — strictly 1–4,
+  `meter: 4`, like Freefall and unlike the anchor, Mercies and Scullers. It is
+  also the *flattest* histogram in the corpus: 67% on beats 1–2 against 78–81%
+  everywhere else. That is the wrong direction for comfort. The timelines whose
+  grids are demonstrably broken show the *strongest* beat-1 skew, which is what
+  you would expect if part of that skew is the detector snapping to cuts rather
+  than the director cutting to beats. Another reason no beat-position claim
+  goes in the profile before rubato gating.
+- The transient median (41 ms) is the highest in the corpus and still inside
+  two frames. Six timelines now span 17–41 ms.
