@@ -153,7 +153,7 @@ def test_inspects_a_real_clip_with_the_property_keys_the_wrappers_assume() -> No
         pytest.skip("No clips with media behind them in the media pool")
     first = decodable[0]
 
-    result = inspect_clip(first["name"], bin=first["bin"] or None)
+    result = inspect_clip(first["name"], bin=first["bin"])
 
     assert result["ok"] is True
     assert "File Path" in result["properties"]
@@ -386,7 +386,7 @@ def a_source_clip() -> dict[str, Any]:
     if not listing["ok"]:
         pytest.skip("No media pool")
     for entry in _decodable(listing["clips"]):
-        clip = inspect_clip(entry["name"], bin=entry["bin"] or None)
+        clip = inspect_clip(entry["name"], bin=entry["bin"])
         if not clip["ok"]:
             continue
         media = clip["bounds"]["media"]
@@ -395,7 +395,9 @@ def a_source_clip() -> dict[str, Any]:
             continue
         return {
             "name": entry["name"],
-            "bin": entry["bin"] or None,
+            # Verbatim, not `or None`: the bin a listing reports reads the same clip back,
+            # and "" is the pool root itself — the root copy of a duplicated name (#122).
+            "bin": entry["bin"],
             "fps": float(fps),
             # inspect_clip reports media bounds as in/out/duration — there is no "start".
             "start": media["in"]["frames"],
@@ -804,10 +806,10 @@ def test_a_real_frame_grab_lands_on_the_moment_resolve_numbers_it_at() -> None:
     footage = next(iter(_decodable(listing["clips"])), None)
     if footage is None:
         pytest.skip("No online clip with a frame rate in the media pool")
-    bounds = inspect_clip(footage["name"], bin=footage["bin"] or None)["bounds"]["media"]
+    bounds = inspect_clip(footage["name"], bin=footage["bin"])["bounds"]["media"]
     middle = bounds["in"]["frames"] + bounds["duration"]["frames"] // 2
 
-    result = grab_frames(footage["name"], [middle], bin=footage["bin"] or None)
+    result = grab_frames(footage["name"], [middle], bin=footage["bin"])
 
     assert result["ok"] is True, result.get("error")
     grabbed = result["frames"][0]
@@ -815,7 +817,7 @@ def test_a_real_frame_grab_lands_on_the_moment_resolve_numbers_it_at() -> None:
     assert grabbed["time"]["frames"] == middle
     assert max(grabbed["width"], grabbed["height"]) <= 1568
 
-    again = grab_frames(footage["name"], [middle], bin=footage["bin"] or None)
+    again = grab_frames(footage["name"], [middle], bin=footage["bin"])
     assert again["cached"] is True, "unchanged media must be a cache hit"
 
 
@@ -844,9 +846,9 @@ def test_a_real_scene_scan_reports_cuts_on_the_clips_own_clock() -> None:
         chosen = matches[0]
     else:
         chosen = min(footage, key=lambda one: one["frames"])
-    bounds = inspect_clip(chosen["name"], bin=chosen["bin"] or None)["bounds"]["media"]
+    bounds = inspect_clip(chosen["name"], bin=chosen["bin"])["bounds"]["media"]
 
-    started = detect_scene_cuts(chosen["name"], bin=chosen["bin"] or None)
+    started = detect_scene_cuts(chosen["name"], bin=chosen["bin"])
     record = wait_for(started["job_id"], timeout=1800.0)
 
     assert started["ok"] is True, started.get("error")

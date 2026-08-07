@@ -553,6 +553,109 @@ def test_inspect_refuses_an_ambiguous_clip_name(attach: Attach, tmp_path: Path) 
     assert inspect_clip("C0012.mp4", bin="Broll")["ok"] is True
 
 
+def test_a_root_clip_is_reachable_when_its_name_is_also_used_in_a_bin(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """#122: bin="" is the root folder alone — the only way to name the root copy."""
+    same = a_file(tmp_path, "C0012.mp4")
+    root_copy = a_clip(same, Description="at the root")
+    binned_copy = a_clip(same, Description="filed away")
+    attach(studio(pool=media_pool(bins={"": [root_copy], "Angles/Cam A": [binned_copy]})))
+
+    at_root = inspect_clip("C0012.mp4", bin="")
+
+    assert at_root["ok"] is True
+    assert at_root["clip"]["bin"] == ""
+    assert at_root["properties"]["Description"] == "at the root"
+    binned = inspect_clip("C0012.mp4", bin="Angles/Cam A")
+    assert binned["clip"]["bin"] == "Angles/Cam A"
+    assert binned["properties"]["Description"] == "filed away"
+
+
+def test_a_duplicated_name_still_refuses_without_a_bin(attach: Attach, tmp_path: Path) -> None:
+    """Narrowing the root must not turn the whole-pool search into a first-match."""
+    same = a_file(tmp_path, "C0012.mp4")
+    attach(studio(pool=media_pool(bins={"": [a_clip(same)], "Angles": [a_clip(same)]})))
+
+    result = inspect_clip("C0012.mp4")
+
+    assert result["ok"] is False
+    assert result["error"]["code"] == "ambiguous_clip"
+    assert result["error"]["detail"]["bins"] == ["", "Angles"]
+    assert 'bin=""' in result["error"]["fix"]  # the root has to be expressible
+    assert 'bin="Angles"' in result["error"]["fix"]
+
+
+def test_every_bin_a_listing_reports_reads_the_same_clip_back(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The bin value list_media reports round-trips verbatim, root included."""
+    same = a_file(tmp_path, "C0012.mp4")
+    attach(
+        studio(
+            pool=media_pool(
+                bins={
+                    "": [a_clip(same)],
+                    "Angles": [a_clip(a_file(tmp_path, "C0013.mp4"))],
+                    "Angles/Cam A": [a_clip(same)],
+                }
+            )
+        )
+    )
+
+    listed = list_media()["clips"]
+
+    assert len(listed) == 3
+    for entry in listed:
+        read_back = inspect_clip(entry["name"], bin=entry["bin"])
+        assert read_back["ok"] is True, entry
+        assert read_back["clip"]["bin"] == entry["bin"]
+
+
+def test_a_named_bin_still_reaches_a_clip_in_its_subfolder(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Only the root narrows: a named bin keeps searching what is nested inside it."""
+    attach(studio(pool=media_pool(bins={"Angles/Cam A": [a_clip(a_file(tmp_path, "C0012.mp4"))]})))
+
+    result = inspect_clip("C0012.mp4", bin="Angles")
+
+    assert result["ok"] is True
+    assert result["clip"]["bin"] == "Angles/Cam A"
+
+
+def test_naming_the_root_master_reaches_the_root_clip_only(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Master is the root's own name, so it narrows the same way the empty string does."""
+    same = a_file(tmp_path, "C0012.mp4")
+    attach(
+        studio(
+            pool=media_pool(
+                bins={"": [a_clip(same, Description="at the root")], "Angles": [a_clip(same)]}
+            )
+        )
+    )
+
+    result = inspect_clip("C0012.mp4", bin="Master")
+
+    assert result["ok"] is True
+    assert result["clip"]["bin"] == ""
+    assert result["properties"]["Description"] == "at the root"
+
+
+def test_inspect_of_a_missing_root_clip_says_it_searched_the_root(
+    attach: Attach, tmp_path: Path
+) -> None:
+    attach(studio(pool=media_pool(bins={"Angles": [a_clip(a_file(tmp_path, "C0012.mp4"))]})))
+
+    result = inspect_clip("C0012.mp4", bin="")
+
+    assert result["ok"] is False
+    assert result["error"]["code"] == "clip_not_found"
+    assert result["error"]["detail"]["searched"] == "the media pool root"
+
+
 # --- metadata --------------------------------------------------------------------------
 
 

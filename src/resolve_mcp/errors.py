@@ -167,10 +167,12 @@ class AmbiguousClipError(ResolveMcpError):
     code = "ambiguous_clip"
 
     def __init__(self, name: str, bins: list[str]) -> None:
-        listed = ", ".join(bin_path or "the root" for bin_path in bins)
+        # Every value printed has to be one the caller can pass back, the empty string for
+        # a clip at the pool root included (#122) — an unnamable option is not a fix.
+        listed = ", ".join(f'bin="{bin_path}"' for bin_path in bins)
         super().__init__(
             cause=f"{len(bins)} clips are named {name!r}, so the reference is ambiguous.",
-            fix=f"Pass bin= to say which one: {listed}.",
+            fix=f'Pass one of these to say which: {listed} — bin="" is the pool root itself.',
             detail={"requested": name, "bins": bins},
         )
 
