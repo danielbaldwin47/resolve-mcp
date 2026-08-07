@@ -496,6 +496,11 @@ def test_a_real_take_selector_swaps_the_angle_without_moving_the_shot(tmp_path: 
     before = _video_items(name)
     assert [item["takes"] for item in before] == [2, 2, 2]
     assert [item["source"]["in"]["frames"] for item in before][0] == source["start"]
+    # #120's second half, and it has to be measured on a shot whose getters both read true:
+    # Resolve's end getter is already one past the last frame, so a wrapper that adds one
+    # to it reports a 48-frame shot covering 49 source frames. On the *swapped* shot the
+    # start getter's own lost frame cancels that, which is why this is asserted here.
+    assert before[0]["source"]["out"]["frames"] == source["start"] + durations[0]
 
     swapped = swap_take(cut_file, "s000", 2, timeline=name)
 
@@ -504,6 +509,7 @@ def test_a_real_take_selector_swaps_the_angle_without_moving_the_shot(tmp_path: 
     assert swapped["sync"]["in"] == alternate_at
     after = _video_items(name)
     assert after[0]["source"]["in"]["frames"] == alternate_at
+    assert after[0]["source"]["out"]["frames"] == alternate_at + durations[0]
     assert [item["record"]["in"]["frames"] for item in after] == [
         item["record"]["in"]["frames"] for item in before
     ]

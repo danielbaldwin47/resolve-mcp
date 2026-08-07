@@ -165,11 +165,18 @@ class FakeTimelineItem(AnswersNone):
         return self._source_start or 0
 
     def GetSourceEndFrame(self) -> int:  # noqa: N802
-        """The last source frame — inclusive, and not derivable from duration on a retime."""
+        """One past the last source frame, and not derivable from duration on a retime.
+
+        Exclusive because that is what 21.0.3.7 answers, not because it reads that way:
+        #120 measured a shot cut from source 0..47 reporting 48, and one cut from 100
+        reporting 148 over 48 frames. This fake used to subtract the one — the same belief
+        the wrapper held — so the two agreed with each other and neither agreed with
+        Resolve, which is exactly the shape of quirk this tier exists to carry.
+        """
         self._check()
         if self._source_end is not None:
             return self._source_end
-        return (self._source_start or 0) + self._duration - 1
+        return (self._source_start or 0) + self._duration
 
     def GetMediaPoolItem(self) -> FakeMediaPoolItem | None:  # noqa: N802
         self._check("GetMediaPoolItem")
