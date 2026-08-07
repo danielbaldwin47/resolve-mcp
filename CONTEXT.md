@@ -63,7 +63,7 @@ Top level:
 `analysis/` — compute jobs that read audio and write findings to disk:
 `applause` (bursts → tune boundaries), `beats` (grid + downbeats, model
 injected per ADR 0002), `correlate` (measure a cut against its music),
-`decode` (WAV → numpy, stdlib only), `drums` (hits per stem), `energy`
+`decode` (WAV → numpy, no third-party decoder), `drums` (hits per stem), `energy`
 (loudness curves), `fills` (drum-fill candidates), `halves` (shared
 identify/cache/write pattern), `music` (beats + energy + gist job),
 `records` (sliceable record files), `silence` (RMS spans), `solos` (front
@@ -72,8 +72,10 @@ of band changes), `structure` (tunes + solo changes job), `transcribe`
 `whisper` (default backend: faster-whisper large-v3).
 
 `audio/` — concert audio out of Resolve onto disk: `acquire` (both routes),
-`ffmpeg` (per-source-clip route), `separator` (python-audio-separator out
-of process), `stems` (two-pass separation), `wav` (read back written WAVs).
+`ffmpeg` (per-source-clip route), `riff` (the WAV container itself: PCM,
+IEEE float and extensible headers, because stdlib `wave` opens PCM only),
+`separator` (python-audio-separator out of process), `stems` (two-pass
+separation), `wav` (header facts + the one unreadable-WAV error).
 
 `cut/` — cut-file schema v1: `document` (read off disk), `schema`
 (verbatim, served by `get_cut_schema`), `validate` (11 errors + 2
@@ -131,7 +133,9 @@ module, not the package, and never the whole package at once:
 - `connection.py` — `FakeResolve`, `FakeConnector`, `EXPORT_TYPES`
 - `separator.py` — `FakeSeparator`
 - `fixtures.py` — `write_wav`/`write_clicks`/`write_hits`/`write_sections`/
-  `write_jpeg`, `ffmpeg_absent`, `ffmpeg_refusing`
+  `write_jpeg`, `ffmpeg_absent`, `ffmpeg_refusing`; and the headers stdlib
+  `wave` cannot write, built by hand — `write_float_wav`,
+  `write_extensible_pcm_wav`, `write_tagged_wav`
 - `builders.py` — `studio()`, `sync_reference()`, `with_a_mix()`
 
 `__init__.py` re-exports every public name, so `from .fakes import X` works
