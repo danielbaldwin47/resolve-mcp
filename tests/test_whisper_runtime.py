@@ -22,7 +22,10 @@ from resolve_mcp.analysis import cuda, whisper
 from resolve_mcp.config import Config
 from resolve_mcp.errors import TranscriberUnavailableError, TranscriptionError
 
-SYSTEM32 = r"C:\Windows\system32"
+# Whatever was on PATH before us. Deliberately drive-letter-free: these tests assert a
+# Windows decision but run on the Linux CI runner too, where os.pathsep is the colon and a
+# "C:\..." entry would split itself in half.
+ALREADY_ON_PATH = r"\Windows\system32"
 CUBLAS = ("cublas64_12.dll", "cublasLt64_12.dll")
 CUDNN = ("cudnn64_9.dll", "cudnn_ops64_9.dll", "cudnn_engines_precompiled64_9.dll")
 NVRTC = ("nvrtc64_120_0.dll", "nvrtc-builtins64_129.dll")
@@ -67,24 +70,26 @@ def test_nothing_is_prepared_off_windows_where_the_loader_needs_no_help(
     tmp_path: Path, platform: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     site = _site_packages(tmp_path, cublas=CUBLAS, cudnn=CUDNN, cuda_nvrtc=NVRTC)
-    monkeypatch.setenv("PATH", SYSTEM32)
+    monkeypatch.setenv("PATH", ALREADY_ON_PATH)
 
     assert cuda.dll_directories(site, platform=platform) == ()
     assert cuda.prepare(site, platform=platform) == ()
-    assert os.environ["PATH"] == SYSTEM32
+    assert os.environ["PATH"] == ALREADY_ON_PATH
 
 
 def test_preparation_prepends_the_directories_ahead_of_everything_already_there(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     site = _site_packages(tmp_path, cublas=CUBLAS, cudnn=CUDNN, cuda_nvrtc=NVRTC)
-    monkeypatch.setenv("PATH", SYSTEM32)
+    monkeypatch.setenv("PATH", ALREADY_ON_PATH)
 
     prepared = cuda.prepare(site, platform="win32")
 
     assert prepared == cuda.dll_directories(site, platform="win32")
     assert all(one.is_absolute() for one in prepared)
-    assert os.environ["PATH"].split(os.pathsep) == [str(one) for one in prepared] + [SYSTEM32]
+    assert os.environ["PATH"].split(os.pathsep) == [str(one) for one in prepared] + [
+        ALREADY_ON_PATH
+    ]
 
 
 def test_a_second_preparation_does_not_lengthen_the_path_again(
@@ -92,7 +97,7 @@ def test_a_second_preparation_does_not_lengthen_the_path_again(
 ) -> None:
     """One process transcribes many jobs; the search path must not grow a copy per job."""
     site = _site_packages(tmp_path, cublas=CUBLAS, cudnn=CUDNN, cuda_nvrtc=NVRTC)
-    monkeypatch.setenv("PATH", SYSTEM32)
+    monkeypatch.setenv("PATH", ALREADY_ON_PATH)
 
     cuda.prepare(site, platform="win32")
     once = os.environ["PATH"]
@@ -105,10 +110,10 @@ def test_a_venv_without_the_cuda_wheels_is_a_quiet_no_op(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A CPU-only install is a supported install: nothing to prepare, nothing to say."""
-    monkeypatch.setenv("PATH", SYSTEM32)
+    monkeypatch.setenv("PATH", ALREADY_ON_PATH)
 
     assert cuda.prepare(tmp_path, platform="win32") == ()
-    assert os.environ["PATH"] == SYSTEM32
+    assert os.environ["PATH"] == ALREADY_ON_PATH
 
 
 class _Info:
