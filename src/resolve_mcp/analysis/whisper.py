@@ -56,7 +56,26 @@ def _model(name: str) -> Any:
     # Before the model is built, never after: CTranslate2 loads its CUDA libraries at the
     # first allocation on the device, and by then there is nothing left to prepare (#128).
     cuda.prepare()
-    return _build(name, config.whisper_device, config.whisper_compute_type)
+    device, compute_type = config.whisper_device, config.whisper_compute_type
+    try:
+        return _build(name, device, compute_type)
+    except TranscriberUnavailableError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - the backend raises its own unrelated types
+        # Since #128 these two are typed by whoever set the variable, so a typo reaches
+        # here as a raw backend error. Say which value was refused and where it came from.
+        raise TranscriptionError(
+            cause=(
+                f"faster-whisper would not load {name} on device={device!r} "
+                f"compute_type={compute_type!r}: {type(exc).__name__}: {exc}"
+            ),
+            fix=(
+                "RESOLVE_MCP_WHISPER_DEVICE takes 'auto', 'cuda' or 'cpu'; "
+                "RESOLVE_MCP_WHISPER_COMPUTE_TYPE takes 'default', 'float32', 'float16' "
+                "or 'int8'. Unset both to use the defaults."
+            ),
+            detail={"model": name, "device": device, "compute_type": compute_type},
+        ) from exc
 
 
 def _build(name: str, device: str, compute_type: str) -> Any:

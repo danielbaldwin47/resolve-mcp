@@ -20,6 +20,7 @@ import pytest
 from resolve_mcp import config as config_module
 from resolve_mcp.analysis import cuda, whisper
 from resolve_mcp.config import Config
+from resolve_mcp.errors import TranscriberUnavailableError, TranscriptionError
 
 SYSTEM32 = r"C:\Windows\system32"
 CUBLAS = ("cublas64_12.dll", "cublasLt64_12.dll")
@@ -110,25 +111,6 @@ def test_a_venv_without_the_cuda_wheels_is_a_quiet_no_op(
     assert os.environ["PATH"] == SYSTEM32
 
 
-def test_the_device_and_precision_default_to_the_backends_own_choice() -> None:
-    config = Config.from_env({})
-
-    assert config.whisper_device == "auto"
-    assert config.whisper_compute_type == "default"
-
-
-def test_the_device_and_precision_are_overridable_for_a_box_without_a_gpu() -> None:
-    config = Config.from_env(
-        {
-            "RESOLVE_MCP_WHISPER_DEVICE": "cpu",
-            "RESOLVE_MCP_WHISPER_COMPUTE_TYPE": "float32",
-        }
-    )
-
-    assert config.whisper_device == "cpu"
-    assert config.whisper_compute_type == "float32"
-
-
 class _Info:
     language = "en"
 
@@ -172,6 +154,48 @@ def test_the_model_is_built_with_the_configured_device_and_precision(
     assert recording_backend.built == [
         {"name": whisper.DEFAULT_MODEL, "device": "cuda", "compute_type": "float32"}
     ]
+
+
+def test_a_device_the_backend_refuses_names_the_value_and_the_variable_that_set_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """These two are typed by a human now, so a typo has to arrive as advice, not a stack."""
+
+    def _refuse(name: str, device: str, compute_type: str) -> object:
+        raise ValueError(f"unsupported device {device}")
+
+    monkeypatch.setattr(whisper, "_build", _refuse)
+    monkeypatch.setattr(cuda, "prepare", lambda: ())
+    config_module.set_config(
+        Config.from_env(
+            {
+                "RESOLVE_MCP_WHISPER_DEVICE": "gpu",
+                "RESOLVE_MCP_CACHE": str(tmp_path / "cache"),
+            }
+        )
+    )
+
+    with pytest.raises(TranscriptionError) as raised:
+        whisper._model("large-v3")
+
+    assert "device='gpu'" in raised.value.cause
+    assert "RESOLVE_MCP_WHISPER_DEVICE" in raised.value.fix
+    assert raised.value.detail["device"] == "gpu"
+
+
+def test_a_missing_backend_still_says_it_is_missing_rather_than_blaming_the_device(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The unavailable-backend error is the older, more specific one; shaping must not eat it."""
+
+    def _absent(name: str, device: str, compute_type: str) -> object:
+        raise TranscriberUnavailableError(cause="faster-whisper is not installed.")
+
+    monkeypatch.setattr(whisper, "_build", _absent)
+    monkeypatch.setattr(cuda, "prepare", lambda: ())
+
+    with pytest.raises(TranscriberUnavailableError):
+        whisper._model("large-v3")
 
 
 def test_the_cuda_runtime_is_prepared_before_the_model_is_built(

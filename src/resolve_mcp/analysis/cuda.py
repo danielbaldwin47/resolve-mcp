@@ -43,14 +43,16 @@ from ..logging_config import get_logger
 
 log = get_logger("analysis")
 
-# Installed by nvidia-cublas-cu12 and nvidia-cudnn-cu12; cuda_nvrtc arrives as a
-# dependency of cuDNN. Listed in the order the runtime layers on top of itself.
+# Installed by nvidia-cublas-cu12 and nvidia-cudnn-cu12; cuda_nvrtc rides in as a
+# dependency of cuBLAS (checked in its wheel metadata, not assumed). Listed in the order
+# the runtime layers on top of itself — and each one is still filtered on existing, so a
+# runtime that stops shipping one of them degrades to "not found" rather than to a crash.
 NVIDIA_PACKAGES = ("cublas", "cudnn", "cuda_nvrtc")
 
 _prepared = False
 
 
-def site_packages() -> Path:
+def _site_packages() -> Path:
     """Where this venv's wheels live — the root the nvidia layout hangs off."""
     return Path(sysconfig.get_paths()["purelib"])
 
@@ -80,7 +82,7 @@ def prepare(root: Path | None = None, platform: str | None = None) -> tuple[Path
         return ()
     _prepared = True
 
-    root = site_packages() if root is None else Path(root)
+    root = _site_packages() if root is None else Path(root)
     directories = dll_directories(root, platform=platform)
     if not directories:
         log.debug("No bundled CUDA runtime under %s; leaving the search path alone", root)

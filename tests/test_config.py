@@ -109,6 +109,26 @@ def test_the_default_render_preset_is_a_resolve_built_in_and_overridable() -> No
     )
 
 
+def test_the_transcriber_takes_the_backends_own_device_and_precision_unless_told_otherwise(
+) -> None:
+    """Defaults are faster-whisper's own: the GPU when there is one, the model's precision.
+
+    The overrides exist so a box that resolves "auto" wrongly degrades to slow rather than
+    broken (#128), which is only true while the defaults stay the backend's.
+    """
+    assert Config.from_env({}).whisper_device == "auto"
+    assert Config.from_env({}).whisper_compute_type == "default"
+
+    config = Config.from_env(
+        {
+            "RESOLVE_MCP_WHISPER_DEVICE": "cpu",
+            "RESOLVE_MCP_WHISPER_COMPUTE_TYPE": "float32",
+        }
+    )
+    assert config.whisper_device == "cpu"
+    assert config.whisper_compute_type == "float32"
+
+
 def test_ffmpeg_is_a_bare_name_on_path_until_told_otherwise() -> None:
     assert Config.from_env({}).ffmpeg == "ffmpeg"
     assert Config.from_env({"RESOLVE_MCP_FFMPEG": r"D:\tools\ffmpeg.exe"}).ffmpeg == (
