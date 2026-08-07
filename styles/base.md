@@ -42,7 +42,10 @@ opinion" — it is "not yet measured", and `corpus.md` is where it gets filled.
 - Cutting on a big moment is an emphasis move, made on purpose or not at all.
   `[stated principle]`
 - The offset distribution the corpus actually shows — signed, early against
-  late, and how it conditions on context. *Open; see `corpus.md`.*
+  late, and how it conditions on context. *Open here on purpose. The concert
+  entry has numbers (`concert.md` §1), but a claim only graduates to this layer
+  once contexts agree (#21 policy 3), and no studio-session timeline has been
+  measured.*
 
 ## Energy
 
@@ -76,8 +79,13 @@ opinion" — it is "not yet measured", and `corpus.md` is where it gets filled.
 Free prose, first-class, anywhere in this document. Nothing here is waiting for
 a number to be allowed to be said.
 
-- The corpus is not yet measured, so every distribution above is open and the
-  profile currently runs on stated principle alone. That is the intended state
-  for a first pass (#21 policy 4: no minimum-n gate blocks the first analysis
-  run) — but it does mean nothing here has yet been checked against a real
-  edit.
+- One concert timeline is measured and no studio session is, so nothing has
+  graduated to this layer yet and every distribution here is still open. That
+  is the intended state for a first pass (#21 policy 4: no minimum-n gate
+  blocks the first analysis run), but it does mean this file still runs on
+  stated principle alone.
+- The first measured entry did not contradict any principle above — the anchor
+  puts the median cut 33 ms off the nearest transient with 2 of 360 landing on
+  one, which is the transient philosophy behaving as stated. A principle
+  surviving its first contact with the corpus is worth recording; it is not yet
+  worth re-tagging.

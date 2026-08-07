@@ -18,7 +18,7 @@ recency breaks ties).
 
 | # | Project | Timeline(s) | Context | Status | Notes |
 | --- | --- | --- | --- | --- | --- |
-| 1 | `2026-06_Zinc_and_Monkfish` | Zinc - Set 2 Main | concert | not started | **Anchor** — strongest current-taste exemplar; two-camera, 2026 |
+| 1 | `2026-06_Zinc_and_Monkfish` | Zinc - Set 2 Main | concert | **measured, unlabelled** | **Anchor** — strongest current-taste exemplar; two-camera, 2026 |
 | 2 | `Archive/Client/Ryan and Hang Main - 9-23-24 gene edit` | Freefall Timeline, Sunshine Timeline, Mercies Timeline | concert | not started | Canonical snapshot for Ryan and Hang; music-performance cuts only |
 | 3 | `Mike Tucker Scullers` | Concert Full Cut | concert | not started | Good two-camera concert; older, so recency weighting applies |
 | 4 | `Archive/Client/Ryan Devlin Projects Current` | Stablemates | concert | not started | Older but explicitly taste-endorsed |
@@ -78,4 +78,38 @@ the right one.
 
 | # | Timeline | Context | Cuts | Alignment | Sidecar | Result |
 | --- | --- | --- | --- | --- | --- | --- |
-| _(none yet)_ | | | | | | |
+| 1 | Zinc - Set 2 Main | concert | 366 (360 measured, 6 openings) | `audio_clip`, matched | `angles/2026-06_Zinc_and_Monkfish.json` (unconfirmed) | `…/analysis/Zinc---Set-2-Main-dcb16e19eca1.correlate.json` |
+
+**Entry 1, measured 2026-08-06.** Against `Zinc Set 2 Reaper v4.wav` (74:10,
+48 kHz, the Reaper master mix on A3), beats from `analyze_music` (11,130 beats,
+4,831 downbeats). Two angles, both multicam: Video 1 holds 188 cuts and 68.5%
+of screen time (13.8 s a shot), Video 2 holds 178 cuts and 31.5% (6.7 s a
+shot) — a home angle held long against an angle cut to briefly.
+
+Labelled from frame grabs off the multicam's source clips: an operated
+front-of-house **wide** on the FX6, and a locked-off **drummer cam** on the
+A7IV at stage right. **Which angle number is which camera is inferred, not
+read** — Resolve's API does not expose the multicam's angle mapping, so the
+sidecar assigns the wide to Video 1 from the screen-time shape and marks both
+`confidence: "low"`. One look at the timeline settles it; until then every
+role-conditioned claim is unverified.
+
+| Measure | Value |
+| --- | --- |
+| Offset to nearest transient | median 33 ms, mean 46 ms, max 345 ms; 195 early / 163 late / 2 on |
+| Offset to nearest beat | median 88 ms, mean 1.31 s, max 43.5 s; 194 early / 165 late / 1 on |
+| Shot length | median 7.26 s, mean 10.39 s, min 0.46 s, max 71.07 s |
+| Bar position | 1:171, 2:111, 3:44, 4:30, 5:2, 6:2 — **not usable, see below** |
+
+Two cautions on this row:
+
+- **The beat grid does not fit this music.** `analyze_music` reported
+  `tempo_bpm: 214.29` with `meter: 1` over a jazz set, and the beat-offset mean
+  (1.31 s) sits fifteen times its own median (88 ms) — a grid that fits in
+  places and wanders in others. The bar-position histogram is derived from that
+  grid, so it says nothing yet, and the beat-offset numbers are worth much less
+  than the transient ones. This is the rubato gating #13 calls for, not yet
+  applied.
+- **The transient numbers do not depend on the grid.** Onsets are measured off
+  the mix directly, which is why they are the row's trustworthy half — and
+  they are also the half the profile's core principle is about.
