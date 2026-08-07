@@ -1,4 +1,8 @@
-"""Timelines and their tracks: ``FakeTrack``, ``FakeTimeline`` and the ``TrackSpec`` shorthand."""
+"""Timelines and their tracks.
+
+``FakeTrack``, ``FakeTimeline``, the ``TrackSpec`` shorthand, and the frame arithmetic an
+append lands on.
+"""
 
 from __future__ import annotations
 
