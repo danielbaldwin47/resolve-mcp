@@ -324,14 +324,51 @@ makes this checkable at all, being the only rig whose fixed camera is a wide;
 without it, "wide" and "locked off" name the same cameras throughout the corpus
 and no evidence could separate them.
 
+### The mechanism, and the hardest number in the corpus
+
+The director's account of *why* (2026-08-07): the locked camera is spent on the
+drums because the drums are the rhythm section's most watchable instrument,
+which frees the operated camera to stay with the soloist — and to roam the band
+for movement and interesting shots, since that is where interesting shots come
+from.
+
+That account predicts something checkable, so it was checked. Splitting all
+1080 shots by role:
+
+| Role | n | median | mean | >30 s | longest |
+| --- | --- | --- | --- | --- | --- |
+| `drums-tight` (locked, all 6 timelines) | 314 | 5.5 s | — | **0 (0.0%)** | **21.5 s** |
+| `ensemble-wide`, the 4 locked instances | 206 | 7.3 s | 8.7 s | 2 (1.0%) | 57.4 s |
+| `ensemble-wide`, the 1 operated instance (anchor) | 188 | 10.7 s | 13.9 s | 17 (9.0%) | 71.1 s |
+| `room-wide` (locked, Mercies) | 5 | 7.5 s | 7.4 s | 0 (0.0%) | 12.9 s |
+| `soloist-moving` | 242 | 14.4 s | 24.6 s | 58 (24.0%) | 238.9 s |
+
+Rates exclude Monkfish, whose uncut passages would swamp them; its drum shots
+are counted in the 314 and its longest is 13.7 s.
+
+**No drummer shot anywhere in this corpus reaches 22 seconds.** 314 shots, six
+timelines, four rooms, four years, zero exceptions — the hardest boundary the
+corpus has produced, and a usable rule rather than a tendency.
+
+The sharpest evidence sits *inside* one role. `ensemble-wide` appears five
+times; the anchor's instance is operated and the other four are locked. The
+operated one puts 9.0% of its shots past 30 s, the locked ones 1.0%. Same role
+name, same framing, opposite behaviour — and operation is the only thing that
+differs. A locked shot has given everything it has within a few seconds; an
+operated camera renews itself by moving, which is exactly the director's
+reason, arrived at from the other end.
+
 Two limits worth keeping attached to that:
 
 - **It is a claim about the shape of the rig, not about intent.** The operated
   camera is the one that can follow anything, so it is also the one an editor
   can stay on. That may be why it holds the cut, and this corpus cannot say.
-- **It is still not the subject claim.** Whether the operated camera is chosen
-  because it is *on the soloist* rests on entry 2 alone, where frame grabs
-  actually show what it points at. Entries 3 and 5 were stated, not seen: their
-  sidecars record `subject` as inferred, and they are excluded from any claim
-  that turns on it. A stated label is enough to say a camera moves; it is not
-  enough to say what it was following.
+- **The subject question is answered, but as a principle rather than a
+  measurement.** The director's account (2026-08-07) is that the moving camera
+  generally follows the soloist *and* roams the band for interesting movement —
+  soloist-primary, not soloist-only, by design. That is `[stated principle]`
+  in the profile, corroborated by entry 2's frame grabs, and it is a different
+  and in some ways better kind of evidence than three projects of inferred
+  labels would have been. What remains unmeasurable is per-shot subject: no
+  analysis in this corpus can see who is on screen, so no claim should ever
+  rest on attributing a *particular* shot.

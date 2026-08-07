@@ -10,13 +10,12 @@
       "role": "soloist-moving",
       "subject": "soloist",
       "character": "moving",
-      "note": "The moving camera, and the tighter of the two. The home angle of this cut: 182 cuts, 74.3% of screen time.",
-      "confidence": "medium",
-      "stated_by_director": "angle 1 is the moving camera, tighter",
-      "inferred": [
-        "subject"
-      ],
-      "inference_basis": "The director stated how this camera behaves, not what it follows. 'soloist' is carried over from the entry-2 rig, where the operated camera was verified against frame grabs to follow whoever is playing. Nothing here was looked at, so any claim that turns on the subject must not count this angle as evidence - only claims about framing and operation may."
+      "note": "The moving camera, and the tighter of the two. The home angle of this cut: 182 cuts, 74.3% of screen time, and 41 of those shots run past 30 seconds against the wide's 1.",
+      "confidence": "high",
+      "subject_is_primary_not_exclusive": true,
+      "stated_by_director": "angle 1 is the moving camera, tighter; and separately, that the moving camera generally follows the soloist but also roams the band for interesting movement",
+      "inferred": [],
+      "inference_basis": "Both axes are now stated rather than inferred. The subject is soloist-PRIMARY: the director's account is that this camera goes to whoever is soloing and also moves around the band for visual interest, so a given shot may be on anyone. Claims about this angle's subject should be read as 'mostly the soloist, by design not always', and nothing here supports a per-shot subject - no frames from this night have been looked at."
     },
     "unmixed board audio Multicam - Angle 2": {
       "role": "ensemble-wide",
@@ -34,7 +33,8 @@
   "mapping_basis": {
     "what_is_known": "Which multicam angle number is which camera, stated by the director on 2026-08-07, plus each camera's framing and whether it is operated.",
     "why_it_needed_the_director": "This project has no render and no accessible source frames, so neither the read-the-render method (entry 2) nor the frame-grab method (entry 1) could be used. Resolve's API gives the angle name and nothing about what is behind it.",
-    "what_is_not_known": "What the moving camera actually points at, moment to moment. That is the one thing frame grabs give and a sentence cannot.",
+    "what_is_not_known": "What the moving camera points at in any particular shot. The director has since given its habit - soloist first, roaming for interest - which is enough for role-level claims and not enough to attribute any single shot. That per-shot answer is the one thing frame grabs give and a sentence cannot.",
+    "why_this_rig_is_unusual": "It is the only labelled rig in the corpus with no drummer camera, so its locked camera is a wide. The director's rationale for the usual arrangement - spend the locked camera on the drums, the rhythm section's most watchable instrument, so the operated camera is free for the soloist - explains both the norm and this exception.",
     "scope": "This project only."
   }
 }

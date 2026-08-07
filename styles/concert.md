@@ -84,6 +84,13 @@ that the grid is a live band's grid, so it moves.
   this one on purpose: its mean is 22.5 s against a 6.3 s median, but three
   fifths of that timeline is passages nobody has cut yet, so its skew is a fact
   about how far the edit got rather than about how the director holds a shot.
+- **The skew has an address: it is the operated camera.** Splitting the same
+  shots by role, the locked cameras are nearly symmetric (drums 5.5 s median
+  against a 6.6 s mean) while the operated ones carry the whole tail
+  (`soloist-moving` 14.4 s median against a 24.6 s mean). The long holds in the
+  bullet above are not scattered across the cut — every one of them is on a
+  camera somebody was running. See §4.
+  `[measured — 3 projects, n=847 shots, concert]`
 - Duration distributions conditioned on section type and energy band. *Open;
   the conditioning needs the structure analysis, which has not been run over
   the corpus.*
@@ -120,12 +127,44 @@ that the grid is a live band's grid, so it moves.
   `[measured — 3 projects, n=847 shots, concert]` (`corpus.md`, "What the
   labels settled") — Monkfish agrees but its share is excluded as ever; it is
   the home angle there by cut count too.
-- **Whether the operated camera is followed because it is on the soloist is a
-  separate question, and still one project.** Entry 2 is the only place anyone
-  has looked at what the moving camera points at; entries 3 and 5 were labelled
-  by description, so their sidecars mark `subject` as inferred and they are
-  excluded here. Moving is measured, on-the-soloist is not.
-  `[believed, unverified]` — entry 2 only.
+- **The moving camera serves two masters: the soloist, and visual interest.**
+  It generally goes to whoever is soloing, but it also roams — different angles
+  on the band, movement within the shot — because that is where interesting
+  shots come from. Its subject is soloist-*primary*, not soloist-only, and that
+  is a design choice rather than a lapse.
+  `[stated principle]` (director, 2026-08-07) — corroborated on entry 2, the one
+  night whose frame grabs show the camera on tenor, on piano hands, and wide on
+  tenor-and-bass at different moments.
+- **The locked camera is spent on the drums so the operated one is free.** With
+  two or three cameras, the fixed angle goes to the drums because the drums are
+  the rhythm section's most watchable instrument — which buys the operated
+  camera permission to stay with the soloist and to roam.
+  `[stated principle]` (director, 2026-08-07). The corpus fits and names the
+  exception: three of four rigs put the locked camera on the kit, and the
+  fourth (entry 3) has no drum camera at all, so its locked camera is a wide.
+- **An operated camera can hold; a locked one cannot.** Shot length splits on
+  operation, hard:
+
+  | Role | n | median | >30 s | longest |
+  | --- | --- | --- | --- | --- |
+  | `drums-tight` (locked) | 314 | 5.5 s | **0 (0.0%)** | **21.5 s** |
+  | `ensemble-wide`, locked instances | 206 | 7.3 s | 2 (1.0%) | 57.4 s |
+  | `ensemble-wide`, the one operated instance (anchor) | 188 | 10.7 s | 17 (9.0%) | 71.1 s |
+  | `soloist-moving` | 242 | 14.4 s | 58 (24.0%) | 238.9 s |
+
+  **No drummer shot anywhere in the corpus reaches 22 seconds** — 314 shots,
+  six timelines, four years, no exceptions. The mechanism is the director's:
+  a locked shot has given everything it has within a few seconds, while an
+  operated camera renews itself by moving. The cleanest evidence is *within*
+  one role — the anchor's operated `ensemble-wide` behaves like the moving
+  cameras (9.0% past 30 s) while the four locked `ensemble-wide`s behave like
+  drum cams (1.0%). Same role name, opposite behaviour, and operation is what
+  differs.
+  `[measured — 3 projects, n=847 shots, concert]` (Monkfish excluded from the
+  rates; its drum shots are counted in the 314 and its longest is 13.7 s.)
+  *Caveat: in this corpus the operated camera is always also the home angle, so
+  "operated" and "home" cannot be separated. What is separable, and separated
+  above, is framing.*
 - **The second angle is cut to, not lived on — whatever it is pointing at.**
   Near-equal cut counts, a fraction of the hold: anchor drums 178 cuts for
   31.5%, Freefall 13 for 10.1%, Sunshine 10 for 6.7%, Mercies 5 for 4.0%,
@@ -134,7 +173,9 @@ that the grid is a live band's grid, so it moves.
   is a property of being the other angle.
   `[measured — 3 projects, n=1080 shots, concert]` — the shape is what
   generalised here; that it is usually the *drummer* being cut to is a fact
-  about the rig, and one night in the corpus had no drum camera at all.
+  about the rig, and one night in the corpus had no drum camera at all. The
+  hard version of this is the 22-second ceiling below: the second angle is not
+  merely held less on average, it is **never** held long.
 - **A second wide is a garnish, not a role.** Mercies is the only timeline with
   one (`room-wide`, from a seat rather than of the stage): 5 cuts, 5.2%.
   `[believed, unverified]` — one timeline.
@@ -214,11 +255,18 @@ Free prose, first-class.
   identical — same cuts, same offsets, same shot lengths, same shares under new
   names. A label is supposed to add names and nothing else, and re-running was
   cheaper than trusting that it had.
-- **One tie the corpus broke, and one it did not.** Two labels arriving from a
-  sentence settled a question five timelines of measurement could not: the home
-  angle is the operated camera, not the wide, because entry 3 is the only rig
-  whose fixed camera is a wide and so the only place the two readings disagree.
-  The neighbouring question — whether that camera holds the cut *because* it is
-  on the soloist — did not move at all, since a description says a camera moves
-  but not what it was following. Worth remembering which kind of gap a
-  conversation can close.
+- **One tie the corpus broke, and one a conversation did.** Two labels arriving
+  from a sentence settled a question five timelines of measurement could not:
+  the home angle is the operated camera, not the wide, because entry 3 is the
+  only rig whose fixed camera is a wide and so the only place the two readings
+  disagree. The neighbouring question — *why* — could not be measured at all,
+  and was simply answered: the locked camera is spent on the drums so the
+  operated one is free for the soloist and free to roam. Worth remembering
+  which kind of gap each source closes, because they are not interchangeable.
+- **The best result of this pass came from testing what the director said
+  rather than recording it.** His account predicts that an operated camera can
+  sustain a shot and a locked one cannot — so the shots were split by role, and
+  no drum shot in 314 reaches 22 seconds while the moving camera runs to 238.
+  The prediction was not obvious in advance and it held at the extreme, which
+  is worth more than the agreement of averages. Ask why, then check whether the
+  why leaves a mark.

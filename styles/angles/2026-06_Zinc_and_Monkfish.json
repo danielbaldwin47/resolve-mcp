@@ -35,18 +35,17 @@
       "subject": "soloist",
       "character": "moving",
       "note": "The moving camera. The home angle of this cut by both measures - 125 cuts and 89.3% of screen time - though the share is not usable as taste: three fifths of this timeline is passages nobody has cut yet, and they sit on this angle.",
-      "confidence": "medium",
-      "stated_by_director": "angle 1 is the moving camera",
-      "inferred": [
-        "subject"
-      ],
-      "inference_basis": "The director stated behaviour, not subject. 'soloist' is carried over from the entry-2 rig where the operated camera was verified by frame grab; nothing on this night was looked at. Claims that turn on what the camera follows must not count this angle."
+      "confidence": "high",
+      "subject_is_primary_not_exclusive": true,
+      "stated_by_director": "angle 1 is the moving camera; and separately, that the moving camera generally follows the soloist but also roams the band for interesting movement",
+      "inferred": [],
+      "inference_basis": "Both axes are now stated rather than inferred. The subject is soloist-PRIMARY by design: the director's account is that this camera goes to whoever is soloing and also moves around the band for visual interest. Enough for role-level claims; not enough to attribute any single shot, since no frames from this night have been looked at."
     },
     "Monkfish Multicam - Video 2": {
       "role": "drums-tight",
       "subject": "drums",
       "character": "tight",
-      "note": "Fixed drum camera. 108 cuts for 10.7% of the time - near-equal cut counts to the home angle on a tenth of the screen time, the same frequent-and-short shape the drummer cam has at Zinc and at Judson's.",
+      "note": "Fixed drum camera. 108 cuts for 10.7% of the time, and not one of those shots reaches 14 seconds - the frequent-and-short shape every drum cam in the corpus has. The director's rationale: the locked camera is spent on the drums, the rhythm section's most watchable instrument, which frees the operated camera for the soloist.",
       "confidence": "medium",
       "stated_by_director": "angle 2 is the fixed drum angle",
       "inferred": [
