@@ -7,9 +7,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from .core import AnswersNone
+from .media import IMAGE_SUFFIXES, STILL_DEFAULT_FRAMES
 
 if TYPE_CHECKING:
     from .connection import FakeResolve
+    from .media import FakeMediaPoolItem
     from .timeline_item import FakeTimelineItem
 
 
@@ -340,3 +342,26 @@ class FakeTimeline(AnswersNone):
             return
         track.items.append(item)
         track.items.sort(key=lambda placed: placed.GetStart())
+
+
+def _appended_duration(clip: FakeMediaPoolItem, source_start: int, end_frame: Any) -> int:
+    """``endFrame - startFrame``, except on a still that has never had an out point written.
+
+    That is the (a) spike verbatim: a freshly imported still ignores ``endFrame`` entirely
+    and lands at the default duration until any ``Out`` write unlocks it.
+    """
+    still = Path(str(clip.GetClipProperty("File Path") or "")).suffix.lower() in IMAGE_SUFFIXES
+    unlocked = any(key == "Out" for key, _ in clip.property_writes)
+    if still and not unlocked:
+        return STILL_DEFAULT_FRAMES
+    if end_frame is None:
+        return STILL_DEFAULT_FRAMES if still else 1
+    return max(int(end_frame) - source_start, 1)
+
+
+def _track_end(timeline: FakeTimeline, track_type: str, index: int) -> int:
+    ends = [
+        item.GetStart() + item.GetDuration()
+        for item in timeline.GetItemListInTrack(track_type, index) or []
+    ]
+    return max(ends, default=timeline.GetStartFrame())

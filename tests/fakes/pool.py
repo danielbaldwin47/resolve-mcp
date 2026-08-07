@@ -6,15 +6,8 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from .media import (
-    AUDIO_TYPE,
-    FakeFolder,
-    _appended_duration,
-    _import_one,
-    _track_end,
-    text_plus_template,
-)
-from .timeline import FakeTimeline, FakeTrack
+from .media import AUDIO_TYPE, FakeFolder, _import_one, text_plus_template
+from .timeline import FakeTimeline, FakeTrack, _appended_duration, _track_end
 from .timeline_item import FakeTimelineItem
 
 if TYPE_CHECKING:

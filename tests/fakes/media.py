@@ -10,7 +10,6 @@ from .fusion import FakeFusionComp, FakeFusionTool
 
 if TYPE_CHECKING:
     from .connection import FakeResolve
-    from .timeline import FakeTimeline
 
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".exr", ".dpx", ".tga"}
@@ -138,29 +137,6 @@ class FakeFolder:
 
 AUDIO_TYPE = 2
 STILL_DEFAULT_FRAMES = 120
-
-
-def _appended_duration(clip: FakeMediaPoolItem, source_start: int, end_frame: Any) -> int:
-    """``endFrame - startFrame``, except on a still that has never had an out point written.
-
-    That is the (a) spike verbatim: a freshly imported still ignores ``endFrame`` entirely
-    and lands at the default duration until any ``Out`` write unlocks it.
-    """
-    still = Path(str(clip.GetClipProperty("File Path") or "")).suffix.lower() in IMAGE_SUFFIXES
-    unlocked = any(key == "Out" for key, _ in clip.property_writes)
-    if still and not unlocked:
-        return STILL_DEFAULT_FRAMES
-    if end_frame is None:
-        return STILL_DEFAULT_FRAMES if still else 1
-    return max(int(end_frame) - source_start, 1)
-
-
-def _track_end(timeline: FakeTimeline, track_type: str, index: int) -> int:
-    ends = [
-        item.GetStart() + item.GetDuration()
-        for item in timeline.GetItemListInTrack(track_type, index) or []
-    ]
-    return max(ends, default=timeline.GetStartFrame())
 
 
 def _import_one(item: str | dict[str, Any]) -> FakeMediaPoolItem | None:

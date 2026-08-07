@@ -18,7 +18,8 @@ test needs to know which module a fake lives in. Open one module, not the packag
 - ``core`` — ``DroppedHandleError``, ``AnswersNone``; the primitives everything else builds on
 - ``fusion`` — comps, tools, splines
 - ``timeline_item`` — one clip on a track
-- ``timeline`` — timelines, tracks, the ``TrackSpec`` shorthand
+- ``timeline`` — timelines, tracks, the ``TrackSpec`` shorthand, and the frame arithmetic an
+  append lands on
 - ``media`` — clips, bins, and the helpers that build clips from paths
 - ``pool`` — ``FakeMediaPool`` and the ``media_pool()`` builder
 - ``project`` — projects, render jobs, presets, settings
@@ -27,10 +28,18 @@ test needs to know which module a fake lives in. Open one module, not the packag
 - ``fixtures`` — real media files on disk, and the ffmpeg runners
 - ``builders`` — composed scenarios (``studio()``, ``sync_reference()``, ``with_a_mix()``)
 
-``core`` and ``fixtures`` import nothing from their siblings, and the runtime import graph over
-the rest is acyclic — which is what keeps a package importable where a single file could not
-care. The graph only stays that way because references that exist solely in annotations go
-under ``if TYPE_CHECKING``; move one out of that block and you can reintroduce a cycle.
+Two rules keep the package importable — neither mattered while this was one file, and both
+break loudly if ignored:
+
+- **The runtime import graph is acyclic.** ``core`` and ``fixtures`` import nothing from their
+  siblings; every other module imports only from modules that do not import it back. It stays
+  acyclic only because references that exist *solely* in annotations sit under
+  ``if TYPE_CHECKING``. Move one out of that block and you can reintroduce a cycle.
+- **A leading underscore means package-internal, not module-private.** ``_import_one``,
+  ``_appended_duration`` and ``_track_end`` are imported by a sibling on purpose; the
+  underscore says only that ``__init__`` does not re-export them, so no test may reach them.
+  The public surface here is exactly what this module re-exports, and it matches what the
+  single ``fakes.py`` file exposed before the split.
 """
 
 from __future__ import annotations

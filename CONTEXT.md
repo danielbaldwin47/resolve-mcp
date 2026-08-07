@@ -107,7 +107,8 @@ module, not the package, and never the whole package at once:
 - `fusion.py` — `FakeSpline`, `FakeFusionInput`, `FakeFusionTool`,
   `FakeFusionComp`
 - `timeline_item.py` — `FakeTimelineItem`
-- `timeline.py` — `FakeTrack`, `FakeTimeline`, `TrackSpec`
+- `timeline.py` — `FakeTrack`, `FakeTimeline`, `TrackSpec`, and the frame
+  arithmetic an append lands on
 - `media.py` — `FakeMediaPoolItem`, `FakeFolder`, `text_plus_template`, and
   the helpers that build clips from paths
 - `pool.py` — `FakeMediaPool`, `media_pool()`
