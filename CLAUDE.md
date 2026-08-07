@@ -126,6 +126,23 @@ big files; do not re-read a file after editing it. The hooks in
 `.claude/hooks/` enforce the cat/tail rules and whole-file re-reads — a block
 from them is the rule firing, not an obstacle to route around.
 
+The same scratch-file rule covers `gh`: issue bodies, comment threads, and
+PR diffs are the biggest single results observed in past sessions (a
+`gh issue view --comments` dump is ~6k tokens, a `gh pr diff` more). Write
+them to a scratch file (`gh issue view <n> --json body -q .body >
+issue.scratch.log`) and Grep back the section you need; never dump a full
+diff or comment thread into the session to read once.
+
+**Orient from `CONTEXT.md`, not exploration.** The repo map there answers
+"which module owns X, where is the seam, which test file covers Y" — read
+it before spawning an Explore agent, and scope any explore to what the map
+can't hold (exact signatures, current behaviour). A PR that adds, moves,
+or deletes a module updates the map in the same PR.
+
+Long multi-PR sweeps (merge trains, cross-PR audits) shard per-PR into
+subagents; the orchestrating session keeps receipts, not diffs — past
+sweeps that inlined everything ended at 2× the usable context budget.
+
 ## Agent skills
 
 ### Issue tracker
@@ -140,5 +157,5 @@ The five canonical triage roles, each label string equal to its role name. See `
 
 ### Domain docs
 
-Single-context — one `CONTEXT.md` (created lazily; may not exist yet) and
-`docs/adr/` at the repo root. See `docs/agents/domain.md`.
+Single-context — `CONTEXT.md` (repo map + vocabulary) and `docs/adr/` at
+the repo root. See `docs/agents/domain.md`.
