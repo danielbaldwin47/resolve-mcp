@@ -28,6 +28,16 @@ timelines. The server measures; Claude decides.
   default) vs `-m live` against a running Resolve Studio. See CLAUDE.md.
 - **stem** — separated audio (mix → vocals/drums/bass/other; drums →
   kick/snare/toms), path is a content hash (ADR 0003).
+- **style layer** — `styles/` at the repo root: layered Markdown style
+  profiles (`base.md` + `concert.md`), the corpus record (`corpus.md`) and
+  per-project angle sidecars (`angles/*.json`). Agent-authored,
+  director-editable, and **never touched by server code** — see
+  `docs/agents/style-layer.md`, guarded by `tests/test_style_layer.py`.
+- **provenance tag** — what every style claim ends with, saying how well it is
+  known: `[measured: …, n=…]`, `[believed, unverified]`, `[director]`.
+- **angle sidecar** — one JSON file per Resolve project labelling each camera
+  by subject × character; `role` is the only key `correlate_timeline` reads,
+  and it arrives as a mapping the agent lifted, never as a path.
 
 ## Module map — `src/resolve_mcp/`
 
@@ -93,6 +103,9 @@ project + dry run).
 and calls `mcp.tool(fn)` — nothing binds to FastMCP at import, so every
 tool is callable in tests without the transport.
 
+There is no `styles/` module and there never will be: the style layer is data
+the agent owns, not code the server runs.
+
 `video/` — `ffmpeg` (the two commands video routes run), `frames` (frame
 grabs — the one compute route that is not a job), `jpeg` (read back
 dimensions), `scenes` (scene-cut detection as cached job), `source` (clip
@@ -140,5 +153,6 @@ Test files pair 1:1 with the module they cover (`test_cut_validate.py` ↔
   analysis models are injected; 0003 stems fingerprinted (path is a
   content hash).
 - `docs/agents/` — issue-tracker conventions (wayfinder map ops), triage
-  labels, domain-docs usage.
+  labels, domain-docs usage, the style layer (sidecar + profile formats,
+  provenance tags, how a corpus pass is run).
 - Wayfinder: map = issue #1, scope = #2, spec = #22, build tickets #23–#47.
