@@ -4,7 +4,7 @@
   "labelled": "2026-08-06 (Zinc), 2026-08-07 (Monkfish)",
   "method": "Zinc: frame grabs off the multicam's source clips, read by the agent, then confirmed. Monkfish: stated by the director, nothing looked at.",
   "confirmed_by_director": "2026-08-07",
-  "note": "Two nights in one project: Zinc - Set 2 (corpus entry 1) and Monkfish Main (entry 5), each with its own multicam and its own angle numbers. The numbers do not carry across - Video 1 is the wide at Zinc and the moving camera at Monkfish - so both nights are labelled separately here.",
+  "note": "Two nights in one project: Zinc - Set 2 (corpus entry 1) and Monkfish Main (entry 5), each with its own multicam and its own angle numbers. Both nights happen to put the operated camera on Video 1 and the drums on Video 2, but Video 1 is a wide at Zinc and a moving camera at Monkfish - the angle number does not carry the framing, which is why both nights are labelled separately rather than once.",
   "angles": {
     "Zinc - Set 2 Multicam - Video 1": {
       "role": "ensemble-wide",

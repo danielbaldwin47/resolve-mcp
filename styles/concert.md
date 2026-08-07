@@ -146,8 +146,10 @@ that the grid is a live band's grid, so it moves.
   the corpus runs exactly that: the anchor runs two cameras with the *wide*
   operated and the drummer cam locked; entry 2 runs three (and four on Mercies,
   with a second wide from a seat); entry 3 runs two with **no drummer camera at
-  all**; entry 5 runs two the reverse way round from the anchor — in the same
-  project. Read a night's sidecar; never assume the rig.
+  all**; and entry 5, in the same project as the anchor five months earlier,
+  puts a *moving* camera where the anchor puts a wide — same angle number, same
+  role in the cut, different framing. Read a night's sidecar; never assume the
+  rig.
   `[measured — 3 projects, n=6 timelines, concert]`
 
 ## 5. Event-reactive moves

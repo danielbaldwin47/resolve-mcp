@@ -258,9 +258,16 @@ Three things worth carrying forward:
 two angles, **labelled by the director on 2026-08-07** — same project as the
 anchor but a different venue five months earlier, and no render, so the mapping
 was neither carried over from the Zinc sidecar nor guessed. Video 1 is the
-moving camera, Video 2 the fixed drum angle: **the reverse of Zinc's numbering
-in the same project**, which is the concrete reason the sidecar labels the two
-nights separately. Alignment is the cleanest of any entry:
+moving camera, Video 2 the fixed drum angle.
+
+Both nights in this project happen to put the operated camera on Video 1 and
+the drums on Video 2, so the *numbering* did survive the five months — but
+**Video 1 is a wide at Zinc and a moving camera at Monkfish**, which is the
+thing the number cannot tell you and the reason the sidecar labels the two
+nights separately rather than once. Guessing from the anchor would have got the
+home angle right here and its framing wrong.
+
+Alignment is the cleanest of any entry:
 `audio_clip`, matched, against `140111-061037.WAV` on A1 with its zero exactly
 at the timeline's first frame. Nothing had to be named or transcoded.
 
