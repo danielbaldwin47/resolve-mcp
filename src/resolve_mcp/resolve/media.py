@@ -1,6 +1,6 @@
 """Media pool wrappers: import, list, inspect, metadata, bins, relink.
 
-Thin, testable, and MCP-free like the rest of this layer. Four things here are decisions
+Thin, testable, and MCP-free like the rest of this layer. Five things here are decisions
 rather than API calls, and are the reason this file exists at all:
 
 * **Bin paths are slash-separated from the media pool root** (``"Concert/Angles"``), the
@@ -19,6 +19,18 @@ rather than API calls, and are the reason this file exists at all:
 * **Image media gets the still-duration workaround at import.** A one-time
   ``SetClipProperty("Out", …)`` is what makes ``endFrame`` respected on stills later; doing
   it at import means no timeline code ever has to remember.
+* **A no-bin import gets a suggested bin, never an enforced one** (#57). The layout:
+  ``[<Gig>/]01_Timelines``, ``02_Footage/<Camera>`` (B-Roll alongside; angle-description
+  bins allowed when camera metadata is unreadable), ``03_Audio``, ``04_Assets`` (with
+  ``Text/<Song>`` for title assets). The ``<Gig>`` level exists only when a project holds
+  more than one gig, and only the agent can know the gig, so that prefix arrives as an
+  explicit bin. Numbered categories use underscores; gig and song bins use human
+  formatting; clips live in leaf bins. Angle identity is two-layer: bins encode source
+  role (camera, roll class) while the angle sidecars (#13) stay canonical for descriptive
+  semantics — a bin move is an address change (cut files update per the alternates spec)
+  and sidecars keyed on clip name persist. Existing projects are adaptive: the agent reads
+  and follows the structure it finds; the template is for empty ground; nothing is ever
+  reorganized unasked.
 """
 
 from __future__ import annotations
@@ -51,6 +63,17 @@ log = get_logger("media")
 BIN_SEPARATOR = "/"
 DEFAULT_LIST_LIMIT = 200
 IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".tif", ".tiff", ".exr", ".dpx", ".tga"})
+AUDIO_SUFFIXES = frozenset({".aac", ".aif", ".aiff", ".flac", ".m4a", ".mp3", ".ogg", ".wav"})
+GRAPHIC_SUFFIXES = frozenset({".ai", ".eps", ".psd", ".svg"})
+FOOTAGE_BIN = "02_Footage"
+AUDIO_BIN = "03_Audio"
+ASSETS_BIN = "04_Assets"
+# Camera fields in priority order, each consulted in the clip's properties then its
+# metadata. Live-verified on real FX6 XAVC (2026-08-07, Resolve Studio, #94): the model
+# lives in "Camera TC Type" ("ILME-FX6V") while "Camera Type" holds the manufacturer
+# ("Sony"), so the model key must win or every camera bins as its make. An unreadable
+# camera falls back to the bare footage bin rather than guessing.
+CAMERA_KEYS = ("Camera TC Type", "Camera Type")
 SEQUENCE_TOKEN = "%"
 # Resolve paths an imported image sequence by folding the index range into the name —
 # shot_[0001-0024].png — a label, not a file (#85, Resolve Studio 21.0.3.7).
@@ -458,30 +481,152 @@ def import_media(
     bin_path: str | None = None,
     sequences: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Import media into ``bin_path``, creating the bin if needed."""
+    """Import media into ``bin_path``, creating the bin if needed.
+
+    With no ``bin_path`` at all, every item gets a bin suggested by media type — the
+    module docstring's fifth decision (#57). An explicit bin, the root included, bypasses
+    suggestion entirely.
+    """
     pool = media_pool(connection)
     items = _requests(paths, sequences)
+    if bin_path is None:
+        return _import_suggested(pool, items)
     target = ensure_bin(pool, bin_path)
     imported = import_into(pool, items, target)
 
     summaries: list[dict[str, Any]] = []
     landed: set[str] = set()
     for clip in imported:
-        reported = properties(clip)
-        landed.add(reported.get(FILE_PATH, ""))
-        landed.add(str(clip.GetName() or ""))
-        summary = summarise(target.path, clip, reported)
-        summary["still_duration_workaround"] = apply_still_workaround(clip, reported)
-        summaries.append(summary)
+        summaries.append(_clip_summary(clip, properties(clip), target.path, "explicit", landed))
 
+    refused = _refused_or_fail(items, imported, landed, summaries)
+    log.info("Imported %d clip(s) into %r", len(summaries), target.path or "the root")
+    return {"bin": target.path, "imported": summaries, "not_imported": refused}
+
+
+def _import_suggested(pool: Pool, items: list[str | dict[str, Any]]) -> dict[str, Any]:
+    """Import with no bin argument: each item is suggested a bin by media type (#57).
+
+    Suggestion paths are category-from-root; the optional ``<Gig>/`` prefix is the agent's
+    to supply via an explicit bin, because the server cannot know the gig. Suggestion is
+    never enforcement — nothing here refuses a path for being off-convention; an explicit
+    bin simply never reaches this function.
+    """
+    groups: dict[str, list[str | dict[str, Any]]] = {}
+    for item in items:
+        groups.setdefault(_suggested_bin(item), []).append(item)
+
+    summaries: list[dict[str, Any]] = []
+    imported: list[Clip] = []
+    landed: set[str] = set()
+    for category, group in groups.items():
+        target = ensure_bin(pool, category)
+        arrived = import_into(pool, group, target)
+        imported.extend(arrived)
+        for clip in arrived:
+            reported = properties(clip)
+            placed = _placed(pool, clip, reported, target)
+            summaries.append(_clip_summary(clip, reported, placed.path, placed.source, landed))
+
+    refused = _refused_or_fail(items, imported, landed, summaries)
+    bins = sorted({str(summary["bin"]) for summary in summaries})
+    log.info("Imported %d clip(s) into suggested bin(s) %s", len(summaries), ", ".join(bins))
+    return {"bins": bins, "imported": summaries, "not_imported": refused}
+
+
+def _suggested_bin(item: str | dict[str, Any]) -> str:
+    """Which #57 category an import request belongs to, judged before the import.
+
+    Suffix, not the ``Type`` property, for the same reason as :func:`is_still`: Resolve
+    types a sequence and a movie both ``Video``. A sequence request (a dict) is image
+    frames by construction.
+    """
+    if isinstance(item, dict):
+        return ASSETS_BIN
+    if _looks_like_image(item):
+        return ASSETS_BIN
+    suffix = Path(item).suffix.lower()
+    if suffix in GRAPHIC_SUFFIXES:
+        return ASSETS_BIN
+    if suffix in AUDIO_SUFFIXES:
+        return AUDIO_BIN
+    return FOOTAGE_BIN
+
+
+def _camera_model(clip: Clip, reported: dict[str, str]) -> str | None:
+    """The camera model the clip reports, sanitised for bin use, or ``None``.
+
+    Read after import — the model is embedded data Resolve surfaces, nothing the file
+    path could carry. Key priority outranks dict priority: a model found anywhere beats a
+    manufacturer found anywhere (see ``CAMERA_KEYS``), with the spec's clip properties
+    consulted before metadata for each key. A slash in a model name would read as a bin
+    separator, so it is folded to a dash.
+    """
+    metadata = clip.GetMetadata()
+    dicts = [reported, metadata if isinstance(metadata, dict) else {}]
+    for key in CAMERA_KEYS:
+        for source in dicts:
+            value = str(source.get(key) or "").strip()
+            if value:
+                return value.replace(BIN_SEPARATOR, "-")
+    return None
+
+
+class Placement(NamedTuple):
+    """Where a suggested-mode clip ended up, and what the suggestion drew on."""
+
+    path: str
+    source: str
+
+
+def _placed(pool: Pool, clip: Clip, reported: dict[str, str], target: LocatedBin) -> Placement:
+    """Place one suggested clip: footage gets a second hop into its camera leaf.
+
+    Footage is the one category whose final bin can only be known after import, once the
+    clip's properties and metadata are readable.
+    """
+    if target.path != FOOTAGE_BIN:
+        return Placement(target.path, "media_type")
+    model = _camera_model(clip, reported)
+    if model is None:
+        return Placement(target.path, "fallback")
+    leaf = ensure_bin(pool, f"{FOOTAGE_BIN}{BIN_SEPARATOR}{model}")
+    if not pool.MoveClips([clip], leaf.folder):
+        name = str(clip.GetName() or "")
+        log.warning("Camera bin move refused for %r; leaving it in %r", name, target.path)
+        return Placement(target.path, "fallback")
+    return Placement(leaf.path, "camera_metadata")
+
+
+def _clip_summary(
+    clip: Clip,
+    reported: dict[str, str],
+    bin_used: str,
+    source: str,
+    landed: set[str],
+) -> dict[str, Any]:
+    """One imported clip's envelope line: the summary, the bin, and how the bin was chosen."""
+    landed.add(reported.get(FILE_PATH, ""))
+    landed.add(str(clip.GetName() or ""))
+    summary = summarise(bin_used, clip, reported)
+    summary["still_duration_workaround"] = apply_still_workaround(clip, reported)
+    summary["bin_source"] = source
+    return summary
+
+
+def _refused_or_fail(
+    items: list[str | dict[str, Any]],
+    imported: list[Clip],
+    landed: set[str],
+    summaries: list[dict[str, Any]],
+) -> list[str]:
     refused = _not_imported(items, imported, landed)
     if not summaries:
         raise ImportFailedError(
             cause=f"Resolve imported none of the {len(items)} path(s) requested.",
             detail={"not_imported": refused},
         )
-    log.info("Imported %d clip(s) into %r", len(summaries), target.path or "the root")
-    return {"bin": target.path, "imported": summaries, "not_imported": refused}
+    return refused
 
 
 def _not_imported(

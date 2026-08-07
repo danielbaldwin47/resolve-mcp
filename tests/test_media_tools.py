@@ -15,7 +15,7 @@ from resolve_mcp.tools.media import (
 )
 
 from .conftest import Attach
-from .fakes import FakeMediaPoolItem, media_pool, studio
+from .fakes import FakeFolder, FakeMediaPool, FakeMediaPoolItem, media_pool, studio
 
 AUDIO_MAPPING = json.dumps(
     {
@@ -144,7 +144,7 @@ def test_import_applies_the_still_duration_workaround_to_image_media(
 
     assert result["ok"] is True
     assert result["imported"][0]["still_duration_workaround"] is True
-    clip = pool.GetRootFolder().GetClipList()[0]
+    clip = bin_named(pool, "04_Assets").GetClipList()[0]
     assert clip.property_writes == [("Out", "0")]
 
 
@@ -155,7 +155,7 @@ def test_import_does_not_touch_the_out_point_of_a_video(attach: Attach, tmp_path
     result = import_media(paths=[str(a_file(tmp_path, "C0012.mp4"))])
 
     assert result["imported"][0]["still_duration_workaround"] is False
-    assert pool.GetRootFolder().GetClipList()[0].property_writes == []
+    assert bin_named(pool, "02_Footage").GetClipList()[0].property_writes == []
 
 
 def test_import_reports_the_paths_resolve_refused_and_keeps_the_rest(
@@ -212,6 +212,161 @@ def test_import_restores_the_folder_that_was_current_before_it(
     assert import_media(paths=[str(a_file(tmp_path, "C0012.mp4"))], bin="Angles")["ok"] is True
 
     assert pool.GetCurrentFolder() is before
+
+
+# --- import: suggested bins (#94) ------------------------------------------------------
+
+
+def bin_named(pool: FakeMediaPool, path: str) -> FakeFolder:
+    """Walk a slash path down from the root, or fail the test that asked."""
+    folder = pool.GetRootFolder()
+    for segment in path.split("/"):
+        matches = [sub for sub in folder.GetSubFolderList() if sub.GetName() == segment]
+        assert matches, f"no bin {segment!r} under {folder.GetName()!r}"
+        folder = matches[0]
+    return folder
+
+
+def test_no_bin_import_suggests_a_bin_per_media_type(attach: Attach, tmp_path: Path) -> None:
+    """One call, three media types: each lands in its #57 category, created on demand."""
+    video = a_file(tmp_path, "C0012.mp4")
+    audio = a_file(tmp_path, "mix.wav")
+    still = a_file(tmp_path, "poster.png")
+    pool = media_pool()
+    attach(studio(pool=pool))
+
+    result = import_media(paths=[str(video), str(audio), str(still)])
+
+    assert result["ok"] is True
+    assert result["bins"] == ["02_Footage", "03_Audio", "04_Assets"]
+    placed = {clip["name"]: (clip["bin"], clip["bin_source"]) for clip in result["imported"]}
+    assert placed == {
+        "C0012.mp4": ("02_Footage", "fallback"),
+        "mix.wav": ("03_Audio", "media_type"),
+        "poster.png": ("04_Assets", "media_type"),
+    }
+    assert [clip.GetName() for clip in bin_named(pool, "02_Footage").GetClipList()] == ["C0012.mp4"]
+    assert [clip.GetName() for clip in bin_named(pool, "03_Audio").GetClipList()] == ["mix.wav"]
+    assert [clip.GetName() for clip in bin_named(pool, "04_Assets").GetClipList()] == ["poster.png"]
+
+
+def test_no_bin_video_lands_in_a_camera_bin_read_from_metadata(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The camera leaf exists only after import: the model is clip metadata, not the path."""
+    video = a_file(tmp_path, "C0012.mp4")
+    clip = FakeMediaPoolItem("C0012.mp4", str(video), metadata={"Camera TC Type": "ILME-FX6V"})
+    pool = media_pool()
+    pool.import_result = [clip]
+    attach(studio(pool=pool))
+
+    result = import_media(paths=[str(video)])
+
+    assert result["ok"] is True
+    assert result["bins"] == ["02_Footage/ILME-FX6V"]
+    assert result["imported"][0]["bin"] == "02_Footage/ILME-FX6V"
+    assert result["imported"][0]["bin_source"] == "camera_metadata"
+    leaf = bin_named(pool, "02_Footage/ILME-FX6V")
+    assert [found.GetName() for found in leaf.GetClipList()] == ["C0012.mp4"]
+
+
+def test_no_bin_sequence_is_suggested_into_assets(attach: Attach, tmp_path: Path) -> None:
+    for index in range(1, 4):
+        a_file(tmp_path, f"seq/shot_{index:04d}.png")
+    pool = media_pool()
+    attach(studio(pool=pool))
+
+    result = import_media(
+        sequences=[
+            {"path": str(tmp_path / "seq" / "shot_%04d.png"), "start_index": 1, "end_index": 3}
+        ]
+    )
+
+    assert result["ok"] is True
+    assert result["imported"][0]["bin"] == "04_Assets"
+    assert result["imported"][0]["bin_source"] == "media_type"
+
+
+def test_no_bin_graphics_are_suggested_into_assets(attach: Attach, tmp_path: Path) -> None:
+    """Graphics ride with stills in #57: a .psd is an asset, not footage."""
+    graphic = a_file(tmp_path, "lower-third.psd")
+    attach(studio(pool=media_pool()))
+
+    result = import_media(paths=[str(graphic)])
+
+    assert result["ok"] is True
+    assert result["imported"][0]["bin"] == "04_Assets"
+    assert result["imported"][0]["bin_source"] == "media_type"
+
+
+def test_a_camera_model_in_clip_properties_also_lands_the_leaf(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The spec words the source as clip properties; metadata is the second look."""
+    video = a_file(tmp_path, "C0500.mp4")
+    clip = FakeMediaPoolItem("C0500.mp4", str(video), properties={"Camera TC Type": "ILCE-7M4"})
+    pool = media_pool()
+    pool.import_result = [clip]
+    attach(studio(pool=pool))
+
+    result = import_media(paths=[str(video)])
+
+    assert result["imported"][0]["bin"] == "02_Footage/ILCE-7M4"
+    assert result["imported"][0]["bin_source"] == "camera_metadata"
+
+
+def test_the_model_key_beats_the_manufacturer_key(attach: Attach, tmp_path: Path) -> None:
+    """Real FX6 media fills both: "Camera TC Type" holds the model, "Camera Type" only
+    the make (live probe, 2026-08-07) — the make must never name the bin when the model
+    is readable, or every Sony camera collapses into one 02_Footage/Sony."""
+    video = a_file(tmp_path, "A016C008_260618GD.MXF")
+    clip = FakeMediaPoolItem(
+        "A016C008_260618GD.MXF",
+        str(video),
+        properties={"Camera TC Type": "ILME-FX6V", "Camera Type": "Sony"},
+        metadata={"Camera TC Type": "ILME-FX6V", "Camera Type": "Sony"},
+    )
+    pool = media_pool()
+    pool.import_result = [clip]
+    attach(studio(pool=pool))
+
+    result = import_media(paths=[str(video)])
+
+    assert result["imported"][0]["bin"] == "02_Footage/ILME-FX6V"
+    assert result["imported"][0]["bin_source"] == "camera_metadata"
+
+
+def test_an_explicit_bin_bypasses_suggestion_entirely(attach: Attach, tmp_path: Path) -> None:
+    """No path is ever refused for being off-convention: bin= wins, even for audio."""
+    audio = a_file(tmp_path, "mix.wav")
+    pool = media_pool()
+    attach(studio(pool=pool))
+
+    result = import_media(paths=[str(audio)], bin="Anywhere/At All")
+
+    assert result["ok"] is True
+    assert result["bin"] == "Anywhere/At All"
+    assert result["imported"][0]["bin"] == "Anywhere/At All"
+    assert result["imported"][0]["bin_source"] == "explicit"
+    assert "bins" not in result
+
+
+def test_a_refused_camera_move_falls_back_to_the_footage_bin(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """A camera model that cannot land its leaf is a fallback, not a lie in the envelope."""
+    video = a_file(tmp_path, "C0012.mp4")
+    clip = FakeMediaPoolItem("C0012.mp4", str(video), metadata={"Camera TC Type": "ILME-FX6V"})
+    pool = media_pool()
+    pool.import_result = [clip]
+    pool.move_result = False
+    attach(studio(pool=pool))
+
+    result = import_media(paths=[str(video)])
+
+    assert result["ok"] is True
+    assert result["imported"][0]["bin"] == "02_Footage"
+    assert result["imported"][0]["bin_source"] == "fallback"
 
 
 # --- list ------------------------------------------------------------------------------
