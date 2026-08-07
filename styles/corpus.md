@@ -299,6 +299,48 @@ Two notes:
 - The transient median (41 ms) is the highest in the corpus and still inside
   two frames. Six timelines now span 17–41 ms.
 
+## What the gate settled: half these grids never described a bar (#112)
+
+All six timelines re-scored with the rubato/confidence gate on. The gate refuses
+a beat on either of two independent grounds: a bar position its own meter cannot
+hold, or an interval that does not match the tempo around it. Cuts landing on a
+refused beat stay in the records, marked `in_grid: false`, and are counted out of
+the bar and beat-offset statistics only — the transient numbers are computed over
+every cut and are untouched by any of this.
+
+| Timeline | Meter | Cuts measured | Gated | Bar histogram, gate on | Beats 1–2 |
+| --- | --- | --- | --- | --- | --- |
+| Anchor (Zinc Set 2) | **1** | 360 | 360 (100%) | — | — |
+| Sunshine | **1** | 49 | 49 (100%) | — | — |
+| Mercies | **1** | 37 | 37 (100%) | — | — |
+| Scullers | 4 | 326 | 108 (33.1%) | 1:128, 2:40, 3:27, 4:23 | 77.1% |
+| Freefall | 4 | 43 | 8 (18.6%) | 1:15, 2:14, 3:2, 4:4 | 82.9% |
+| Monkfish | 4 | 228 | 26 (11.4%) | 1:80, 2:49, 3:34, 4:39 | 63.9% |
+
+Three notes:
+
+- **Three of the six grids report `meter: 1`** — the detector marked every beat
+  a downbeat, so those grids never described a bar position at all. They are
+  refused whole rather than filtered against their own meter: keeping only the
+  beats at position 1 would leave a histogram reading 100% beat one *by
+  construction*, which would look like the strongest evidence in the corpus for
+  precisely the effect under test. Every 78–84% figure recorded above came from
+  these three timelines, and none of it was ever evidence.
+- **The three surviving grids do not agree.** 63.9%, 77.1% and 82.9% on beats
+  1–2, all above the 50% an indifferent director gives, so the direction
+  replicates across every timeline that can speak. The magnitude does not: 19
+  points of spread, and gating moved each timeline by under 4 points. The
+  disagreement was never the rubato — it is between timelines, and the gate
+  removed the out-of-time stretches without narrowing the gap.
+- **The #45 artefact hypothesis is half-retired.** The prediction was that
+  broken grids skew harder; those grids now produce no histogram at all, so the
+  comparison cannot be made. Among the survivors the pattern still leans the
+  wrong way — Monkfish, the largest sample at 228 cuts, remains the flattest.
+
+Recomputed from the cut records and beat grids already in the analysis cache
+using the shipped `beats.trust`, not re-read out of Resolve: the cut times and
+bar positions are the ones #45 wrote, and only the gating arithmetic is new.
+
 ## What the labels settled: operation, not framing
 
 With entries 3 and 5 labelled, all six measured timelines have roles, and one

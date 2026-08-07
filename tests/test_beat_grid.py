@@ -8,6 +8,7 @@ start on the one, so neither assumption is allowed to go unchecked.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
@@ -113,3 +114,89 @@ def test_a_structured_failure_from_a_detector_is_passed_through_unchanged() -> N
 
     with pytest.raises(AnalysisDependencyError):
         beats.detect(Path("concert.wav"), missing)
+
+
+# --- how far the grid may be trusted (#112) ---------------------------------------------------
+
+
+def _rubato(steady: int = 12, free: Sequence[float] = (0.9, 1.4, 0.7, 1.3)) -> BeatGrid:
+    """A grid that keeps time and then stops keeping it — a ballad head after an in-time tune."""
+    times = [round(index * 0.5, 6) for index in range(steady)]
+    for interval in free:
+        times.append(round(times[-1] + interval, 6))
+    return BeatGrid(beats=tuple(times), downbeats=tuple(times[::4]))
+
+
+def test_a_grid_that_keeps_time_in_four_is_trusted_end_to_end() -> None:
+    """The gate has to be inert on the timelines whose grids are already sound."""
+    found = beats.trust(beats.numbered(_steady(13)))
+
+    assert found.meter == 4
+    assert all(found.trusted)
+    assert found.reasons == {}
+
+
+def test_a_bar_position_the_meter_cannot_hold_is_not_trusted() -> None:
+    """A bar 6 in a grid whose bars are fours is the grid refuting itself — #112 AC3."""
+    grid = BeatGrid(
+        beats=tuple(round(index * 0.5, 6) for index in range(17)),
+        downbeats=(0.0, 3.0, 5.0, 7.0),
+    )
+
+    found = beats.trust(beats.numbered(grid))
+
+    assert found.meter == 4
+    # The opening bar runs to six beats, so its fifth and sixth are positions 4/4 cannot hold.
+    assert found.trusted[:6] == (True, True, True, True, False, False)
+    assert found.trusted[6:10] == (True, True, True, True)
+    assert found.reasons == {"bar_position": 2}
+
+
+def test_beats_either_side_of_an_out_of_time_stretch_are_not_trusted() -> None:
+    """Rubato carries perfectly legal bar positions, so only the timing gives it away."""
+    found = beats.trust(beats.numbered(_rubato()))
+
+    assert found.trusted[:10] == (True,) * 10
+    assert not all(found.trusted[11:])
+    assert found.reasons.get("tempo", 0) > 0
+
+
+def test_a_steady_grid_that_changes_tempo_once_is_not_gated_wholesale() -> None:
+    """A set has tunes at different tempos; only the change itself is untrustworthy, not both."""
+    slow = [round(index * 0.5, 6) for index in range(12)]
+    fast = [round(slow[-1] + (index + 1) * 0.35, 6) for index in range(12)]
+    grid = BeatGrid(beats=tuple(slow + fast), downbeats=tuple((slow + fast)[::4]))
+
+    found = beats.trust(beats.numbered(grid))
+
+    assert all(found.trusted[:9])
+    assert all(found.trusted[-9:])
+
+
+def test_a_grid_too_short_to_judge_is_left_alone_rather_than_gated_blind() -> None:
+    """Two beats give one interval and no local reference; refusing them all would invent a gate."""
+    found = beats.trust(beats.numbered(BeatGrid(beats=(0.0, 0.5), downbeats=(0.0,))))
+
+    assert all(found.trusted)
+
+
+def test_a_grid_that_calls_every_beat_a_downbeat_describes_no_bar_position_at_all() -> None:
+    """The anchor's failure: `meter: 1` over a jazz set, every beat marked as starting a bar.
+
+    Filtering such a grid against its own meter would keep exactly the beats at position one
+    and throw the rest away, leaving a histogram that is 100% beat one by construction. That
+    is not a gate finding a skew, it is a gate manufacturing one, so the grid is refused whole.
+    """
+    times = tuple(round(index * 0.5, 6) for index in range(16))
+    found = beats.trust(beats.numbered(BeatGrid(beats=times, downbeats=times)))
+
+    assert found.meter == 1
+    assert not any(found.trusted)
+    assert found.reasons["bar_position"] == 16
+
+
+def test_an_empty_grid_has_nothing_to_trust_and_no_meter() -> None:
+    found = beats.trust(beats.numbered(BeatGrid((), ())))
+
+    assert found.trusted == ()
+    assert found.meter is None

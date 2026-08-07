@@ -46,16 +46,31 @@ that the grid is a live band's grid, so it moves.
   wrong where those cuts are — and it is the same grid the other 96% were
   scored against.
 
-  There is now a reason to think the skew is partly the detector rather than
-  the director. Two timelines have structurally sound grids (Freefall and
-  Monkfish: strictly 1–4, `meter: 4`) and they are the flattest — Monkfish puts
-  67% on beats 1–2 where every broken-grid timeline puts 78–81%. The
-  measurement gets *less* dramatic exactly where the instrument gets more
-  trustworthy, which is the wrong direction for a real finding. Rubato gating
-  comes first (**#112**), and until it lands a consistent-looking histogram is
-  the most misleading thing in this file, because it looks like evidence. #112
-  is written to close either way: "the skew did not survive gating" retires
-  this item just as well as a measured claim would.*
+  **Gated (#112). Half the corpus turned out to have no bar positions at all,
+  and the number did not survive.** Three of the six grids — the anchor,
+  Sunshine and Mercies — report `meter: 1`: the detector marked every beat a
+  downbeat, so those grids never described a bar position in the first place.
+  All three are now refused whole rather than filtered, because keeping only
+  their position-1 beats would leave a histogram that is 100% beat one by
+  construction and would read as the strongest evidence in the file for the
+  very thing under test. Every one of the 78–84% figures quoted above came
+  from those three timelines. They are not weak evidence; they are not
+  evidence.
+
+  Three grids survive gating with a real meter of 4, and they do not agree:
+  Freefall 82.9% on beats 1–2 (8 of 43 cuts gated), Scullers 77.1% (108 of
+  326), Monkfish 63.9% (26 of 228). All three sit above the 50% an
+  indifferent director would produce, so the *direction* is real and
+  replicates. The magnitude does not: 19 points separate the three, gating
+  moved each by under 4 points, and the largest sample is the flattest. The
+  disagreement was never the rubato — it is between timelines, and the gate
+  removed the stretches without closing the gap.
+
+  So: cuts do favour the front of the bar, and no number describes by how
+  much. A conditioned beat-position pattern stays **open** — but no longer
+  blocked, since the instrument now says when it cannot be trusted.
+  `[measured — 3 projects, n=455 cuts surviving the gate, concert; direction
+  only, no magnitude]`*
 
 ## 2. Energy — the master concept
 
