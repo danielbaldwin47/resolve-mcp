@@ -68,11 +68,12 @@ GRAPHIC_SUFFIXES = frozenset({".ai", ".eps", ".psd", ".svg"})
 FOOTAGE_BIN = "02_Footage"
 AUDIO_BIN = "03_Audio"
 ASSETS_BIN = "04_Assets"
-# The field Resolve fills with the recording device's model name, consulted in the clip's
-# properties first, then its metadata. One key on purpose: which fields real cards
-# populate is a live question (#94 live smoke), and an unreadable camera falls back to
-# the bare footage bin rather than guessing.
-CAMERA_KEYS = ("Camera Type",)
+# Camera fields in priority order, each consulted in the clip's properties then its
+# metadata. Live-verified on real FX6 XAVC (2026-08-07, Resolve Studio, #94): the model
+# lives in "Camera TC Type" ("ILME-FX6V") while "Camera Type" holds the manufacturer
+# ("Sony"), so the model key must win or every camera bins as its make. An unreadable
+# camera falls back to the bare footage bin rather than guessing.
+CAMERA_KEYS = ("Camera TC Type", "Camera Type")
 SEQUENCE_TOKEN = "%"
 # Resolve paths an imported image sequence by folding the index range into the name —
 # shot_[0001-0024].png — a label, not a file (#85, Resolve Studio 21.0.3.7).
@@ -556,14 +557,15 @@ def _camera_model(clip: Clip, reported: dict[str, str]) -> str | None:
     """The camera model the clip reports, sanitised for bin use, or ``None``.
 
     Read after import — the model is embedded data Resolve surfaces, nothing the file
-    path could carry. Properties are consulted before metadata because the spec words the
-    source as clip properties; which dict real cards populate is the #94 live question.
-    A slash in a model name would read as a bin separator, so it is folded to a dash.
+    path could carry. Key priority outranks dict priority: a model found anywhere beats a
+    manufacturer found anywhere (see ``CAMERA_KEYS``), with the spec's clip properties
+    consulted before metadata for each key. A slash in a model name would read as a bin
+    separator, so it is folded to a dash.
     """
     metadata = clip.GetMetadata()
     dicts = [reported, metadata if isinstance(metadata, dict) else {}]
-    for source in dicts:
-        for key in CAMERA_KEYS:
+    for key in CAMERA_KEYS:
+        for source in dicts:
             value = str(source.get(key) or "").strip()
             if value:
                 return value.replace(BIN_SEPARATOR, "-")

@@ -255,7 +255,7 @@ def test_no_bin_video_lands_in_a_camera_bin_read_from_metadata(
 ) -> None:
     """The camera leaf exists only after import: the model is clip metadata, not the path."""
     video = a_file(tmp_path, "C0012.mp4")
-    clip = FakeMediaPoolItem("C0012.mp4", str(video), metadata={"Camera Type": "ILME-FX6V"})
+    clip = FakeMediaPoolItem("C0012.mp4", str(video), metadata={"Camera TC Type": "ILME-FX6V"})
     pool = media_pool()
     pool.import_result = [clip]
     attach(studio(pool=pool))
@@ -304,7 +304,7 @@ def test_a_camera_model_in_clip_properties_also_lands_the_leaf(
 ) -> None:
     """The spec words the source as clip properties; metadata is the second look."""
     video = a_file(tmp_path, "C0500.mp4")
-    clip = FakeMediaPoolItem("C0500.mp4", str(video), properties={"Camera Type": "ILCE-7M4"})
+    clip = FakeMediaPoolItem("C0500.mp4", str(video), properties={"Camera TC Type": "ILCE-7M4"})
     pool = media_pool()
     pool.import_result = [clip]
     attach(studio(pool=pool))
@@ -312,6 +312,27 @@ def test_a_camera_model_in_clip_properties_also_lands_the_leaf(
     result = import_media(paths=[str(video)])
 
     assert result["imported"][0]["bin"] == "02_Footage/ILCE-7M4"
+    assert result["imported"][0]["bin_source"] == "camera_metadata"
+
+
+def test_the_model_key_beats_the_manufacturer_key(attach: Attach, tmp_path: Path) -> None:
+    """Real FX6 media fills both: "Camera TC Type" holds the model, "Camera Type" only
+    the make (live probe, 2026-08-07) — the make must never name the bin when the model
+    is readable, or every Sony camera collapses into one 02_Footage/Sony."""
+    video = a_file(tmp_path, "A016C008_260618GD.MXF")
+    clip = FakeMediaPoolItem(
+        "A016C008_260618GD.MXF",
+        str(video),
+        properties={"Camera TC Type": "ILME-FX6V", "Camera Type": "Sony"},
+        metadata={"Camera TC Type": "ILME-FX6V", "Camera Type": "Sony"},
+    )
+    pool = media_pool()
+    pool.import_result = [clip]
+    attach(studio(pool=pool))
+
+    result = import_media(paths=[str(video)])
+
+    assert result["imported"][0]["bin"] == "02_Footage/ILME-FX6V"
     assert result["imported"][0]["bin_source"] == "camera_metadata"
 
 
@@ -335,7 +356,7 @@ def test_a_refused_camera_move_falls_back_to_the_footage_bin(
 ) -> None:
     """A camera model that cannot land its leaf is a fallback, not a lie in the envelope."""
     video = a_file(tmp_path, "C0012.mp4")
-    clip = FakeMediaPoolItem("C0012.mp4", str(video), metadata={"Camera Type": "ILME-FX6V"})
+    clip = FakeMediaPoolItem("C0012.mp4", str(video), metadata={"Camera TC Type": "ILME-FX6V"})
     pool = media_pool()
     pool.import_result = [clip]
     pool.move_result = False
