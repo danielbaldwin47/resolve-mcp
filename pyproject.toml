@@ -46,7 +46,8 @@ dev = [
 # librosa -> numba. Without this, `uv sync` resolves numpy 2.5 and PANNs inference dies at import
 # while the whole fake tier stays green, because ADR 0002 injects the models rather than depending
 # on them. Constrained here rather than in [project.dependencies] so the cap governs this
-# environment without shipping in the published metadata: the server itself is fine on numpy 2.5.
+# environment without shipping in the published metadata: nothing the server itself imports has
+# this ceiling, only the injected analysis stack does.
 # numba 0.66.0 is the latest stable as of 2026-08; when 0.67 ships stable it likely lifts the
 # ceiling and this block can go.
 constraint-dependencies = ["numpy<2.5"]
