@@ -318,6 +318,42 @@ def test_a_dissolve_is_not_a_shot(attach: Attach, tmp_path: Path) -> None:
     assert result["cuts"] == 3
 
 
+def test_a_dissolve_that_starts_on_the_cut_takes_no_shot_with_it(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The other dissolve shape: aligned to the incoming shot rather than centred on the cut.
+
+    Live on corpus entry 2 (#45) both shapes appear in one timeline. This one abuts the
+    outgoing shot instead of overlapping it, so an adjacency rule keeps the dissolve — and
+    then drops the real shot behind it, which does overlap. The count stays right and the
+    cut is silently a different cut: a swap is worse than a miscount, because nothing about
+    the totals looks wrong.
+    """
+    timeline = FakeTimeline(
+        "sunset-set v3",
+        FPS,
+        start_frame=100,
+        video=[
+            FakeTrack(
+                "Video 1",
+                [
+                    _shot(*SHOTS[0]),
+                    _dissolve(start=162, duration=14),
+                    _shot(*SHOTS[1]),
+                    _shot(*SHOTS[2]),
+                ],
+            )
+        ],
+        audio=[FakeTrack("Master", [_shot("master_mix.wav", 100, 200, 0)])],
+    )
+    attach(studio(timeline=timeline))
+
+    result = _measured(tmp_path)
+
+    assert [one["clip"] for one in _rows(result)] == ["C0012.mp4", "C0031.mp4", "C0012.mp4"]
+    assert result["cuts"] == 3
+
+
 def test_a_generator_on_the_cut_track_is_still_a_shot(attach: Attach, tmp_path: Path) -> None:
     """The transition test is overlap, not the absence of a pool item — a generator has none."""
     slate = FakeTimelineItem("Solid Color", 299, 30, source_start=0)
@@ -327,6 +363,38 @@ def test_a_generator_on_the_cut_track_is_still_a_shot(attach: Attach, tmp_path: 
 
     assert [one["clip"] for one in _rows(result)][-1] == "Solid Color"
     assert result["cuts"] == 4
+
+
+def test_a_dissolve_into_a_generator_does_not_eat_the_generator(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Neither item has a pool item, so 'overlaps a real shot' cannot separate them.
+
+    What separates them is that a generator holds its stretch of track exclusively and a
+    transition does not — so the test is overlap with anything else, not with media.
+    """
+    timeline = FakeTimeline(
+        "sunset-set v3",
+        FPS,
+        start_frame=100,
+        video=[
+            FakeTrack(
+                "Video 1",
+                [
+                    _shot(*SHOTS[0]),
+                    _shot(*SHOTS[1]),
+                    _dissolve(start=299, duration=14),
+                    FakeTimelineItem("Solid Color", 299, 30, source_start=0),
+                ],
+            )
+        ],
+        audio=[FakeTrack("Master", [_shot("master_mix.wav", 100, 200, 0)])],
+    )
+    attach(studio(timeline=timeline))
+
+    result = _measured(tmp_path)
+
+    assert [one["clip"] for one in _rows(result)] == ["C0012.mp4", "C0031.mp4", "Solid Color"]
 
 
 def test_each_multicam_angle_is_its_own_clip(attach: Attach, tmp_path: Path) -> None:
@@ -473,6 +541,41 @@ def test_an_unrecognised_mix_still_measures_but_says_the_clock_was_assumed(
 
     assert result["alignment"]["audio"] == "master_mix.wav"
     assert result["alignment"]["matched"] is False
+
+
+def test_saying_where_the_mix_starts_beats_reading_it_off_a_clip_that_is_not_it(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The analysed mix is not always on the timeline at all, and then no clip can be read.
+
+    Corpus entry 2 (#45): the music reaches the cut through the multicam's own audio angle,
+    so A1 carries the multicam, whose in point is in the multicam's timebase and says
+    nothing about where the mastered mix begins. Every mode here would be guessing — and a
+    guess 15 seconds out turns a cut on the beat into a cut nowhere near one, while the
+    reading still looks perfectly ordinary. So the caller can name the frame instead, which
+    a render of the timeline makes exactly knowable.
+    """
+    attach(
+        studio(
+            timeline=FakeTimeline(
+                "judsons",
+                FPS,
+                start_frame=100,
+                video=[FakeTrack("Video 1", [_shot(*shot) for shot in SHOTS])],
+                audio=[FakeTrack("A1", [_shot("Sunshine Multicam - Angle 3", 100, 200, 500)])],
+            )
+        )
+    )
+
+    result = _measured(tmp_path, audio_at=100)
+
+    assert result["alignment"] == {
+        "mode": "given",
+        "audio": "master_mix.wav",
+        "matched": True,
+        "zero_frame": 100,
+    }
+    assert _rows(result)[1]["t"] == 1.033
 
 
 def test_a_mix_with_a_start_timecode_is_not_read_an_hour_late(

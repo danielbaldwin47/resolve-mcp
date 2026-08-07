@@ -1,0 +1,101 @@
+{
+  "project": "Archive/Client/Ryan and Hang Main - 9-23-24 gene edit",
+  "context": "concert",
+  "labelled": "2026-08-07",
+  "method": "frames taken from each timeline's finished render at moments a given angle is on screen",
+  "confirmed_by_director": false,
+  "note": "The Judson's quartet show: Freefall, Sunshine and Mercies. Angle numbers belong to each tune's own multicam and do not carry across tunes - Angle 10 is the drummer on Freefall and the roaming camera on Mercies. That is why every tune is labelled separately rather than once for the project.",
+  "renders": {
+    "note": "What the evidence times are times into. Each render's duration matches its timeline to within 0.02s - under a frame at 23.976 - so render second X is timeline frame 86400 + X*23.976.",
+    "Freefall Timeline": "B:\\Client Work\\Ryan Devlin\\Concert\\Judson's Orlando\\Renders\\Freefall\\Freefall YT.mp4",
+    "Sunshine Timeline": "B:\\Client Work\\Ryan Devlin\\Concert\\Judson's Orlando\\Renders\\Sunshine\\You Are My Sunshine YT.mp4",
+    "Mercies Timeline": "B:\\Client Work\\Ryan Devlin\\Concert\\Judson's Orlando\\Renders\\Mercies\\Mercies YT.mp4"
+  },
+  "angles": {
+    "Free fall Judson’s  Multicam - Angle 11": {
+      "role": "soloist-moving",
+      "subject": "soloist",
+      "character": "moving",
+      "note": "Operated camera from house right that follows whoever is playing - tenor tight at 303s, wider on tenor and bass at other moments. The home angle of this cut.",
+      "confidence": "high",
+      "evidence": ["render frame @ 302.8s", "render frame @ 430.3s"]
+    },
+    "Free fall Judson’s  Multicam - Angle 8": {
+      "role": "ensemble-wide",
+      "subject": "ensemble",
+      "character": "wide",
+      "note": "Locked full-stage wide from front of house: piano at house left, tenor centre, bass behind, drums at house right. Audience heads in the bottom of frame.",
+      "confidence": "high",
+      "evidence": ["render frame @ 165.2s"]
+    },
+    "Free fall Judson’s  Multicam - Angle 10": {
+      "role": "drums-tight",
+      "subject": "drums",
+      "character": "tight",
+      "note": "Behind and beside the kit at house right, drummer large in foreground with the band beyond him.",
+      "confidence": "high",
+      "evidence": ["render frame @ 23.8s", "render frame @ 53.8s"]
+    },
+    "Sunshine Multicam - Camera 9": {
+      "role": "soloist-moving",
+      "subject": "soloist",
+      "character": "moving",
+      "note": "The same roaming operated camera: piano hands tight at 47s, tenor and bass medium at 879s. The home angle of this cut.",
+      "confidence": "high",
+      "evidence": ["render frame @ 46.8s", "render frame @ 879.4s"]
+    },
+    "Sunshine Multicam - Camera A": {
+      "role": "ensemble-wide",
+      "subject": "ensemble",
+      "character": "wide",
+      "note": "Locked full-stage wide, clean of audience - flatter and squarer to the stage than the Freefall wide.",
+      "confidence": "high",
+      "evidence": ["render frame @ 436.3s"]
+    },
+    "Sunshine Multicam - Camera 4": {
+      "role": "drums-tight",
+      "subject": "drums",
+      "character": "tight",
+      "note": "Drummer cam at house right, same framing as the Freefall one.",
+      "confidence": "high",
+      "evidence": ["render frame @ 160.1s"]
+    },
+    "Mercies Multicam - Angle 10": {
+      "role": "soloist-moving",
+      "subject": "soloist",
+      "character": "moving",
+      "note": "The roaming operated camera again, on tenor. The home angle of this cut.",
+      "confidence": "high",
+      "evidence": ["render frame @ 92.0s"]
+    },
+    "Mercies Multicam - Angle 2": {
+      "role": "ensemble-wide",
+      "subject": "ensemble",
+      "character": "wide",
+      "note": "Locked full-stage wide, clean of audience.",
+      "confidence": "high",
+      "evidence": ["render frame @ 500.0s"]
+    },
+    "Mercies Multicam - Angle 4": {
+      "role": "room-wide",
+      "subject": "room",
+      "character": "wide",
+      "note": "A second wide, further back and lower, with audience silhouettes across the bottom of frame - the shot from a seat rather than the shot of the stage. Distinct from Angle 2, which is clean.",
+      "confidence": "high",
+      "evidence": ["render frame @ 609.7s"]
+    },
+    "Mercies Multicam - Angle 5": {
+      "role": "drums-tight",
+      "subject": "drums",
+      "character": "tight",
+      "note": "Drummer cam at house right.",
+      "confidence": "high",
+      "evidence": ["render frame @ 272.7s"]
+    }
+  },
+  "mapping_basis": {
+    "what_is_known": "Everything here. Each label was read off a frame of the finished render taken at a moment that angle is on screen, so the frame *is* the angle rather than evidence about it.",
+    "why_that_works": "Resolve exposes no angle-to-source mapping, so labelling from the multicam's source clips can only infer which source is which angle number - that is what the anchor needed a director's eye to settle. A full-timeline render removes the question: its duration matches the timeline to within 0.02s on all three tunes, so a timeline frame maps to a render frame directly, and the render shows the cut as cut.",
+    "what_is_still_open": "Nothing about the mapping. The role vocabulary itself is a judgement - 'soloist-moving' names a camera whose subject changes with the music, which is a different kind of thing from a locked-off drummer cam."
+  }
+}

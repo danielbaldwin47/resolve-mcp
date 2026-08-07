@@ -77,9 +77,8 @@ here as *one file per project, keyed to the project, kept out of the profile* �
 not as a file sitting beside the Resolve project on the media drive. A sidecar
 next to the footage is outside version control, and on an archived project it
 is on whichever drive that project was archived to; the labels are the agent's
-own document and their history is worth as much as the profiles'. If the
-director wants them beside the footage instead, only this path changes —
-nothing reads them but the agent.
+own document and their history is worth as much as the profiles'. **The
+director confirmed this reading on 2026-08-07** — sidecars stay in the repo.
 
 ```json
 {
@@ -108,9 +107,44 @@ nothing reads them but the agent.
   and the profile makes claims about each.
 - **`confidence`** and **`evidence`** are why a claim resting on this angle is
   thin or not: a `low` here is a reason a corpus claim downgrades.
-- **`confirmed_by_director`** — labelling is auto-labelled by Claude and
-  confirmed once by the director; reruns never re-ask (#13). Until that flip,
-  every claim resting on these labels is `[believed, unverified]`.
+- **`confirmed_by_director`** — `false` until confirmed, then the date it was
+  (`"2026-08-07"`). Labelling is auto-labelled by Claude and confirmed once;
+  reruns never re-ask (#13). Until that flip, every claim resting on these
+  labels is unverified in a second, sharper way than usual: not merely thin,
+  but possibly inverted.
+
+### Labelling a multicam: grab the render, not the sources
+
+Resolve exposes no angle→source mapping. `GetClipProperty("Angle")` comes back
+empty and a timeline item carries only the angle name, so labelling from the
+multicam's *source clips* can establish what each camera is and still not say
+which camera is `Video 1`. That gap is what made the anchor's sidecar need a
+director's eye, and the screen-time guess behind it (the home angle usually
+holds the most) was right once — which is one data point, not a method.
+
+**Where the timeline has a finished render, there is no gap.** Grab a frame of
+the render at a moment a given angle is on screen: the frame *is* that angle.
+Nothing is inferred, and `confirmed_by_director` is not needed to trust it.
+
+1. Read the shots (`correlate_timeline`'s reader, or the same walk) and group
+   them by angle name.
+2. For each angle take its longest shot or two, and the frame at the midpoint —
+   a midpoint is safely inside the shot even if a transition softens the edges.
+3. Convert to a render time: `(record_in - start_frame) / fps`. **Check the
+   render actually spans the timeline first** — compare its duration against
+   `(end_frame - start_frame) / fps`. On the three entry-2 tunes these agreed
+   to within 0.02 s, under a frame; a render of a section rather than the whole
+   timeline would not, and would put every label on the wrong angle.
+4. Read the frames and write the labels.
+
+Where there is no render — the anchor, and `Mike Tucker Scullers` — the gap is
+real and the director's eye is the only way to close it. Ask before the roles
+are used for anything, and note that timing claims need no labels at all: a
+timeline can be measured while its angles are still unlabelled.
+
+Angle *numbers* are per-multicam and do not carry across timelines even inside
+one project: on the Judson's show `Angle 10` is the drummer on one tune and the
+roaming camera on another. Label every timeline separately.
 
 An entry with no `role` is dropped by `correlate_timeline` rather than refused,
 so a half-labelled project still measures — its shots land under `unlabelled`.
@@ -155,10 +189,23 @@ Read **across** the corpus before claiming, not one project at a time: the
 number that matters is the distribution, and the tag a claim is entitled to is
 set by how many cuts and how many projects stand behind it.
 
-**`alignment.mode` decides whether a result is usable at all.** `audio_clip`
-means the times were read through the audio the analysis ran on;
-`timeline_start` means the timeline said nothing about where the mix sits and
-the times count from its own first frame instead. A whole file measured against
-the wrong zero looks exactly like a whole file measured against the right one,
-so a corpus pass records the mode per timeline and excludes `timeline_start`
-readings from every timing claim.
+**`alignment.mode` decides whether a result is usable at all.** A whole file
+measured against the wrong zero looks exactly like a whole file measured
+against the right one, so a corpus pass records the mode per timeline:
+
+- **`audio_clip` with `matched: true`** — the clip carrying the analysed audio
+  was found on the timeline. Trust it.
+- **`given`** — the caller named the frame. Trust it exactly as far as the
+  caller's reason: on entry 2 that reason is a render whose duration matches
+  its timeline to within a frame, which is checkable; a remembered number is
+  not the same thing.
+- **`audio_clip` with `matched: false`** — the times were taken off whichever
+  audio clip happened to be first. Excluded from timing claims.
+- **`timeline_start`** — the timeline said nothing at all. Excluded.
+
+Hand-edited concerts routinely need `given`, and it is worth knowing why before
+you reach for it: where the music arrives through a multicam's own audio angle,
+*no* clip on the timeline is the mix, and the in point that can be read belongs
+to the multicam's timebase. Measured against the entry-2 timelines' own A1 the
+error would have been 15 s on one tune and 40 s on another — invisible in the
+output, and enough to move every cut to a different beat.

@@ -170,6 +170,7 @@ def correlate_timeline(
     solos: str | None = None,
     angles: dict[str, Any] | None = None,
     track: int = FIRST_TRACK,
+    audio_at: Any | None = None,
     refresh: bool = False,
 ) -> dict[str, Any]:
     """Measure a cut against the music it was cut to. Returns a job to poll, not the measurement.
@@ -187,6 +188,13 @@ def correlate_timeline(
     just {"C0012.mp4": "drums"} — you keep the sidecar, you read it, you pass what it says.
     Each of these is optional, and each one absent means that column reads null rather than
     a guess.
+
+    The audio is normally located by finding it on the timeline. When it is not there at all
+    — a multicam carries its own audio angle, and the mix itself was never laid down —
+    audio_at names the timeline frame the analysed audio starts at, dual time as everywhere.
+    A render of the whole timeline starts at its first frame, which is how that is knowable.
+    Check alignment in the result: mode "given" is what you asked for, and mode "audio_clip"
+    with matched false means the times were taken off a clip nobody vouched for.
 
     timeline names the cut, defaulting to the open one; track is the video track it sits on.
     The result names a JSON file of one record per shot — grep it, or read a slice with sed
@@ -208,6 +216,7 @@ def correlate_timeline(
             solos=solos,
             angles=angles,
             track=track,
+            audio_at=audio_at,
             refresh=refresh,
         )
     }

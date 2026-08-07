@@ -48,7 +48,7 @@ from ..resolve.session import frame_rate
 from ..resolve.timeline import (
     FIRST_TRACK,
     Reader,
-    angle_name,
+    angle_of,
     clip_name,
     find_timeline,
     fingerprint,
@@ -59,7 +59,7 @@ from ..resolve.timeline import (
     source_bounds,
     start_frame,
 )
-from ..timing import SECONDS_PRECISION, dual_time
+from ..timing import SECONDS_PRECISION, dual_time, to_frames
 from . import decode, energy, records
 from .beats import nearest
 
@@ -73,6 +73,9 @@ INLINE_CUTS = 12
 UNLABELLED = "unlabelled"
 """Where shots from a clip the angle sidecar does not name are counted."""
 
+GIVEN = "given"
+"""The alignment mode where the caller named the frame rather than the server reading it."""
+
 Onsets = Callable[[Path], tuple[float, ...]]
 """The transient seam: a WAV in, onset times in seconds out."""
 
@@ -83,10 +86,15 @@ class Shot(NamedTuple):
     clip: str
     record_in: int
     duration: int
+    media: bool = True
+    """Whether Resolve gave it a media pool item — false for transitions and generators."""
 
     @property
     def record_out(self) -> int:
         return self.record_in + self.duration
+
+    def overlaps(self, other: Shot) -> bool:
+        return self.record_in < other.record_out and other.record_in < self.record_out
 
 
 class Clock(NamedTuple):
@@ -131,6 +139,7 @@ def correlate_timeline(
     solos: str | None = None,
     angles: Mapping[str, Any] | None = None,
     track: int = FIRST_TRACK,
+    audio_at: Any | None = None,
     refresh: bool = False,
     onsets: Onsets | None = None,
     config: Config | None = None,
@@ -145,16 +154,20 @@ def correlate_timeline(
     the agent's document (#45 — no server path reads or writes it), so the labels arrive
     already lifted out of it.
 
+    ``audio_at`` is the timeline frame the analysed audio's own zero sits at, for when no
+    clip on the timeline carries it and so none can be read.
+
     ``onsets`` is the transient seam; the default decodes the audio for real.
     """
     config = config or get_config()
     roles = _roles(angles)
     music = _music(beats, audio, tunes, solos, roles)
-    shots, clock, print_, name = _read_cut(connection, timeline, track, music.audio)
+    shots, clock, print_, name = _read_cut(connection, timeline, track, music.audio, audio_at)
 
     params: dict[str, Any] = {
         "timeline": name,
         "track": int(track),
+        "audio_at": clock.zero_frame if clock.mode == GIVEN else None,
         "beats": _named(beats),
         "audio": _named(audio),
         "tunes": _named(tunes),
@@ -216,6 +229,7 @@ def _read_cut(
     name: str | None,
     track: int,
     mix: Path | None = None,
+    at: Any | None = None,
 ) -> tuple[list[Shot], Clock, dict[str, Any], str]:
     """Everything Resolve has to answer for, taken before the job starts.
 
@@ -247,7 +261,8 @@ def _read_cut(
             ),
             detail={"timeline": found, "track": int(track)},
         )
-    clock = _clock(reader, timeline, fps, mix)
+    given = to_frames(at, fps, "audio_at")
+    clock = _clock(reader, timeline, fps, mix, given)
     return shots, clock, fingerprint(reader, timeline), found
 
 
@@ -264,9 +279,13 @@ def _shots(reader: Reader, timeline: Any, track: int) -> list[Shot]:
         if record_in is None or duration is None:
             log.warning("Skipped a shot on video track %d: Resolve gave no position", track)
             continue
-        name = angle_name(reader, item) or str(item.GetName() or "")
-        found.append(Shot(clip=name, record_in=record_in, duration=duration))
-    return _without_transitions(sorted(found, key=lambda shot: shot.record_in), track)
+        clip = reader.optional(item, "GetMediaPoolItem", None)
+        name = angle_of(reader, item, clip) or str(item.GetName() or "")
+        found.append(
+            Shot(clip=name, record_in=record_in, duration=duration, media=clip is not None)
+        )
+    ordered = sorted(found, key=lambda shot: (shot.record_in, not shot.media))
+    return _without_transitions(ordered, track)
 
 
 def _without_transitions(shots: Sequence[Shot], track: int) -> list[Shot]:
@@ -280,15 +299,34 @@ def _without_transitions(shots: Sequence[Shot], track: int) -> list[Shot]:
     distribution as a cut the editor did not make, and its length lands in the duration
     stats as a shot nobody held.
 
-    Two items cannot overlap on one video track, so overlapping the shot before it is what
-    a transition is and a shot is not. That is a fact about tracks rather than about any
+    Two items cannot overlap on one video track, so overlapping a real shot is what a
+    transition does and a shot cannot. That is a fact about tracks rather than about any
     getter, which is why it is the test rather than the absence of a media pool item — a
     generator has none of those either, and a generator on the cut track is a shot.
+
+    *Which* shot it overlaps is the part worth being careful about. Dissolves come in two
+    shapes and corpus entry 2 has both: centred on the cut, overlapping the outgoing shot,
+    and aligned to the incoming one, merely abutting the outgoing shot and overlapping only
+    what follows. Compared against its neighbour alone the second shape survives — and then
+    the real shot behind it is the thing that overlaps, so it is dropped instead. That swap
+    leaves the cut count right and the cut wrong, which is the worst way to be wrong. So
+    the comparison is against every *other* item on the track, not the one before.
+
+    Overlap alone is not quite the test, because a dissolve into a slate overlaps only the
+    slate and a slate has no pool item either — so "overlaps something real" cannot separate
+    them and "overlaps anything" throws both away. What separates them is that a shot holds
+    some stretch of track *exclusively* and a transition never does: every frame of a
+    dissolve is a frame some neighbour is also on. So a pool-less item is a transition when
+    the rest of the track already covers all of it, and a shot otherwise.
     """
     kept: list[Shot] = []
     dropped = 0
-    for shot in shots:
-        if kept and shot.record_in < kept[-1].record_out:
+    for index, shot in enumerate(shots):
+        others = [other for position, other in enumerate(shots) if position != index]
+        if not shot.media and _covered_by(shot, others):
+            dropped += 1
+            continue
+        if kept and shot.overlaps(kept[-1]):
             dropped += 1
             continue
         kept.append(shot)
@@ -299,8 +337,37 @@ def _without_transitions(shots: Sequence[Shot], track: int) -> list[Shot]:
     return kept
 
 
-def _clock(reader: Reader, timeline: Any, fps: float, mix: Path | None) -> Clock:
+def _covered_by(shot: Shot, others: Sequence[Shot]) -> bool:
+    """Is every frame of ``shot`` also held by something else on the track?
+
+    Walked rather than summed, because two neighbours that each cover half of a dissolve
+    cover all of it between them, and a gap anywhere means the item is holding track of its
+    own — which is the thing a transition never does.
+    """
+    frame = shot.record_in
+    while frame < shot.record_out:
+        reach = max(
+            (other.record_out for other in others if other.record_in <= frame < other.record_out),
+            default=None,
+        )
+        if reach is None:
+            return False
+        frame = reach
+    return True
+
+
+def _clock(
+    reader: Reader, timeline: Any, fps: float, mix: Path | None, given: int | None = None
+) -> Clock:
     """Where the analysed mix sits under the cut, read off the audio shot that holds it.
+
+    Unless the caller said. A hand-edited concert routinely reaches the cut through a
+    multicam's own audio angle, and then no clip on the timeline *is* the mastered mix —
+    the in point that can be read belongs to the multicam's timebase, which has no stated
+    relationship to the mix's own zero. Every mode below would be guessing, and a guess
+    here is invisible: the reading comes back looking ordinary, with every time in it
+    shifted by the same silent amount. So a caller who knows — a full-timeline render puts
+    the mix's zero exactly at the timeline's first frame — says so, and is believed.
 
     The mix is one continuous clip under the whole cut (#22: the cutting substrate), so its
     record position and its own in point together say which second of the analysis any
@@ -313,6 +380,9 @@ def _clock(reader: Reader, timeline: Any, fps: float, mix: Path | None) -> Clock
     was recognised or merely assumed — which is the difference between a reading to trust
     and one to check before writing a style profile from it.
     """
+    if given is not None:
+        return Clock(given, fps, GIVEN, mix.name if mix else None, mix is not None)
+
     found = _audio_shots(reader, timeline)
     wanted = _matching(found, mix)
     chosen = wanted or (found[0] if found else None)

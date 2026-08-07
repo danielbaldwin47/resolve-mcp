@@ -766,7 +766,11 @@ def source_bounds(
 
 def clip_name(reader: Reader, item: TimelineItem) -> str | None:
     """The media pool clip a shot came from — a generator or title has none."""
-    clip = reader.optional(item, "GetMediaPoolItem", None)
+    return _pool_name(reader, reader.optional(item, "GetMediaPoolItem", None))
+
+
+def _pool_name(reader: Reader, clip: Any) -> str | None:
+    """The pool clip's own name, for callers that already hold the clip."""
     if clip is None:
         return None
     name = reader.optional(clip, "GetName", None)
@@ -786,7 +790,16 @@ def angle_name(reader: Reader, item: TimelineItem) -> str | None:
     that is what a multicam shot answers. Everything else keeps the pool name, which
     survives a shot being renamed on the timeline.
     """
-    clip = reader.optional(item, "GetMediaPoolItem", None)
+    return angle_of(reader, item, reader.optional(item, "GetMediaPoolItem", None))
+
+
+def angle_of(reader: Reader, item: TimelineItem, clip: Any) -> str | None:
+    """:func:`angle_name` for a caller that already fetched the pool item.
+
+    Every getter here is a call across to Resolve, and the shot read is one pass over a
+    whole track — so a caller that needs the pool item for its own reasons hands it in
+    rather than making the same round trip twice more.
+    """
     if clip is None:
         return None
     kind = reader.optional(clip, "GetClipProperty", None, CLIP_TYPE)
@@ -794,4 +807,4 @@ def angle_name(reader: Reader, item: TimelineItem) -> str | None:
         angle = reader.optional(item, "GetName", None)
         if angle is not None:
             return str(angle)
-    return clip_name(reader, item)
+    return _pool_name(reader, clip)
