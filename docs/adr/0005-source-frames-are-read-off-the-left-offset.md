@@ -87,6 +87,12 @@ real retime and is believed.
   21.0.3.7, so a retimed shot cannot be created through the scripting API at all; only a
   human retiming in the GUI produces one. The branch is held by a fake alone, and the fake's
   numbers are reasoned from the measured exclusivity rather than measured directly.
+- The exclusivity itself is not left to the fakes, but it had to be asserted in the right
+  place. The live take-selector test now checks `source.out` on the shot *before* the swap,
+  where both getters read true and a wrapper that adds one to the end reports a 48-frame
+  shot covering 49 source frames. On the swapped shot the two defects cancel — the start
+  getter loses the frame the `+ 1` adds back — so asserting there would have passed either
+  way and proved nothing.
 - The slip's arithmetic is unexplained. It is not a cumulative timecode drift — it does not
   grow over 69001 frames — and pinning the exact function was not needed to stop trusting the
   getter. If a future build changes the bound, `SOURCE_SLIP` is the one number to re-measure.

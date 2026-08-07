@@ -735,7 +735,12 @@ def read_item(
 
 
 SOURCE_SLIP: Final = 1
-"""How far ``GetSourceStartFrame`` may sit below the truth — measured on 21.0.3.7, #120."""
+"""How far a source-frame getter may sit below the truth — measured on 21.0.3.7, #120.
+
+The same one frame bounds both comparisons in :func:`source_bounds`, for reasons its
+docstring gives: it is how far ``GetSourceStartFrame`` strays from the left offset, and
+also how far a span built from two such getters strays from the duration it should equal.
+"""
 
 
 def source_bounds(
@@ -754,42 +759,49 @@ def source_bounds(
     enough: a take Resolve had really placed on source frame 108 read back as playing 107,
     which is what made a swap look like it had moved the shot.
 
-    So the offset wins a disagreement it could have caused — one frame — and loses a
-    larger one, because past that the two are no longer describing the same thing. A still
-    is the case that separates them: its media is a single source frame, and it reports an
-    absolute start of 27 against a left offset of 86313, which is the timeline's clock
-    rather than the media's. There the absolute getter, lossy as it is, is the only one
-    answering the question, and the end it reports is read the way that route always read
-    it. The two routes are never mixed: an in point counted from the media start against
-    an out point in absolute source frames would be a span that means nothing.
+    So the offset wins a disagreement it could have caused — one frame, in either
+    direction, since the offset is the exact one and stays right whichever way the other
+    landed — and loses a larger one, because past that the two are no longer describing
+    the same thing. A still is the case that separates them: its media is a single source
+    frame, and it reports an absolute start of 27 against a left offset of 86313, which is
+    the timeline's clock rather than the media's.
 
-    The end of the offset route is the record duration, not ``GetSourceEndFrame``, which
-    is one past the last frame already (a shot on source 0..47 reports 48) and carries the
-    same slip. A retime is the one shot whose source span is not its record duration, so
-    the getter is still read to notice one: a span that differs by more than the slip is a
-    real retime and is believed, and anything closer is the duration.
+    That still is also the only measured shot on the absolute route, and it is why the
+    route keeps its ``+ 1``: it reports its end as 27 as well, so the frame it plays is
+    counted by treating that as the last one. The offset route cannot read the end that
+    way — there ``GetSourceEndFrame`` is one *past* the last frame (a shot on source 0..47
+    reports 48) — which is the shape of build this is, two getters that do not share a
+    convention. The routes are never mixed either: an in point counted from the media
+    start against an out point in absolute source frames would be a span that means
+    nothing.
+
+    The end of the offset route is therefore the record duration, which is exact. A retime
+    is the one shot whose source span is not its duration, so the end getter is still read
+    to notice one. One frame of tolerance is the right width for that comparison and not a
+    borrowed number: the span is a difference of two getters that each slip by 0 or 1
+    frame, so an unretimed shot reads its true span ±1 and no wider — both extremes were
+    measured, source 2 reading a span of 47 and source 47 reading 49 against a duration of
+    48. Anything further out is a real retime and is believed.
     """
     offset = read_frames(reader.optional(item, "GetLeftOffset", None))
     start = read_frames(reader.optional(item, "GetSourceStartFrame", None))
+    last = read_frames(reader.optional(item, "GetSourceEndFrame", None))
     if offset is not None and (start is None or abs(offset - start) <= SOURCE_SLIP):
-        return offset, _span_from(reader, item, start, duration, offset)
+        return offset, _end_from_offset(offset, start, last, duration)
     if start is None:
         return None, None
-    last = read_frames(reader.optional(item, "GetSourceEndFrame", None))
     if last is not None:
         return start, last + 1
     return start, (start + duration if duration is not None else None)
 
 
-def _span_from(
-    reader: Reader,
-    item: TimelineItem,
-    start: int | None,
-    duration: int | None,
+def _end_from_offset(
     offset: int,
+    start: int | None,
+    last: int | None,
+    duration: int | None,
 ) -> int | None:
-    """The exclusive end of a shot read off its left offset — see :func:`source_bounds`."""
-    last = read_frames(reader.optional(item, "GetSourceEndFrame", None))
+    """Where a shot read off its left offset stops — see :func:`source_bounds`."""
     span = None if start is None or last is None else last - start
     if duration is None:
         return None if span is None else offset + span
