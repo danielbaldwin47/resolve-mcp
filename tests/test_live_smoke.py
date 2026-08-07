@@ -876,6 +876,49 @@ def test_the_preset_list_is_the_one_in_the_deliver_page() -> None:
     print(f"\nrender presets: {reply['presets']}")
 
 
+def test_the_shipped_default_preset_is_a_built_in_on_this_machine(tmp_path: Path) -> None:
+    """#96: whether ``H.265 Master`` is really a name a stock Resolve offers.
+
+    The fakes prove that an omitted preset resolves to the config default, that the marker
+    says which of the two it was, and that an unknown name refuses. What only Resolve can
+    say is whether the *shipped* default is spelled the way this project spells it — get
+    that wrong and every render that names no preset refuses on a fresh install, which is
+    exactly the call this ticket made the normal one. Slow: it renders a two-second span.
+    """
+    if get_status()["context"]["timeline"] is None:
+        pytest.skip("No timeline open in Resolve")
+    default = get_config().default_render_preset
+    listed = list_render_presets()
+    assert listed["ok"] is True, listed.get("error")
+    assert default in listed["presets"], (
+        f"the default preset {default!r} is not in {listed['presets']} — a bare "
+        "render_timeline would refuse on this install"
+    )
+
+    whole = inspect_timeline(detail="summary")
+    assert whole["ok"] is True
+    first = whole["timeline"]["start"]["frames"]
+    fps = whole["timeline"]["fps"] or 24
+    if whole["timeline"]["duration"]["frames"] < int(fps * 4):
+        pytest.skip("The open timeline is too short to render a span out of")
+
+    started = render_timeline(
+        name="resolve-mcp-smoke-default",
+        target_dir=str(tmp_path),
+        start=first + int(fps),
+        end=first + int(fps * 3),
+    )
+    record = wait_for(started["job"]["job_id"], timeout=1800.0)
+
+    assert record.state == "completed", record.error
+    assert record.params["preset_source"] == "default"
+    assert record.result is not None
+    assert record.result["preset"] == default
+    written = Path(record.result["path"])
+    assert written.exists() and written.stat().st_size > 0
+    print(f"\ndefault preset {default!r} rendered {written} ({written.stat().st_size} bytes)")
+
+
 def test_a_range_render_covers_the_frames_it_was_given(tmp_path: Path) -> None:
     """#33: the AC no fake can answer — that MarkIn/MarkOut are read on the timeline's clock.
 

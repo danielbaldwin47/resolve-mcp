@@ -50,8 +50,12 @@ class FakeProject:
         self.render_writes_the_file = True
         # A preset carries the format and codec with it — loading one is what sets them,
         # which is why the deliver route never sets a format of its own.
+        # "H.265 Master" is here because Resolve ships it on every install: it is the
+        # config's default preset, so a fake without it would make every bare render fail
+        # for a reason no real machine has.
         self.render_presets: dict[str, tuple[str, str]] = {
             "H.264 Master": ("mp4", "H.264"),
+            "H.265 Master": ("mp4", "H.265"),
             "ProRes 422 HQ": ("mov", "ProRes422HQ"),
         }
         self.loaded_presets: list[str] = []

@@ -22,6 +22,9 @@ DEFAULT_STEM_MODEL = "htdemucs_ft.yaml"
 # The name audio-separator 0.44.5 lists for the six-stem MDX23C drum model; the
 # "MDX23C-DrumSep-6stem-FT.ckpt" spelling is not in its catalog and fails to load.
 DEFAULT_DRUM_MODEL = "MDX23C-DrumSep-aufr33-jarredou.ckpt"
+# A Resolve built-in, present on every install, so a bare render works before anyone has
+# saved a preset. The director's own presets are named explicitly or set here.
+DEFAULT_RENDER_PRESET = "H.265 Master"
 
 
 TRUTHY = {"1", "true", "yes", "on"}
@@ -39,6 +42,7 @@ class Config:
     audio_separator: str = DEFAULT_AUDIO_SEPARATOR
     stem_model: str = DEFAULT_STEM_MODEL
     drum_model: str = DEFAULT_DRUM_MODEL
+    default_render_preset: str = DEFAULT_RENDER_PRESET
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Config:
@@ -57,6 +61,9 @@ class Config:
             audio_separator=env.get("RESOLVE_MCP_AUDIO_SEPARATOR") or DEFAULT_AUDIO_SEPARATOR,
             stem_model=env.get("RESOLVE_MCP_STEM_MODEL") or DEFAULT_STEM_MODEL,
             drum_model=env.get("RESOLVE_MCP_DRUM_MODEL") or DEFAULT_DRUM_MODEL,
+            default_render_preset=(
+                env.get("RESOLVE_MCP_DEFAULT_RENDER_PRESET") or DEFAULT_RENDER_PRESET
+            ),
         )
 
     @property

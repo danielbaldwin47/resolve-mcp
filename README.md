@@ -110,9 +110,13 @@ against the media all the same. `detect_scene_cuts` decodes the whole clip, so i
 the catalog of every cut and shot goes to the cache in dual-time JSON and only a gist (how
 many cuts, the shot lengths, the first few times, the path) comes back inline.
 
-Deliverables come off one timeline the same way: `render_timeline` takes a **preset** by
-name — what a preset renders was decided in the Deliver page and saved there, so the server
-overrides only where the file goes and which frames it covers — plus an optional half-open
+Deliverables come off one timeline the same way: `render_timeline` renders with a **preset**
+— what a preset renders was decided in the Deliver page and saved there, so the server
+overrides only where the file goes and which frames it covers. Name none and the configured
+default is used (`H.265 Master`, a Resolve built-in; `RESOLVE_MCP_DEFAULT_RENDER_PRESET`
+points it elsewhere), and the job says which preset ran and whether it was the default or
+explicit. An unknown name is refused with the list of names that exist, never swapped for a
+near-enough preset. On top of that goes an optional half-open
 `[start, end)` range in the timeline's own frames, the numbers `inspect_timeline` and
 `list_markers` report. That is a per-song file out of a concert set. Without a `target_dir`
 the file lands in the cache's `renders` folder, which the server replaces freely on a
@@ -173,6 +177,7 @@ Zero-config by default; every path has an environment override.
 | `RESOLVE_MCP_AUDIO_SEPARATOR` | `audio-separator` (found on PATH) | python-audio-separator CLI used for stem separation |
 | `RESOLVE_MCP_STEM_MODEL` | `htdemucs_ft.yaml` | Pass one: the 4-stem model (vocals, drums, bass, other) |
 | `RESOLVE_MCP_DRUM_MODEL` | `MDX23C-DrumSep-aufr33-jarredou.ckpt` | Pass two: the drum decomposition model (kick, snare, toms) |
+| `RESOLVE_MCP_DEFAULT_RENDER_PRESET` | `H.265 Master` | Render preset `render_timeline` uses when the call names none. Must be a preset the project offers — an unknown name is refused, never swapped for another |
 | `RESOLVE_MCP_LOG_LEVEL` | `INFO` | Log level for the stderr logger |
 | `RESOLVE_MCP_ALLOW_ANY_PYTHON` | unset | Bypass the interpreter check (see ADR 0001) |
 

@@ -6,8 +6,9 @@ A concert set is one timeline and a dozen files. That shape drives every decisio
   their own leave resolution, bit rate and colour at whatever the project was last set to.
   What those should be is the director's call, made once in the Deliver page and saved; this
   server picks a saved preset by name and overrides only where the file goes and which
-  frames it covers. That is also why the preset catalog was never specified in the spec —
-  it belongs to the project, not to the server.
+  frames it covers. That is also why the spec never said what a preset *contains* — the
+  settings belong to the project, not to the server. Which presets there are is the fourth
+  decision below.
 
 * **A range is the same half-open ``[in, out)`` as everywhere else, on the timeline's own
   clock.** The numbers ``inspect_timeline`` and ``list_markers`` report are the numbers to
@@ -21,6 +22,21 @@ A concert set is one timeline and a dozen files. That shape drives every decisio
   render directory is cleared before rendering, and a directory the caller named is refused
   unless ``refresh`` says otherwise. A deliverable the director already sent out is not this
   server's to overwrite on a guess.
+
+* **The catalog is one changeable default plus explicitly named extras** (#71). The default
+  is ``config.default_render_preset``, shipped as the Resolve built-in ``H.265 Master`` and
+  overridable like any other key, so "render this" means render with the preset the server
+  knows and a name in the call is the override. What comes out of here are streaming uploads
+  — YouTube, Instagram — rendered per song off one concert timeline; there is no standing
+  review or master role for a preset to fill, and no per-platform roles either: a vertical
+  Instagram deliverable is a timeline and a cut, not a preset. Extra presets (a future review
+  preset, ``h.265 NVIDIA``) are names the director saves in the GUI and passes explicitly.
+
+  This catalog records a name and a one-line purpose, never a settings table: presets are GUI
+  state the director owns and re-tunes as the methodology moves, and a copy of their settings
+  here would be a second version of the truth that nothing updates. For the same reason the
+  cut file never names a preset — delivery format is a render-time parameter, so one cut can
+  go out to two platforms without being rewritten.
 
 Caching is the timeline fingerprint plus these parameters, so a re-render of an unchanged
 song is instant and a cut that moved renders again — see ``resolve.timeline.fingerprint``
@@ -61,6 +77,18 @@ not a stalled render at ninety minutes, and killing it would waste the whole thi
 RENDER_FLOOR = 0.05
 RENDER_CEILING = 0.98
 
+# Where the preset came from: the config default, or a name the caller spelled out.
+DEFAULTED = "default"
+EXPLICIT = "explicit"
+
+REPORTED_ONLY = frozenset({"preset_source"})
+"""Params that describe the call rather than the file, so they stay out of the cache key.
+
+Two calls that differ only in these produce the same bytes; keying on them would re-render
+a whole song to answer a question about how it was asked for. Anything added here has to be
+read the same way, or a real difference will start sharing one cache entry.
+"""
+
 
 def list_presets(connection: ResolveConnection) -> dict[str, Any]:
     """The render presets this project offers, and the format it would render with now."""
@@ -75,7 +103,7 @@ def list_presets(connection: ResolveConnection) -> dict[str, Any]:
 
 def render_timeline(
     connection: ResolveConnection,
-    preset: str,
+    preset: str | None = None,
     timeline: str | None = None,
     name: str | None = None,
     target_dir: str | None = None,
@@ -90,6 +118,12 @@ def render_timeline(
     a job exists: a preset that is not in the project, a range that runs off the end of the
     timeline, a file already sitting where this one would land. Those are the caller's
     mistakes, and a raised error names them a poll earlier than a failed job would.
+
+    Omitting ``preset`` renders with ``config.default_render_preset``. A default the project
+    does not have refuses exactly like a name that was typed out: there is no second preset
+    to fall back to, only a wrong-shaped file that would go out under a right-sounding name.
+    Which of the two happened is ``preset_source`` on the job's params — see ``_result`` for
+    why the marker sits there and not on the result.
     """
     config = config or get_config()
     project = current_project(connection, "No project is open, so there is nothing to render.")
@@ -98,16 +132,22 @@ def render_timeline(
     fps = frame_rate(project, found)
     span = _span(start, end, found, fps)
 
+    if preset is None:
+        chosen, source = config.default_render_preset, DEFAULTED
+    else:
+        chosen, source = preset, EXPLICIT
+
     # Reading the preset list is cheap and does not disturb the queue; loading it is what
     # changes project state, and that waits for the job's turn under the Resolve lock.
-    render.require_preset(project, preset)
+    render.require_preset(project, chosen)
 
     covered = span or (int(found.GetStartFrame()), int(found.GetEndFrame()))
     stem = _stem(name, timeline_name, span)
     directory = Path(target_dir) if target_dir is not None else config.render_dir
     params: dict[str, Any] = {
         "timeline": timeline_name,
-        "preset": preset,
+        "preset": chosen,
+        "preset_source": source,
         "name": stem,
         "target_dir": str(directory),
         "whole_timeline": span is None,
@@ -115,7 +155,12 @@ def render_timeline(
         "end": covered[1],
         "fps": fps,
     }
-    key = cache.cache_key(KIND, [fingerprint(Reader(connection), found)], params)
+
+    # How the preset was chosen is reported, not keyed on: it does not change a frame of the
+    # file, and a concert render costs minutes to hours. Keying on it would re-render the
+    # whole song the first time a caller spelled out the name it had been defaulting to.
+    keyed = {field: value for field, value in params.items() if field not in REPORTED_ONLY}
+    key = cache.cache_key(KIND, [fingerprint(Reader(connection), found)], keyed)
 
     # The lookup start_job is about to make, made a moment early: a cache hit renders
     # nothing, so it is the one case where a file already at the target is this job's own
@@ -211,6 +256,12 @@ def _result(
     The range is reported whether or not one was asked for: a whole-timeline render covers
     the timeline's own bounds, and a deliverable that will not say what it holds is one the
     agent has to open Resolve to identify.
+
+    The preset is named here and how it was chosen is not: ``preset_source`` lives on the
+    job's params, which always describe *this* call, while a result can be replayed from
+    cache. A render started on the default and asked for again by name is one file and one
+    cache entry, and a result that carried the marker would answer the second call with the
+    first call's word for it.
     """
     fps = params["fps"]
     start = int(params["start"])
