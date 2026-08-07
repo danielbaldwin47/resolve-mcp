@@ -72,6 +72,15 @@ One JSON file per corpus project, labelling each camera on **two axes**:
 `tight`, `moving`). The style profile speaks in roles; the camera→role mapping
 for a given project lives here, with the project, not in the profile (#13).
 
+#13 says that mapping "lives with the project, not the style doc". That is read
+here as *one file per project, keyed to the project, kept out of the profile* —
+not as a file sitting beside the Resolve project on the media drive. A sidecar
+next to the footage is outside version control, and on an archived project it
+is on whichever drive that project was archived to; the labels are the agent's
+own document and their history is worth as much as the profiles'. If the
+director wants them beside the footage instead, only this path changes —
+nothing reads them but the agent.
+
 ```json
 {
   "project": "2026-06_Zinc_and_Monkfish",

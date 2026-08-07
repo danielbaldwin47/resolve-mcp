@@ -34,7 +34,9 @@ timelines. The server measures; Claude decides.
   director-editable, and **never touched by server code** — see
   `docs/agents/style-layer.md`, guarded by `tests/test_style_layer.py`.
 - **provenance tag** — what every style claim ends with, saying how well it is
-  known: `[measured: …, n=…]`, `[believed, unverified]`, `[director]`.
+  known. The vocabulary is settled in #13: `[stated principle]`,
+  `[measured — N projects, n=…, context]`, `[review feedback, YYYY-MM]`,
+  `[believed, unverified]`.
 - **angle sidecar** — one JSON file per Resolve project labelling each camera
   by subject × character; `role` is the only key `correlate_timeline` reads,
   and it arrives as a mapping the agent lifted, never as a path.

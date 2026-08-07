@@ -23,17 +23,26 @@ from resolve_mcp.config import Config
 from resolve_mcp.errors import InvalidRequestError
 from resolve_mcp.resolve.connection import get_connection
 
+from .conftest import Attach
+from .fakes import studio
+
 SOURCE = Path(__file__).resolve().parent.parent / "src" / "resolve_mcp"
 
 STYLE_LAYER = re.compile(
     r"""
-      \bstyles [/\\]            # the directory itself, in a path
-    | \bsidecars? [/\\]         # or a sidecar named as one
-    | (?:base|concert) \.md     # or a profile by name
+      \bstyles [/\\]      # the directory itself, in a path
+    | \bsidecars? [/\\]   # or a sidecar directory named as one
     """,
     re.VERBOSE | re.IGNORECASE,
 )
-"""What reading or writing the style layer would have to look like in source."""
+"""What reading or writing the style layer would have to look like in source.
+
+Deliberately a path shape rather than a profile's name: ``concert.md`` on its own
+appears in prose about the style layer, and prose about it is exactly what the modules
+here *should* carry — the docstrings in ``analysis/correlate.py`` explain why the sidecar
+is the agent's document. Matching a separator is what tells naming a path apart from
+naming an idea.
+"""
 
 STYLE_LAYER_WORDS = re.compile(r"style[_ ]?profile|sidecar|angle[_ ]?label", re.IGNORECASE)
 """The vocabulary — allowed in prose, never in the name of a directory the server owns."""
@@ -84,8 +93,10 @@ def test_config_grew_no_directory_this_test_does_not_know_about(tmp_path: Path) 
     assert found == set(DIRECTORIES)
 
 
-def test_correlate_timeline_refuses_a_sidecar_path_as_angles() -> None:
+def test_correlate_timeline_refuses_a_sidecar_path_as_angles(attach: Attach) -> None:
     """angles is labels already lifted out of the sidecar, never the sidecar to go and read."""
+    attach(studio())
+
     with pytest.raises(InvalidRequestError) as raised:
         correlate.correlate_timeline(
             get_connection(),

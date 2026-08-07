@@ -794,5 +794,4 @@ def angle_name(reader: Reader, item: TimelineItem) -> str | None:
         angle = reader.optional(item, "GetName", None)
         if angle is not None:
             return str(angle)
-    name = reader.optional(clip, "GetName", None)
-    return None if name is None else str(name)
+    return clip_name(reader, item)

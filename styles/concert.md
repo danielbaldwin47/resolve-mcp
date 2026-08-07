@@ -41,8 +41,9 @@ that the grid is a live band's grid, so it moves.
 
 - Duration distributions conditioned on section type and energy band. *Open;
   see `corpus.md`.*
-- The variation instinct and "spectacle earns a hold" are base claims and apply
-  here unchanged.
+- The variation instinct and "spectacle earns a hold" are base claims, and a
+  concert changes nothing about them — they carry their tags in `base.md` and
+  are named here only so this section is not read as silent on them.
 - Whether shots shorten through a solo's build and lengthen through a head.
   *Open.*
 
