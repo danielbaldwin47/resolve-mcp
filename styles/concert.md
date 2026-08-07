@@ -52,8 +52,10 @@ that the grid is a live band's grid, so it moves.
   67% on beats 1–2 where every broken-grid timeline puts 78–81%. The
   measurement gets *less* dramatic exactly where the instrument gets more
   trustworthy, which is the wrong direction for a real finding. Rubato gating
-  comes first, and until it lands a consistent-looking histogram is the most
-  misleading thing in this file, because it looks like evidence.*
+  comes first (**#112**), and until it lands a consistent-looking histogram is
+  the most misleading thing in this file, because it looks like evidence. #112
+  is written to close either way: "the skew did not survive gating" retires
+  this item just as well as a measured claim would.*
 
 ## 2. Energy — the master concept
 
@@ -103,39 +105,50 @@ that the grid is a live band's grid, so it moves.
   Anchor 68.5%, Freefall 75.5%, Sunshine 76.3%, Mercies 74.4%, Scullers 74.3%.
   Five timelines, three projects, and the share never drops below two thirds.
   This one needs no labels — it is about the shape of the distribution, not
-  about which camera — which is why entry 3 supports it while supporting
-  nothing else in this section.
+  about which camera — and it was measured on entries 3 and 5 before either had
+  a sidecar. When the labels arrived, not one of these numbers moved.
   `[measured — 3 projects, n=847 shots, concert]` — Monkfish is excluded
   (89.3%), not because it disagrees but because share is time and three fifths
   of its time is uncut passage sitting on one angle.
-- **The home angle may be the camera on whoever is playing rather than the
-  wide.** On entry 2 the wide holds 14–17% while a roaming operated camera
-  holds 74–76%, so there the home angle is chosen by *subject*, not framing.
-  `[believed, unverified]` — entry 2 only, and the reason is worth stating: the
-  anchor cannot corroborate this even though its numbers look like they should.
-  Its home angle is its wide *and* its operated camera at once, so it has no
-  case where the two disagree and cannot tell which one the director was
-  following. Entry 3 is measured but unlabelled and cannot speak to it either.
-  One project deciding between two readings is exactly what #21 policy 4 is
-  about — so this is written down as the better reading, not as a finding, and
-  entry 4 or 5 is what would settle it.
-- **The drummer cam is cut to, not lived on.** It takes near-equal cut counts
-  and a fraction of the hold: anchor 178 cuts for 31.5%, Freefall 13 for 10.1%,
-  Sunshine 10 for 6.7%, Mercies 5 for 4.0%. Frequent and short is the shape.
-  `[measured — 2 projects, n=498 shots, concert]` — two, not three: entry 3 is
-  unlabelled, so its 167 second-angle cuts cannot be attributed to a drummer.
+- **The home angle is the operated camera, and framing does not predict it.**
+  On all six labelled timelines the angle holding the cut is the one somebody is
+  running, and **no locked-off camera is ever the home angle**. Framing says
+  nothing: a wide holds 68.5% on the anchor and 25.7% on entry 3. What makes
+  this checkable is entry 3, the only rig whose fixed camera is a *wide* —
+  everywhere else "wide" and "locked off" name the same cameras, so no evidence
+  could separate them.
+  `[measured — 3 projects, n=847 shots, concert]` (`corpus.md`, "What the
+  labels settled") — Monkfish agrees but its share is excluded as ever; it is
+  the home angle there by cut count too.
+- **Whether the operated camera is followed because it is on the soloist is a
+  separate question, and still one project.** Entry 2 is the only place anyone
+  has looked at what the moving camera points at; entries 3 and 5 were labelled
+  by description, so their sidecars mark `subject` as inferred and they are
+  excluded here. Moving is measured, on-the-soloist is not.
+  `[believed, unverified]` — entry 2 only.
+- **The second angle is cut to, not lived on — whatever it is pointing at.**
+  Near-equal cut counts, a fraction of the hold: anchor drums 178 cuts for
+  31.5%, Freefall 13 for 10.1%, Sunshine 10 for 6.7%, Mercies 5 for 4.0%,
+  Monkfish drums 108 cuts against the home angle's 125, and **Scullers 167
+  against 182 on a camera that is a wide, not a drum cam**. Frequent-and-short
+  is a property of being the other angle.
+  `[measured — 3 projects, n=1080 shots, concert]` — the shape is what
+  generalised here; that it is usually the *drummer* being cut to is a fact
+  about the rig, and one night in the corpus had no drum camera at all.
 - **A second wide is a garnish, not a role.** Mercies is the only timeline with
   one (`room-wide`, from a seat rather than of the stage): 5 cuts, 5.2%.
   `[believed, unverified]` — one timeline.
 - Wide-as-reset patterns and transition habits between roles — which role
-  follows which. *Open. Four labelled timelines is enough to start; the shot
-  records hold the sequence, and nothing has read it yet.*
-- The role vocabulary a given night supports is whatever its sidecar says. Spec
-  #22 describes the rig as a static wide, a drummer cam and a roaming soloist
-  cam — but the anchor night ran **two** cameras and the other way round: the
-  wide is the operated one and the drummer cam is locked off.
-  `[believed, unverified]` — one night, from its frame grabs. Worth watching
-  across the corpus rather than assuming either way.
+  follows which. *Open. All six timelines are labelled now; the shot records
+  hold the sequence, and nothing has read it yet.*
+- **The rig is not a constant, so the role vocabulary is per night.** Spec #22
+  describes a static wide, a drummer cam and a roaming soloist cam. No night in
+  the corpus runs exactly that: the anchor runs two cameras with the *wide*
+  operated and the drummer cam locked; entry 2 runs three (and four on Mercies,
+  with a second wide from a seat); entry 3 runs two with **no drummer camera at
+  all**; entry 5 runs two the reverse way round from the anchor — in the same
+  project. Read a night's sidecar; never assume the rig.
+  `[measured — 3 projects, n=6 timelines, concert]`
 
 ## 5. Event-reactive moves
 
@@ -166,11 +179,12 @@ Free prose, first-class.
   the anchor, the three Judson's tunes (entry 2), the Scullers full cut
   (entry 3) and Monkfish Main (entry 5). Only Stablemates is left, and it is
   left for a reason — no render and no defensible clock. Timing claims above
-  therefore carry `[measured — …]`. Claims that
-  need *labels* to state — which role holds the cut — rest on two projects,
-  because entries 3 and 5 are measured but unlabelled; claims that separate
-  framing from subject rest on entry 2 alone, because the anchor's home angle
-  is both its wide and its operated camera and so cannot tell the two apart.
+  therefore carry `[measured — …]`. **Every measured timeline is now labelled**
+  (the director supplied entries 3 and 5 on 2026-08-07), so role claims rest on
+  the same three projects the timing claims do. What is still thin is narrower
+  and worth naming exactly: claims about what a camera *points at* rest on
+  entry 2 alone, the only night whose moving camera anybody has actually
+  looked at.
 - **Every timeline agrees about transients and none agrees about the beat
   grid.** Six timelines, three projects, four years: the median cut sits
   17–41 ms from the nearest transient every time — inside two frames, without
@@ -193,3 +207,16 @@ Free prose, first-class.
   in the corpus produce the flattest histograms.
   Everything above is measured with those fixed; nothing measured before them
   should be believed.
+- **The labelling pass moved no number, and that was the useful part.** Entries
+  3 and 5 were re-measured with their new sidecars attached and came back
+  identical — same cuts, same offsets, same shot lengths, same shares under new
+  names. A label is supposed to add names and nothing else, and re-running was
+  cheaper than trusting that it had.
+- **One tie the corpus broke, and one it did not.** Two labels arriving from a
+  sentence settled a question five timelines of measurement could not: the home
+  angle is the operated camera, not the wide, because entry 3 is the only rig
+  whose fixed camera is a wide and so the only place the two readings disagree.
+  The neighbouring question — whether that camera holds the cut *because* it is
+  on the soloist — did not move at all, since a description says a camera moves
+  but not what it was following. Worth remembering which kind of gap a
+  conversation can close.

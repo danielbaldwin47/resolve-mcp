@@ -1,0 +1,40 @@
+{
+  "project": "Mike Tucker Scullers",
+  "context": "concert",
+  "labelled": "2026-08-07",
+  "method": "stated by the director; no frame grabs and no render exist for this project",
+  "confirmed_by_director": "2026-08-07",
+  "note": "Corpus entry 3, Concert Full Cut. A two-camera night with no drummer camera - the second angle is a wide, which makes this the only labelled rig in the corpus whose two cameras are not 'operated + drums'.",
+  "angles": {
+    "unmixed board audio Multicam - Angle 1": {
+      "role": "soloist-moving",
+      "subject": "soloist",
+      "character": "moving",
+      "note": "The moving camera, and the tighter of the two. The home angle of this cut: 182 cuts, 74.3% of screen time.",
+      "confidence": "medium",
+      "stated_by_director": "angle 1 is the moving camera, tighter",
+      "inferred": [
+        "subject"
+      ],
+      "inference_basis": "The director stated how this camera behaves, not what it follows. 'soloist' is carried over from the entry-2 rig, where the operated camera was verified against frame grabs to follow whoever is playing. Nothing here was looked at, so any claim that turns on the subject must not count this angle as evidence - only claims about framing and operation may."
+    },
+    "unmixed board audio Multicam - Angle 2": {
+      "role": "ensemble-wide",
+      "subject": "ensemble",
+      "character": "wide",
+      "note": "Fixed wide from the side of the room rather than front of house. 167 cuts, 25.7% - near-equal cut counts to the home angle on a quarter of the time, the same frequent-and-short shape the drummer cam has elsewhere, but on a wide.",
+      "confidence": "high",
+      "stated_by_director": "angle 2 is the fixed wide side-view",
+      "inferred": [
+        "subject"
+      ],
+      "inference_basis": "'wide' and 'fixed' are stated. 'ensemble' follows from a wide of a stage holding the whole band; it is not a separate observation."
+    }
+  },
+  "mapping_basis": {
+    "what_is_known": "Which multicam angle number is which camera, stated by the director on 2026-08-07, plus each camera's framing and whether it is operated.",
+    "why_it_needed_the_director": "This project has no render and no accessible source frames, so neither the read-the-render method (entry 2) nor the frame-grab method (entry 1) could be used. Resolve's API gives the angle name and nothing about what is behind it.",
+    "what_is_not_known": "What the moving camera actually points at, moment to moment. That is the one thing frame grabs give and a sentence cannot.",
+    "scope": "This project only."
+  }
+}
