@@ -46,16 +46,23 @@ that the grid is a live band's grid, so it moves.
   wrong where those cuts are — and it is the same grid the other 96% were
   scored against.
 
-  There is now a reason to think the skew is partly the detector rather than
-  the director. Two timelines have structurally sound grids (Freefall and
-  Monkfish: strictly 1–4, `meter: 4`) and they are the flattest — Monkfish puts
-  67% on beats 1–2 where every broken-grid timeline puts 78–81%. The
-  measurement gets *less* dramatic exactly where the instrument gets more
-  trustworthy, which is the wrong direction for a real finding. Rubato gating
-  comes first (**#112**), and until it lands a consistent-looking histogram is
-  the most misleading thing in this file, because it looks like evidence. #112
-  is written to close either way: "the skew did not survive gating" retires
-  this item just as well as a measured claim would.*
+  **The gate is built (#112); the pass that would settle this has not run.**
+  `correlate_timeline` now refuses a beat whose bar position its own meter
+  cannot hold, or whose interval does not match the tempo around it, and
+  refuses whole any grid whose meter comes out as 1 — filtering such a grid
+  against its own meter would keep exactly its position-1 beats and leave a
+  histogram that is 100% beat one *by construction*, which is a gate
+  manufacturing the very skew it was built to test. Cuts are marked
+  `in_grid: false` and counted, never silently dropped.
+
+  What that changes here: the instrument can now say when it cannot be
+  trusted, so this item is **open but no longer blocked**. What it does not
+  change: still no beat-position claim, because a claim needs numbers out of
+  `correlate_timeline` over the six corpus timelines, and that pass needs each
+  project open in Resolve. A provisional offline check suggests three of the
+  six grids will produce no bar histogram at all under the gate. If that
+  holds, half the histograms quoted above were never evidence — but it is a
+  prediction until the tool has been run.*
 
 ## 2. Energy — the master concept
 

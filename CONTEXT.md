@@ -62,7 +62,9 @@ Top level:
 
 `analysis/` — compute jobs that read audio and write findings to disk:
 `applause` (bursts → tune boundaries), `beats` (grid + downbeats, model
-injected per ADR 0002), `correlate` (measure a cut against its music),
+injected per ADR 0002; `trust` says which beats the grid describes well enough
+to count, #112), `correlate` (measure a cut against its music, gating the beat
+statistics on `trust` and leaving the transient ones ungated),
 `decode` (WAV → numpy, no third-party decoder), `drums` (hits per stem), `energy`
 (loudness curves), `fills` (drum-fill candidates), `halves` (shared
 identify/cache/write pattern), `music` (beats + energy + gist job),

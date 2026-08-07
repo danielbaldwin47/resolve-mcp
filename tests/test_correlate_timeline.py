@@ -37,6 +37,15 @@ BEAT_SECONDS = tuple(index * 0.5 for index in range(13))
 ONSETS = (1.05, 2.48)
 """Two transients, one either side of the beat the cuts near them are measured against."""
 
+BAD_BAR_SECONDS = tuple(round(index * 0.5, 6) for index in range(17))
+BAD_BAR_DOWNBEATS = (0.0, 3.0, 5.0, 7.0)
+"""A grid whose bars are mostly fours but whose first runs to six — the #112 self-refuting case.
+
+Beats stay at 120bpm throughout, so the steadiness check is inert here and the bar-position
+check is the only thing that can gate: the second measured cut lands on beat six of a bar
+that a meter of four cannot hold, and the first lands on a position four can.
+"""
+
 SHOTS = (
     ("C0012.mp4", 100, 62, 1000),
     ("C0031.mp4", 162, 87, 4200),
@@ -96,16 +105,21 @@ def _dissolve(start: int, duration: int) -> FakeTimelineItem:
     return FakeTimelineItem("Cross Dissolve", start, duration)
 
 
-def beats_file(tmp_path: Path, seconds: Sequence[float] = BEAT_SECONDS) -> Path:
+def beats_file(
+    tmp_path: Path,
+    seconds: Sequence[float] = BEAT_SECONDS,
+    downbeats: Sequence[float] | None = None,
+    name: str = "concert-beats.json",
+) -> Path:
     """A beats file in the shape analyze_music writes: header, then one record per line.
 
     Written once per test: the cache keys off the file's mtime, so a second identical write
     would look like new analysis and no rerun would ever be answered from cache.
     """
-    target = tmp_path / "concert-beats.json"
+    target = tmp_path / name
     if target.exists():
         return target
-    grid = BeatGrid(tuple(seconds), tuple(seconds[::4]))
+    grid = BeatGrid(tuple(seconds), tuple(seconds[::4] if downbeats is None else downbeats))
     return records.write(
         target,
         {"kind": "beats", "audio": "concert.wav", "duration_seconds": 6.0},
@@ -205,6 +219,7 @@ def test_every_shot_lands_on_disk_with_its_offsets_bar_and_section(
         "beat": 3,
         "bar": 1,
         "in_bar": 3,
+        "in_grid": True,
         "transient_offset": -0.017,
         "tune": 1,
         "front": "drums",
@@ -771,3 +786,106 @@ def test_a_handle_that_dies_mid_read_never_measures_half_a_cut(
         assert _result(envelope["job"])["cuts"] == 3
     else:
         assert envelope["error"]["code"] in {"resolve_unavailable", "internal_error"}
+
+
+# --- gating the cuts the grid cannot describe (#112) -------------------------------------------
+
+
+def _bad_grid(tmp_path: Path) -> str:
+    return str(
+        beats_file(
+            tmp_path,
+            seconds=BAD_BAR_SECONDS,
+            downbeats=BAD_BAR_DOWNBEATS,
+            name="bad-grid-beats.json",
+        )
+    )
+
+
+def test_a_cut_on_a_bar_position_the_meter_cannot_hold_is_marked_and_counted(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """AC1/AC3: the marker is per cut and the count is inline, so nothing drops silently."""
+    attach(studio(timeline=a_cut()))
+
+    result = _measured(tmp_path, beats=_bad_grid(tmp_path))
+
+    cuts = _rows(result)
+    assert cuts[1]["in_bar"] == 3
+    assert cuts[1]["in_grid"] is True
+    # Beat six of a bar in a grid whose meter is four: the grid contradicting itself.
+    assert cuts[2]["in_bar"] == 6
+    assert cuts[2]["in_grid"] is False
+    assert result["gated"] == 1
+
+
+def test_a_gated_cut_is_kept_out_of_the_bar_and_beat_statistics(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """AC3: an impossible position is evidence the grid is wrong, not a position to publish."""
+    attach(studio(timeline=a_cut()))
+
+    result = _measured(tmp_path, beats=_bad_grid(tmp_path))
+
+    assert result["bars"] == {"3": 1}
+    assert "6" not in result["bars"]
+    assert result["beat_offsets"]["measured"] == 1
+
+
+def test_the_gate_leaves_the_transient_measurement_exactly_as_it_was(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """AC2: transients need no grid, so a broken grid must not shrink their n by one cut.
+
+    The two runs are the gate off and on over identical cuts: the sound grid gates nothing,
+    the broken one gates a cut. The beat block moves between them and the transient block
+    may not.
+    """
+    attach(studio(timeline=a_cut()))
+    ungated = _measured(tmp_path)
+
+    attach(studio(timeline=a_cut()))
+    gated = _measured(tmp_path, beats=_bad_grid(tmp_path))
+
+    assert ungated["gated"] == 0
+    assert gated["gated"] == 1
+    assert gated["transient_offsets"] == ungated["transient_offsets"]
+    assert gated["transient_offsets"]["measured"] == 2
+    assert gated["beat_offsets"] != ungated["beat_offsets"]
+
+
+def test_a_cut_in_an_out_of_time_stretch_is_gated_though_its_bar_position_is_legal(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The check that matters at this seam: rubato carries positions 1..4 like anything else.
+
+    The bar-position gate cannot see this one — every position here is legal — so a cut that
+    survives the sound grid and falls out of this one has been gated on timing alone.
+    """
+    attach(studio(timeline=a_cut()))
+
+    # Steady to 1.5s, then the head goes out of time across where the second cut lands.
+    wandering = (0.0, 0.5, 1.0, 1.5, 2.4, 2.6, 3.6, 3.8, 4.9, 5.1, 6.1, 6.3)
+    result = _measured(
+        tmp_path,
+        beats=str(beats_file(tmp_path, seconds=wandering, name="rubato-beats.json")),
+    )
+
+    cuts = _rows(result)
+    assert cuts[2]["in_bar"] in {1, 2, 3, 4}  # nothing a bar-position check could object to
+    assert cuts[2]["in_grid"] is False
+    assert result["gated"] >= 1
+    assert result["grid_refused"].get("tempo", 0) > 0
+    assert result["grid_refused"].get("bar_position", 0) == 0
+
+
+def test_every_cut_carries_the_marker_even_when_the_grid_is_sound(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """A reader should not have to guess whether an absent marker means trusted or unmeasured."""
+    attach(studio(timeline=a_cut()))
+
+    result = _measured(tmp_path)
+
+    assert [one["in_grid"] for one in _rows(result)] == [True, True, True]
+    assert result["gated"] == 0

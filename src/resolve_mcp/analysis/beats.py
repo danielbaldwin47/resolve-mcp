@@ -27,12 +27,53 @@ INSTALL = "uv pip install 'beat_this @ git+https://github.com/CPJKU/beat_this'"
 DOWNBEAT_TOLERANCE = 0.005
 """How far a downbeat may sit from the beat it marks before it is a different beat."""
 
+UNSTEADY_FRACTION = 0.15
+"""How far a beat-to-beat interval may sit from its neighbours before the grid is guessing.
+
+Fifteen percent is roughly a swung eighth against a straight one: wide enough that ordinary
+human time-keeping and the model's own rounding stay inside it, narrow enough that a rubato
+ballad head — where the interval wanders by half again — falls outside on the first beat.
+"""
+
+MINIMUM_METER = 2
+"""The smallest meter that is a meter at all.
+
+A grid reporting bars one beat long has not found a slow tune; it has marked every beat a
+downbeat, which is the failure the anchor timeline shows at 214bpm over a jazz set (#112).
+Such a grid is refused whole rather than filtered against its own meter: keeping only the
+beats whose position is ``1`` would leave a histogram that is 100% beat one by construction
+and would read as the strongest possible evidence for the very skew being tested.
+"""
+
+STEADINESS_WINDOW = 9
+"""Intervals used as the local reference for one interval.
+
+The comparison is local rather than against the whole mix because a two-hour set has tunes
+at different tempos, and a grid measured against the set-wide median would call the fast
+tune untrustworthy for no better reason than that it is fast. Nine intervals is a little
+over two bars in four: long enough to have a median worth the name, short enough that the
+reference moves with the music.
+"""
+
 
 class BeatGrid(NamedTuple):
     """Beat times and the subset of them that start a bar, both in seconds."""
 
     beats: tuple[float, ...]
     downbeats: tuple[float, ...]
+
+
+class GridTrust(NamedTuple):
+    """Which beats the grid describes well enough to draw a statistic from, and why not.
+
+    ``trusted`` is parallel to the beat records it was computed from. ``reasons`` counts the
+    beats each check refused, so a result can say what it dropped rather than quietly
+    returning a smaller n (#112).
+    """
+
+    trusted: tuple[bool, ...]
+    meter: int | None
+    reasons: dict[str, int]
 
 
 Detector = Callable[[Path], BeatGrid]
@@ -144,14 +185,93 @@ def gist(grid: BeatGrid, records: Sequence[dict[str, Any]]) -> dict[str, Any]:
         if later > earlier
     ]
     tempos = sorted(60.0 / interval for interval in intervals)
-    lengths = list(Counter(record["bar"] for record in records).values())
     return {
         "count": len(grid.beats),
         "downbeat_count": sum(1 for record in records if record["downbeat"]),
         "tempo_bpm": round(statistics.median(tempos), 2) if tempos else None,
         "tempo_min_bpm": round(tempos[0], 2) if tempos else None,
         "tempo_max_bpm": round(tempos[-1], 2) if tempos else None,
-        "meter": statistics.mode(lengths) if lengths else None,
+        "meter": _meter(records),
         "first_seconds": round(grid.beats[0], 3) if grid.beats else None,
         "last_seconds": round(grid.beats[-1], 3) if grid.beats else None,
     }
+
+
+def trust(records: Sequence[dict[str, Any]]) -> GridTrust:
+    """How far the grid may be trusted, beat by beat.
+
+    A grid is fitted over the whole mix, including the stretches that are not in time at all
+    — free intros, rubato heads, out-of-time codas — and the fit succeeds there anyway. Cuts
+    scored against those stretches are measuring the detector rather than the director, so
+    #112 gates them out of the beat statistics instead of averaging them in.
+
+    Two checks, deliberately independent. The first is free: a bar position outside
+    ``1..meter`` is the grid contradicting its own meter, and needs no confidence signal to
+    spot. The second is the one that matters, because rubato carries perfectly legal bar
+    positions and only the timing gives it away. beat_this exposes no per-beat confidence of
+    its own (it returns two lists of times), so steadiness is derived from the intervals.
+    """
+    meter = _meter(records)
+    describes_bars = meter is not None and meter >= MINIMUM_METER
+    steady = _steady_flags([float(record["t"]) for record in records])
+    reasons: Counter[str] = Counter()
+    trusted: list[bool] = []
+    for record, holds_time in zip(records, steady, strict=True):
+        in_bar = record.get("in_bar")
+        placed = (
+            describes_bars
+            and meter is not None
+            and isinstance(in_bar, int)
+            and 1 <= in_bar <= meter
+        )
+        if not placed:
+            reasons["bar_position"] += 1
+        if not holds_time:
+            reasons["tempo"] += 1
+        trusted.append(placed and holds_time)
+    return GridTrust(tuple(trusted), meter, dict(reasons))
+
+
+def _meter(records: Sequence[dict[str, Any]]) -> int | None:
+    """The meter the grid behaves as if it is in: the commonest bar length it produced.
+
+    One definition, shared by the gist that reports it and the gate that judges bar positions
+    against it, so a grid can never be described as one meter and gated against another.
+    """
+    lengths = list(Counter(record["bar"] for record in records).values())
+    return statistics.mode(lengths) if lengths else None
+
+
+def _steady_flags(times: Sequence[float]) -> tuple[bool, ...]:
+    """Whether each beat sits between intervals that match the tempo around them.
+
+    A beat is judged by the intervals either side of it, so an interval that does not belong
+    discredits both of the beats it joins rather than one arbitrary end of it.
+    """
+    intervals = [later - earlier for earlier, later in zip(times, times[1:], strict=False)]
+    if len(intervals) < 2:
+        # One interval has no neighbours to be judged against; refusing it would be inventing
+        # a verdict rather than reaching one.
+        return tuple(True for _ in times)
+    unsteady = [
+        _wanders(interval, _local(intervals, index)) for index, interval in enumerate(intervals)
+    ]
+    return tuple(
+        not any(unsteady[near] for near in (position - 1, position) if 0 <= near < len(unsteady))
+        for position in range(len(times))
+    )
+
+
+def _local(intervals: Sequence[float], index: int) -> float:
+    """The tempo around one interval, as the median of the window it sits in."""
+    start = max(0, index - STEADINESS_WINDOW // 2)
+    return statistics.median(intervals[start : start + STEADINESS_WINDOW])
+
+
+def _wanders(interval: float, local: float) -> bool:
+    """Whether one interval is too far from the tempo around it to be the same tempo.
+
+    A window with no length at all — a grid reporting the same time twice — is treated as
+    wandering rather than divided by, since nothing can be judged against it.
+    """
+    return local <= 0 or abs(interval - local) > UNSTEADY_FRACTION * local

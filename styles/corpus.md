@@ -299,6 +299,33 @@ Two notes:
 - The transient median (41 ms) is the highest in the corpus and still inside
   two frames. Six timelines now span 17–41 ms.
 
+## Rubato gating exists; the corpus pass that uses it is still to run (#112)
+
+`correlate_timeline` now gates the beat statistics. A beat is refused on either
+of two independent grounds — a bar position its own meter cannot hold, or an
+interval that does not match the tempo around it — and a grid whose meter comes
+out as 1 is refused whole rather than filtered, since keeping only its
+position-1 beats would leave a histogram reading 100% beat one *by
+construction*. Cuts landing on a refused beat stay in the records marked
+`in_grid: false` and are counted out of the bar and beat-offset statistics only;
+the transient numbers are computed over every cut and are untouched.
+
+**No gated histogram is recorded here yet, deliberately.** A number in this file
+is evidence, and evidence comes from the tool: step 4 of the analysis workflow
+in `docs/agents/style-layer.md` is explicit that `correlate_timeline` is the one
+tested measurement path and that statistics are never recomputed ad hoc. The six
+gated rows therefore need a live re-run through the tool, which needs each
+project open in Resolve. Until that pass runs, the ungated bar histograms
+recorded in the entries above stand as they are — already marked, in entries 1,
+2 and 4, as saying nothing.
+
+A provisional offline pass over the cut records and grids in the analysis cache
+was run to size the job, and is recorded on the ticket rather than here. Its one
+result worth acting on: three of the six grids look likely to report `meter: 1`
+and so to produce no bar histogram at all under the gate, which would mean half
+the corpus never described a bar position in the first place. Treat that as a
+prediction about what the live pass will show, not as a measurement.
+
 ## What the labels settled: operation, not framing
 
 With entries 3 and 5 labelled, all six measured timelines have roles, and one

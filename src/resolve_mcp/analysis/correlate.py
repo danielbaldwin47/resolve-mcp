@@ -61,7 +61,7 @@ from ..resolve.timeline import (
 )
 from ..timing import SECONDS_PRECISION, dual_time, to_frames
 from . import decode, energy, records
-from .beats import nearest
+from .beats import GridTrust, nearest, trust
 
 log = get_logger("analysis")
 
@@ -201,8 +201,9 @@ def correlate(
     transients = _transients(music.audio, onsets)
 
     progress(0.7, "measuring the cut against the music")
-    rows = measure(shots, clock, music, transients)
-    summary = _summary(rows, clock, transients, [float(one["t"]) for one in music.beats])
+    grid = trust(music.beats)
+    rows = measure(shots, clock, music, transients, grid)
+    summary = _summary(rows, clock, transients, [float(one["t"]) for one in music.beats], grid)
 
     target = config.analysis_dir / keyed_name(name, key, ".correlate.json", "correlate")
     # "count", not "cuts": the records themselves are the file's ``cuts`` field, and a header
@@ -575,6 +576,7 @@ def measure(
     clock: Clock,
     music: Music,
     transients: Sequence[float] | None,
+    grid: GridTrust | None = None,
 ) -> list[dict[str, Any]]:
     """One record per shot: where it starts in the music, and how far off everything it is.
 
@@ -587,11 +589,13 @@ def measure(
     tune_times = [float(row["t"]) for row in (music.tunes or ())]
     solo_times = [float(row["t"]) for row in (music.solos or ())]
     roles = music.roles or {}
+    trusted = (grid if grid is not None else trust(music.beats)).trusted
 
     rows: list[dict[str, Any]] = []
     for index, shot in enumerate(shots, start=1):
         seconds = clock.seconds(shot.record_in)
-        beat = _beat_at(music.beats, times, seconds)
+        found = nearest(times, seconds)
+        beat = None if found is None else music.beats[found]
         rows.append(
             {
                 "cut": index,
@@ -609,6 +613,10 @@ def measure(
                 "beat": None if beat is None else beat.get("beat"),
                 "bar": None if beat is None else beat.get("bar"),
                 "in_bar": None if beat is None else beat.get("in_bar"),
+                # Whether the grid describes the music here at all (#112). The measurement
+                # itself is kept either way — a marked cut is a fact about the detector, and
+                # dropping the row would hide the very thing the gate exists to report.
+                "in_grid": found is not None and trusted[found],
                 "transient_offset": _offset(transients, seconds),
                 "tune": _tune_at(music.tunes, tune_times, seconds),
                 "front": _front_at(music.solos, solo_times, seconds),
@@ -627,15 +635,6 @@ def _opens(index: int, shot: Shot, shots: Sequence[Shot]) -> bool:
     measurement, and the records say which shots were left out of the statistics.
     """
     return index == 1 or shot.record_in != shots[index - 2].record_out
-
-
-def _beat_at(
-    rows: Sequence[dict[str, Any]],
-    times: Sequence[float],
-    seconds: float,
-) -> dict[str, Any] | None:
-    found = nearest(times, seconds)
-    return None if found is None else rows[found]
 
 
 def _offset(times: Sequence[float] | None, seconds: float) -> float | None:
@@ -691,6 +690,7 @@ def _summary(
     clock: Clock,
     transients: Sequence[float] | None,
     grid: Sequence[float],
+    trusted: GridTrust,
 ) -> dict[str, Any]:
     """The list-free reading: what a style profile is written from, and a self-review read.
 
@@ -699,6 +699,10 @@ def _summary(
     file and averages the column gets the number it was already told.
     """
     cut_to_music = [row for row in rows if not row["opening"]]
+    # The gate is applied here and nowhere else (#112). Transients need no grid, so they are
+    # measured over every cut; the beat and bar statistics are taken over the cuts the grid
+    # can actually describe, and the count of the rest is reported rather than swallowed.
+    in_grid = [row for row in cut_to_music if row["in_grid"]]
     transient_offsets = (
         None if transients is None else _offsets([row["transient_offset"] for row in cut_to_music])
     )
@@ -707,10 +711,17 @@ def _summary(
         "alignment": clock.reading(),
         "cuts": len(rows),
         "openings": sum(1 for row in rows if row["opening"]),
+        # ``outside_grid`` and ``gated`` are different refusals and neither implies the other:
+        # the first is a cut beyond the ends of the analysed span, which means the times and
+        # the audio are not the same recording; the second is a cut inside the span that the
+        # grid describes badly. A misaligned clock shows in the first, rubato in the second.
         "outside_grid": _outside(rows, grid),
-        "beat_offsets": _offsets([row["beat_offset"] for row in cut_to_music]),
+        "gated": len(cut_to_music) - len(in_grid),
+        "grid_meter": trusted.meter,
+        "grid_refused": trusted.reasons,
+        "beat_offsets": _offsets([row["beat_offset"] for row in in_grid]),
         "transient_offsets": transient_offsets,
-        "bars": _histogram(row["in_bar"] for row in cut_to_music),
+        "bars": _histogram(row["in_bar"] for row in in_grid),
         "tunes": _spread("tune", cut_to_music) if _measured("tune", rows) else None,
         "solos": _spread("front", cut_to_music) if _measured("front", rows) else None,
         "shot_seconds": _lengths([row["seconds"] for row in rows]),
