@@ -40,7 +40,7 @@ def render_timeline(
     except where it goes and which frames it covers.
 
     Leave preset out and the server's configured default is used, which is the normal way to
-    render: the result says which preset ran and whether it was the default or explicit. Name
+    render: the job's params name the preset that ran and mark it default or explicit. Name
     one — spelled as list_render_presets spells it — only to override that for this render.
     Either way an unknown name is refused with the list of names that exist; nothing falls
     back to another preset, because a wrong-shaped file under a right-sounding name is worse

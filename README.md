@@ -110,9 +110,13 @@ against the media all the same. `detect_scene_cuts` decodes the whole clip, so i
 the catalog of every cut and shot goes to the cache in dual-time JSON and only a gist (how
 many cuts, the shot lengths, the first few times, the path) comes back inline.
 
-Deliverables come off one timeline the same way: `render_timeline` takes a **preset** by
-name — what a preset renders was decided in the Deliver page and saved there, so the server
-overrides only where the file goes and which frames it covers — plus an optional half-open
+Deliverables come off one timeline the same way: `render_timeline` renders with a **preset**
+— what a preset renders was decided in the Deliver page and saved there, so the server
+overrides only where the file goes and which frames it covers. Name none and the configured
+default is used (`H.265 Master`, a Resolve built-in; `RESOLVE_MCP_DEFAULT_RENDER_PRESET`
+points it elsewhere), and the job says which preset ran and whether it was the default or
+explicit. An unknown name is refused with the list of names that exist, never swapped for a
+near-enough preset. On top of that goes an optional half-open
 `[start, end)` range in the timeline's own frames, the numbers `inspect_timeline` and
 `list_markers` report. That is a per-song file out of a concert set. Without a `target_dir`
 the file lands in the cache's `renders` folder, which the server replaces freely on a

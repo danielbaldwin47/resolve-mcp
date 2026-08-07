@@ -77,6 +77,18 @@ not a stalled render at ninety minutes, and killing it would waste the whole thi
 RENDER_FLOOR = 0.05
 RENDER_CEILING = 0.98
 
+# Where the preset came from: the config default, or a name the caller spelled out.
+DEFAULTED = "default"
+EXPLICIT = "explicit"
+
+REPORTED_ONLY = frozenset({"preset_source"})
+"""Params that describe the call rather than the file, so they stay out of the cache key.
+
+Two calls that differ only in these produce the same bytes; keying on them would re-render
+a whole song to answer a question about how it was asked for. Anything added here has to be
+read the same way, or a real difference will start sharing one cache entry.
+"""
+
 
 def list_presets(connection: ResolveConnection) -> dict[str, Any]:
     """The render presets this project offers, and the format it would render with now."""
@@ -110,6 +122,8 @@ def render_timeline(
     Omitting ``preset`` renders with ``config.default_render_preset``. A default the project
     does not have refuses exactly like a name that was typed out: there is no second preset
     to fall back to, only a wrong-shaped file that would go out under a right-sounding name.
+    Which of the two happened is ``preset_source`` on the job's params — see ``_result`` for
+    why the marker sits there and not on the result.
     """
     config = config or get_config()
     project = current_project(connection, "No project is open, so there is nothing to render.")
@@ -118,19 +132,22 @@ def render_timeline(
     fps = frame_rate(project, found)
     span = _span(start, end, found, fps)
 
-    using = config.default_render_preset if preset is None else preset
+    if preset is None:
+        chosen, source = config.default_render_preset, DEFAULTED
+    else:
+        chosen, source = preset, EXPLICIT
 
     # Reading the preset list is cheap and does not disturb the queue; loading it is what
     # changes project state, and that waits for the job's turn under the Resolve lock.
-    render.require_preset(project, using)
+    render.require_preset(project, chosen)
 
     covered = span or (int(found.GetStartFrame()), int(found.GetEndFrame()))
     stem = _stem(name, timeline_name, span)
     directory = Path(target_dir) if target_dir is not None else config.render_dir
     params: dict[str, Any] = {
         "timeline": timeline_name,
-        "preset": using,
-        "preset_source": "default" if preset is None else "explicit",
+        "preset": chosen,
+        "preset_source": source,
         "name": stem,
         "target_dir": str(directory),
         "whole_timeline": span is None,
@@ -142,7 +159,7 @@ def render_timeline(
     # How the preset was chosen is reported, not keyed on: it does not change a frame of the
     # file, and a concert render costs minutes to hours. Keying on it would re-render the
     # whole song the first time a caller spelled out the name it had been defaulting to.
-    keyed = {field: value for field, value in params.items() if field != "preset_source"}
+    keyed = {field: value for field, value in params.items() if field not in REPORTED_ONLY}
     key = cache.cache_key(KIND, [fingerprint(Reader(connection), found)], keyed)
 
     # The lookup start_job is about to make, made a moment early: a cache hit renders
@@ -240,9 +257,11 @@ def _result(
     the timeline's own bounds, and a deliverable that will not say what it holds is one the
     agent has to open Resolve to identify.
 
-    ``preset_source`` says whether that preset was named in the call or came from the config
-    default, so a file that came out the wrong shape leads back to the thing that chose it
-    rather than to a guess about which of the two was in play.
+    The preset is named here and how it was chosen is not: ``preset_source`` lives on the
+    job's params, which always describe *this* call, while a result can be replayed from
+    cache. A render started on the default and asked for again by name is one file and one
+    cache entry, and a result that carried the marker would answer the second call with the
+    first call's word for it.
     """
     fps = params["fps"]
     start = int(params["start"])
@@ -252,7 +271,6 @@ def _result(
         "size_bytes": expecting.stat().st_size,
         "timeline": params["timeline"],
         "preset": params["preset"],
-        "preset_source": params["preset_source"],
         "format": format_and_codec.get("format"),
         "codec": format_and_codec.get("codec"),
         "whole_timeline": params["whole_timeline"],

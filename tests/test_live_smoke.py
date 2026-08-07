@@ -911,9 +911,9 @@ def test_the_shipped_default_preset_is_a_built_in_on_this_machine(tmp_path: Path
     record = wait_for(started["job"]["job_id"], timeout=1800.0)
 
     assert record.state == "completed", record.error
+    assert record.params["preset_source"] == "default"
     assert record.result is not None
     assert record.result["preset"] == default
-    assert record.result["preset_source"] == "default"
     written = Path(record.result["path"])
     assert written.exists() and written.stat().st_size > 0
     print(f"\ndefault preset {default!r} rendered {written} ({written.stat().st_size} bytes)")

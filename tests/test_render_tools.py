@@ -36,7 +36,7 @@ def test_the_preset_list_names_what_the_deliver_page_offers(attach: Attach) -> N
     reply = list_render_presets()
 
     assert reply["ok"] is True
-    assert reply["presets"] == ["H.264 Master", "H.265 Master", "ProRes 422 HQ"]
+    assert reply["presets"] == PRESETS_ON_THIS_PROJECT
     assert reply["count"] == 3
 
 
@@ -73,9 +73,9 @@ def test_a_render_with_no_preset_named_uses_the_configured_default(attach: Attac
     assert started["job"]["params"]["preset"] == DEFAULT_PRESET
     assert started["job"]["params"]["preset_source"] == "default"
     assert record.state == "completed"
+    assert record.params["preset_source"] == "default"
     assert record.result is not None
     assert record.result["preset"] == DEFAULT_PRESET
-    assert record.result["preset_source"] == "default"
     assert record.result["codec"] == "H.265"
     assert _project(resolve).loaded_presets == [DEFAULT_PRESET]
 
@@ -98,9 +98,9 @@ def test_the_env_override_changes_which_preset_a_bare_render_uses(
     record = wait_for(render_timeline()["job"]["job_id"])
 
     assert record.state == "completed"
+    assert record.params["preset_source"] == "default"
     assert record.result is not None
     assert record.result["preset"] == "ProRes 422 HQ"
-    assert record.result["preset_source"] == "default"
     assert _project(resolve).loaded_presets == ["ProRes 422 HQ"]
 
 
@@ -112,9 +112,9 @@ def test_a_named_preset_is_marked_explicit_and_beats_the_default(attach: Attach)
     record = wait_for(started["job"]["job_id"])
 
     assert started["job"]["params"]["preset_source"] == "explicit"
+    assert record.params["preset_source"] == "explicit"
     assert record.result is not None
     assert record.result["preset"] == PRESET
-    assert record.result["preset_source"] == "explicit"
     assert _project(resolve).loaded_presets == [PRESET]
 
 
@@ -122,8 +122,11 @@ def test_defaulting_to_a_preset_and_naming_it_are_one_cache_entry(attach: Attach
     """How the preset was chosen does not change a frame of the file, so it is not in the key.
 
     A concert render costs minutes to hours; re-running one because the second call spelled
-    out the name the first call defaulted to would be the expensive kind of wrong. The
-    replayed result still reports the render that actually happened — ``default``.
+    out the name the first call defaulted to would be the expensive kind of wrong.
+
+    Which is why the marker is on the params and not on the result: the result is replayed
+    from the earlier render, and one carrying ``default`` would answer this explicit call
+    with the other call's word for it.
     """
     resolve = studio(timeline=_concert())
     attach(resolve)
@@ -134,6 +137,9 @@ def test_defaulting_to_a_preset_and_naming_it_are_one_cache_entry(attach: Attach
     assert again["cached"] is True
     assert again["result"] == first.result
     assert len(_project(resolve).render_jobs) == 1
+    assert again["params"]["preset_source"] == "explicit"
+    assert first.params["preset_source"] == "default"
+    assert "preset_source" not in again["result"]
 
 
 # --- the whole timeline --------------------------------------------------------------------
