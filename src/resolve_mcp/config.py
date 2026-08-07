@@ -22,6 +22,14 @@ DEFAULT_STEM_MODEL = "htdemucs_ft.yaml"
 # The name audio-separator 0.44.5 lists for the six-stem MDX23C drum model; the
 # "MDX23C-DrumSep-6stem-FT.ckpt" spelling is not in its catalog and fails to load.
 DEFAULT_DRUM_MODEL = "MDX23C-DrumSep-aufr33-jarredou.ckpt"
+# faster-whisper's own defaults, kept as the defaults here: "auto" picks CUDA when there is
+# a card and CPU when there is not, and "default" means the model's stored precision. CUDA
+# buys speed, not accuracy — large-v3 stores float16, which a GPU runs natively and a CPU
+# widens to float32 (nominally *more* precise). The knobs exist so a box that resolves "auto"
+# wrongly degrades to slow rather than broken; "cuda" + "float32" is the documented pairing
+# for CPU-identical numbers at GPU speed.
+DEFAULT_WHISPER_DEVICE = "auto"
+DEFAULT_WHISPER_COMPUTE_TYPE = "default"
 # A Resolve built-in, present on every install, so a bare render works before anyone has
 # saved a preset. The director's own presets are named explicitly or set here.
 DEFAULT_RENDER_PRESET = "H.265 Master"
@@ -43,6 +51,8 @@ class Config:
     stem_model: str = DEFAULT_STEM_MODEL
     drum_model: str = DEFAULT_DRUM_MODEL
     default_render_preset: str = DEFAULT_RENDER_PRESET
+    whisper_device: str = DEFAULT_WHISPER_DEVICE
+    whisper_compute_type: str = DEFAULT_WHISPER_COMPUTE_TYPE
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Config:
@@ -63,6 +73,10 @@ class Config:
             drum_model=env.get("RESOLVE_MCP_DRUM_MODEL") or DEFAULT_DRUM_MODEL,
             default_render_preset=(
                 env.get("RESOLVE_MCP_DEFAULT_RENDER_PRESET") or DEFAULT_RENDER_PRESET
+            ),
+            whisper_device=env.get("RESOLVE_MCP_WHISPER_DEVICE") or DEFAULT_WHISPER_DEVICE,
+            whisper_compute_type=(
+                env.get("RESOLVE_MCP_WHISPER_COMPUTE_TYPE") or DEFAULT_WHISPER_COMPUTE_TYPE
             ),
         )
 

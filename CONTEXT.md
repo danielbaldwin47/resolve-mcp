@@ -70,7 +70,9 @@ Top level:
 `applause` (bursts → tune boundaries), `beats` (grid + downbeats, model
 injected per ADR 0002; `trust` says which beats the grid describes well enough
 to count, #112), `correlate` (measure a cut against its music, gating the beat
-statistics on `trust` and leaving the transient ones ungated),
+statistics on `trust` and leaving the transient ones ungated), `cuda` (preloads
+the CUDA runtime the `analysis` extra ships, so CTranslate2 finds it on Windows;
+pure decisions, #128),
 `decode` (WAV → numpy, no third-party decoder), `drums` (hits per stem), `energy`
 (loudness curves), `fills` (drum-fill candidates), `halves` (shared
 identify/cache/write pattern), `music` (beats + energy + gist job),

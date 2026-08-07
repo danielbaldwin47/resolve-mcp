@@ -16,15 +16,15 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from ..config import get_config
 from ..errors import TranscriberUnavailableError, TranscriptionError
 from ..logging_config import get_logger
+from . import cuda
 from .transcript import Transcription, Word
 
 log = get_logger("analysis")
 
 DEFAULT_MODEL = "large-v3"
-DEVICE = "auto"
-COMPUTE_TYPE = "default"
 
 
 def transcribe(audio: Path, params: Mapping[str, Any]) -> Transcription:
@@ -52,6 +52,15 @@ def transcribe(audio: Path, params: Mapping[str, Any]) -> Transcription:
 
 
 def _model(name: str) -> Any:
+    config = get_config()
+    # Before the import, never after: CTranslate2 resolves its CUDA libraries as the
+    # extension module loads, and by then there is nothing left to prepare (#128).
+    cuda.prepare()
+    return _build(name, config.whisper_device, config.whisper_compute_type)
+
+
+def _build(name: str, device: str, compute_type: str) -> Any:
+    """The one import of faster-whisper, and the only line an absent backend can break."""
     try:
         from faster_whisper import WhisperModel
     except ImportError as exc:
@@ -59,7 +68,8 @@ def _model(name: str) -> Any:
             cause="faster-whisper is not installed in this environment.",
             detail={"model": name},
         ) from exc
-    return WhisperModel(name, device=DEVICE, compute_type=COMPUTE_TYPE)
+    log.info("Loading %s on device=%s compute_type=%s", name, device, compute_type)
+    return WhisperModel(name, device=device, compute_type=compute_type)
 
 
 def _word(word: Any) -> Word:
