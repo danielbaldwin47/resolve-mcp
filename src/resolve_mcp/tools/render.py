@@ -24,7 +24,7 @@ def list_render_presets() -> dict[str, Any]:
 
 @tool
 def render_timeline(
-    preset: str,
+    preset: str | None = None,
     timeline: str | None = None,
     name: str | None = None,
     target_dir: str | None = None,
@@ -36,8 +36,15 @@ def render_timeline(
 
     A render is the longest thing this server does, so it hands back a job straight away and
     get_job reports it — progress while it runs, the file's path and size when it finishes,
-    a cause and a fix if the queue refused it. preset must be one list_render_presets names;
-    it decides everything about the file except where it goes and which frames it covers.
+    a cause and a fix if the queue refused it. A preset decides everything about the file
+    except where it goes and which frames it covers.
+
+    Leave preset out and the server's configured default is used, which is the normal way to
+    render: the result says which preset ran and whether it was the default or explicit. Name
+    one — spelled as list_render_presets spells it — only to override that for this render.
+    Either way an unknown name is refused with the list of names that exist; nothing falls
+    back to another preset, because a wrong-shaped file under a right-sounding name is worse
+    than a refusal you can act on.
 
     start and end cut one deliverable out of a longer timeline — a song off a concert set.
     They are frames on the timeline's own clock, the numbers inspect_timeline and

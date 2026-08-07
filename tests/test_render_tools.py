@@ -14,7 +14,7 @@ from typing import Any
 
 import pytest
 
-from resolve_mcp.config import get_config
+from resolve_mcp.config import Config, get_config, set_config
 from resolve_mcp.jobs.runner import wait_for
 from resolve_mcp.tools.jobs import get_job
 from resolve_mcp.tools.render import list_render_presets, render_timeline
@@ -23,6 +23,8 @@ from .conftest import Attach
 from .fakes import FakeProject, FakeResolve, FakeTimeline, studio
 
 PRESET = "H.264 Master"
+DEFAULT_PRESET = "H.265 Master"
+PRESETS_ON_THIS_PROJECT = ["H.264 Master", "H.265 Master", "ProRes 422 HQ"]
 
 
 # --- presets -------------------------------------------------------------------------------
@@ -34,8 +36,8 @@ def test_the_preset_list_names_what_the_deliver_page_offers(attach: Attach) -> N
     reply = list_render_presets()
 
     assert reply["ok"] is True
-    assert reply["presets"] == ["H.264 Master", "ProRes 422 HQ"]
-    assert reply["count"] == 2
+    assert reply["presets"] == ["H.264 Master", "H.265 Master", "ProRes 422 HQ"]
+    assert reply["count"] == 3
 
 
 def test_the_preset_list_reports_the_format_currently_loaded(attach: Attach) -> None:
@@ -55,6 +57,83 @@ def test_no_project_open_is_a_failure_not_an_empty_preset_list(attach: Attach) -
 
     assert reply["ok"] is False
     assert reply["error"]["code"] == "no_project_open"
+
+
+# --- the default preset --------------------------------------------------------------------
+
+
+def test_a_render_with_no_preset_named_uses_the_configured_default(attach: Attach) -> None:
+    """"Render this" means render with the preset the server knows — #96's whole point."""
+    resolve = studio(timeline=FakeTimeline("sunset-set v3", "24"))
+    attach(resolve)
+
+    started = render_timeline()
+    record = wait_for(started["job"]["job_id"])
+
+    assert started["job"]["params"]["preset"] == DEFAULT_PRESET
+    assert started["job"]["params"]["preset_source"] == "default"
+    assert record.state == "completed"
+    assert record.result is not None
+    assert record.result["preset"] == DEFAULT_PRESET
+    assert record.result["preset_source"] == "default"
+    assert record.result["codec"] == "H.265"
+    assert _project(resolve).loaded_presets == [DEFAULT_PRESET]
+
+
+def test_the_env_override_changes_which_preset_a_bare_render_uses(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The default is config like any other key, so a machine can be pointed elsewhere."""
+    set_config(
+        Config.from_env(
+            {
+                "RESOLVE_MCP_CACHE": str(tmp_path / "cache"),
+                "RESOLVE_MCP_DEFAULT_RENDER_PRESET": "ProRes 422 HQ",
+            }
+        )
+    )
+    resolve = studio(timeline=_concert())
+    attach(resolve)
+
+    record = wait_for(render_timeline()["job"]["job_id"])
+
+    assert record.state == "completed"
+    assert record.result is not None
+    assert record.result["preset"] == "ProRes 422 HQ"
+    assert record.result["preset_source"] == "default"
+    assert _project(resolve).loaded_presets == ["ProRes 422 HQ"]
+
+
+def test_a_named_preset_is_marked_explicit_and_beats_the_default(attach: Attach) -> None:
+    resolve = studio(timeline=_concert())
+    attach(resolve)
+
+    started = render_timeline(preset=PRESET)
+    record = wait_for(started["job"]["job_id"])
+
+    assert started["job"]["params"]["preset_source"] == "explicit"
+    assert record.result is not None
+    assert record.result["preset"] == PRESET
+    assert record.result["preset_source"] == "explicit"
+    assert _project(resolve).loaded_presets == [PRESET]
+
+
+def test_defaulting_to_a_preset_and_naming_it_are_one_cache_entry(attach: Attach) -> None:
+    """How the preset was chosen does not change a frame of the file, so it is not in the key.
+
+    A concert render costs minutes to hours; re-running one because the second call spelled
+    out the name the first call defaulted to would be the expensive kind of wrong. The
+    replayed result still reports the render that actually happened — ``default``.
+    """
+    resolve = studio(timeline=_concert())
+    attach(resolve)
+
+    first = wait_for(render_timeline(name="Blue Monk")["job"]["job_id"])
+    again = render_timeline(preset=DEFAULT_PRESET, name="Blue Monk")["job"]
+
+    assert again["cached"] is True
+    assert again["result"] == first.result
+    assert len(_project(resolve).render_jobs) == 1
 
 
 # --- the whole timeline --------------------------------------------------------------------
@@ -271,6 +350,27 @@ def test_an_unknown_preset_names_the_ones_that_exist(attach: Attach) -> None:
 
     assert reply["ok"] is False
     assert reply["error"]["code"] == "render_preset_not_found"
+    assert reply["error"]["detail"]["available"] == PRESETS_ON_THIS_PROJECT
+    assert _project(resolve).render_jobs == []
+
+
+def test_a_default_preset_this_project_lacks_refuses_rather_than_falling_back(
+    attach: Attach,
+) -> None:
+    """No fallback, ever (#71 Q4): a missing default is a question for the director.
+
+    Rendering the nearest other preset would hand back a file of the wrong shape under a
+    name that says it is right, and nothing downstream would catch it.
+    """
+    resolve = studio(timeline=_concert())
+    del _project(resolve).render_presets[DEFAULT_PRESET]
+    attach(resolve)
+
+    reply = render_timeline()
+
+    assert reply["ok"] is False
+    assert reply["error"]["code"] == "render_preset_not_found"
+    assert reply["error"]["detail"]["requested"] == DEFAULT_PRESET
     assert reply["error"]["detail"]["available"] == ["H.264 Master", "ProRes 422 HQ"]
     assert _project(resolve).render_jobs == []
 

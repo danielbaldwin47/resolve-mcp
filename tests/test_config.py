@@ -96,6 +96,19 @@ def test_the_separator_and_its_two_models_are_overridable() -> None:
     assert config.drum_model == "drumsep.ckpt"
 
 
+def test_the_default_render_preset_is_a_resolve_built_in_and_overridable() -> None:
+    """Shipped as a preset every install has, so a bare render works before anyone configures.
+
+    A preset saved on the director's machine cannot be the shipped value — it would not be
+    on a fresh install, and the first render would refuse with nothing to point at.
+    """
+    assert Config.from_env({}).default_render_preset == "H.265 Master"
+    assert (
+        Config.from_env({"RESOLVE_MCP_DEFAULT_RENDER_PRESET": "Concert 4K"}).default_render_preset
+        == "Concert 4K"
+    )
+
+
 def test_ffmpeg_is_a_bare_name_on_path_until_told_otherwise() -> None:
     assert Config.from_env({}).ffmpeg == "ffmpeg"
     assert Config.from_env({"RESOLVE_MCP_FFMPEG": r"D:\tools\ffmpeg.exe"}).ffmpeg == (
