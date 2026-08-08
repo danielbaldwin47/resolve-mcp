@@ -116,6 +116,43 @@ def test_a_structured_failure_from_a_detector_is_passed_through_unchanged() -> N
         beats.detect(Path("concert.wav"), missing)
 
 
+# --- where a beat sits in a four-bar group ----------------------------------------------------
+#
+# Shared by every reading that places an event against the grid — drum fills score the beat they
+# resolve into (#39), phrase boundaries the beat the ending is called on (#143) — so it is pinned
+# here, once, rather than in each of their test files.
+
+
+def test_the_top_of_a_four_bar_group_is_the_strongest_placement() -> None:
+    records = beats.numbered(_steady(20))
+    tops = [
+        record for record in records if record["downbeat"] and record["bar"] in (1, 5)
+    ]
+
+    assert [beats.bar_line_strength(record) for record in tops] == [1.0, 1.0]
+
+
+def test_an_ordinary_bar_line_reads_weaker_than_the_top_of_the_group() -> None:
+    records = beats.numbered(_steady(20))
+    (second_bar,) = [record for record in records if record["bar"] == 2 and record["downbeat"]]
+
+    assert beats.bar_line_strength(second_bar) == beats.AT_BAR_LINE
+    assert beats.AT_BAR_LINE < 1.0
+
+
+def test_a_beat_inside_a_bar_is_the_weakest_placement() -> None:
+    records = beats.numbered(_steady(20))
+    inside = next(record for record in records if not record["downbeat"])
+
+    assert beats.bar_line_strength(inside) == beats.MID_BAR
+    assert beats.MID_BAR < beats.AT_BAR_LINE
+
+
+def test_no_beat_at_all_scores_as_weakly_as_a_beat_mid_bar() -> None:
+    """A detector whose event fell off the end of the grid gets a number, not a crash."""
+    assert beats.bar_line_strength(None) == beats.MID_BAR
+
+
 # --- how far the grid may be trusted (#112) ---------------------------------------------------
 
 

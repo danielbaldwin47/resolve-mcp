@@ -70,10 +70,6 @@ TOM_SHARE = 0.5
 """The tom share of a run at which the tom factor is fully convinced."""
 RESOLUTION_BEATS = 0.25
 """How near the resolution point a hit must land to count as landing on it."""
-PHRASE_BARS = 4
-"""Bars to the phrase. A fill into bar 5 of 8 is doing more work than one into bar 4."""
-PHRASE_AT_BAR_LINE = 0.6
-PHRASE_MID_BAR = 0.15
 WEIGHTS = {"density": 0.35, "toms": 0.25, "resolution": 0.15, "phrase": 0.25}
 DEFAULT_MINIMUM_CONFIDENCE = 0.35
 """Below this a candidate is counted but not written — the floor on what is worth reading."""
@@ -232,7 +228,7 @@ def _weighed(reading: Reading, first: int, last: int) -> Candidate:
         "density": _clamp((density / reading.baseline - 1.0) / (STRONG_MULTIPLE - 1.0)),
         "toms": _clamp(counts[TOM_STEM] / total / TOM_SHARE) if total else 0.0,
         "resolution": 1.0 if _hit_near(reading.times, end, tolerance) else 0.0,
-        "phrase": _phrase(into),
+        "phrase": beats_module.bar_line_strength(into),
     }
     return Candidate(
         start=round(start, PLACES),
@@ -251,13 +247,6 @@ def _weighed(reading: Reading, first: int, last: int) -> Candidate:
             _clamp(sum(WEIGHTS[name] * value for name, value in factors.items())), PLACES
         ),
     )
-
-
-def _phrase(into: Mapping[str, Any] | None) -> float:
-    """A fill into the top of a phrase is doing more work than one into any old bar line."""
-    if into is None or not into["downbeat"]:
-        return PHRASE_MID_BAR
-    return 1.0 if (int(into["bar"]) - 1) % PHRASE_BARS == 0 else PHRASE_AT_BAR_LINE
 
 
 def _hit_near(times: Sequence[float], seconds: float, tolerance: float) -> bool:
@@ -335,7 +324,7 @@ def detect_drum_fills(
     config = config or get_config()
     source = _readable(audio)
     found = _stems(stems)
-    _sane_floor(minimum_confidence)
+    halves.sane_floor(minimum_confidence, DEFAULT_MINIMUM_CONFIDENCE)
 
     settings = {"minimum_confidence": float(minimum_confidence)}
     identity = cache.identity(source, config.audio_dir)
@@ -447,15 +436,6 @@ def _all_on_disk(found: Mapping[str, Path]) -> None:
                 "so asking for them redoes the separation."
             ),
             detail={"missing": [str(found[label]) for label in missing]},
-        )
-
-
-def _sane_floor(minimum_confidence: float) -> None:
-    if not 0.0 <= minimum_confidence <= 1.0:
-        raise InvalidRequestError(
-            cause="The confidence floor is a fraction between 0 and 1.",
-            fix=f"The default is {DEFAULT_MINIMUM_CONFIDENCE}; 0 writes every candidate.",
-            detail={"minimum_confidence": minimum_confidence},
         )
 
 

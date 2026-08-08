@@ -115,6 +115,43 @@ def write_hits(
     return _write_samples(path, samples, sample_rate, bit_depth, channels)
 
 
+def write_tones(
+    path: Path,
+    notes: Sequence[tuple[float, float, float]],
+    seconds: float | None = None,
+    sample_rate: int = 48_000,
+    bit_depth: int = 24,
+    channels: int = 2,
+    amplitude: float = 0.5,
+    attack_seconds: float = 0.01,
+    release_seconds: float = 0.02,
+) -> Path:
+    """A melodic stem: ``(start, duration, hz)`` notes laid down, silence between them.
+
+    ``write_hits`` is the percussion stem — transients with no pitch to read — and the phrase
+    side needs its opposite: notes that hold a pitch for a knowable length and then stop, so
+    "how long was that note" and "how far did the line jump" are facts about the fixture
+    rather than about the detector that reads it.
+
+    The attack and release live *inside* the note's own duration, so a note really has
+    stopped by ``start + duration`` and a planted gap is the length it says it is.
+    """
+    peak = 2 ** (bit_depth - 1) * amplitude
+    ends = [start + held for start, held, _ in notes]
+    total = int((seconds if seconds is not None else max(ends, default=0.0) + 0.5) * sample_rate)
+    attack = max(int(attack_seconds * sample_rate), 1)
+    release = max(int(release_seconds * sample_rate), 1)
+    samples = [0] * total
+    for start, held, hertz in notes:
+        first = max(int(start * sample_rate), 0)
+        length = min(int(held * sample_rate), max(total - first, 0))
+        for offset in range(length):
+            envelope = min(offset / attack, (length - offset) / release, 1.0)
+            wobble = math.sin(2 * math.pi * hertz * offset / sample_rate)
+            samples[first + offset] = int(peak * envelope * wobble)
+    return _write_samples(path, samples, sample_rate, bit_depth, channels)
+
+
 def write_sections(
     path: Path,
     sections: Sequence[tuple[str, float]],

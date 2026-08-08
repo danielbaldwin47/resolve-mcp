@@ -61,6 +61,7 @@ from .fixtures import write_hits as write_hits
 from .fixtures import write_jpeg as write_jpeg
 from .fixtures import write_sections as write_sections
 from .fixtures import write_tagged_wav as write_tagged_wav
+from .fixtures import write_tones as write_tones
 from .fixtures import write_wav as write_wav
 from .fusion import FakeFusionComp as FakeFusionComp
 from .fusion import FakeFusionInput as FakeFusionInput
