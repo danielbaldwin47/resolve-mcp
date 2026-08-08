@@ -74,8 +74,10 @@ Top level:
 `applause` (bursts → tune boundaries, then a beat-density floor drops the calls
 with no pulse under them, #133), `beats` (grid + downbeats, model
 injected per ADR 0002; `trust` says which beats the grid describes well enough
-to count, #112), `correlate` (measure a cut against its music, gating the beat
-statistics on `trust` and leaving the transient ones ungated), `cuda` (preloads
+to count, #112), `correlate` (measure a cut against its music — by default the *visible* edit,
+every frame resolved to the topmost enabled video item with uncovered stretches
+as black shots, #142; `track=` measures one video track alone. Gates the beat
+statistics on `trust` and leaves the transient ones ungated), `cuda` (preloads
 the CUDA runtime the `analysis` extra ships, so CTranslate2 finds it on Windows;
 pure decisions, #128),
 `decode` (WAV → numpy, no third-party decoder), `drums` (hits per stem), `energy`

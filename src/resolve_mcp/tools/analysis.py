@@ -21,7 +21,6 @@ from ..analysis import (
     whisper,
 )
 from ..resolve.connection import get_connection
-from ..resolve.timeline import FIRST_TRACK
 from .envelope import tool
 
 
@@ -181,7 +180,7 @@ def correlate_timeline(
     tunes: str | None = None,
     solos: str | None = None,
     angles: dict[str, Any] | None = None,
-    track: int = FIRST_TRACK,
+    track: int | None = None,
     audio_at: Any | None = None,
     refresh: bool = False,
 ) -> dict[str, Any]:
@@ -208,11 +207,19 @@ def correlate_timeline(
     Check alignment in the result: mode "given" is what you asked for, and mode "audio_clip"
     with matched false means the times were taken off a clip nobody vouched for.
 
-    timeline names the cut, defaulting to the open one; track is the video track it sits on.
+    timeline names the cut, defaulting to the open one. What gets measured is the *visible*
+    edit: every frame taken from the topmost enabled video item, so a shot on V2 is a shot
+    and the frames it covers are its own rather than the clip's underneath, and a stretch no
+    track covers is a black shot with clip and role null. Each record says which track it
+    came from, and visible in the result says which tracks were read and how many blacks
+    there were. Pass track=1 to measure one video track alone instead, laid out as the
+    editor left it — a different question, and the one to ask about a single-track cut.
+
     The result names a JSON file of one record per shot — grep it, or read a slice with sed
     — and returns the reading inline: offset statistics with early and late counted apart, a
     histogram of where in the bar the cuts land, shot-duration stats, and how much of the
-    cut each angle and role holds.
+    cut each angle and role holds (black counted on its own line, apart from the angles the
+    sidecar has not named).
 
     Nothing here judges the edit. Two frames late is reported as two frames late; what
     counts as musical belongs in your style profile, not in this server.

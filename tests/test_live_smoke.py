@@ -1287,7 +1287,9 @@ def test_correlate_measures_a_real_hand_edited_timeline() -> None:
 
     A hand-edited concert timeline is where the reading is actually hard — titles and
     generators with no media pool item, shots that were trimmed rather than placed, an audio
-    track that may or may not be the mix the analysis ran on. Opt in by pointing the two
+    track that may or may not be the mix the analysis ran on. #142 added the second half:
+    the same cut read as the visible edit, where a stacked track and a gap are the two
+    things a single-track reading got wrong. Opt in by pointing the two
     variables at a real cut and a real beats file, in PowerShell on the Resolve machine:
 
         $env:RESOLVE_MCP_CORRELATE_BEATS = 'C:\\cache\\analysis\\gig-beats.json'
@@ -1314,15 +1316,35 @@ def test_correlate_measures_a_real_hand_edited_timeline() -> None:
     result = record.result
 
     written = json.loads(Path(result["path"]).read_text(encoding="utf-8"))
-    tracks = inspect_timeline(timeline=named, detail="clips")["tracks"]
-    on_video_one = next(
-        track for track in tracks if track["type"] == "video" and track["index"] == 1
-    )
+    cuts = written["cuts"]
+    reading = inspect_timeline(timeline=named, detail="clips")
+    tracks = reading["tracks"]
+    video = [track for track in tracks if track["type"] == "video"]
+    on_video_one = next(track for track in video if track["index"] == 1)
 
-    assert len(written["cuts"]) == on_video_one["item_count"]
-    assert [one["t"] for one in written["cuts"]] == sorted(one["t"] for one in written["cuts"])
+    assert [one["t"] for one in cuts] == sorted(one["t"] for one in cuts)
+    # #142's AC. The strip runs from the timeline's own first frame — a film that opens on
+    # black opens on a shot — and every track that holds picture is somewhere in it: on the
+    # #46 recut the top track is where three shots live that a V1 reading never saw at all.
+    assert cuts[0]["in"]["frames"] == reading["timeline"]["start"]["frames"]
+    measured = set(result["visible"]["measured"])
+    assert {one["track"] for one in cuts} <= measured | {None}
+    holding = [track["index"] for track in video if track["item_count"]]
+    assert max(holding) in {one["track"] for one in cuts}, "the top track is not on screen"
     assert result["beat_offsets"] is not None, "no cut measured against the grid"
     print(_render_correlation(result))
+
+    # The same cut read as one track, which is what the tool did before #142: no overlays,
+    # no black, and one shot per item Resolve hands back for V1. Measured without the audio
+    # so the transient decode does not run a second time.
+    alone = correlate_timeline(beats=beats, timeline=named, track=1, refresh=True)
+    assert alone["ok"] is True, alone.get("error")
+    one_track = wait_for(alone["job"]["job_id"], timeout=300.0)
+    assert one_track.state == "completed", one_track.error
+    assert one_track.result is not None
+    assert one_track.result["visible"]["mode"] == "track"
+    assert one_track.result["cuts"] <= on_video_one["item_count"]  # transitions are not shots
+    print(f"track 1:   {one_track.result['cuts']} shots of {on_video_one['item_count']} items")
 
 
 def _render_correlation(result: dict[str, Any]) -> str:
@@ -1331,6 +1353,7 @@ def _render_correlation(result: dict[str, Any]) -> str:
         [
             f"file:      {result['path']}",
             f"alignment: {result['alignment']}",
+            f"visible:   {result['visible']}",
             f"cuts:      {result['cuts']} ({result['openings']} opening)",
             f"beats:     {result['beat_offsets']}",
             f"transients:{result['transient_offsets']}",
