@@ -627,9 +627,7 @@ def _read_track(
         "index": index,
         "name": str(reader.optional(timeline, "GetTrackName", "", *where) or ""),
         # ``None``, not ``False``, off the current timeline — see ``Reader.reads_current``.
-        "enabled": bool(reader.optional(timeline, "GetIsTrackEnabled", True, *where))
-        if readable
-        else None,
+        "enabled": track_enabled(reader, timeline, *where),
         "locked": bool(reader.optional(timeline, "GetIsTrackLocked", False, *where))
         if readable
         else None,
@@ -687,6 +685,28 @@ def items_in_track(timeline: Timeline, track_type: str, index: int) -> list[Time
     return list(timeline.GetItemListInTrack(track_type, index) or [])
 
 
+def track_enabled(reader: Reader, timeline: Timeline, track_type: str, index: int) -> bool | None:
+    """Whether a track is switched on, or ``None`` when the answer cannot be believed.
+
+    Off the project's current timeline ``GetIsTrackEnabled`` answers ``False`` for every
+    track, with no error and no ``None`` to say so (#84 — see ``Reader.reads_current``). A
+    caller reading the value there learns nothing about the track, so "unknown" is the only
+    answer that is not a lie, and a caller that acts on enable-state has to say which it got.
+    """
+    if not reader.reads_current:
+        return None
+    return bool(reader.optional(timeline, "GetIsTrackEnabled", True, track_type, index))
+
+
+def item_enabled(reader: Reader, item: TimelineItem) -> bool:
+    """Whether the item itself is switched on.
+
+    Unlike its track's switch this reads true off the current timeline: the #84 sweep read
+    ``GetClipEnabled`` both ways and it did not drift.
+    """
+    return bool(reader.optional(item, "GetClipEnabled", True))
+
+
 def _marker_count(reader: Reader, timeline: Timeline) -> int:
     markers = reader.optional(timeline, "GetMarkers", None)
     return len(markers) if isinstance(markers, dict) else 0
@@ -721,7 +741,7 @@ def read_item(
         "source": {"in": dual_time(source_in, fps), "out": dual_time(source_out, fps)},
         "sync_offset": dual_time(offset, fps),
         "clip": clip_name(reader, item),
-        "enabled": bool(reader.optional(item, "GetClipEnabled", True)),
+        "enabled": item_enabled(reader, item),
         # ``GetTakesCount``, not ``GetTakeCount``: the plural is the method the scripting
         # README actually declares (line 523), and fusionscript answers an unknown name
         # with ``None`` rather than raising — so the singular read as zero takes forever.

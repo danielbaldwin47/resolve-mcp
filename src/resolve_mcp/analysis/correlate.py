@@ -46,18 +46,20 @@ from ..naming import keyed_name
 from ..resolve.connection import ResolveConnection
 from ..resolve.session import frame_rate
 from ..resolve.timeline import (
-    FIRST_TRACK,
     Reader,
     angle_of,
     clip_name,
+    current_name,
     find_timeline,
     fingerprint,
+    item_enabled,
     items_in_track,
     name_of,
     open_project,
     read_frames,
     source_bounds,
     start_frame,
+    track_enabled,
 )
 from ..timing import SECONDS_PRECISION, dual_time, to_frames
 from . import decode, energy, records
@@ -73,6 +75,18 @@ INLINE_CUTS = 12
 UNLABELLED = "unlabelled"
 """Where shots from a clip the angle sidecar does not name are counted."""
 
+BLACK = "black"
+"""Where the stretches nothing covers are counted — a known absence, not a missing label."""
+
+READING = 2
+"""The shape of the reading this writes; bumped whenever the records or the header change.
+
+The cache is keyed on what was measured, not on the code that measured it, so a call whose
+inputs have not changed is otherwise answered out of a file the *previous* shape wrote — for
+#142 that is a report with no track on its records and no ``visible`` on its header, handed
+back as though it were this measurement rather than the one before it.
+"""
+
 GIVEN = "given"
 """The alignment mode where the caller named the frame rather than the server reading it."""
 
@@ -83,11 +97,16 @@ Onsets = Callable[[Path], tuple[float, ...]]
 class Shot(NamedTuple):
     """One shot as the measurement needs it: what it is and where it sits."""
 
-    clip: str
+    clip: str | None
+    """The angle on screen, or ``None`` for black — the stretch no enabled item covers."""
+
     record_in: int
     duration: int
     media: bool = True
     """Whether Resolve gave it a media pool item — false for transitions and generators."""
+
+    track: int | None = None
+    """The video track the frame is taken from; ``None`` along with ``clip`` for black."""
 
     @property
     def record_out(self) -> int:
@@ -138,7 +157,7 @@ def correlate_timeline(
     tunes: str | None = None,
     solos: str | None = None,
     angles: Mapping[str, Any] | None = None,
-    track: int = FIRST_TRACK,
+    track: int | None = None,
     audio_at: Any | None = None,
     refresh: bool = False,
     onsets: Onsets | None = None,
@@ -149,6 +168,12 @@ def correlate_timeline(
     Every input is read and checked here, before the job exists: a path that is not there
     and a file that is not what it claims are wrong *calls*, and a wrong call should come
     back from the tool rather than from a poll two seconds later.
+
+    ``track`` chooses what is measured. Left out, it is the *visible* edit: every frame
+    resolved to the topmost enabled video item, so an overlay on V2 is a shot and the frames
+    it covers belong to it rather than to whatever sits underneath. Named, it is that video
+    track alone, laid out as the editor left it. Both are real questions, but only the first
+    describes the film anybody watches (#142).
 
     ``angles`` is a mapping the caller passes, not a file this reads: the angle sidecar is
     the agent's document (#45 — no server path reads or writes it), so the labels arrive
@@ -162,11 +187,12 @@ def correlate_timeline(
     config = config or get_config()
     roles = _roles(angles)
     music = _music(beats, audio, tunes, solos, roles)
-    shots, clock, print_, name = _read_cut(connection, timeline, track, music.audio, audio_at)
+    cut = _read_cut(connection, timeline, track, music.audio, audio_at)
+    shots, clock, name = cut.shots, cut.clock, cut.name
 
     params: dict[str, Any] = {
         "timeline": name,
-        "track": int(track),
+        "track": None if track is None else int(track),
         "audio_at": clock.zero_frame if clock.mode == GIVEN else None,
         "beats": _named(beats),
         "audio": _named(audio),
@@ -174,11 +200,13 @@ def correlate_timeline(
         "solos": _named(solos),
         "angles": dict(sorted(roles.items())) if roles is not None else None,
     }
-    watched = [print_, *_fingerprints(beats, audio, tunes, solos)]
+    watched = [{"reading": READING}, cut.fingerprint, *_fingerprints(beats, audio, tunes, solos)]
     key = cache.cache_key(KIND, watched, params)
 
     def work(progress: Progress) -> JobOutput:
-        return correlate(shots, clock, name, music, key, params, progress, onsets, config)
+        return correlate(
+            shots, clock, name, music, key, params, cut.visible, progress, onsets, config
+        )
 
     return start_job(KIND, params, work, cache_key=key, refresh=refresh, config=config)
 
@@ -190,6 +218,7 @@ def correlate(
     music: Music,
     key: str,
     params: dict[str, Any],
+    visible: dict[str, Any],
     progress: Progress,
     onsets: Onsets | None = None,
     config: Config | None = None,
@@ -203,7 +232,9 @@ def correlate(
     progress(0.7, "measuring the cut against the music")
     grid = trust(music.beats)
     rows = measure(shots, clock, music, transients, grid)
-    summary = _summary(rows, clock, transients, [float(one["t"]) for one in music.beats], grid)
+    summary = _summary(
+        rows, clock, visible, transients, [float(one["t"]) for one in music.beats], grid
+    )
 
     target = config.analysis_dir / keyed_name(name, key, ".correlate.json", "correlate")
     # "count", not "cuts": the records themselves are the file's ``cuts`` field, and a header
@@ -225,24 +256,40 @@ def correlate(
 # --- reading the cut --------------------------------------------------------------------------
 
 
+class Cut(NamedTuple):
+    """Everything Resolve answered for, taken in one reading before the job starts."""
+
+    shots: list[Shot]
+    clock: Clock
+    fingerprint: dict[str, Any]
+    name: str
+    visible: dict[str, Any]
+    """How the shots were arrived at — which tracks, and how many gaps became black."""
+
+
 def _read_cut(
     connection: ResolveConnection,
     name: str | None,
-    track: int,
+    track: int | None,
     mix: Path | None = None,
     at: Any | None = None,
-) -> tuple[list[Shot], Clock, dict[str, Any], str]:
+) -> Cut:
     """Everything Resolve has to answer for, taken before the job starts.
 
     A job that reached back into Resolve would be measuring a timeline the director may
     have moved on from, and would need the Resolve lock to do it. One reading up front,
     then arithmetic — and a handle that dies during it fails the *call*, which is the one
     failure the tool layer's single reconnect can still fix.
+
+    The reader is told whether this timeline is the project's current one, because the
+    visible edit is decided partly on track enable-state and that getter answers ``False``
+    for everything off the current timeline (#84). Believing it there would read a whole
+    concert as one black shot.
     """
     project = open_project(connection)
     timeline = find_timeline(project, name)
-    reader = Reader(connection)
     found = name_of(timeline)
+    reader = Reader(connection, current=found == current_name(project))
 
     fps = frame_rate(project, timeline)
     if not fps:
@@ -252,29 +299,130 @@ def _read_cut(
             detail={"timeline": found},
         )
 
-    shots = _shots(reader, timeline, track)
+    shots, visible = _read_shots(reader, timeline, track)
     if not shots:
         raise InvalidRequestError(
-            cause=f"Video track {track} of {found!r} holds no shots to measure.",
-            fix=(
-                "Name the timeline with timeline= and the track the cut sits on with track= "
-                "— inspect_timeline shows which tracks hold what."
+            cause=(
+                f"Video track {track} of {found!r} holds no shots to measure."
+                if track is not None
+                else f"No enabled video track of {found!r} holds a shot to measure."
             ),
-            detail={"timeline": found, "track": int(track)},
+            fix=(
+                "Name the timeline with timeline=, and a single video track with track= if "
+                "you want that track alone rather than the visible edit — inspect_timeline "
+                "shows which tracks hold what."
+            ),
+            detail={"timeline": found, "track": None if track is None else int(track)},
         )
     given = to_frames(at, fps, "audio_at")
     clock = _clock(reader, timeline, fps, mix, given)
-    return shots, clock, fingerprint(reader, timeline), found
+    return Cut(shots, clock, fingerprint(reader, timeline), found, visible)
 
 
-def _shots(reader: Reader, timeline: Any, track: int) -> list[Shot]:
+def _read_shots(
+    reader: Reader, timeline: Any, track: int | None
+) -> tuple[list[Shot], dict[str, Any]]:
+    """The strip of shots to measure, and the reading of where it came from.
+
+    Two different questions, and the reading says which was asked. A measurement of the
+    wrong stack is shaped exactly like a measurement of the right one — every offset
+    well-formed, every clip named — so the one line that separates them travels with it.
+    """
+    tracks = int(read_frames(reader.optional(timeline, "GetTrackCount", 0, "video")) or 0)
+    if track is not None:
+        shots = _shots(reader, timeline, int(track))
+        return shots, _reading("track", tracks, [int(track)], [], reader.reads_current, shots)
+
+    layers: list[Shot] = []
+    measured: list[int] = []
+    skipped: list[int] = []
+    for index in range(1, tracks + 1):
+        if track_enabled(reader, timeline, "video", index) is False:
+            skipped.append(index)
+            continue
+        on_track = _shots(reader, timeline, index, only_enabled=True)
+        if on_track:
+            measured.append(index)
+            layers.extend(on_track)
+    visible = _composite(layers)
+    if skipped:
+        log.info("Video tracks %s are switched off, so nothing on them is visible", skipped)
+    return visible, _reading("visible", tracks, measured, skipped, reader.reads_current, visible)
+
+
+def _reading(
+    mode: str,
+    tracks: int,
+    measured: Sequence[int],
+    skipped: Sequence[int],
+    enabled_known: bool,
+    shots: Sequence[Shot],
+) -> dict[str, Any]:
+    return {
+        "mode": mode,
+        "video_tracks": tracks,
+        "measured": list(measured),
+        "skipped": list(skipped),
+        # False means every track was measured because none could be ruled out (#84), not
+        # that every track was on — the difference matters to anyone reading ``measured``.
+        "enabled_known": enabled_known,
+        "black": sum(1 for shot in shots if shot.clip is None),
+    }
+
+
+def _composite(shots: Sequence[Shot]) -> list[Shot]:
+    """The stacked tracks flattened into the one strip of picture that plays (#142).
+
+    Every frame belongs to the topmost item covering it, so an overlay is a shot and the
+    stretch of the clip beneath it is not — that stretch is not on screen, and attributing
+    the overlay's frames to it describes a cut nobody made.
+
+    Where nothing covers a frame the viewer sees black, and black is a shot: the director
+    who left a gap under an empty V1 chose that, and a gap that vanishes takes both its cuts
+    with it. Only the gaps *between* shots become black — before the first frame of picture
+    and after the last there is no edit, just timeline.
+
+    A clip the overlay interrupts comes back as a second shot, because the frame it comes
+    back on is a cut the viewer sees, whatever the timeline's item list says.
+    """
+    edges = sorted({edge for shot in shots for edge in (shot.record_in, shot.record_out)})
+    runs: list[tuple[Shot | None, int, int]] = []
+    for start, end in zip(edges, edges[1:], strict=False):
+        top = _topmost(shots, start)
+        if runs and runs[-1][0] is top and runs[-1][2] == start:
+            runs[-1] = (top, runs[-1][1], end)
+        else:
+            runs.append((top, start, end))
+    return [
+        Shot(clip=None, record_in=start, duration=end - start, media=False, track=None)
+        if top is None
+        else Shot(
+            clip=top.clip, record_in=start, duration=end - start, media=top.media, track=top.track
+        )
+        for top, start, end in runs
+    ]
+
+
+def _topmost(shots: Sequence[Shot], frame: int) -> Shot | None:
+    """What is on screen at ``frame`` — the highest track holding it, or nothing at all."""
+    covering = [shot for shot in shots if shot.record_in <= frame < shot.record_out]
+    return max(covering, key=lambda shot: shot.track or 0, default=None)
+
+
+def _shots(reader: Reader, timeline: Any, track: int, only_enabled: bool = False) -> list[Shot]:
     """The shots on one video track, in the order they play.
 
     A shot whose position will not read is dropped rather than guessed at: a measurement
     with an invented time in it is worse than one shot short, and the log says which.
+
+    ``only_enabled`` drops the items the editor switched off, which is what the visible edit
+    needs and what measuring a named track deliberately does not do: a track read alone is
+    read as it was laid out.
     """
     found: list[Shot] = []
     for item in items_in_track(timeline, "video", int(track)):
+        if only_enabled and not item_enabled(reader, item):
+            continue
         record_in = read_frames(item.GetStart())
         duration = read_frames(item.GetDuration())
         if record_in is None or duration is None:
@@ -283,7 +431,13 @@ def _shots(reader: Reader, timeline: Any, track: int) -> list[Shot]:
         clip = reader.optional(item, "GetMediaPoolItem", None)
         name = angle_of(reader, item, clip) or str(item.GetName() or "")
         found.append(
-            Shot(clip=name, record_in=record_in, duration=duration, media=clip is not None)
+            Shot(
+                clip=name,
+                record_in=record_in,
+                duration=duration,
+                media=clip is not None,
+                track=int(track),
+            )
         )
     ordered = sorted(found, key=lambda shot: (shot.record_in, not shot.media))
     return _without_transitions(ordered, track)
@@ -600,7 +754,8 @@ def measure(
             {
                 "cut": index,
                 "clip": shot.clip,
-                "role": roles.get(shot.clip),
+                "track": shot.track,
+                "role": None if shot.clip is None else roles.get(shot.clip),
                 "opening": _opens(index, shot, shots),
                 "t": _rounded(seconds),
                 # Dual time for the two timeline positions, because an outlier the agent
@@ -688,6 +843,7 @@ def _front_at(
 def _summary(
     rows: Sequence[dict[str, Any]],
     clock: Clock,
+    visible: dict[str, Any],
     transients: Sequence[float] | None,
     grid: Sequence[float],
     trusted: GridTrust,
@@ -709,6 +865,7 @@ def _summary(
     return {
         "timeline_fps": clock.fps,
         "alignment": clock.reading(),
+        "visible": visible,
         "cuts": len(rows),
         "openings": sum(1 for row in rows if row["opening"]),
         # ``outside_grid`` and ``gated`` are different refusals and neither implies the other:
@@ -782,12 +939,17 @@ def _usage(rows: Sequence[dict[str, Any]], field: str) -> dict[str, dict[str, An
     Counted in both shots and seconds because they answer different questions: a role can
     take a third of the cuts and a tenth of the screen time, and which of those a style
     profile should say is the director's call, not this tool's.
+
+    Black gets its own line rather than falling in with the unlabelled: how much of a cut is
+    empty is a fact about the edit, and how much of it the sidecar has not named yet is a
+    fact about the sidecar. Added together neither is readable.
     """
     total = sum(float(row["seconds"]) for row in rows) or 1.0
     usage: dict[str, dict[str, Any]] = {}
     for row in rows:
         held = row[field]
-        key = UNLABELLED if held is None else str(held)
+        named = UNLABELLED if held is None else str(held)
+        key = BLACK if row["clip"] is None else named
         entry = usage.setdefault(key, {"cuts": 0, "seconds": 0.0, "share": 0.0})
         entry["cuts"] += 1
         entry["seconds"] += float(row["seconds"])
