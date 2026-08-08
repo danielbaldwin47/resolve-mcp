@@ -56,7 +56,7 @@ from ..errors import (
 )
 from ..logging_config import get_logger
 from ..spill import spill
-from ..timing import dual_time
+from ..timing import dual_time, frames_from_timecode
 from .camera_sidecar import camera_model as recorded_camera_model
 from .connection import ResolveConnection
 
@@ -84,6 +84,7 @@ SEQUENCE_TOKEN = "%"
 SEQUENCE_RANGE = re.compile(r"\[(\d+)-\d+\]")
 
 FILE_PATH = "File Path"
+DURATION = "Duration"
 FRAMES = "Frames"
 FPS = "FPS"
 START = "Start"
@@ -355,17 +356,49 @@ def frame_rate(reported: dict[str, str]) -> float | None:
         return None
 
 
-def frame_bounds(reported: dict[str, str]) -> tuple[int | None, int | None]:
+def frame_bounds(
+    reported: dict[str, str], fps: float | None = None
+) -> tuple[int | None, int | None]:
     """Media bounds as half-open ``[start, out)``.
 
     Resolve reports ``End`` as the last frame; every range in this server is half-open, so
     the out point is that frame plus one. Frame count is the fallback when ``End`` is
     missing. The rule lives here so bounds mean the same thing to a listing and to a cut.
+
+    Audio-only clips report ``Start``, ``End`` and ``Frames`` as empty strings (#46,
+    live-verified): only ``Duration`` carries the length, as timecode. So whenever the
+    out point is unreadable and ``Duration`` parses, the duration stands in — bounds are
+    ``[start, start + duration)`` with an unreported start read as 0 — counted at the
+    clip's own rate or, since audio reports no rate either, at the caller's ``fps`` (the
+    timeline's, for a cut). With no rate at all, or no parseable ``Duration``, the
+    unknowns stay ``None`` — unknown, never invented.
     """
     start = _number(reported, START)
     end = _number(reported, END)
     frames = _number(reported, FRAMES)
     out = end + 1 if end is not None else (start + frames if start is not None and frames else None)
+    if out is None:
+        rate = frame_rate(reported) or fps
+        duration = frames_from_timecode(reported.get(DURATION, ""), rate) if rate else None
+        if duration is not None:
+            begin = start if start is not None else 0
+            log.debug(
+                "End/Frames unreported; bounds %d-%d read from %s %r at %s fps",
+                begin,
+                begin + duration,
+                DURATION,
+                reported.get(DURATION),
+                rate,
+            )
+            return begin, begin + duration
+        # The case a live session most needs to see: nothing reported and nothing to
+        # derive from, so every bounds-based check downstream silently fails open.
+        log.debug(
+            "End/Frames unreported and %s %r cannot stand in (rate %s); bounds unknown",
+            DURATION,
+            reported.get(DURATION),
+            rate,
+        )
     return start, out
 
 
@@ -809,7 +842,11 @@ def _bounds(clip: Clip, reported: dict[str, str]) -> dict[str, Any]:
     the out point is that frame plus one and ``duration = out - in`` everywhere.
     """
     fps = frame_rate(reported)
-    start, out = frame_bounds(reported)
+    # The same rate feeds the Duration fallback, so a listing and a cut read one bounds —
+    # except when the clip itself reports no rate (audio-only media): a listing has no
+    # timeline to borrow a rate from, so its bounds stay unknown while a cut, which does,
+    # can still derive them.
+    start, out = frame_bounds(reported, fps=fps)
     duration = (
         out - start if out is not None and start is not None else _number(reported, FRAMES)
     )

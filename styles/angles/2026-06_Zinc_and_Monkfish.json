@@ -1,10 +1,10 @@
 {
   "project": "2026-06_Zinc_and_Monkfish",
   "context": "concert",
-  "labelled": "2026-08-06 (Zinc), 2026-08-07 (Monkfish)",
-  "method": "Zinc: frame grabs off the multicam's source clips, read by the agent, then confirmed. Monkfish: stated by the director, nothing looked at.",
+  "labelled": "2026-08-06 (Zinc), 2026-08-07 (Monkfish), 2026-08-08 (MCP Monkfish Main reference sources)",
+  "method": "Zinc: frame grabs off the multicam's source clips, read by the agent, then confirmed. Monkfish: stated by the director, nothing looked at. MCP Monkfish Main sources: frame grabs off the source clips themselves, read by the agent (2026-08-08), corroborating the director's statements about the night. The 2026-08-07 confirmation below covers the two multicam nights only; the 2026-08-08 clip-name entries rest on frame evidence, unconfirmed and, per the style-layer rule for frame-derived labels, not requiring it.",
   "confirmed_by_director": "2026-08-07",
-  "note": "Two nights in one project: Zinc - Set 2 (corpus entry 1) and Monkfish Main (entry 5), each with its own multicam and its own angle numbers. Both nights happen to put the operated camera on Video 1 and the drums on Video 2, but Video 1 is a wide at Zinc and a moving camera at Monkfish - the angle number does not carry the framing, which is why both nights are labelled separately rather than once.",
+  "note": "Two nights in one project: Zinc - Set 2 (corpus entry 1) and Monkfish Main (entry 5), each with its own multicam and its own angle numbers. Both nights happen to put the operated camera on Video 1 and the drums on Video 2, but Video 1 is a wide at Zinc and a moving camera at Monkfish - the angle number does not carry the framing, which is why both nights are labelled separately rather than once. A third keying scheme sits alongside the per-night multicam angle numbers: the MCP Monkfish Main reference timeline is plain tracks, not a multicam, so its two entries are keyed by source clip name, which is what correlate_timeline groups on there.",
   "angles": {
     "Zinc - Set 2 Multicam - Video 1": {
       "role": "ensemble-wide",
@@ -40,6 +40,35 @@
       "stated_by_director": "angle 1 is the moving camera; and separately, that the moving camera generally follows the soloist but also roams the band for interesting movement",
       "inferred": [],
       "inference_basis": "Both axes are now stated rather than inferred. The subject is soloist-PRIMARY by design: the director's account is that this camera goes to whoever is soloing and also moves around the band for visual interest. Enough for role-level claims; not enough to attribute any single shot, since no frames from this night have been looked at."
+    },
+    "20260618_D_A7IV_0001.MP4": {
+      "role": "drums-tight",
+      "subject": "drums",
+      "character": "tight",
+      "note": "Source clip behind the 'Drummer Camera - Fixed' track (V1) of the MCP Monkfish Main reference timeline; one continuous A7IV recording. Locked off level with the kit: drummer foreground right, bass beyond him - the same framing family as the Zinc A7IV. Keyed by clip name because the reference timeline is plain tracks, not a multicam, and correlate_timeline groups on the clip.",
+      "camera": "A7IV",
+      "confidence": "high",
+      "evidence": [
+        "frames/20260618_D_A7IV_0001.MP4-cbb8e8d2387c.jpg",
+        "frames/20260618_D_A7IV_0001.MP4-b19594b6f176.jpg",
+        "frames/20260618_D_A7IV_0001.MP4-f0a8712c5267.jpg",
+        "frames/20260618_D_A7IV_0001.MP4-d41b43a298a0.jpg"
+      ]
+    },
+    "A016C004_260618HC.MXF": {
+      "role": "soloist-moving",
+      "subject": "soloist",
+      "character": "moving",
+      "note": "Source clip behind the 'Moving Camera' track (V2) of the MCP Monkfish Main reference timeline, FX6, covering the selected tune only (ends 164 frames before the tune does). Grabs at four spread moments: tight on tenor twice, on the bass player during the quiet passage (his solo), sax-with-drummer late - the soloist-primary roaming the director described, now seen.",
+      "camera": "FX6",
+      "confidence": "high",
+      "subject_is_primary_not_exclusive": true,
+      "evidence": [
+        "frames/A016C004_260618HC.MXF-7aae3643a5be.jpg",
+        "frames/A016C004_260618HC.MXF-d0df8cb4bb33.jpg",
+        "frames/A016C004_260618HC.MXF-0cc4e35652c5.jpg",
+        "frames/A016C004_260618HC.MXF-2e4b851ec542.jpg"
+      ]
     },
     "Monkfish Multicam - Video 2": {
       "role": "drums-tight",

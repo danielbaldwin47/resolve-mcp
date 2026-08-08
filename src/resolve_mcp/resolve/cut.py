@@ -107,8 +107,9 @@ def preflight(
         log.info("Cut file %s is not schema-valid; the media pool was not read", loaded.path)
         return Preflight(loaded, findings, [])
 
+    timeline_fps = float(loaded.doc["timeline"]["fps"])
     sources = [
-        Source(_facts(found.bin_path, found.clip), found)
+        Source(_facts(found.bin_path, found.clip, timeline_fps), found)
         for found in _located(connection, loaded.doc)
     ]
     facts = [source.facts for source in sources]
@@ -149,10 +150,12 @@ def _located(connection: ResolveConnection, doc: dict[str, Any]) -> list[media.L
     return located
 
 
-def _facts(bin_path: str, clip: Clip) -> ClipFacts:
+def _facts(bin_path: str, clip: Clip, timeline_fps: float) -> ClipFacts:
     name = str(clip.GetName() or "")
     reported = media.properties(clip)
-    start, out = media.frame_bounds(reported)
+    # The timeline's rate is what the Duration fallback counts at: an audio-only clip
+    # reports no Start/End/Frames and no rate of its own (#46), only a Duration timecode.
+    start, out = media.frame_bounds(reported, fps=timeline_fps)
     channels = media.audio_channels(reported)
     if channels is None:
         # E7's has-audio leg reads an undocumented property key. If Resolve renames it
@@ -162,8 +165,11 @@ def _facts(bin_path: str, clip: Clip) -> ClipFacts:
     return ClipFacts(
         name=name,
         bin_path=bin_path,
-        start=start if start is not None else 0,
-        end_exclusive=out if out is not None else 0,
+        # Bounds nothing could derive stay None — "cannot verify", so the range legs of
+        # E5/E7 skip the clip rather than fail every range against fictitious 0-0 media
+        # (the same fail-open stance has_audio takes below).
+        start=start,
+        end_exclusive=out,
         fps=media.frame_rate(reported),
         # An unreported channel count must not fail a cut that is fine: E7 blocks the
         # build, and "Resolve did not say" is not evidence of silence.

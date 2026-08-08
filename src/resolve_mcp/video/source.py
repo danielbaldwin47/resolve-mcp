@@ -84,12 +84,15 @@ def locate(
             detail={"clip": clip, "file_path": path},
         )
 
-    start, out = media.frame_bounds(reported)
+    fps = media.frame_rate(reported)
+    # The clip's own rate is the only one this seam has; it feeds the Duration fallback
+    # so a grab sees the same bounds a listing and a cut do.
+    start, out = media.frame_bounds(reported, fps=fps)
     return Source(
         name=clip,
         path=path,
         bin_path=located.bin_path,
-        fps=media.frame_rate(reported),
+        fps=fps,
         start=start or 0,
         out=out,
     )
