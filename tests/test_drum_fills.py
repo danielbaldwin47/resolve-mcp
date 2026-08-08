@@ -189,6 +189,21 @@ def test_constant_tom_comping_alone_makes_no_run_to_discard() -> None:
     assert found.dropped == 0
 
 
+def test_a_clip_too_short_for_the_exclusion_zone_still_has_a_baseline() -> None:
+    """Twelve beats leaves nothing outside the excluded neighbourhood of a middle beat.
+
+    A baseline of zero there would read steady comping as a departure on every beat, so the
+    exclusion is what gets given up on a clip this short, not the baseline.
+    """
+    rows = _grid(bars=3)
+
+    found = fills.candidates(_comping(rows) + _timekeeper(rows, "toms", count=3), rows)
+
+    assert found.candidates == ()
+    assert found.considered == 0
+    assert found.dropped == 0
+
+
 def test_a_sustained_dense_passage_is_still_discarded() -> None:
     """A run past ``MAXIMUM_BEATS`` is a solo or a groove, and dropping it whole stays right."""
     rows = _grid(bars=16)

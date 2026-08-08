@@ -65,7 +65,7 @@ The ride *becomes* crashy at a phrase end. Counted apart, that reads as a ride d
 and a crash appearing — two half-signals that partly cancel — putting a hole in exactly the
 moment the cymbals were carried in to catch (#125).
 """
-COUNTED = tuple(
+COUNTED_STEMS = tuple(
     dict.fromkeys(CYMBAL_STEM if one in CYMBAL_SOURCES else one for one in DRUM_STEMS)
 )
 """The stems as this file counts them: the separated ones, with the cymbals merged into one."""
@@ -101,13 +101,26 @@ it is judged against. Without this a fill inflates the very median meant to reve
 is this ticket's failure arriving by another door.
 """
 DEFAULT_METER = 4
-"""Beats to the bar when the grid does not say — reached only on a grid with no bars at all."""
+"""Beats to the bar when the grid cannot say.
+
+The guard on a type rather than a state the detector reaches: ``beats.meter`` is typed
+``int | None`` and answers ``None`` only for an empty record sequence, which ``candidates``
+has already turned away by the time the window is sized.
+"""
 TOM_SHARE = 0.5
 """The tom share of a run at which the tom factor is fully convinced."""
 RESOLUTION_BEATS = 0.25
 """How near the resolution point a hit must land to count as landing on it."""
 PHRASE_BARS = 4
-"""Bars to the phrase. A fill into bar 5 of 8 is doing more work than one into bar 4."""
+"""Bars to the phrase. A fill into bar 5 is doing more work than one into bar 4.
+
+Four rather than eight, settled rather than inherited (#125 asked for the disagreement
+between this constant and its old docstring to be resolved deliberately). Phrases in this
+material run four, eight or twelve bars, and every eight- and twelve-bar boundary is also a
+four-bar one — so four is the divisor that marks all of them, at the cost of also marking
+the bar line halfway through a longer phrase. That cost is affordable because this is a
+quarter of the confidence and not a gate.
+"""
 PHRASE_AT_BAR_LINE = 0.6
 PHRASE_MID_BAR = 0.15
 WEIGHTS = {"density": 0.35, "toms": 0.25, "resolution": 0.15, "phrase": 0.25}
@@ -287,12 +300,16 @@ def _usual(
     index: int,
     half: int,
 ) -> float:
-    """The median count for one stem around one beat, that beat's own neighbourhood left out."""
-    sample = [
-        tallies[other][stem]
-        for other in range(max(0, index - half), min(len(tallies), index + half + 1))
-        if abs(other - index) > EXCLUDED_BEATS
-    ]
+    """The median count for one stem around one beat, that beat's own neighbourhood left out.
+
+    A grid shorter than the exclusion zone has no context left after the zone is taken out,
+    and a baseline of zero there would read every beat as a departure. So the zone is given
+    up before the baseline is: on a clip that short, the rest of the clip is the context.
+    """
+    window = range(max(0, index - half), min(len(tallies), index + half + 1))
+    sample = [tallies[other][stem] for other in window if abs(other - index) > EXCLUDED_BEATS]
+    if not sample:
+        sample = [tallies[other][stem] for other in window if other != index]
     return statistics.median(sample) if sample else 0.0
 
 
@@ -388,7 +405,7 @@ def rows(detection: Detection) -> tuple[dict[str, Any], ...]:
             "beats": one.beats,
             "resolves_into_bar": one.resolves_into_bar,
             "hits": one.hits,
-            **{stem: one.counts.get(stem, 0) for stem in COUNTED},
+            **{stem: one.counts.get(stem, 0) for stem in COUNTED_STEMS},
             "density": one.density,
             "density_ratio": one.density_ratio,
             "confidence": one.confidence,
