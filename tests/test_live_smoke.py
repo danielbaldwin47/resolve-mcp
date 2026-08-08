@@ -1317,18 +1317,20 @@ def test_correlate_measures_a_real_hand_edited_timeline() -> None:
 
     written = json.loads(Path(result["path"]).read_text(encoding="utf-8"))
     cuts = written["cuts"]
-    tracks = inspect_timeline(timeline=named, detail="clips")["tracks"]
-    on_video_one = next(
-        track for track in tracks if track["type"] == "video" and track["index"] == 1
-    )
+    reading = inspect_timeline(timeline=named, detail="clips")
+    tracks = reading["tracks"]
+    video = [track for track in tracks if track["type"] == "video"]
+    on_video_one = next(track for track in video if track["index"] == 1)
 
     assert [one["t"] for one in cuts] == sorted(one["t"] for one in cuts)
-    # #142's AC: the visible edit is one gapless strip of picture, so every shot starts
-    # exactly where the last one ended — the invariant a stacked timeline breaks first, and
-    # the one no fake can prove holds against a real overlay.
-    assert [one["in"]["frames"] for one in cuts[1:]] == [one["out"]["frames"] for one in cuts[:-1]]
+    # #142's AC. The strip runs from the timeline's own first frame — a film that opens on
+    # black opens on a shot — and every track that holds picture is somewhere in it: on the
+    # #46 recut the top track is where three shots live that a V1 reading never saw at all.
+    assert cuts[0]["in"]["frames"] == reading["timeline"]["start"]["frames"]
     measured = set(result["visible"]["measured"])
     assert {one["track"] for one in cuts} <= measured | {None}
+    holding = [track["index"] for track in video if track["item_count"]]
+    assert max(holding) in {one["track"] for one in cuts}, "the top track is not on screen"
     assert result["beat_offsets"] is not None, "no cut measured against the grid"
     print(_render_correlation(result))
 

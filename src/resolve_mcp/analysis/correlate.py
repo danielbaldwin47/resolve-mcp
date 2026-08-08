@@ -78,13 +78,14 @@ UNLABELLED = "unlabelled"
 BLACK = "black"
 """Where the stretches nothing covers are counted — a known absence, not a missing label."""
 
-READING = 2
-"""The shape of the reading this writes; bumped whenever the records or the header change.
+READING = 3
+"""What this measurement *is*; bumped whenever a rerun over unchanged inputs would differ.
 
 The cache is keyed on what was measured, not on the code that measured it, so a call whose
-inputs have not changed is otherwise answered out of a file the *previous* shape wrote — for
+inputs have not changed is otherwise answered out of a file the previous version wrote — for
 #142 that is a report with no track on its records and no ``visible`` on its header, handed
-back as though it were this measurement rather than the one before it.
+back as though it were this measurement rather than the one before it. Both the shape and
+the reading count: 3 rather than 2 because the same shots now resolve to a different strip.
 """
 
 GIVEN = "given"
@@ -188,12 +189,11 @@ def correlate_timeline(
     roles = _roles(angles)
     music = _music(beats, audio, tunes, solos, roles)
     cut = _read_cut(connection, timeline, track, music.audio, audio_at)
-    shots, clock, name = cut.shots, cut.clock, cut.name
 
     params: dict[str, Any] = {
-        "timeline": name,
+        "timeline": cut.name,
         "track": None if track is None else int(track),
-        "audio_at": clock.zero_frame if clock.mode == GIVEN else None,
+        "audio_at": cut.clock.zero_frame if cut.clock.mode == GIVEN else None,
         "beats": _named(beats),
         "audio": _named(audio),
         "tunes": _named(tunes),
@@ -205,7 +205,16 @@ def correlate_timeline(
 
     def work(progress: Progress) -> JobOutput:
         return correlate(
-            shots, clock, name, music, key, params, cut.visible, progress, onsets, config
+            cut.shots,
+            cut.clock,
+            cut.name,
+            music,
+            key,
+            params,
+            cut.visible,
+            progress,
+            onsets,
+            config,
         )
 
     return start_job(KIND, params, work, cache_key=key, refresh=refresh, config=config)
@@ -331,7 +340,10 @@ def _read_shots(
     tracks = int(read_frames(reader.optional(timeline, "GetTrackCount", 0, "video")) or 0)
     if track is not None:
         shots = _shots(reader, timeline, int(track))
-        return shots, _reading("track", tracks, [int(track)], [], reader.reads_current, shots)
+        # ``enabled_known`` is None rather than False here: this branch never asks whether a
+        # track is switched on, and reporting on a getter it did not read would be an answer
+        # to a question nobody put.
+        return shots, _reading("track", tracks, [int(track)], [], None, shots)
 
     layers: list[Shot] = []
     measured: list[int] = []
@@ -340,11 +352,9 @@ def _read_shots(
         if track_enabled(reader, timeline, "video", index) is False:
             skipped.append(index)
             continue
-        on_track = _shots(reader, timeline, index, only_enabled=True)
-        if on_track:
-            measured.append(index)
-            layers.extend(on_track)
-    visible = _composite(layers)
+        measured.append(index)
+        layers.extend(_shots(reader, timeline, index, only_enabled=True))
+    visible = _composite(layers, start_frame(timeline))
     if skipped:
         log.info("Video tracks %s are switched off, so nothing on them is visible", skipped)
     return visible, _reading("visible", tracks, measured, skipped, reader.reads_current, visible)
@@ -355,22 +365,26 @@ def _reading(
     tracks: int,
     measured: Sequence[int],
     skipped: Sequence[int],
-    enabled_known: bool,
+    enabled_known: bool | None,
     shots: Sequence[Shot],
 ) -> dict[str, Any]:
     return {
         "mode": mode,
         "video_tracks": tracks,
+        # Every track this reading took shots from or would have: with ``skipped`` it
+        # accounts for all ``video_tracks``, so a track missing from both is a bug rather
+        # than a track that happened to be empty.
         "measured": list(measured),
         "skipped": list(skipped),
         # False means every track was measured because none could be ruled out (#84), not
         # that every track was on — the difference matters to anyone reading ``measured``.
+        # None means the question was never asked, which is what reading one track does.
         "enabled_known": enabled_known,
         "black": sum(1 for shot in shots if shot.clip is None),
     }
 
 
-def _composite(shots: Sequence[Shot]) -> list[Shot]:
+def _composite(shots: Sequence[Shot], opens_at: int) -> list[Shot]:
     """The stacked tracks flattened into the one strip of picture that plays (#142).
 
     Every frame belongs to the topmost item covering it, so an overlay is a shot and the
@@ -379,17 +393,28 @@ def _composite(shots: Sequence[Shot]) -> list[Shot]:
 
     Where nothing covers a frame the viewer sees black, and black is a shot: the director
     who left a gap under an empty V1 chose that, and a gap that vanishes takes both its cuts
-    with it. Only the gaps *between* shots become black — before the first frame of picture
-    and after the last there is no edit, just timeline.
+    with it. That includes the run-up from ``opens_at``, the timeline's own first frame,
+    when the first picture lands after it — a film that opens on black opens on a held frame
+    somebody chose the length of, and the cut out of it is one of the most deliberate in the
+    edit.
+
+    What is *not* a shot is the black after the last picture. A black shot needs a start and
+    an end the edit decides, and that one has no end: how long it runs is however far
+    whatever else is on the timeline reaches — usually an audio item a frame or an hour
+    longer than the cut — which is a fact about the mix rather than about the cut.
 
     A clip the overlay interrupts comes back as a second shot, because the frame it comes
     back on is a cut the viewer sees, whatever the timeline's item list says.
     """
     edges = sorted({edge for shot in shots for edge in (shot.record_in, shot.record_out)})
+    if edges and opens_at < edges[0]:
+        edges.insert(0, opens_at)
     runs: list[tuple[Shot | None, int, int]] = []
     for start, end in zip(edges, edges[1:], strict=False):
+        # Coverage cannot change inside a run: every frame at which some item starts or ends
+        # is an edge, so what is on top at ``start`` is on top until ``end``.
         top = _topmost(shots, start)
-        if runs and runs[-1][0] is top and runs[-1][2] == start:
+        if runs and runs[-1][0] is top:
             runs[-1] = (top, runs[-1][1], end)
         else:
             runs.append((top, start, end))

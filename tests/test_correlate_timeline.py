@@ -469,6 +469,44 @@ def test_a_gap_is_a_black_shot_rather_than_nothing(attach: Attach, tmp_path: Pat
     assert result["clips"]["black"] == {"cuts": 1, "seconds": 0.633, "share": 0.203}
 
 
+def test_a_film_that_opens_on_black_opens_on_a_shot(attach: Attach, tmp_path: Path) -> None:
+    """The run-up from the timeline's first frame is held black somebody chose the length of,
+    and the cut out of it is a decision — measured, not written off as an opening."""
+    late = FakeTimeline(
+        "sunset-set v3",
+        FPS,
+        start_frame=100,
+        video=[
+            FakeTrack(
+                "Video 1",
+                [_shot(clip, start + 30, run, source) for clip, start, run, source in SHOTS],
+            )
+        ],
+        audio=[FakeTrack("Master", [_shot("master_mix.wav", 100, 200, 0)])],
+    )
+    attach(studio(timeline=late))
+
+    result = _measured(tmp_path)
+
+    cuts = _rows(result)
+    assert cuts[0]["clip"] is None
+    assert cuts[0]["in"]["frames"] == 100  # the timeline's own first frame, not the picture's
+    assert cuts[0]["seconds"] == 0.5  # 30 frames at 60fps
+    assert cuts[1]["opening"] is False
+    assert result["visible"]["black"] == 1
+
+
+def test_the_black_after_the_last_shot_is_not_a_shot(attach: Attach, tmp_path: Path) -> None:
+    """It has no end the edit decides — how far it runs is however long the audio under it is,
+    which is a fact about the mix rather than about the cut."""
+    attach(studio(timeline=a_cut()))  # the master mix runs one frame past the last shot
+
+    result = _measured(tmp_path)
+
+    assert [one["clip"] for one in _rows(result)] == ["C0012.mp4", "C0031.mp4", "C0012.mp4"]
+    assert result["visible"]["black"] == 0
+
+
 def test_black_is_counted_apart_from_the_clips_nobody_labelled(
     attach: Attach, tmp_path: Path
 ) -> None:
