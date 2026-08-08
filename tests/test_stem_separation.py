@@ -105,6 +105,26 @@ def test_the_drum_stem_is_what_the_second_pass_decomposes(
     assert all(Path(one).exists() for one in record.result["drums"].values())
 
 
+def test_the_cymbals_are_carried_out_of_the_drum_pass(
+    attach: Attach,
+    separating: FakeSeparator,
+) -> None:
+    """#125: fills here are often cymbal-led, so the pass keeps the ride and crash it writes.
+
+    ``hh`` stays out: the drum model produces it either way, and a hat playing four to the beat
+    is a timekeeper the detector gains nothing from counting.
+    """
+    attach(studio(timeline=with_a_mix(FakeTimeline("sunset-set v3", "59.94"))))
+
+    record = wait_for(separate_stems(get_connection(), runner=separating)["job_id"])
+
+    assert {"ride", "crash"} <= set(DRUM_STEMS)
+    assert "hh" not in DRUM_STEMS
+    assert separation_params()["drum_stems"] == list(DRUM_STEMS)
+    assert record.result is not None
+    assert {"ride", "crash"} <= set(record.result["drums"])
+
+
 def test_each_pass_runs_its_own_model(attach: Attach, separating: FakeSeparator) -> None:
     attach(studio(timeline=with_a_mix(FakeTimeline("sunset-set v3", "59.94"))))
     config = get_config()

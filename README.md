@@ -41,7 +41,7 @@ scene-cut detection, the render/deliver tools, and the `run_python` escape hatch
 | `edit_title` | Fixes one placed title in place — its words or its exposed params, neighbours untouched |
 | `grab_frames` | Grabs chosen moments on a clip as JPEGs (≤1568px) the agent reads off disk |
 | `detect_scene_cuts` | Job: catalogs where a clip changes shot, gist inline and the full list on disk |
-| `separate_stems` | Two-pass GPU stem separation: mix → 4 stems, drums → kick/snare/toms |
+| `separate_stems` | Two-pass GPU stem separation: mix → 4 stems, drums → kick/snare/toms/ride/crash |
 | `list_render_presets` | The project's render presets, spelled the way `render_timeline` needs |
 | `render_timeline` | Renders a timeline or a range of one as a background job |
 | `get_job` | Polls one background job: progress, result, or a structured failure |
@@ -182,7 +182,7 @@ Zero-config by default; every path has an environment override.
 | `RESOLVE_MCP_FFMPEG` | `ffmpeg` (found on PATH) | ffmpeg executable used for per-clip audio extraction, frame grabs and scene-cut detection |
 | `RESOLVE_MCP_AUDIO_SEPARATOR` | `audio-separator` (found on PATH) | python-audio-separator CLI used for stem separation |
 | `RESOLVE_MCP_STEM_MODEL` | `htdemucs_ft.yaml` | Pass one: the 4-stem model (vocals, drums, bass, other) |
-| `RESOLVE_MCP_DRUM_MODEL` | `MDX23C-DrumSep-aufr33-jarredou.ckpt` | Pass two: the drum decomposition model (kick, snare, toms) |
+| `RESOLVE_MCP_DRUM_MODEL` | `MDX23C-DrumSep-aufr33-jarredou.ckpt` | Pass two: the drum decomposition model (kick, snare, toms, ride, crash) |
 | `RESOLVE_MCP_DEFAULT_RENDER_PRESET` | `H.265 Master` | Render preset `render_timeline` uses when the call names none. Must be a preset the project offers — an unknown name is refused, never swapped for another |
 | `RESOLVE_MCP_WHISPER_DEVICE` | `auto` | Device faster-whisper transcribes on: `auto`, `cuda` or `cpu`. `auto` takes the GPU whenever there is one |
 | `RESOLVE_MCP_WHISPER_COMPUTE_TYPE` | `default` | Precision: `default` is the model's stored precision (float16 for `large-v3`, widened to float32 on CPU). `float32` on `cuda` gives CPU-identical numbers at GPU speed |
