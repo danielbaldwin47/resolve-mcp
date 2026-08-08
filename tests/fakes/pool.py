@@ -61,6 +61,10 @@ class FakeMediaPool:
         self.refuses_create_timeline = False
         self.switches_current_timeline = True
         self.deleted_timelines: list[FakeTimeline] = []
+        # Timelines this pool answers ``False`` for. Resolve refuses a delete for reasons
+        # a caller cannot see — a timeline open in another page, one inside a compound —
+        # and the refusal is the only word it gives, so a sweep has to survive one.
+        self.refuse_deleting: set[FakeTimeline] = set()
         self.deleted_folders: list[FakeFolder] = []
         self.delete_folders_result = True
 
@@ -323,6 +327,8 @@ class FakeMediaPool:
         """
         self._check("DeleteTimelines")
         self.deleted_timelines.extend(timelines)
+        if any(timeline in self.refuse_deleting for timeline in timelines):
+            return False
         project = self._reached_project()
         if project is None:
             return True
