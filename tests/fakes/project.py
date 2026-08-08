@@ -52,13 +52,18 @@ class FakeProject:
         # which is why the deliver route never sets a format of its own.
         # "H.265 Master" is here because Resolve ships it on every install: it is the
         # config's default preset, so a fake without it would make every bare render fail
-        # for a reason no real machine has.
+        # for a reason no real machine has. "Audio Only" is stock for the same reason, and
+        # it is the route the audio export takes first (#131), so a fake without it would
+        # exercise the fallback on every audio test and the primary route on none.
         self.render_presets: dict[str, tuple[str, str]] = {
+            "Audio Only": ("wav", "lpcm"),
             "H.264 Master": ("mp4", "H.264"),
             "H.265 Master": ("mp4", "H.265"),
             "ProRes 422 HQ": ("mov", "ProRes422HQ"),
         }
         self.loaded_presets: list[str] = []
+        #: Every pair asked for, refused ones included — the record that says which route ran.
+        self.format_calls: list[tuple[str, str]] = []
         self.accepts_preset = True
         self.accepts_format = True
         self.accepts_settings = True
@@ -75,6 +80,7 @@ class FakeProject:
         return True
 
     def SetCurrentRenderFormatAndCodec(self, format_: str, codec: str) -> bool:  # noqa: N802
+        self.format_calls.append((format_, codec))
         if not self.accepts_format:
             return False
         self.render_format = (format_, codec)

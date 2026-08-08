@@ -24,7 +24,7 @@ from .fakes import FakeProject, FakeResolve, FakeTimeline, studio
 
 PRESET = "H.264 Master"
 DEFAULT_PRESET = "H.265 Master"
-PRESETS_ON_THIS_PROJECT = ["H.264 Master", "H.265 Master", "ProRes 422 HQ"]
+PRESETS_ON_THIS_PROJECT = ["Audio Only", "H.264 Master", "H.265 Master", "ProRes 422 HQ"]
 
 
 # --- presets -------------------------------------------------------------------------------
@@ -37,7 +37,7 @@ def test_the_preset_list_names_what_the_deliver_page_offers(attach: Attach) -> N
 
     assert reply["ok"] is True
     assert reply["presets"] == PRESETS_ON_THIS_PROJECT
-    assert reply["count"] == 3
+    assert reply["count"] == 4
 
 
 def test_the_preset_list_reports_the_format_currently_loaded(attach: Attach) -> None:
@@ -377,7 +377,7 @@ def test_a_default_preset_this_project_lacks_refuses_rather_than_falling_back(
     assert reply["ok"] is False
     assert reply["error"]["code"] == "render_preset_not_found"
     assert reply["error"]["detail"]["requested"] == DEFAULT_PRESET
-    assert reply["error"]["detail"]["available"] == ["H.264 Master", "ProRes 422 HQ"]
+    assert reply["error"]["detail"]["available"] == ["Audio Only", "H.264 Master", "ProRes 422 HQ"]
     assert _project(resolve).render_jobs == []
 
 

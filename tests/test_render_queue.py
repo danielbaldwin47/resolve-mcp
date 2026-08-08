@@ -220,60 +220,100 @@ def test_every_way_the_queue_can_refuse_a_job_says_which(
     assert expected in raised.value.cause
 
 
-def test_a_build_that_refuses_the_pair_renders_through_the_fallback_preset(
+def test_a_named_preset_is_the_route_taken_and_the_pair_is_never_asked_for(
     tmp_path: Path,
 ) -> None:
-    """Resolve 21.0.3 refuses every ("wav", …) pair, so the preset is the only way in (#32).
+    """Studio 21.0.3.7 refuses every ("wav", …) pair, so the preset goes first (#131).
 
+    Asking for the pair first cost one guaranteed-failing call on every export there; the
+    call record is what holds the order, since either route leaves the same format behind.
     The settings are applied after the preset, so the caller's target directory survives it.
     """
     project = FakeProject("sunset-set")
     project.accepts_format = False
-    project.render_presets["Audio Only"] = ("wav", "lpcm")
 
     job_id = render.submit(
         project,
         {"TargetDir": str(tmp_path)},
         ("wav", "lpcm"),
-        fallback_preset="Audio Only",
+        preset="Audio Only",
     )
 
     assert job_id
     assert project.loaded_presets == ["Audio Only"]
+    assert project.format_calls == []
     assert project.render_settings["TargetDir"] == str(tmp_path)
 
 
-def test_the_fallback_preset_is_left_alone_when_the_pair_is_taken(tmp_path: Path) -> None:
-    """A preset carries a whole render config — loading one a build did not need would
-    overwrite settings the caller never asked to change."""
+def test_a_build_without_the_preset_still_renders_through_the_pair(tmp_path: Path) -> None:
+    """The pair is kept as the fallback for builds where it works — an install missing
+    the stock preset (renamed, localised, deleted) is one of them."""
     project = FakeProject("sunset-set")
-    project.render_presets["Audio Only"] = ("wav", "lpcm")
+    del project.render_presets["Audio Only"]
 
-    render.submit(
+    job_id = render.submit(
         project,
         {"TargetDir": str(tmp_path)},
         ("wav", "lpcm"),
-        fallback_preset="Audio Only",
+        preset="Audio Only",
     )
 
+    assert job_id
+    assert project.loaded_presets == []
+    assert project.format_calls == [("wav", "lpcm")]
+    assert project.render_format == ("wav", "lpcm")
+
+
+def test_a_preset_that_will_not_load_falls_back_to_the_pair(tmp_path: Path) -> None:
+    """A preset Resolve lists and then refuses is the other build the pair is kept for."""
+    project = FakeProject("sunset-set")
+    project.accepts_preset = False
+
+    job_id = render.submit(
+        project,
+        {"TargetDir": str(tmp_path)},
+        ("wav", "lpcm"),
+        preset="Audio Only",
+    )
+
+    assert job_id
     assert project.loaded_presets == []
     assert project.render_format == ("wav", "lpcm")
 
 
-def test_a_refused_pair_with_no_preset_to_fall_back_on_says_both(tmp_path: Path) -> None:
+def test_a_preset_with_no_pair_behind_it_fails_rather_than_queueing_the_wrong_format(
+    tmp_path: Path,
+) -> None:
+    """Nothing queues on a format nobody selected: the job would render whatever the
+    project was last set to and land a file the caller never asked for."""
+    project = FakeProject("sunset-set")
+    del project.render_presets["Audio Only"]
+
+    with pytest.raises(RenderQueueError) as raised:
+        render.submit(project, {"TargetDir": str(tmp_path)}, preset="Audio Only")
+
+    assert "Audio Only" in raised.value.cause
+    assert project.render_jobs == []
+
+
+def test_neither_route_to_the_format_working_says_both(tmp_path: Path) -> None:
     project = FakeProject("sunset-set")
     project.accepts_format = False
+    del project.render_presets["Audio Only"]
 
     with pytest.raises(RenderQueueError) as raised:
         render.submit(
             project,
             {"TargetDir": str(tmp_path)},
             ("wav", "lpcm"),
-            fallback_preset="Audio Only",
+            preset="Audio Only",
         )
 
     assert "would not render" in raised.value.cause
+    assert "Audio Only" in raised.value.cause
     assert raised.value.detail["preset"] == "Audio Only"
+    # What presets do exist is the one fact that identifies a renamed or localised install.
+    assert "H.265 Master" in raised.value.detail["available"]
 
 
 def test_a_queue_that_will_not_start_takes_its_job_back_off(tmp_path: Path) -> None:
