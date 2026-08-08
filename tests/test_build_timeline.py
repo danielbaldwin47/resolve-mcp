@@ -313,6 +313,41 @@ def test_a_carried_marker_keeps_the_colour_note_and_custom_data_it_had(
     }
 
 
+def test_the_report_splits_the_carry_by_colour(attach: Attach, tmp_path: Path) -> None:
+    """The blue anchor rode the music and is exact; the note was put over a shot, and moving
+    the shots is what this build did. One count for both would hide which needs an eye."""
+    earlier = _earlier(
+        {
+            100: _a_marker("sunset boulevard"),
+            140: _a_marker("night ferry"),
+            180: _a_marker("tighten this", "Red"),
+        }
+    )
+    resolve = studio(timeline=None, timelines=[earlier], pool=a_pool())
+
+    result = _rebuild(resolve, tmp_path, attach)
+
+    assert result["markers"]["carried"] == 3
+    assert result["markers"]["by_color"] == {"Blue": 2, "Red": 1}
+
+
+def test_a_marker_that_did_not_land_is_left_out_of_the_colour_count(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """`by_color` counts what is on the timeline, not what was attempted — an agent reads it
+    to decide what to re-check, and a refused marker is not there to re-check."""
+    earlier = _earlier(
+        {100: _a_marker("sunset boulevard"), 400: _a_marker("tighten this", "Red")},
+        end_frame=500,
+    )
+    resolve = studio(timeline=None, timelines=[earlier], pool=a_pool())
+
+    result = _rebuild(resolve, tmp_path, attach)
+
+    assert result["markers"]["by_color"] == {"Blue": 1}
+    assert result["markers"]["skipped"] == 1
+
+
 def test_a_marker_lands_on_the_mix_frame_it_sat_over_not_the_record_frame_it_had(
     attach: Attach, tmp_path: Path
 ) -> None:
@@ -382,6 +417,7 @@ def test_the_first_version_of_a_cut_has_nothing_to_carry(attach: Attach, tmp_pat
         "skipped": 0,
         "from": None,
         "shift": None,
+        "by_color": {},
         "refused": [],
         "reason": "Nothing to carry: this is the first version of this cut.",
     }

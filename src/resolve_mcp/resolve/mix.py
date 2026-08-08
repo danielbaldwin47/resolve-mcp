@@ -8,10 +8,20 @@ one clip nobody re-times — so "which frame of the mix is under this record fra
 only coordinate two versions of the same cut agree on.
 
 That reading is a single number, :attr:`MixShot.zero_frame`: the record frame the mix's own
-first frame lands on. Everything built from it is addition. Two callers need it and must
-never disagree about it — ``correlate_timeline`` turns timeline positions into seconds of
-the analysed mix, and ``build_timeline`` carries hand-placed markers from the previous
-version onto the one it just made — so the reading lives here once rather than in each.
+first frame lands on. Everything built from it is addition. Two callers need it —
+``correlate_timeline`` turns timeline positions into seconds of the analysed mix, and
+``build_timeline`` carries hand-placed markers from the previous version onto the one it
+just made — so the reading lives here once rather than in each, and cannot come out
+differently in the two.
+
+What is deliberately *not* shared is how hard each caller insists on it. Reading and
+writing carry different costs for being wrong. ``correlate`` is producing a measurement to
+look at: if nothing matches the file it analysed it falls back to the first audio clip and
+labels the result ``matched: False``, so an assumed anchor is still useful and says it was
+assumed. The carry is producing *marker writes*: there is nowhere to put a caveat on a
+marker in the GUI, so it takes :func:`anchor`, which answers only when the shots agree, and
+otherwise carries nothing. Same reading, two risk postures — that difference is the point,
+not a drift between them.
 
 The subtlety worth the module: a source frame is counted from the *start of the media
 file*, not from the clip's own start timecode. A WAV stamped 01:00:00:00 reports source
@@ -64,11 +74,11 @@ def audio_shots(reader: Reader, timeline: Timeline) -> list[MixShot]:
             if record_in is None or source_in is None:
                 continue
             name = clip_name(reader, item) or str(item.GetName() or "")
-            found.append(MixShot(name, record_in, source_in - media_start(reader, item)))
+            found.append(MixShot(name, record_in, source_in - _media_start(reader, item)))
     return found
 
 
-def media_start(reader: Reader, item: TimelineItem) -> int:
+def _media_start(reader: Reader, item: TimelineItem) -> int:
     """The first frame of the media itself, which is not zero on anything with a start stamp."""
     clip = reader.optional(item, "GetMediaPoolItem", None)
     if clip is None:
@@ -98,4 +108,4 @@ def anchor(shots: Sequence[MixShot], name: str | None = None) -> MixShot | None:
     return wanted[0]
 
 
-__all__ = ["MixShot", "anchor", "audio_shots", "media_start"]
+__all__ = ["MixShot", "anchor", "audio_shots"]

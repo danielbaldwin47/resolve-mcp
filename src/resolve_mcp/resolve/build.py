@@ -35,7 +35,7 @@ from typing import Any, Final
 from ..cut.validate import locked_track_finding, overlay_positions, placements
 from ..errors import BuildFailedError, CutInvalidError, TimelineNotFoundError
 from ..logging_config import get_logger
-from ..naming import latest_version, next_version_name
+from ..naming import latest_version, next_version_name, version_name
 from . import cut, markers, media, mix, takes
 from . import timeline as timeline_read
 from .connection import ResolveConnection
@@ -167,7 +167,7 @@ def build_timeline(
         project,
         built,
         name,
-        f"{base} v{superseded}" if superseded else None,
+        version_name(base, superseded) if superseded else None,
         carry_markers,
     )
 
@@ -255,7 +255,7 @@ def _carry_markers(
         )
 
     shift = here.zero_frame - there.zero_frame
-    entries = [_carried(marker, shift) for marker in found]
+    entries = [_write_entry(marker, shift) for marker in found]
     results = markers.set_markers(connection, entries, name=name)["results"]
     refused = [
         {
@@ -275,11 +275,18 @@ def _carry_markers(
         name,
         shift,
     )
+    landed = [entry for entry, result in zip(entries, results, strict=True) if result.get("ok")]
     return {
-        "carried": len(entries) - len(refused),
+        "carried": len(landed),
         "skipped": len(refused),
         "from": previous,
         "shift": shift,
+        # Not decoration: the carry is exact for a marker that means a *musical* moment and
+        # only approximate for one that means a *picture* moment, and the two are told apart
+        # by colour alone. Blue names a song and rides the mix exactly; a director's coloured
+        # note was put over a shot, and this rebuild is what moved the shots. Splitting the
+        # count is what lets an agent re-read the notes without re-reading the anchors.
+        "by_color": _colours(landed),
         # A marker whose moment was cut out of this version lands outside the timeline and is
         # refused by name, because "which song lost its marker" is the actionable half.
         "refused": refused[:REFUSED_MARKER_CAP],
@@ -294,12 +301,21 @@ def _no_carry(reason: str, source: str | None = None) -> dict[str, Any]:
         "skipped": 0,
         "from": source,
         "shift": None,
+        "by_color": {},
         "refused": [],
         "reason": reason,
     }
 
 
-def _carried(marker: dict[str, Any], shift: int) -> dict[str, Any]:
+def _colours(entries: list[dict[str, Any]]) -> dict[str, int]:
+    """How many of each colour came across, the same histogram ``list_markers`` reports."""
+    counts: dict[str, int] = {}
+    for entry in entries:
+        counts[entry["color"]] = counts.get(entry["color"], 0) + 1
+    return counts
+
+
+def _write_entry(marker: dict[str, Any], shift: int) -> dict[str, Any]:
     """One read marker as the write that puts it over the same moment of the mix."""
     return {
         "frame": marker["record"]["frames"] + shift,

@@ -99,6 +99,16 @@ def latest_version(base: str, existing: Iterable[str]) -> int:
     return max(numbers, default=0)
 
 
+def version_name(base: str, number: int) -> str:
+    """What version ``number`` of ``base`` is called.
+
+    One owner for the format, because it is read back as well as written: a caller naming
+    the version a build supersedes has to spell it exactly as the build that made it did,
+    and two f-strings agreeing today is not the same as one that cannot drift.
+    """
+    return f"{base} v{number}"
+
+
 def next_version_name(base: str, existing: Iterable[str]) -> str:
     """The name the next build takes: ``<base> v<latest + 1>``."""
-    return f"{base} v{latest_version(base, existing) + 1}"
+    return version_name(base, latest_version(base, existing) + 1)

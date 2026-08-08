@@ -81,10 +81,10 @@ SCENE_SCAN_CLIP_ENV = "RESOLVE_MCP_SCENE_SCAN_CLIP"
 """Opt-in for #34's live AC: a pool clip with hard cuts, so the scan has cuts to map."""
 
 SMOKE_CUT = "resolve-mcp-smoke"
+"""Every build here materialises a new version of this name; delete them when you are done."""
 
 SMOKE_SONG = "resolve-mcp-130"
 """The blue marker #130's carry moves — named so a leftover in the GUI says where it came from."""
-"""Every build here materialises a new version of this name; delete them when you are done."""
 
 LOCKED_TRACK_PROBE = """
 pool = project.GetMediaPool()

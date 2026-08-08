@@ -105,6 +105,11 @@ def build_timeline(
     `carry_markers=False` to leave them behind. A cut with no master mix has no shared axis
     with the earlier version: nothing is carried, and `markers.reason` says so.
 
+    Read `markers.by_color` before trusting the coloured ones. A blue marker names a song
+    and lands exactly, because the music is what it was anchored to. A note put over a
+    *shot* lands on the same music, and moving the shots is what this build just did — so
+    re-read those against the new cut.
+
     The validate_cut rules run first: a single error aborts before any timeline is created,
     and comes back with the same per-segment findings. The report echoes the cut file's
     content hash, which is what ties the timeline back to the exact cut that made it —
