@@ -165,17 +165,16 @@ def test_the_export_renders_one_file_for_the_whole_timeline(attach: Attach) -> N
     assert _project(resolve).render_mode == 1
 
 
-def test_the_mix_still_exports_on_a_build_that_refuses_the_wav_pair(attach: Attach) -> None:
-    """Resolve 21.0.3 refuses every ("wav", …) pair, and the mix has to come out anyway.
+def test_the_mix_exports_through_the_audio_only_preset(attach: Attach) -> None:
+    """Studio 21.0.3.7 refuses every ("wav", …) pair, so the preset is the route (#32, live).
 
-    The stock ``Audio Only`` preset is the only route to a WAV on that build (#32, live),
-    so the worker names it as the fallback. Without this test the worker could stop passing
-    it and every other test here would stay green.
+    It goes first, not second (#131): on the supported build the pair is one guaranteed
+    failure before the preset succeeds. Without this test the worker could stop naming the
+    preset and every other test here would stay green.
     """
     resolve = studio(timeline=with_a_mix(FakeTimeline("sunset-set v3", "59.94")))
     project = _project(resolve)
     project.accepts_format = False
-    project.render_presets["Audio Only"] = ("wav", "lpcm")
     attach(resolve)
 
     record = wait_for(acquire_timeline_audio(get_connection())["job_id"])
@@ -184,16 +183,36 @@ def test_the_mix_still_exports_on_a_build_that_refuses_the_wav_pair(attach: Atta
     assert record.result is not None
     assert Path(record.result["path"]).exists()
     assert project.loaded_presets == ["Audio Only"]
+    assert project.format_calls == []
     # The preset chose the format; the caller still chose where it lands.
     assert project.render_settings["TargetDir"] == str(get_config().audio_dir)
     assert project.render_settings["ExportVideo"] is False
 
 
-def test_a_build_with_no_wav_route_at_all_fails_the_job_naming_both(attach: Attach) -> None:
-    """The pair refused and no usable fallback: the reply has to name the preset too,
-    or the machine that cannot render audio looks identical to one missing a codec."""
+def test_a_build_missing_the_preset_still_exports_through_the_pair(attach: Attach) -> None:
+    """The pair stays as the fallback for builds where it works — an install whose stock
+    preset was renamed or deleted still has to get the mix out."""
     resolve = studio(timeline=with_a_mix(FakeTimeline("sunset-set v3", "59.94")))
-    _project(resolve).accepts_format = False  # and no "Audio Only" among the presets
+    project = _project(resolve)
+    del project.render_presets["Audio Only"]
+    attach(resolve)
+
+    record = wait_for(acquire_timeline_audio(get_connection())["job_id"])
+
+    assert record.state == "completed", record.error
+    assert record.result is not None
+    assert Path(record.result["path"]).exists()
+    assert project.loaded_presets == []
+    assert project.format_calls == [("wav", "lpcm")]
+
+
+def test_a_build_with_no_wav_route_at_all_fails_the_job_naming_both(attach: Attach) -> None:
+    """Neither route usable: the reply has to name the preset too, or the machine that
+    cannot render audio looks identical to one missing a codec."""
+    resolve = studio(timeline=with_a_mix(FakeTimeline("sunset-set v3", "59.94")))
+    project = _project(resolve)
+    project.accepts_format = False
+    del project.render_presets["Audio Only"]
     attach(resolve)
 
     record = wait_for(acquire_timeline_audio(get_connection())["job_id"])

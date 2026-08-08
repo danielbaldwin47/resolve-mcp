@@ -68,6 +68,22 @@ The order is what was observed twice live: in #88's wedge and #92's, no dialog w
 only a restart cleared it. Naming the dialog alone sends the reader to a GUI with nothing to
 show them."""
 
+RESTORE_THE_PRESET_FIX = (
+    "Restore the stock {preset!r} preset in this Resolve — it is the only route to this "
+    "format on builds that refuse the format/codec pair directly."
+)
+"""What to tell a caller that never chose the preset name: the worker hardcodes it, so the
+install is what is wrong, not the request."""
+
+PRESET_UNUSABLE_FIX = (
+    "Restore the stock {preset!r} preset in this Resolve, or open the Deliver page and see "
+    "what it selects — nothing else names the output this render needs."
+)
+
+UNKNOWN_FORMAT = "unknown"
+"""What 21.0.3.7 answers for the current format after ``Audio Only`` loads — and it renders a
+WAV regardless (live). A reading of it says the build will not say, not that it disagrees."""
+
 STATUS = "JobStatus"
 PERCENT = "CompletionPercentage"
 
@@ -128,69 +144,42 @@ def submit(
     project: Project,
     settings: dict[str, Any],
     format_and_codec: tuple[str, str] | None = None,
-    fallback_preset: str | None = None,
+    preset: str | None = None,
 ) -> str:
     """Push one job onto the queue and return its id.
 
-    ``SetRenderSettings`` and the format/codec pair are project-level state; they are set
-    immediately before the job is added so that the job captures them. The pair travels as
-    one because Resolve takes it as one, and it is optional because a loaded preset has
-    already set both — setting them again would overwrite the rest of what the preset chose.
+    ``SetRenderSettings``, the format/codec pair and a loaded preset are all project-level
+    state; they are set immediately before the job is added so that the job captures them.
+    The pair travels as one because Resolve takes it as one, and both selectors are optional
+    because a caller that has already loaded a preset itself (the deliver route) has both
+    set — setting them again would overwrite the rest of what that preset chose.
 
-    ``fallback_preset`` is the way past a build that refuses the pair outright: Resolve
-    21.0.3 lists Wave among its render formats, returns an empty codec map for it, and
-    refuses every ("wav", …) pair, so audio can only be reached through the stock preset
-    that already selects it (#32, live). The settings are applied after the preset either
-    way, so the caller's target directory and name still win.
+    Given both, ``preset`` is the route tried first and the pair is what is left when the
+    preset is unusable. That order is the way round it is because of the build this runs on:
+    Resolve 21.0.3 lists Wave among its render formats, returns an empty codec map for it,
+    and refuses every ("wav", …) pair, so audio is reachable only through the stock preset
+    that already selects it (#32, live) — asking for the pair first spent one guaranteed
+    failure on every export there (#131). The pair stays as the fallback for the builds
+    where it works, including an install whose stock preset was renamed or deleted. The
+    settings are applied after the preset either way, so the caller's target directory and
+    name still win.
 
-    What the fallback deliberately does *not* do is confirm the preset selected the format
-    that was asked for. On the build this exists for, ``GetCurrentRenderFormatAndCodec``
-    answers ``{"format": "unknown"}`` after ``Audio Only`` loads and still renders a WAV —
-    so a check against the requested format would reject the one route that works. The
-    file the job writes is what settles it, and ``render`` already refuses a job that
-    produced nothing.
+    Going first costs the preset something the fallback ordering never had to pay: a preset
+    carries a *whole* render config, so on a build that would have taken the pair, loading it
+    replaces settings the caller never asked to change. That is the price of the swap and it
+    is accepted — ``Audio Only`` is the shape this render wants anyway, the caller's settings
+    are re-applied over it, and the alternative is the guaranteed-failing call on the build
+    that is actually supported.
+
+    What is *not* accepted is a preset quietly rendering something else. Only a reading that
+    succeeded may say so: ``GetCurrentRenderFormatAndCodec`` answers ``{"format": "unknown"}``
+    after ``Audio Only`` loads on 21.0.3.7 and renders a WAV regardless (live), so an
+    unreadable format leaves the preset in charge — a check that treated it as disagreement
+    would reject the one route that works. A readable format that differs demotes the preset
+    to the pair, because a customised preset otherwise beats an explicit request silently and
+    the job lands a file under a name that says it is something it is not.
     """
-    if format_and_codec is not None:
-        format_, codec = format_and_codec
-        if not project.SetCurrentRenderFormatAndCodec(format_, codec):
-            if fallback_preset is None:
-                raise RenderQueueError(
-                    cause=f"Resolve would not render {format_}/{codec}.",
-                    detail={"format": format_, "codec": codec, "preset": None},
-                )
-            # load_preset, not LoadRenderPreset: a bare False means both "no such preset"
-            # and "will not load", and the two want different answers from the caller.
-            try:
-                load_preset(project, fallback_preset)
-            except ResolveMcpError as exc:
-                raise RenderQueueError(
-                    cause=(
-                        f"Resolve would not render {format_}/{codec}, and the "
-                        f"{fallback_preset!r} preset it falls back on is unusable: {exc.cause}"
-                    ),
-                    # Not exc.fix: that one tells the caller to re-spell the preset, and
-                    # the caller never chose this name — the worker hardcodes it. What is
-                    # actually wrong is the install.
-                    fix=(
-                        f"Restore the stock {fallback_preset!r} preset in this Resolve — "
-                        "it is the only route to this format on builds that refuse the "
-                        "format/codec pair directly."
-                    ),
-                    # exc.detail carries what presets do exist, which is the one fact that
-                    # identifies a renamed or localised install.
-                    detail={
-                        **exc.detail,
-                        "format": format_,
-                        "codec": codec,
-                        "preset": fallback_preset,
-                    },
-                ) from exc
-            log.info(
-                "Resolve refused %s/%s — rendering through the %r preset instead",
-                format_,
-                codec,
-                fallback_preset,
-            )
+    _select_output(project, format_and_codec, preset)
     if not project.SetRenderSettings(settings):
         raise RenderQueueError(
             cause="Resolve refused the render settings.",
@@ -201,6 +190,101 @@ def submit(
         raise RenderQueueError(cause="Resolve would not add the job to the render queue.")
     log.info("Queued render job %s", job_id)
     return str(job_id)
+
+
+def _select_output(
+    project: Project,
+    format_and_codec: tuple[str, str] | None,
+    preset: str | None,
+) -> None:
+    """Put the project on the asked-for output: by preset where this build takes one, else pair.
+
+    This is where ``submit``'s ordering lives, and its docstring is where the reasons are.
+    Nothing is selected when the caller named neither — the deliver route loaded its own
+    preset before calling and would have this overwrite it.
+    """
+    refusal: str | None = None
+    detail: dict[str, Any] = {}
+    if preset is not None:
+        refusal, detail = _preset_refusal(project, preset, format_and_codec)
+        if refusal is None:
+            return
+    if format_and_codec is None:
+        if refusal is None:
+            return
+        # Nothing else names the output, and queuing anyway would render whatever the
+        # project was last set to — a file the caller never asked for.
+        raise RenderQueueError(
+            cause=f"Resolve would not render through the {preset!r} preset: {refusal}",
+            fix=PRESET_UNUSABLE_FIX.format(preset=preset),
+            detail={**detail, "preset": preset},
+        )
+    format_, codec = format_and_codec
+    if project.SetCurrentRenderFormatAndCodec(format_, codec):
+        if refusal is not None:
+            log.info(
+                "Not rendering through the %r preset (%s) — asking Resolve for %s/%s directly",
+                preset,
+                refusal,
+                format_,
+                codec,
+            )
+        return
+    if refusal is None:
+        raise RenderQueueError(
+            cause=f"Resolve would not render {format_}/{codec}.",
+            detail={"format": format_, "codec": codec, "preset": None},
+        )
+    raise RenderQueueError(
+        cause=(
+            f"Resolve would not render {format_}/{codec}, and the {preset!r} preset is no "
+            f"route to it either: {refusal}"
+        ),
+        # Not the underlying error's fix: that one tells the caller to re-spell the preset,
+        # and the caller never chose this name — the worker hardcodes it. What is actually
+        # wrong is the install.
+        fix=RESTORE_THE_PRESET_FIX.format(preset=preset),
+        detail={**detail, "format": format_, "codec": codec, "preset": preset},
+    )
+
+
+def _preset_refusal(
+    project: Project,
+    preset: str,
+    format_and_codec: tuple[str, str] | None,
+) -> tuple[str | None, dict[str, Any]]:
+    """Load ``preset``; answer why it is no route to the asked-for format, ``None`` if it is.
+
+    Loading is how the question is asked — a preset that will not load, and one that loads
+    and selects something else, are both "no route", and only the attempt tells them apart.
+
+    The detail returned alongside carries what presets do exist, which is the one fact that
+    identifies a renamed or localised install.
+    """
+    # load_preset, not LoadRenderPreset: a bare False means both "no such preset" and
+    # "will not load", and the two want different answers from the caller.
+    try:
+        load_preset(project, preset)
+    except ResolveMcpError as exc:
+        return exc.cause, exc.detail
+    if format_and_codec is None:
+        return None, {}
+    selected = current_format(project).get("format", "")
+    # Only a reading that *succeeded* may demote the preset. The build this ordering exists
+    # for answers "unknown" here after ``Audio Only`` loads and then renders a WAV anyway
+    # (live, 21.0.3.7), so treating an unreadable format as disagreement would reject the one
+    # route that works. A readable format that differs is another matter: a preset customised
+    # to render something else would otherwise silently beat an explicit request, and the job
+    # would land a file under a name that says it is something it is not.
+    if selected.casefold() in ("", UNKNOWN_FORMAT):
+        return None, {}
+    wanted = format_and_codec[0]
+    if selected.casefold() == wanted.casefold():
+        return None, {}
+    return (
+        f"it renders {selected}, not {wanted}",
+        {"selected": selected},
+    )
 
 
 def render(
