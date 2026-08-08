@@ -86,6 +86,7 @@ def virtual_transcript(
 def build_timeline(
     cut_file: str,
     min_segment_frames: int = cut.MIN_SEGMENT_FRAMES,
+    carry_markers: bool = True,
 ) -> dict[str, Any]:
     """Build a cut file into a new `<name> v<N>` timeline and report what landed.
 
@@ -95,6 +96,20 @@ def build_timeline(
     land on V2 at their anchor segment's start plus the offset — never a frame you state —
     so tightening a segment and rebuilding leaves every overlay over the same content.
 
+    The version being superseded usually carries hand-placed markers — the blue song
+    anchors a titles file is written against, and the director's coloured notes. They are
+    carried onto the new version by the frame of the master mix each one sat over, so they
+    stay on the same musical moment however much the picture above moved, and a titles file
+    re-applies without anyone re-marking the songs. `markers` in the report says how many
+    came across, how far they shifted, and names any the new version has no room for. Pass
+    `carry_markers=False` to leave them behind. A cut with no master mix has no shared axis
+    with the earlier version: nothing is carried, and `markers.reason` says so.
+
+    Read `markers.by_color` before trusting the coloured ones. A blue marker names a song
+    and lands exactly, because the music is what it was anchored to. A note put over a
+    *shot* lands on the same music, and moving the shots is what this build just did — so
+    re-read those against the new cut.
+
     The validate_cut rules run first: a single error aborts before any timeline is created,
     and comes back with the same per-segment findings. The report echoes the cut file's
     content hash, which is what ties the timeline back to the exact cut that made it —
@@ -102,7 +117,7 @@ def build_timeline(
     partially built version, if one was made, is scrap and can be deleted.
     """
     connection = get_connection()
-    return build.build_timeline(connection, cut_file, min_segment_frames)
+    return build.build_timeline(connection, cut_file, min_segment_frames, carry_markers)
 
 
 @tool

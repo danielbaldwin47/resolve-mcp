@@ -215,6 +215,349 @@ def test_another_cuts_versions_do_not_move_this_ones_number(
     assert build_timeline(a_cut(tmp_path, valid_doc()))["timeline"]["name"] == "sunset-set v1"
 
 
+# --- markers across a rebuild (#130) ------------------------------------------------------
+#
+# The markers on a reviewed version are hand-placed — blue ones name the songs a titles file
+# anchors to — and a rebuild makes an empty timeline. Carrying them is the one thing that
+# stops a rebuild costing a human another pass of re-marking every song boundary.
+#
+# What makes it correct is *not* copying the frame numbers. Record frames are exactly what a
+# rebuild moves. The master mix underneath does not move, so a marker is carried by the frame
+# of the mix it sat over, and these tests pin that: the same musical moment, wherever the
+# picture above it went.
+
+
+MIX = "sunset-master.wav"
+
+
+def _mix(record: int = 0, source: int = 0, stamp: str = "0", name: str = MIX) -> FakeTimelineItem:
+    """The master mix as it sits under an earlier version — the axis the carry reads."""
+    return FakeTimelineItem(
+        name,
+        record,
+        240,
+        source_start=source,
+        media_item=FakeMediaPoolItem(name, properties={"Start": stamp}),
+    )
+
+
+def _earlier(
+    markers: dict[Any, dict[str, Any]] | None = None,
+    mix: list[FakeTimelineItem] | None = None,
+    name: str = "sunset-set v3",
+    end_frame: int | None = None,
+) -> FakeTimeline:
+    """``sunset-set v3``: the reviewed version a rebuild supersedes, marked up by hand."""
+    return FakeTimeline(
+        name,
+        "59.94",
+        video=[FakeTrack("Video 1", [FakeTimelineItem("C0012.mp4", 0, 240)])],
+        audio=[FakeTrack("Master", [_mix()] if mix is None else mix)],
+        markers=markers,
+        end_frame=end_frame,
+    )
+
+
+def _a_marker(name: str, color: str = "Blue", note: str = "", custom: str = "") -> dict[str, Any]:
+    return {"color": color, "name": name, "note": note, "duration": 1, "customData": custom}
+
+
+def _carried(timeline: FakeTimeline) -> list[tuple[float, str, str]]:
+    """What landed on the new version: where, what colour, and which song it names."""
+    return sorted(
+        (frame, marker["color"], marker["name"]) for frame, marker in timeline.GetMarkers().items()
+    )
+
+
+def _rebuild(resolve: Any, tmp_path: Path, attach: Attach, **kwargs: Any) -> dict[str, Any]:
+    attach(resolve)
+    return build_timeline(a_cut(tmp_path, valid_doc()), **kwargs)
+
+
+def test_a_rebuild_carries_the_hand_placed_markers_onto_the_new_version(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The whole point: the song anchors survive, so a titles file re-applies untouched."""
+    earlier = _earlier({100: _a_marker("sunset boulevard"), 180: _a_marker("night ferry")})
+    resolve = studio(timeline=None, timelines=[earlier], pool=a_pool())
+
+    result = _rebuild(resolve, tmp_path, attach)
+
+    assert result["markers"]["carried"] == 2
+    assert result["markers"]["from"] == "sunset-set v3"
+    assert result["markers"]["reason"] is None
+    assert _carried(built(resolve, "sunset-set v4")) == [
+        (100.0, "Blue", "sunset boulevard"),
+        (180.0, "Blue", "night ferry"),
+    ]
+
+
+def test_a_carried_marker_keeps_the_colour_note_and_custom_data_it_had(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """A director's note is only worth carrying with the words on it (#42: the join is data)."""
+    note = _a_marker("tighten this", "Red", "comes in late", "songs.json:sunset")
+    earlier = _earlier({120: note})
+    resolve = studio(timeline=None, timelines=[earlier], pool=a_pool())
+
+    _rebuild(resolve, tmp_path, attach)
+
+    assert built(resolve, "sunset-set v4").GetMarkers() == {
+        120.0: {
+            "color": "Red",
+            "name": "tighten this",
+            "note": "comes in late",
+            "duration": 1,
+            "customData": "songs.json:sunset",
+        }
+    }
+
+
+def test_the_report_splits_the_carry_by_colour(attach: Attach, tmp_path: Path) -> None:
+    """The blue anchor rode the music and is exact; the note was put over a shot, and moving
+    the shots is what this build did. One count for both would hide which needs an eye."""
+    earlier = _earlier(
+        {
+            100: _a_marker("sunset boulevard"),
+            140: _a_marker("night ferry"),
+            180: _a_marker("tighten this", "Red"),
+        }
+    )
+    resolve = studio(timeline=None, timelines=[earlier], pool=a_pool())
+
+    result = _rebuild(resolve, tmp_path, attach)
+
+    assert result["markers"]["carried"] == 3
+    assert result["markers"]["by_color"] == {"Blue": 2, "Red": 1}
+
+
+def test_a_marker_that_did_not_land_is_left_out_of_the_colour_count(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """`by_color` counts what is on the timeline, not what was attempted — an agent reads it
+    to decide what to re-check, and a refused marker is not there to re-check."""
+    earlier = _earlier(
+        {100: _a_marker("sunset boulevard"), 400: _a_marker("tighten this", "Red")},
+        end_frame=500,
+    )
+    resolve = studio(timeline=None, timelines=[earlier], pool=a_pool())
+
+    result = _rebuild(resolve, tmp_path, attach)
+
+    assert result["markers"]["by_color"] == {"Blue": 1}
+    assert result["markers"]["skipped"] == 1
+
+
+def test_a_marker_lands_on_the_mix_frame_it_sat_over_not_the_record_frame_it_had(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """v3's mix started 40 frames in; this cut's starts at 0, so every marker moves 40 later.
+
+    This is the test the whole feature turns on. A copy would leave the marker at 60 and put
+    the song anchor 40 frames before the song.
+    """
+    earlier = _earlier({60: _a_marker("sunset boulevard")}, mix=[_mix(source=40)])
+    resolve = studio(timeline=None, timelines=[earlier], pool=a_pool())
+
+    result = _rebuild(resolve, tmp_path, attach)
+
+    assert result["markers"]["shift"] == 40
+    assert _carried(built(resolve, "sunset-set v4")) == [(100.0, "Blue", "sunset boulevard")]
+
+
+def test_a_start_stamp_on_the_mix_does_not_shift_the_carry(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """A WAV stamped 01:00:00:00 reports source frames an hour in; forgetting to subtract
+    that stamp would shift every carried marker by an hour and still look like a reading."""
+    earlier = _earlier(
+        {60: _a_marker("sunset boulevard")},
+        mix=[_mix(source=216040, stamp="216000")],
+    )
+    resolve = studio(timeline=None, timelines=[earlier], pool=a_pool())
+
+    result = _rebuild(resolve, tmp_path, attach)
+
+    assert result["markers"]["shift"] == 40
+    assert _carried(built(resolve, "sunset-set v4")) == [(100.0, "Blue", "sunset boulevard")]
+
+
+def test_the_earlier_version_keeps_the_markers_it_was_reviewed_with(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """A carry is a copy forward, never a move: v3 is what a reviewer already signed off."""
+    earlier = _earlier({100: _a_marker("sunset boulevard")})
+    resolve = studio(timeline=None, timelines=[earlier], pool=a_pool())
+
+    _rebuild(resolve, tmp_path, attach)
+
+    assert _carried(earlier) == [(100.0, "Blue", "sunset boulevard")]
+
+
+def test_markers_come_from_the_version_being_superseded_not_the_oldest_one(
+    attach: Attach, tmp_path: Path
+) -> None:
+    earlier = _earlier({100: _a_marker("sunset boulevard")})
+    stale = _earlier({40: _a_marker("an abandoned pass")}, name="sunset-set v1")
+    resolve = studio(timeline=None, timelines=[stale, earlier], pool=a_pool())
+
+    result = _rebuild(resolve, tmp_path, attach)
+
+    assert result["markers"]["from"] == "sunset-set v3"
+    assert _carried(built(resolve, "sunset-set v4")) == [(100.0, "Blue", "sunset boulevard")]
+
+
+def test_the_first_version_of_a_cut_has_nothing_to_carry(attach: Attach, tmp_path: Path) -> None:
+    resolve = empty_project(a_pool())
+
+    result = _rebuild(resolve, tmp_path, attach)
+
+    assert result["markers"] == {
+        "carried": 0,
+        "skipped": 0,
+        "from": None,
+        "shift": None,
+        "by_color": {},
+        "refused": [],
+        "reason": "Nothing to carry: this is the first version of this cut.",
+    }
+
+
+def test_carry_markers_off_leaves_the_earlier_versions_markers_where_they_are(
+    attach: Attach, tmp_path: Path
+) -> None:
+    earlier = _earlier({100: _a_marker("sunset boulevard")})
+    resolve = studio(timeline=None, timelines=[earlier], pool=a_pool())
+
+    result = _rebuild(resolve, tmp_path, attach, carry_markers=False)
+
+    assert result["markers"]["carried"] == 0
+    assert "carry_markers was off" in result["markers"]["reason"]
+    assert built(resolve, "sunset-set v4").GetMarkers() == {}
+
+
+def test_an_earlier_version_that_was_never_marked_up_says_so(
+    attach: Attach, tmp_path: Path
+) -> None:
+    resolve = studio(timeline=None, timelines=[_earlier()], pool=a_pool())
+
+    result = _rebuild(resolve, tmp_path, attach)
+
+    assert result["markers"]["carried"] == 0
+    assert result["markers"]["reason"] == "sunset-set v3 carries no markers."
+
+
+def test_a_cut_with_no_master_mix_refuses_to_guess_where_the_markers_go(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """A rough cut has no continuous mix, so the two versions share no axis. Markers that
+    merely look plausible are worse than markers the agent knows it has to place."""
+    doc = valid_doc()
+    del doc["audio"]
+    earlier = _earlier({100: _a_marker("sunset boulevard")})
+    resolve = studio(timeline=None, timelines=[earlier], pool=a_pool())
+    attach(resolve)
+
+    result = build_timeline(a_cut(tmp_path, doc))
+
+    assert result["markers"]["carried"] == 0
+    assert result["markers"]["from"] == "sunset-set v3"
+    assert "no single master mix" in result["markers"]["reason"]
+    assert "placed by hand" in result["markers"]["reason"]
+    assert built(resolve, "sunset-set v4").GetMarkers() == {}
+
+
+def test_a_multi_channel_mix_on_the_earlier_version_is_one_anchor_not_eight(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Live, an 8-channel MXF appends as one item per channel across A1-A8 — one placement
+    said eight times. Counting items instead of reading them refuses a real concert mix."""
+    earlier = _earlier({60: _a_marker("sunset boulevard")}, mix=[_mix(source=40)] * 8)
+    resolve = studio(timeline=None, timelines=[earlier], pool=a_pool())
+
+    result = _rebuild(resolve, tmp_path, attach)
+
+    assert result["markers"]["carried"] == 1
+    assert result["markers"]["shift"] == 40
+    assert _carried(built(resolve, "sunset-set v4")) == [(100.0, "Blue", "sunset boulevard")]
+
+
+def test_an_earlier_version_that_lays_the_mix_at_two_offsets_is_not_an_anchor(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Which of the two says where the mix sits? Nothing answers that, so nothing guesses."""
+    earlier = _earlier({100: _a_marker("sunset boulevard")}, mix=[_mix(), _mix(record=300)])
+    resolve = studio(timeline=None, timelines=[earlier], pool=a_pool())
+
+    result = _rebuild(resolve, tmp_path, attach)
+
+    assert result["markers"]["carried"] == 0
+    assert "does not agree where" in result["markers"]["reason"]
+
+
+def test_an_earlier_version_over_a_different_mix_is_not_an_anchor(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """A hand-edited version over camera scratch shares no clock with this cut's mix."""
+    earlier = _earlier({100: _a_marker("sunset boulevard")}, mix=[_mix(name="C0012.mp4")])
+    resolve = studio(timeline=None, timelines=[earlier], pool=a_pool())
+
+    result = _rebuild(resolve, tmp_path, attach)
+
+    assert result["markers"]["carried"] == 0
+    assert built(resolve, "sunset-set v4").GetMarkers() == {}
+
+
+def test_a_marker_this_version_has_no_room_for_is_named_not_silently_dropped(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The tightening cut the marker sat in is gone. Which song lost its anchor is the
+    actionable half — a count alone would send someone diffing two timelines to find out."""
+    earlier = _earlier(
+        {100: _a_marker("sunset boulevard"), 400: _a_marker("night ferry")},
+        end_frame=500,
+    )
+    resolve = studio(timeline=None, timelines=[earlier], pool=a_pool())
+
+    result = _rebuild(resolve, tmp_path, attach)
+
+    assert result["markers"]["carried"] == 1
+    assert result["markers"]["skipped"] == 1
+    refused = result["markers"]["refused"]
+    assert [entry["name"] for entry in refused] == ["night ferry"]
+    assert refused[0]["record"] == 400
+    assert refused[0]["error"] is not None
+    assert _carried(built(resolve, "sunset-set v4")) == [(100.0, "Blue", "sunset boulevard")]
+
+
+def test_a_version_deleted_mid_build_does_not_sink_a_build_that_landed(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The name came off this project moments earlier, so this is a race, not a mistake —
+    and every clip is already on the timeline by the time the markers are read."""
+    earlier = _earlier({100: _a_marker("sunset boulevard")})
+    pool = a_pool()
+    resolve = studio(timeline=None, timelines=[earlier], pool=pool)
+    attach(resolve)
+    create = pool.CreateEmptyTimeline
+
+    project = resolve.current_project
+    assert project is not None
+
+    def create_and_lose_the_earlier_version(name: str) -> Any:
+        made = create(name)
+        project.remove_timeline(earlier)
+        return made
+
+    pool.CreateEmptyTimeline = create_and_lose_the_earlier_version
+
+    result = build_timeline(a_cut(tmp_path, valid_doc()))
+
+    assert result["ok"] is True
+    assert result["markers"]["carried"] == 0
+    assert "gone by the time" in result["markers"]["reason"]
+
+
 # --- pre-flight: nothing starts on a bad file ---------------------------------------------
 
 

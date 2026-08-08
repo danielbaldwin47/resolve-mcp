@@ -180,3 +180,11 @@ about unmarked. Reviewing a rough cut should take minutes.
 Then the review round is the ordinary one: the director's notes come back as markers,
 `list_markers` is your queue, take notes are `swap_take` with the cut file kept in sync, and
 everything else is a new version.
+
+**A rebuild loses the markers here, and that is deliberate** (ADR 0006). On a concert cut
+`build_timeline` carries the previous version's markers onto the new one by the frame of
+the master mix under them — but a rough cut has no continuous mix, so the two versions
+share no axis and nothing honest can be derived. The build says so in `markers.reason`
+rather than guessing. So read the round's markers *before* you rebuild: `list_markers` on
+the version being superseded is the only copy, and it is what you are rebuilding from
+anyway.
