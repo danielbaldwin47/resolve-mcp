@@ -43,7 +43,7 @@ that the grid is a live band's grid, so it moves.
   uniform 25%: 223 / 103 / 63 / 66 over beats 1–4. The skew is not the gate's
   doing and not an artefact of the broken grids — ungated, over the same three
   timelines, beat 1 held 53.1%, so refusing a third of the beats moved it four
-  points. Read it as a tendency and not a rule: half of a bar's cuts are
+  points. Read it as a tendency and not a rule: half the cuts still land
   somewhere other than beat 1.
   `[measured — 3 projects, n=455 cuts, concert]` (`corpus.md`, the gated pass)
 

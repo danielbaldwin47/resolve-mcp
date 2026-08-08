@@ -318,7 +318,10 @@ the transient numbers are computed over every cut and are untouched.
 
 **The pass has now run.** Each of the three projects was opened in Resolve in
 turn and each timeline re-measured through `correlate_timeline` with
-`refresh=True`, on the live Windows 11 box against Resolve Studio 21.0.3.7.
+`refresh=True`, on the live Windows 11 box against Resolve Studio 21.0.3.7 on
+CPython 3.12.10 — and the attach held throughout, so that interpreter is not a
+uv-managed standalone (ADR 0001, where the failure is a process-killing access
+violation rather than an error).
 Every parameter — beats file, audio, `angles`, `track`, `audio_at` — was copied
 verbatim out of the matching pre-gate `.correlate.json` header, so the gate is
 the only thing that differs between an entry's row above and its row here. No
@@ -427,7 +430,9 @@ against the nearest **surviving** beat, however far away that is. It is one cut
 in 455 and it does not touch the histogram, but a mean is not safe from it.
 The clean fix would be to refuse a cut whose nearest trusted beat is further
 than some multiple of the local beat interval; that is a change to the gate, not
-to this corpus, and there is one instance of it to justify the work.
+to this corpus, and one instance across 455 cuts is thin justification for
+making it. Recorded here so the next mean that looks wrong has an explanation
+waiting.
 
 ### Two bookkeeping consequences of re-running
 
@@ -460,8 +465,8 @@ Monkfish Main and its master, `uv run pytest -m live -k correlate -s` — **1
 passed in 30.79 s**, on the same box and Resolve build. It ran without an
 `angles` sidecar and into pytest's own temporary cache, and still reported
 `measured: 202`, `median_abs: 0.084`, `max_abs: 0.39` — identical to the
-labelled run in the table above. That is the third independent demonstration in
-this corpus that labels add names and move no number.
+labelled run in the table above. That is one more independent demonstration
+that labels add names and move no number.
 
 ## What the labels settled: operation, not framing
 
