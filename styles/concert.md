@@ -20,7 +20,9 @@ that the grid is a live band's grid, so it moves.
 - **Rubato is not measurable and not evidence.** Where the beat confidence
   drops — free intros, out-of-time codas — cut placement there says nothing
   about taste and is gated out of the evidence rather than averaged in.
-  `[stated principle]` (#13, analysis workflow)
+  `[stated principle]` (#13, analysis workflow) — and the pass that applies it
+  shows the principle is not a rounding error: the gate refuses every cut on
+  three of the six corpus timelines and a third of them on a fourth.
 - **Cuts land close to a transient without landing on one.** The median cut sits
   a few frames from the nearest transient and almost never on it: 33 ms on the
   anchor (2 of 360 cuts on a transient), 41 ms on Monkfish, 34 ms on Freefall,
@@ -36,33 +38,37 @@ that the grid is a live band's grid, so it moves.
   "always cut just before the hit", not the presence of one: the placement is
   about distance, not side.
   `[measured — 3 projects, n=1043 cuts, concert]`
-- Beat-grid position patterns, in frames and in beat-fraction, conditioned on
-  context. *Open, and blocked rather than merely unmeasured. Every timeline so
-  far skews hard to the first beat of the bar — anchor 171:111:44:30, Scullers
-  203:55:38:27, Mercies 25:6:2:3 — which would be a real finding if the grids
-  were trustworthy, and they are not: the anchor's reports `meter: 1` at 214 bpm
-  over a jazz set, Mercies puts a cut in a bar 6, and Scullers puts cuts in bars
-  5, 6 and 7. There is no such position in 4/4, so the grid is demonstrably
-  wrong where those cuts are — and it is the same grid the other 96% were
-  scored against.
+- **Cuts skew to the first beat of the bar — where the grid can be trusted at
+  all.** 49.0% of gated cuts land on beat 1 and 71.6% on beats 1–2, against a
+  uniform 25%: 223 / 103 / 63 / 66 over beats 1–4. The skew is not the gate's
+  doing and not an artefact of the broken grids — ungated, over the same three
+  timelines, beat 1 held 53.1%, so refusing a third of the beats moved it four
+  points. Read it as a tendency and not a rule: half of a bar's cuts are
+  somewhere other than beat 1.
+  `[measured — 3 projects, n=455 cuts, concert]` (`corpus.md`, the gated pass)
 
-  **The gate is built (#112); the pass that would settle this has not run.**
-  `correlate_timeline` now refuses a beat whose bar position its own meter
-  cannot hold, or whose interval does not match the tempo around it, and
-  refuses whole any grid whose meter comes out as 1 — filtering such a grid
-  against its own meter would keep exactly its position-1 beats and leave a
-  histogram that is 100% beat one *by construction*, which is a gate
-  manufacturing the very skew it was built to test. Cuts are marked
-  `in_grid: false` and counted, never silently dropped.
+  **Three of the six corpus timelines can say nothing here at all**, including
+  the anchor. Their grids report `meter: 1` and the gate refuses them whole
+  rather than filter them, since keeping only a meter-1 grid's position-1 beats
+  would leave a histogram reading 100% beat one *by construction*. The
+  histograms those three used to show — anchor 171:111:44:30, Mercies 25:6:2:3
+  — were never evidence, and the positions 5, 6 and 7 that Scullers and Mercies
+  reported are gone from every surviving row. This claim therefore rests on
+  Freefall, Monkfish Main and Concert Full Cut: one timeline from each of the
+  three projects, which is the thinnest a three-project claim can be.
 
-  What that changes here: the instrument can now say when it cannot be
-  trusted, so this item is **open but no longer blocked**. What it does not
-  change: still no beat-position claim, because a claim needs numbers out of
-  `correlate_timeline` over the six corpus timelines, and that pass needs each
-  project open in Resolve. A provisional offline check suggests three of the
-  six grids will produce no bar histogram at all under the gate. If that
-  holds, half the histograms quoted above were never evidence — but it is a
-  prediction until the tool has been run.*
+  One confound the gate cannot address, and it is the reason this reads
+  `[measured]` rather than settled: `beat_this` places downbeats from the same
+  mix the cuts were made to, and a downbeat detector keys on strong onsets —
+  roughly where cuts land. Part of the skew could be the detector agreeing with
+  the director about where the strong moments are. Separating the two needs a
+  grid from an independent source (a click track, a hand-tapped grid), which
+  this corpus does not have.
+
+- Beat-grid position patterns **conditioned on context** — by tune section, by
+  energy, in beat-fraction rather than whole positions. *Open. The unconditioned
+  histogram above is what the gated pass could support; conditioning it splits
+  455 cuts across three timelines into samples too small to defend.*
 
 ## 2. Energy — the master concept
 
