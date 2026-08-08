@@ -177,6 +177,38 @@ def nearest(beats: Sequence[float], seconds: float) -> int | None:
     return min(candidates, key=lambda one: abs(beats[one] - seconds))
 
 
+GROUP_BARS = 4
+"""Bars to the group.
+
+Four rather than eight, settled rather than inherited (#125 asked for the disagreement
+between this constant and its old docstring to be resolved deliberately). Phrases in this
+material run four, eight or twelve bars, and every eight- and twelve-bar boundary is also a
+four-bar one — so four is the divisor that marks all of them, at the cost of also marking
+the bar line halfway through a longer phrase. That cost is affordable because callers weigh
+this as one factor among several, never as a gate.
+"""
+AT_BAR_LINE = 0.6
+MID_BAR = 0.15
+
+
+def bar_line_strength(row: Mapping[str, Any] | None) -> float:
+    """How strong a place to put something this beat is: the top of a four-bar group, an
+    ordinary bar line, or the middle of a bar.
+
+    Public for the same reason ``nearest`` is: more than one reading places an event against
+    the grid and they must agree about what a strong placement is. Drum fills score the beat
+    they resolve into (#39) and phrase boundaries score the beat the ending is called on
+    (#143); the question — where does this beat sit in a four-bar group — is the grid's, not
+    either detector's, and scoring it twice is how the two would drift apart.
+
+    Note this is *hypermeter*, not a phrase boundary: it says a beat is a plausible place for
+    a phrase to turn over, never that one did. ``analysis.phrases`` answers that.
+    """
+    if row is None or not row["downbeat"]:
+        return MID_BAR
+    return 1.0 if (int(row["bar"]) - 1) % GROUP_BARS == 0 else AT_BAR_LINE
+
+
 def gist(grid: BeatGrid, records: Sequence[dict[str, Any]]) -> dict[str, Any]:
     """The stats worth returning inline: how many, how fast, and in what meter."""
     intervals = [

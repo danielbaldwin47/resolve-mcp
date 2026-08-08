@@ -13,6 +13,7 @@ from ..analysis import (
     correlate,
     fills,
     music,
+    phrases,
     silence,
     solos,
     structure,
@@ -277,11 +278,53 @@ def detect_drum_fills(
     }
 
 
+@tool
+def detect_phrases(
+    stems: str,
+    audio: str,
+    stem: str = phrases.DEFAULT_STEM,
+    minimum_confidence: float = phrases.DEFAULT_MINIMUM_CONFIDENCE,
+    refresh: bool = False,
+) -> dict[str, Any]:
+    """Start phrase-boundary detection over the soloist's stem. Returns a job to poll.
+
+    The phrase is the cut-placement unit: a director says "cut after the sax's phrase" far
+    more often than they name a beat. This finds those endings. stems is the directory a
+    separate_stems job reported; stem names which one holds the line, and defaults to other —
+    the stem the horns and the piano land in. audio is the master mix those stems came from:
+    boundaries are placed against its beat grid, and if music analysis already ran over it the
+    beats come from cache rather than the model again.
+
+    The result names one JSON file and summarises it. Every boundary carries two times — t,
+    the frame to cut on, which is the first beat inside the rest; and measured_t, where the
+    line actually stopped — plus the bar and beat it lands on, the length of the rest, how
+    long the ending note was held against the median note of this solo, the leap in semitones
+    into the next phrase, and a 0-1 confidence with the four factors behind it. Inline you get
+    the count, the median phrase length, the mean confidence and the strongest boundary.
+
+    These are candidates, not verdicts, and the reading is monophonic: the residual stem holds
+    piano under horn, so a chord reads as one note and a busy comp reads as a busy line.
+    Endings closer together than half a bar are counted and left out as one ending heard
+    twice. minimum_confidence is the floor on what gets written; refresh redoes work the cache
+    would answer for.
+    """
+    return {
+        "job": phrases.detect_phrases(
+            stems,
+            audio,
+            stem=stem,
+            minimum_confidence=minimum_confidence,
+            refresh=refresh,
+        )
+    }
+
+
 TOOLS: tuple[Any, ...] = (
     transcribe_audio,
     analyze_music,
     analyze_structure,
     detect_drum_fills,
+    detect_phrases,
     correlate_timeline,
 )
 
@@ -291,5 +334,6 @@ __all__ = [
     "analyze_structure",
     "correlate_timeline",
     "detect_drum_fills",
+    "detect_phrases",
     "transcribe_audio",
 ]

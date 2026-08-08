@@ -38,6 +38,12 @@ timelines. The server measures; Claude decides.
 - **stem** — separated audio (mix → vocals/drums/bass/other; drums →
   kick/snare/toms/ride/crash), path is a content hash (ADR 0003). The drum
   model writes `hh` too; it is not collected (#125).
+- **phrase** — the cut-placement unit (#46, `styles/concert.md` §1): a
+  stretch of the soloist's line between two endings. `analysis/phrases.py`
+  reports the **boundaries**, each with two times — `measured_t`, where the
+  line actually stopped, and `t`, the beat inside the rest that a cut is
+  placed on. Not the `phrase` factor inside `fills`, which is only "how far
+  into a four-bar group does this land".
 - **style layer** — `styles/` at the repo root: layered Markdown style
   profiles (`base.md` + `concert.md`), the corpus record (`corpus.md`) and
   per-project angle sidecars (`angles/*.json`). Agent-authored,
@@ -82,7 +88,11 @@ the CUDA runtime the `analysis` extra ships, so CTranslate2 finds it on Windows;
 pure decisions, #128),
 `decode` (WAV → numpy, no third-party decoder), `drums` (hits per stem), `energy`
 (loudness curves), `fills` (drum-fill candidates), `halves` (shared
-identify/cache/write pattern), `music` (beats + energy + gist job),
+identify/cache/write pattern), `melody` (notes off one melodic stem —
+monophonic pitch + gating, model injected per ADR 0002; the reading `phrases`
+is a rule layer over, as `drums` is to `fills`), `music` (beats + energy + gist
+job), `phrases` (phrase boundaries: where the soloist stops, which is the
+cut-placement unit #46 named, #143),
 `records` (sliceable record files), `silence` (RMS spans), `solos` (front
 of band changes), `structure` (tunes + solo changes job; both halves read the
 shared beats half), `transcribe`
@@ -154,7 +164,9 @@ module, not the package, and never the whole package at once:
 - `project.py` — `FakeProject`, `FakeProjectManager`
 - `connection.py` — `FakeResolve`, `FakeConnector`, `EXPORT_TYPES`
 - `separator.py` — `FakeSeparator`
-- `fixtures.py` — `write_wav`/`write_clicks`/`write_hits`/`write_sections`/
+- `fixtures.py` — `write_wav`/`write_clicks`/`write_hits`/`write_tones`
+  (a melodic stem: pitched notes of a known length with known gaps)/
+  `write_sections`/
   `write_jpeg`, `ffmpeg_absent`, `ffmpeg_refusing`; and the headers stdlib
   `wave` cannot write, built by hand — `write_float_wav`,
   `write_extensible_pcm_wav`, `write_tagged_wav`
