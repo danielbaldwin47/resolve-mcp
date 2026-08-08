@@ -39,6 +39,7 @@ from resolve_mcp.jobs.runner import wait_for
 from resolve_mcp.naming import timestamped_name
 from resolve_mcp.resolve.connection import get_connection
 from resolve_mcp.resolve.media import (
+    AUDIO_CHANNELS,
     apply_still_workaround,
     ensure_bin,
     find_clip,
@@ -158,6 +159,32 @@ def test_inspects_a_real_clip_with_the_property_keys_the_wrappers_assume() -> No
     assert result["ok"] is True
     assert "File Path" in result["properties"]
     assert result["bounds"]["media"]["duration"] is not None
+
+
+def test_the_audio_ch_key_is_spelled_the_way_e7_reads_it() -> None:
+    """#62 item 5: E7 fails open when this key is unreadable, so if Resolve ever renamed
+    it, `validate_cut` would silently pass every clip as having audio.
+
+    Swept across the pool rather than pinned to one clip: an image sequence may not
+    enumerate audio keys, and that absence is not the rename this test guards against.
+    """
+    listing = list_media()
+    if not listing["ok"]:
+        pytest.skip("No media pool")
+    decodable = _decodable(listing["clips"])
+    if not decodable:
+        pytest.skip("No clips with media behind them in the media pool")
+
+    seen: set[str] = set()
+    for clip in decodable:
+        result = inspect_clip(clip["name"], bin=clip["bin"])
+        if not result["ok"]:
+            continue
+        seen.update(result["properties"])
+        if AUDIO_CHANNELS in seen:
+            break
+
+    assert AUDIO_CHANNELS in seen
 
 
 def test_lists_the_real_timelines() -> None:
