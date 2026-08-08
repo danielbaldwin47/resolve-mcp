@@ -431,7 +431,22 @@ def test_a_cut_with_no_master_mix_refuses_to_guess_where_the_markers_go(
     assert built(resolve, "sunset-set v4").GetMarkers() == {}
 
 
-def test_an_earlier_version_carrying_two_clips_of_the_same_mix_is_not_an_anchor(
+def test_a_multi_channel_mix_on_the_earlier_version_is_one_anchor_not_eight(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Live, an 8-channel MXF appends as one item per channel across A1-A8 — one placement
+    said eight times. Counting items instead of reading them refuses a real concert mix."""
+    earlier = _earlier({60: _a_marker("sunset boulevard")}, mix=[_mix(source=40)] * 8)
+    resolve = studio(timeline=None, timelines=[earlier], pool=a_pool())
+
+    result = _rebuild(resolve, tmp_path, attach)
+
+    assert result["markers"]["carried"] == 1
+    assert result["markers"]["shift"] == 40
+    assert _carried(built(resolve, "sunset-set v4")) == [(100.0, "Blue", "sunset boulevard")]
+
+
+def test_an_earlier_version_that_lays_the_mix_at_two_offsets_is_not_an_anchor(
     attach: Attach, tmp_path: Path
 ) -> None:
     """Which of the two says where the mix sits? Nothing answers that, so nothing guesses."""
@@ -441,7 +456,7 @@ def test_an_earlier_version_carrying_two_clips_of_the_same_mix_is_not_an_anchor(
     result = _rebuild(resolve, tmp_path, attach)
 
     assert result["markers"]["carried"] == 0
-    assert "does not carry exactly one" in result["markers"]["reason"]
+    assert "does not agree where" in result["markers"]["reason"]
 
 
 def test_an_earlier_version_over_a_different_mix_is_not_an_anchor(

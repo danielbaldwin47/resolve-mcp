@@ -21,6 +21,7 @@ hour — a failure that looks like a plausible reading rather than an error.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any, NamedTuple
 
 from .timeline import Reader, clip_name, items_in_track, read_frames, source_bounds
@@ -75,16 +76,26 @@ def media_start(reader: Reader, item: TimelineItem) -> int:
     return read_frames(reader.optional(clip, "GetClipProperty", None, "Start")) or 0
 
 
-def named(shots: list[MixShot], name: str) -> MixShot | None:
-    """The one shot carrying ``name``, or ``None`` when none or several do.
+def anchor(shots: Sequence[MixShot], name: str | None = None) -> MixShot | None:
+    """The placement these shots agree on, or ``None`` when they do not agree on one.
 
-    Ambiguity is answered the same way as absence on purpose. A caller asking for *the* mix
-    on a timeline that holds two clips of the same name cannot be told which one was meant,
-    and picking the first would put a whole timeline's worth of derived positions on a
-    coin toss.
+    Counting items would be the obvious rule and is the wrong one. Resolve spreads a
+    multi-channel clip across one track per channel, so a *single* append of an eight-channel
+    mix reads back as eight shots — same clip, same record frame, same source frame, on A1
+    to A8. Measured live on Studio 21.0.3.7 with an 8-channel MXF; a rule that wanted one
+    item would refuse the commonest concert mix there is.
+
+    What decides the question is not how many items there are but whether they agree where
+    the mix begins. So the shots are narrowed to ``name`` when the caller knows which clip
+    it wants, and answered only when every remaining one puts the mix's frame 0 on the same
+    record frame. Disagreement is answered like absence: a timeline carrying the same clip
+    at two offsets cannot say which one a derived position should be counted from, and
+    picking the first would put every one of them on a coin toss.
     """
-    matched = [shot for shot in shots if shot.name == name]
-    return matched[0] if len(matched) == 1 else None
+    wanted = [shot for shot in shots if name is None or shot.name == name]
+    if not wanted or len({(shot.name, shot.zero_frame) for shot in wanted}) != 1:
+        return None
+    return wanted[0]
 
 
-__all__ = ["MixShot", "audio_shots", "media_start", "named"]
+__all__ = ["MixShot", "anchor", "audio_shots", "media_start"]

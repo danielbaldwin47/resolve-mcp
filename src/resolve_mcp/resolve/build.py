@@ -239,22 +239,22 @@ def _carry_markers(
     if not found:
         return _no_carry(f"{previous} carries no markers.", previous)
 
-    here = mix.audio_shots(reader, built)
-    if len(here) != 1:
+    here = mix.anchor(mix.audio_shots(reader, built))
+    if here is None:
         return _no_carry(
             f"This cut has no single master mix under it, so it shares no axis with "
             f"{previous}: its {len(found)} marker(s) have to be placed by hand.",
             previous,
         )
-    there = mix.named(mix.audio_shots(reader, earlier), here[0].name)
+    there = mix.anchor(mix.audio_shots(reader, earlier), here.name)
     if there is None:
         return _no_carry(
-            f"{previous} does not carry exactly one {here[0].name} under it, so there is no "
+            f"{previous} does not agree where {here.name} starts under it, so there is no "
             f"reading of where its {len(found)} marker(s) sit in the mix.",
             previous,
         )
 
-    shift = here[0].zero_frame - there.zero_frame
+    shift = here.zero_frame - there.zero_frame
     entries = [_carried(marker, shift) for marker in found]
     results = markers.set_markers(connection, entries, name=name)["results"]
     refused = [
