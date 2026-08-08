@@ -61,6 +61,14 @@ opinion" — it is "not yet measured", and `corpus.md` is where it gets filled.
 - **Avoid runs of similar shot lengths.** Sameness is itself a thing that
   sticks out, which puts this downstream of transparency rather than beside it.
   `[stated principle]`
+- **The spread is the instrument, not the median.** When the director recut an
+  agent timeline (#46 round), the median shot barely moved (5.9 s → 6.1 s)
+  while the standard deviation nearly doubled (5.0 s → 8.8 s) and the longest
+  hold went 21.7 s → 48.9 s: the correction was almost entirely about
+  variance, in both directions at once — shorter punctuation and longer holds.
+  Matching a target median reproduces none of it.
+  `[review feedback, 2026-08]` — one timeline, but it is a direct
+  agent-vs-director paired comparison, which no corpus row is.
 - **Spectacle earns a hold** — and especially so on a moving camera, where the
   move is the reason to stay. `[stated principle]`
 - Shot-duration distributions, conditioned on section type and energy band.
@@ -73,6 +81,54 @@ opinion" — it is "not yet measured", and `corpus.md` is where it gets filled.
   This document speaks in roles; which camera *is* which role is a fact about a
   project and lives in that project's sidecar. `[stated principle]`
 - Wide-as-reset, and hold lengths per role. *Open; see `corpus.md`.*
+
+## Visual motivation
+
+Cuts are visually motivated as well as musically, and the visual evidence is
+frame grabs — this section is what to read them for. It landed whole from the
+#46 review round, where the director recut an agent-built concert timeline and
+annotated every change; each rule below was then checked against the frames it
+cites (grab paths in the round's record). The rules are about legibility and
+motion, not about concerts, which is why they live here.
+
+- **A camera move is a no-cut zone until it lands.** Landing means the subject
+  is legible and the framing static again; mid-move frames are unreadable blur,
+  and a cut into or out of one gives the viewer nothing to parse. Cutting
+  *into* an unresolved move was the single most common defect the director
+  fixed. `[review feedback, 2026-08]`
+- **Never cut away on the arrival frame.** The travel is spent buying the
+  arrival; a cut at the exact frame a move resolves discards the payoff just
+  paid for. Ride the landing. `[review feedback, 2026-08]` — the recut deleted
+  an agent cut placed on the very frame a tilt arrived at the bassist's hands.
+- **A shot that changes subject on its own is a sequence, not a shot.** A move
+  from the soloist's face, down to his hands, over to the next player's hands
+  and up to that player's face replaces three cuts, and cutting inside it
+  breaks a transition the camera already made better. The strongest internal
+  links are matched content — hands to hands, instrument to instrument.
+  `[review feedback, 2026-08]`
+- **Cut on action.** A performer's own movement across the cut point — a head
+  dropping, a body turning into the next phrase — carries the cut the way the
+  music otherwise would. `[review feedback, 2026-08]`
+- **Blocking is a hard veto.** When a foreground figure occludes the subject
+  (a back filling the frame), the angle carries no information and must be
+  covered, whatever the musical logic says. In-frame is not coverage either: a
+  subject that is small and defocused in an angle's background does not make
+  that angle coverage of the subject. `[review feedback, 2026-08]`
+- **Composition outranks focus — for holding, not for entering.** A
+  well-composed frame going soft mid-shot is not a reason to leave, but a cut
+  should not *enter* an unresolved focus pull: after a reveal, the extra
+  frames until sharpness are worth waiting. Stated by the director as
+  "composition matters more than if something is perfectly in-focus"; the same
+  round shows him waiting ~1.4 s past a well-composed soft frame before
+  cutting in. `[review feedback, 2026-08]`
+- **Hands substitute for a face when the musical event is dexterity.** A
+  virtuosic run is watchable at the fingers; framing that shows the mechanism
+  beats framing that shows the expression while it happens.
+  `[review feedback, 2026-08]`
+- **Emphasis runs commit.** One deliberate on-the-hit cut licenses the next;
+  a run of them reads as a dramatic device where an isolated one reads as an
+  accident. (Downstream of the transparency principle: meant-to-be-noticed
+  needs to keep being meant.) `[review feedback, 2026-08]`
 
 ## Observations
 

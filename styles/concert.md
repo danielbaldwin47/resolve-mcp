@@ -69,6 +69,27 @@ that the grid is a live band's grid, so it moves.
   energy, in beat-fraction rather than whole positions. *Open. The unconditioned
   histogram above is what the gated pass could support; conditioning it splits
   455 cuts across three timelines into samples too small to defend.*
+- **The phrase is the placement unit; transient distance is its residue.** The
+  #46 review round said why the near-not-on number exists: the director's notes
+  move cuts to "after the sax's phrase", "between phrases", "now that the
+  phrase has ended" — ten-plus notes in one tune, against one that moves a cut
+  *off* a big hit ("didn't like it right on the drum hit, too abrupt"). A cut
+  placed at a phrase boundary lands near the following downbeat's transient
+  without landing on it, which is exactly the 17–41 ms signature — so
+  optimising distance-to-transient directly reproduces the number while missing
+  the mechanism, and the failure shows up as cuts that sit two frames off a hit
+  *mid-phrase*. The audience model behind it, in the director's words: "if you
+  were in the audience you might look over to the drums naturally now that the
+  sax phrase has ended". No phrase detector exists in the analysis stack;
+  phrase boundaries are currently readable only from the music itself.
+  `[review feedback, 2026-08]`
+- **Trading inverts the transient rule.** When the band trades (sax and drums
+  exchanging bars), the switch itself is the event, and cutting *on* the
+  transient of each entrance — repeatedly, as a committed run — is the
+  director's own move: "more dramatic… it becomes more of a 'thing'",
+  "playful instead of distracting". The near-not-on principle governs flow;
+  structural exchange is emphasis, and emphasis lands on the hit.
+  `[review feedback, 2026-08]` (base: emphasis runs commit)
 
 ## 2. Energy — the master concept
 
@@ -108,6 +129,12 @@ that the grid is a live band's grid, so it moves.
 - Duration distributions conditioned on section type and energy band. *Open;
   the conditioning needs the structure analysis, which has not been run over
   the corpus.*
+- **The drum cam's frequent-and-short shape needs internal variety too.** The
+  #46 recut kept the drum shots short (median 3.3 s against the agent cut's
+  4.5 s) but deliberately broke their sameness: one held to 8 s "since the drum
+  cam shots tend to all be the same length, and feel monotonous", another ran
+  11.3 s because the interaction on screen earned it. Frequent-and-short is the
+  angle's shape, not a fixed duration. `[review feedback, 2026-08]`
 - The variation instinct and "spectacle earns a hold" are base claims, and a
   concert changes nothing about them — they carry their tags in `base.md` and
   are named here only so this section is not read as silent on them.
@@ -196,6 +223,32 @@ that the grid is a live band's grid, so it moves.
 - **A second wide is a garnish, not a role.** Mercies is the only timeline with
   one (`room-wide`, from a seat rather than of the stage): 5 cuts, 5.2%.
   `[believed, unverified]` — one timeline.
+- **An angle's role is what its framing holds, not its name.** The Monkfish
+  drum cam is a drummer-and-bassist two-shot — both readable in every grabbed
+  frame — and the #46 recut uses it as the *interaction* angle: an 11-second
+  hold on it during the bass solo because "the drums and bass interact lots,
+  and this angle shows both of them", with the director's explicit verdict
+  that "showing the interaction is more important than only showing the
+  soloist". The same reading runs the other way: a moving-cam frame with the
+  bassist prominent "works as a bass cam", and its ending framing (drummer
+  small and defocused behind the sax) is *not* drum coverage however much kit
+  is technically in frame. Sidecars should record what a framing actually
+  contains, because that is what decides which cuts it can carry.
+  `[review feedback, 2026-08]`
+- **The moving camera is a second editor.** Its reframings substitute for
+  cuts: the recut deletes agent cuts because "the moving camera quickly
+  focuses on the drums, so it has the same effect", rides a single shot from
+  sax hands to bass hands to the bassist's face instead of three cuts, and
+  waits out pans rather than cutting into them. The corollary is planning in
+  pairs — one note cuts away *because* "the next shot will come back on the
+  drummer, so it's a smooth transition": the camera's own journey decides
+  when a cut is needed at all. `[review feedback, 2026-08]` (base: visual
+  motivation, all of it)
+- **Follow the audience's gaze at structure changes.** When the front
+  changes, the moving camera settles on the new soloist first, and only then
+  is another angle safe to cut to — mirroring where a listener would look:
+  "you naturally look at the bass in this shot now that it's soloing".
+  `[review feedback, 2026-08]`
 - Wide-as-reset patterns and transition habits between roles — which role
   follows which. *Open. All six timelines are labelled now; the shot records
   hold the sequence, and nothing has read it yet.*
@@ -219,12 +272,50 @@ distribution measured by correlating detected events against actual cut points.
   through the transition, and leave after the new section has settled.
   `[believed, unverified]` — seed pattern recorded as such in #13; the lead/lag
   numbers are exactly what a corpus pass is for.
+- **Fills are one member of the class; the class is visible drum events.** In
+  the #46 recut only 12 of 25 drum-cam arrivals sit near a *detected* fill
+  (the agent cut it revised: 22 of 29 — an overfit to the detector). The
+  director's own arrival reasons: "this drum snare thing", "this rhythmic
+  drum thing, interaction with soloist", "a musical response to what happened
+  before", a phrase-end glance — and one arrival placed to catch a fill's
+  *end*, "the drummer goes 'ah' and the next cut catches that", because the
+  resolution is the watchable part. `detect_drum_fills` finds a subset of the
+  motivation, and treating its output as the complete cue list shows up as a
+  measurable habit. `[review feedback, 2026-08]`
+- **A structural fill is a visual transition.** The big snare fill that ends
+  one solo carries the cut into the next soloist — the same event serves the
+  music and the edit at once. `[review feedback, 2026-08]`
 - **Solo change** — the front changing is structural, and it is the first thing
   that decides which angle a passage lives on. `analyze_structure` names when
   the front changed, never who it is; the sidecar's `role` closes that gap.
   `[believed, unverified]` — follows from how #38 and the sidecar are built;
   the corpus has not been read yet for how strictly past edits follow the front.
 - **Section boundary**, **build** — response and timing signature. *Open.*
+
+## 5b. Openings and endings
+
+Both ends of a tune are staged, not covered. All of this landed in one review
+round on one tune, which the tags say — but every device below was the
+director's own move, unprompted, on top of an agent cut that had simply
+covered both ends.
+
+- **Do not open on the camera finding its shot.** The tune opened on the
+  moving camera mid-pan; the director restaged it — a breath of black, a
+  short settled moving-cam shot overlaid on a second video track, then the
+  static angle carrying the pan's whole duration, returning to the moving
+  camera only after it had landed. A static angle that already contains the
+  pan's destination pre-announces it, and the return reads as continuation.
+  `[review feedback, 2026-08]`
+- **End inside the performance.** The recut deletes the applause tail
+  entirely and ends 10 s before the agent cut did: black beats any frame in
+  which the players have visibly stopped playing. `[review feedback,
+  2026-08]`
+- **Black is a device.** A false ending gets literal black ("this sounds like
+  it could be the end of the tune") so the surprise stinger lands as a
+  surprise, a "landing" shot shows the pickup, and the final crash cuts to
+  black *on* the hit, before any release. The agent schema builds butt-joined
+  V1 segments only; the recut uses gaps and a second video track as
+  first-class material. `[review feedback, 2026-08]`
 
 ## 6. Observations
 
@@ -280,6 +371,28 @@ Free prose, first-class.
   and was simply answered: the locked camera is spent on the drums so the
   operated one is free for the soloist and free to roam. Worth remembering
   which kind of gap each source closes, because they are not interchangeable.
+- **The #46 review round produced the first agent-vs-director paired
+  comparison** — the director hand-recut an agent-built tune (Monkfish tune 2)
+  and annotated all 55 changes, and his recut was then measured with the same
+  instrument that reviews agent cuts. Same tune, same grid, same gate:
+  transient-offset median 34 ms with 1 of 48 on a transient (the phrase
+  mechanism leaving exactly the corpus's residue), but **32 early / 15 late** —
+  a 2:1 early lean where the corpus shows no direction habit, consistent with
+  phrase-boundary cuts landing just before the next entrance. His bar
+  histogram reads 18/9/5/8 (45% beat 1) where the agent build on the *same
+  gated grid* read 16/11/5/12 — which corrects an observation recorded on #46
+  during the build: the flat histogram was a fact about the agent's cut, not
+  about sound grids, and a mild beat-1 skew survives the soundest grid in the
+  corpus. Report: `MCP-Monkfish-Tune-02-v3---Director-186049ae51cc.correlate.json`.
+  `[measured — 1 project, n=48 cuts, concert]` — one tune; the paired design,
+  not the sample size, is what it has over a corpus row.
+- **What the round could not measure is where the recut lives.** The
+  director's two most distinctive devices — literal black and V2 overlay
+  shots — sit outside both the cut schema (butt-joined V1 only) and
+  `correlate_timeline` (reads one track). The measured numbers above describe
+  the V1 skeleton of a cut whose character is partly in what the measurement
+  cannot see; a number-only reading of the round would have missed the black
+  entirely.
 - **The best result of this pass came from testing what the director said
   rather than recording it.** His account predicts that an operated camera can
   sustain a shot and a locked one cannot — so the shots were split by role, and
