@@ -70,6 +70,7 @@ def analyze_structure(
     stems: str | None = None,
     threshold: float = applause.DEFAULT_THRESHOLD,
     tune_seconds: float = applause.DEFAULT_TUNE_SECONDS,
+    density_per_second: float = applause.DEFAULT_DENSITY_PER_SECOND,
     solo_seconds: float = solos.DEFAULT_MINIMUM_SECONDS,
     snap_seconds: float = solos.DEFAULT_SNAP_SECONDS,
     refresh: bool = False,
@@ -78,9 +79,19 @@ def analyze_structure(
 
     A jazz set has no verses to segment, so the boundaries come from the room: applause is
     tagged on the master mix, and the music between two bursts is a tune. The tunes file
-    holds one record per tune — its number, start, end, length, and the seconds of applause
-    on either side of it — which is what a songs.json author reads before placing markers.
-    Inline you get how many tunes, how much clapping, and where the longest one starts.
+    holds one record per tune — its number, start, end, length, the seconds of applause on
+    either side of it, and the beats per second measured under it — which is what a
+    songs.json author reads before placing markers. Inline you get how many tunes, how much
+    clapping, and where the longest one starts.
+
+    Applause on its own over-calls: announcing the band at length, or talking between two
+    rounds of clapping, looks exactly like a tune. So a call also has to have a musical
+    pulse under it, measured against the beat grid, and this tool reads that grid the way
+    the solo half does — analyze_music's if it exists, or it detects one and leaves it
+    behind. Inline you get how many calls that dropped, and the two shoulders it decided
+    on. density_per_second is the floor in beats per second; set it to 0 to keep every
+    call the tagger made, which is also the way to run this tool with no beat model
+    installed.
 
     solos=true adds the second half and needs stems: pass the directory a separate_stems
     job returned. It measures which stem is out front over its own quiet baseline, and
@@ -107,6 +118,7 @@ def analyze_structure(
             stems=stems,
             threshold=threshold,
             tune_seconds=tune_seconds,
+            density_per_second=density_per_second,
             solo_seconds=solo_seconds,
             snap_seconds=snap_seconds,
             refresh=refresh,

@@ -101,6 +101,18 @@ def _detector_that_must_not_run() -> beats_module.Detector:
     return detect
 
 
+def _pulse_in_the_first_tune_only() -> beats_module.Detector:
+    """A grid that stops when the first tune does — the second call has no pulse under it.
+
+    Which is the shape the live pass found (#133): the tagger hears clapping on both sides
+    of two minutes of talking and calls it a tune, and only the beat grid disagrees.
+    """
+    beats = tuple(
+        round(DOWNBEAT_OFFSET + index * 0.5, 6) for index in range(int(TUNE_SECONDS / 0.5))
+    )
+    return _detector(BeatGrid(beats=beats, downbeats=beats[::4]))
+
+
 def _stems(tmp_path: Path, seconds: float = 24.0) -> Path:
     """Three stems of a two-solo set: the vocal has the first half, the horns the second.
 
@@ -148,6 +160,7 @@ def _started(**kwargs: Any) -> dict[str, Any]:
         "burst_seconds": 1.0,
         "gap_seconds": 1.0,
         "tune_seconds": 2.0,
+        "detector": _detector(),
     }
     settings.update(kwargs)
     return structure.analyze_structure(**settings)
@@ -207,6 +220,71 @@ def test_the_tunes_file_is_readable_in_slices(concert: Path) -> None:
     rows = [line for line in lines if line.lstrip().startswith('{"tune":')]
 
     assert len(rows) == result["tunes"]["count"] == 2
+
+
+def test_a_call_with_no_pulse_under_it_never_reaches_the_tunes_file(concert: Path) -> None:
+    """Clapping on both sides of talking is not a tune, and the beat grid is what says so."""
+    result = _result(
+        _started(audio=concert, tagger=_heard(), detector=_pulse_in_the_first_tune_only())
+    )
+
+    written = json.loads(Path(result["tunes"]["path"]).read_text(encoding="utf-8"))
+
+    assert [(one["t"], one["end"]) for one in written["tunes"]] == [(0.0, 4.0)]
+    assert result["tunes"]["count"] == 1
+    assert result["tunes"]["dropped"] == 1
+
+
+def test_the_dropped_call_is_on_disk_with_the_reason_it_was_dropped(concert: Path) -> None:
+    """Out of the tune set but not out of the record — the filter has to be auditable."""
+    result = _result(
+        _started(audio=concert, tagger=_heard(), detector=_pulse_in_the_first_tune_only())
+    )
+
+    written = json.loads(Path(result["tunes"]["path"]).read_text(encoding="utf-8"))
+
+    assert [(one["t"], one["end"]) for one in written["dropped_calls"]] == [(6.0, 10.0)]
+    assert written["dropped_calls"][0]["beats_per_second"] == 0.0
+    assert "no pulse" in written["dropped_calls"][0]["reason"]
+
+
+def test_the_dropped_calls_stay_out_of_what_comes_back_inline(concert: Path) -> None:
+    """The gist is stats; the rejects are boundaries, so they live on disk with the rest."""
+    result = _result(
+        _started(audio=concert, tagger=_heard(), detector=_pulse_in_the_first_tune_only())
+    )
+
+    assert "dropped_calls" not in result["tunes"]
+    assert not any(isinstance(value, list) for value in result["tunes"].values())
+
+
+def test_a_kept_tune_carries_the_density_it_was_kept_on(concert: Path) -> None:
+    result = _result(
+        _started(audio=concert, tagger=_heard(), detector=_pulse_in_the_first_tune_only())
+    )
+
+    written = json.loads(Path(result["tunes"]["path"]).read_text(encoding="utf-8"))
+
+    assert written["tunes"][0]["beats"] == 8
+    assert written["tunes"][0]["beats_per_second"] == 2.0
+
+
+def test_a_floor_of_zero_keeps_every_call_and_never_reads_a_grid(concert: Path) -> None:
+    """The escape hatch is also the way to run this half with no beat model installed."""
+    result = _result(
+        _started(
+            audio=concert,
+            tagger=_heard(),
+            detector=_detector_that_must_not_run(),
+            density_per_second=0.0,
+        )
+    )
+
+    written = json.loads(Path(result["tunes"]["path"]).read_text(encoding="utf-8"))
+
+    assert [(one["t"], one["end"]) for one in written["tunes"]] == [(0.0, 4.0), (6.0, 10.0)]
+    assert result["tunes"]["dropped"] == 0
+    assert written["tunes"][1]["beats_per_second"] is None
 
 
 def test_solo_changes_land_on_disk_snapped_to_a_downbeat(solo_audio: Path, stems: Path) -> None:
@@ -332,6 +410,52 @@ def test_music_analysis_reuses_the_beat_grid_this_job_wrote(
     assert beats["beats"]["count"] > 0
 
 
+def test_the_tune_half_reuses_the_beat_grid_music_analysis_already_wrote(concert: Path) -> None:
+    """The density check pays for no second detection either — same entry, same rule."""
+    _result(music.analyze_music(concert, energy=False, detector=_pulse_in_the_first_tune_only()))
+
+    result = _result(
+        _started(audio=concert, tagger=_heard(), detector=_detector_that_must_not_run())
+    )
+
+    assert result["tunes"]["count"] == 1
+
+
+def test_music_analysis_reuses_the_beat_grid_the_tune_half_wrote(concert: Path) -> None:
+    _result(_started(audio=concert, tagger=_heard()))
+
+    beats = _result(
+        music.analyze_music(concert, energy=False, detector=_detector_that_must_not_run())
+    )
+
+    assert beats["beats"]["count"] > 0
+
+
+def test_moving_the_density_floor_gets_its_own_answer(concert: Path) -> None:
+    """Two floors are two results, so they are keyed apart rather than sharing an entry."""
+    loose = _result(
+        _started(
+            audio=concert,
+            tagger=_heard(),
+            detector=_pulse_in_the_first_tune_only(),
+            density_per_second=0.0,
+        )
+    )
+
+    strict = _result(
+        _started(
+            audio=concert,
+            tagger=_heard(),
+            detector=_pulse_in_the_first_tune_only(),
+            density_per_second=0.5,
+        )
+    )
+
+    assert loose["tunes"]["count"] == 2
+    assert strict["tunes"]["count"] == 1
+    assert loose["tunes"]["path"] != strict["tunes"]["path"]
+
+
 def test_a_finer_solo_window_does_not_re_tag_the_room(concert: Path, stems: Path) -> None:
     """The halves are keyed apart, so changing one does not pay for the other again."""
     _result(_solos(concert, stems, tunes=True, tagger=_heard()))
@@ -381,6 +505,13 @@ def test_an_impossible_threshold_is_refused(concert: Path) -> None:
         _started(audio=concert, threshold=1.5)
 
 
+def test_a_negative_density_floor_is_refused(concert: Path) -> None:
+    with pytest.raises(Exception, match="density"):
+        _started(audio=concert, density_per_second=-1.0)
+
+    assert store.load_all() == []
+
+
 def test_a_missing_tagger_names_the_install(concert: Path, monkeypatch: Any) -> None:
     real = importlib.import_module
 
@@ -396,6 +527,28 @@ def test_a_missing_tagger_names_the_install(concert: Path, monkeypatch: Any) -> 
     assert record.error is not None
     assert record.error["code"] == "analysis_dependency_missing"
     assert "panns" in record.error["fix"]
+
+
+def test_a_missing_beat_model_names_the_way_to_run_without_one(
+    concert: Path,
+    monkeypatch: Any,
+) -> None:
+    """beats' own advice is beats=false, which is no help to a caller asking for tunes."""
+    real = importlib.import_module
+
+    def missing(name: str, *args: Any, **kwargs: Any) -> Any:
+        if name == beats_module.MODULE:
+            raise ImportError(name)
+        return real(name, *args, **kwargs)
+
+    monkeypatch.setattr(importlib, "import_module", missing)
+
+    record = _finished(_started(audio=concert, tagger=_heard(), detector=None))
+
+    assert record.error is not None
+    assert record.error["code"] == "analysis_dependency_missing"
+    assert "density_per_second=0" in record.error["fix"]
+    assert "beat_this" in record.error["fix"]
 
 
 def test_a_tagger_that_falls_over_is_an_analysis_failure(concert: Path) -> None:
@@ -418,6 +571,16 @@ def test_the_tool_returns_a_job_and_never_the_boundaries(concert: Path) -> None:
     assert envelope["ok"] is True
     assert envelope["job"]["kind"] == structure.KIND
     assert "tunes" not in envelope
+
+
+def test_the_tool_hands_the_density_floor_to_the_job(concert: Path) -> None:
+    """Refused rather than started, which is the cheap proof the value reached the starter."""
+    envelope = analysis_tools.analyze_structure(str(concert), density_per_second=-1.0)
+
+    assert envelope["ok"] is False
+    assert envelope["error"]["code"] == "invalid_request"
+    assert "density_per_second" in envelope["error"]["fix"]
+    assert store.load_all() == []
 
 
 def test_the_tool_is_registered() -> None:

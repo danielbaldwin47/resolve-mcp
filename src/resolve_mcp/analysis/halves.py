@@ -101,12 +101,22 @@ def written(
     described: Mapping[str, Any],
     gist: Mapping[str, Any],
     rows: Sequence[Mapping[str, Any]],
+    aside: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """One file per half: a header of gist stats, then one record per line."""
+    """One file per half: a header of gist stats, then one record per line.
+
+    ``aside`` is written into the header but kept out of what comes back, which is the way
+    a half records something too long for a tool result and too short for its own file —
+    the calls the tune half rejected, say (#133). The gist rides home in the job record and
+    stays stats; the aside stays on disk with the records it is about. It goes in under the
+    gist rather than over it, so a name a half picks for an aside can never quietly replace
+    a stat and leave the header saying something the returned dict does not.
+    """
     header = {
         "kind": kind,
         "audio": described["path"],
         "duration_seconds": described["duration_seconds"],
+        **(aside or {}),
         **gist,
     }
     records.write(target, header, kind, list(rows))
