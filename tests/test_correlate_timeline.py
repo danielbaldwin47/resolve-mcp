@@ -84,6 +84,21 @@ def _shot(name: str, start: int, duration: int, source_start: int) -> FakeTimeli
     )
 
 
+def a_stack(*video: FakeTrack, name: str = "sunset-set v3") -> FakeTimeline:
+    """A cut spread over more than one video track — the layout the visible edit resolves."""
+    return FakeTimeline(
+        name,
+        FPS,
+        start_frame=100,
+        video=list(video),
+        audio=[FakeTrack("Master", [_shot("master_mix.wav", 100, 200, 0)])],
+    )
+
+
+def _cut_track(shots: Sequence[tuple[str, int, int, int]] = SHOTS) -> FakeTrack:
+    return FakeTrack("Video 1", [_shot(*shot) for shot in shots])
+
+
 def _a_cut_with(extra: FakeTimelineItem) -> FakeTimeline:
     """The fixture cut with one more item on the cut track — a transition, or a generator."""
     return FakeTimeline(
@@ -209,6 +224,7 @@ def test_every_shot_lands_on_disk_with_its_offsets_bar_and_section(
     assert cuts[1] == {
         "cut": 2,
         "clip": "C0031.mp4",
+        "track": 1,
         "role": None,
         "opening": False,
         "t": 1.033,
@@ -398,8 +414,8 @@ def test_a_dissolve_into_a_generator_does_not_eat_the_generator(
                 [
                     _shot(*SHOTS[0]),
                     _shot(*SHOTS[1]),
-                    _dissolve(start=299, duration=14),
-                    FakeTimelineItem("Solid Color", 299, 30, source_start=0),
+                    _dissolve(start=249, duration=14),
+                    FakeTimelineItem("Solid Color", 249, 30, source_start=0),
                 ],
             )
         ],
@@ -410,6 +426,213 @@ def test_a_dissolve_into_a_generator_does_not_eat_the_generator(
     result = _measured(tmp_path)
 
     assert [one["clip"] for one in _rows(result)] == ["C0012.mp4", "C0031.mp4", "Solid Color"]
+
+
+def test_an_overlay_is_the_shot_the_frame_shows_and_the_covered_clip_resumes(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """What the viewer sees is the topmost item, so a V2 overlay is a shot and V1 is not.
+
+    #142: the #46 director recut put three shots on V2, and a V1-only measurement attributed
+    those frames to the clip underneath — a report that described a cut nobody watched.
+    """
+    over = FakeTrack("Video 2", [_shot("B0001.mp4", 180, 40, 0)])
+    attach(studio(timeline=a_stack(_cut_track(), over)))
+
+    cuts = _rows(_measured(tmp_path))
+
+    assert [(one["clip"], one["in"]["frames"]) for one in cuts] == [
+        ("C0012.mp4", 100),
+        ("C0031.mp4", 162),
+        ("B0001.mp4", 180),
+        ("C0031.mp4", 220),
+        ("C0012.mp4", 249),
+    ]
+    assert [one["track"] for one in cuts] == [1, 1, 2, 1, 1]
+
+
+def test_a_gap_is_a_black_shot_rather_than_nothing(attach: Attach, tmp_path: Path) -> None:
+    """A director who cuts to black cut to something; a vanished gap is a cut left unmeasured."""
+    gapped = (SHOTS[0], ("C0031.mp4", 200, 87, 4200))
+    attach(studio(timeline=a_cut(shots=gapped)))
+
+    result = _measured(tmp_path)
+
+    cuts = _rows(result)
+    assert [(one["clip"], one["track"]) for one in cuts] == [
+        ("C0012.mp4", 1),
+        (None, None),
+        ("C0031.mp4", 1),
+    ]
+    assert cuts[1]["role"] is None
+    assert cuts[1]["seconds"] == 0.633  # 162 to 200 at 60fps
+    assert result["clips"]["black"] == {"cuts": 1, "seconds": 0.633, "share": 0.203}
+
+
+def test_a_film_that_opens_on_black_opens_on_a_shot(attach: Attach, tmp_path: Path) -> None:
+    """The run-up from the timeline's first frame is held black somebody chose the length of,
+    and the cut out of it is a decision — measured, not written off as an opening."""
+    late = FakeTimeline(
+        "sunset-set v3",
+        FPS,
+        start_frame=100,
+        video=[
+            FakeTrack(
+                "Video 1",
+                [_shot(clip, start + 30, run, source) for clip, start, run, source in SHOTS],
+            )
+        ],
+        audio=[FakeTrack("Master", [_shot("master_mix.wav", 100, 200, 0)])],
+    )
+    attach(studio(timeline=late))
+
+    result = _measured(tmp_path)
+
+    cuts = _rows(result)
+    assert cuts[0]["clip"] is None
+    assert cuts[0]["in"]["frames"] == 100  # the timeline's own first frame, not the picture's
+    assert cuts[0]["seconds"] == 0.5  # 30 frames at 60fps
+    assert cuts[1]["opening"] is False
+    assert result["visible"]["black"] == 1
+
+
+def test_the_black_after_the_last_shot_is_not_a_shot(attach: Attach, tmp_path: Path) -> None:
+    """It has no end the edit decides — how far it runs is however long the audio under it is,
+    which is a fact about the mix rather than about the cut."""
+    attach(studio(timeline=a_cut()))  # the master mix runs one frame past the last shot
+
+    result = _measured(tmp_path)
+
+    assert [one["clip"] for one in _rows(result)] == ["C0012.mp4", "C0031.mp4", "C0012.mp4"]
+    assert result["visible"]["black"] == 0
+
+
+def test_black_is_counted_apart_from_the_clips_nobody_labelled(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """A known absence is not a missing label — folding them together hides both."""
+    gapped = (SHOTS[0], ("C0031.mp4", 200, 87, 4200))
+    attach(studio(timeline=a_cut(shots=gapped)))
+
+    result = _measured(tmp_path, angles={"C0012.mp4": "wide"})
+
+    assert result["roles"]["black"]["cuts"] == 1
+    assert result["roles"]["unlabelled"]["cuts"] == 1
+    assert result["roles"]["wide"]["cuts"] == 1
+
+
+def test_a_cut_out_of_black_is_a_cut_rather_than_an_opening(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Black is an outgoing angle, so the frame it hands over on is a decision like any other."""
+    gapped = (SHOTS[0], ("C0031.mp4", 200, 87, 4200))
+    attach(studio(timeline=a_cut(shots=gapped)))
+
+    result = _measured(tmp_path)
+
+    assert [one["opening"] for one in _rows(result)] == [True, False, False]
+    assert result["openings"] == 1
+
+
+def test_an_overlay_filling_a_gap_leaves_no_black(attach: Attach, tmp_path: Path) -> None:
+    """The #46 shape: V1 gaps with V2 shots over some of them, black only where none is."""
+    gapped = (SHOTS[0], ("C0031.mp4", 260, 87, 4200))
+    over = FakeTrack("Video 2", [_shot("B0001.mp4", 162, 38, 0)])
+    attach(studio(timeline=a_stack(_cut_track(gapped), over)))
+
+    result = _measured(tmp_path)
+
+    cuts = _rows(result)
+    assert [one["clip"] for one in cuts] == ["C0012.mp4", "B0001.mp4", None, "C0031.mp4"]
+    assert result["visible"]["black"] == 1
+
+
+def test_a_switched_off_track_is_not_in_the_visible_edit(attach: Attach, tmp_path: Path) -> None:
+    """An overlay the director muted is not on screen, so measuring it would report a cut
+    nobody can watch."""
+    over = FakeTrack("Video 2", [_shot("B0001.mp4", 180, 40, 0)], enabled=False)
+    attach(studio(timeline=a_stack(_cut_track(), over)))
+
+    result = _measured(tmp_path)
+
+    assert [one["clip"] for one in _rows(result)] == ["C0012.mp4", "C0031.mp4", "C0012.mp4"]
+    assert result["visible"]["skipped"] == [2]
+
+
+def test_a_disabled_item_is_not_in_the_visible_edit(attach: Attach, tmp_path: Path) -> None:
+    """``GetClipEnabled`` is the item's own switch and reads true off the current timeline (#84)."""
+    muted = FakeTimelineItem(
+        "B0001.mp4",
+        180,
+        40,
+        source_start=0,
+        media_item=FakeMediaPoolItem("B0001.mp4"),
+        enabled=False,
+    )
+    attach(studio(timeline=a_stack(_cut_track(), FakeTrack("Video 2", [muted]))))
+
+    result = _measured(tmp_path)
+
+    assert [one["clip"] for one in _rows(result)] == ["C0012.mp4", "C0031.mp4", "C0012.mp4"]
+
+
+def test_a_track_whose_switch_cannot_be_read_is_measured_rather_than_dropped(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """#84: off the current timeline every track answers "off", and believing that would
+    measure a whole concert as one black shot."""
+    cut = a_stack(_cut_track(), name="recut v1")
+    cut.getters_need_current = True
+    open_one = FakeTimeline("something else v1", FPS, start_frame=100)
+    attach(studio(timeline=open_one, timelines=[open_one, cut]))
+
+    result = _measured(tmp_path, timeline="recut v1")
+
+    assert [one["clip"] for one in _rows(result)] == ["C0012.mp4", "C0031.mp4", "C0012.mp4"]
+    assert result["visible"]["enabled_known"] is False
+    assert result["visible"]["skipped"] == []
+
+
+def test_naming_a_track_measures_that_track_alone(attach: Attach, tmp_path: Path) -> None:
+    """The old reading is still reachable: what one track holds, overlays and all ignored."""
+    over = FakeTrack("Video 2", [_shot("B0001.mp4", 180, 40, 0)])
+    attach(studio(timeline=a_stack(_cut_track(), over)))
+
+    result = _measured(tmp_path, track=1)
+
+    assert [one["clip"] for one in _rows(result)] == ["C0012.mp4", "C0031.mp4", "C0012.mp4"]
+    assert result["visible"]["mode"] == "track"
+
+
+def test_one_track_read_alone_still_lets_its_gaps_vanish(attach: Attach, tmp_path: Path) -> None:
+    """Track mode measures the track as laid out, so a gap is absence and the next shot opens."""
+    gapped = (SHOTS[0], ("C0031.mp4", 200, 87, 4200))
+    attach(studio(timeline=a_cut(shots=gapped)))
+
+    result = _measured(tmp_path, track=1)
+
+    assert [one["opening"] for one in _rows(result)] == [True, True]
+    assert result["openings"] == 2
+    assert result["beat_offsets"] is None
+
+
+def test_the_report_says_which_tracks_the_reading_came_from(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """A measurement of the wrong stack looks exactly like one of the right stack."""
+    over = FakeTrack("Video 2", [_shot("B0001.mp4", 180, 40, 0)])
+    attach(studio(timeline=a_stack(_cut_track(), over)))
+
+    result = _measured(tmp_path)
+
+    assert result["visible"] == {
+        "mode": "visible",
+        "video_tracks": 2,
+        "measured": [1, 2],
+        "skipped": [],
+        "enabled_known": True,
+        "black": 0,
+    }
 
 
 def test_each_multicam_angle_is_its_own_clip(attach: Attach, tmp_path: Path) -> None:
@@ -622,20 +845,6 @@ def test_a_mix_with_a_start_timecode_is_not_read_an_hour_late(
     assert _rows(result)[1]["t"] == 1.033
 
 
-def test_a_shot_that_starts_after_a_gap_opens_rather_than_cuts(
-    attach: Attach, tmp_path: Path
-) -> None:
-    """There is no outgoing angle at that frame, so its distance from the beat says nothing."""
-    gapped = (SHOTS[0], ("C0031.mp4", 200, 87, 4200))
-    attach(studio(timeline=a_cut(shots=gapped)))
-
-    result = _measured(tmp_path)
-
-    assert [one["opening"] for one in _rows(result)] == [True, True]
-    assert result["openings"] == 2
-    assert result["beat_offsets"] is None
-
-
 def test_cuts_past_the_end_of_the_grid_are_counted_rather_than_pinned_quietly(
     attach: Attach, tmp_path: Path
 ) -> None:
@@ -646,7 +855,8 @@ def test_cuts_past_the_end_of_the_grid_are_counted_rather_than_pinned_quietly(
     result = _measured(tmp_path)
 
     assert result["outside_grid"] == 1
-    assert result["cuts"] == 4
+    # Four shots and the black across the run-up to the far one, which is inside the grid.
+    assert result["cuts"] == 5
 
 
 def test_the_head_reads_as_whoever_the_first_change_took_over_from(
@@ -756,6 +966,24 @@ def test_the_second_run_over_an_unchanged_cut_comes_back_from_cache(
 
     assert started["cached"] is True
     assert _result(started)["path"] == first["path"]
+
+
+def test_a_report_the_previous_shape_wrote_is_not_answered_as_this_one(
+    attach: Attach, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The cache watches what was measured, not the code — so the shape has to be watched too.
+
+    A stale hit is the worst kind here: the file is well-formed and the reading is confident,
+    and the only thing wrong with it is that it answers an older question (#142).
+    """
+    attach(studio(timeline=a_cut()))
+    first = _measured(tmp_path)
+
+    monkeypatch.setattr(correlate, "READING", correlate.READING + 1)
+    started = _started(tmp_path)
+
+    assert started["cached"] is False
+    assert _result(started)["path"] != first["path"]
 
 
 def test_a_recut_is_a_different_measurement(attach: Attach, tmp_path: Path) -> None:
