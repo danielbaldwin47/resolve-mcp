@@ -102,7 +102,9 @@ stalling stdio), `store` (one JSON record per job on disk).
 contract), `fusion` (Text+ node, text, opacity fade spline), `interchange`
 (timeline export/import), `loader` (import DaVinciResolveScript +
 direct-attach), `markers` (read/write, review-loop transport), `media`
-(media pool: import, list, inspect, bins, relink), `render` (render
+(media pool: import, list, inspect, bins, relink), `mix` (where the master
+mix sits under a timeline — the one axis a rebuild does not move; read by
+`build`'s marker carry and by `analysis/correlate`), `render` (render
 queue), `camera_sidecar` (camera model off the card's own XML, for media
 Resolve reports no camera metadata for — #94; not an **angle sidecar**),
 `scripting` (`run_python` with handles pre-bound), `session`

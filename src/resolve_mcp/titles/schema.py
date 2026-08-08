@@ -11,8 +11,9 @@ re-runnable rather than merely automatic:
 
 * **Event times are offsets from the song's blue marker, never absolute frames.** The
   marker name is the song key, which is the explicit join between the file and the
-  timeline (#14 §1). A rebuild makes a new timeline version; re-marking the songs on it
-  is all that is needed for the same titles file to land correctly again. Absolute
+  timeline (#14 §1). A rebuild makes a new timeline version, and ``build_timeline``
+  carries the song markers onto it by the frame of the master mix each one sat over
+  (#130), so the same titles file lands correctly again with nothing re-marked. Absolute
   frames would silently point at the wrong music the moment a segment's length changed.
 * **Titles are not in the cut file, and the cut file is not read here.** The two files
   together describe a deliverable, and each owns its own tracks — ``build_timeline``
@@ -100,7 +101,10 @@ _ANCHORS: Final = """\
 A song's `key` is the *name* of a blue marker on the target timeline; every
 event's `in`/`out` counts frames forward from that marker. So the join between
 this file and the timeline is explicit and survives a rebuild: build the new
-version, mark the songs on it, re-apply this file unchanged.
+version and re-apply this file unchanged. `build_timeline` carries the previous
+version's markers onto the one it makes, riding the master mix underneath, so
+the songs are already marked; check `markers` in the build report before
+re-applying, because a cut with no master mix under it is carried by hand.
 
 Exactly one blue marker must carry each key (T7). A blue marker with no matching
 song is reported as a warning, never an error — a set list is often titled a song

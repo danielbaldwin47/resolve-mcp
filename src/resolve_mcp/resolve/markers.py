@@ -160,6 +160,13 @@ def _reported(clock: MarkerClock) -> dict[int, dict[str, Any]]:
     return markers
 
 
+def _all(clock: MarkerClock) -> list[dict[str, Any]]:
+    """Every readable marker on one clock, in frame order — what both readers start from."""
+    return [
+        _marker(relative, detail, clock) for relative, detail in sorted(_reported(clock).items())
+    ]
+
+
 def list_markers(
     connection: ResolveConnection,
     name: str | None = None,
@@ -174,9 +181,7 @@ def list_markers(
     timeline = find_timeline(project, name)
     clock = MarkerClock(connection, timeline, frame_rate(project, timeline))
 
-    markers = [
-        _marker(relative, detail, clock) for relative, detail in sorted(_reported(clock).items())
-    ]
+    markers = _all(clock)
     window = frame_window(start, end, clock.fps)
     wanted = [marker for marker in markers if _matches(marker, color) and _touches(marker, window)]
 
@@ -218,6 +223,27 @@ def _colors(markers: list[dict[str, Any]]) -> dict[str, int]:
     for marker in markers:
         counts[marker["color"]] = counts.get(marker["color"], 0) + 1
     return counts
+
+
+def markers_on(
+    connection: ResolveConnection,
+    timeline: Timeline,
+    fps: float | None,
+) -> list[dict[str, Any]]:
+    """Every readable marker on a timeline in record time, in frame order and uncapped.
+
+    ``list_markers`` is the agent's view and caps at :data:`DEFAULT_MARKER_LIMIT`, spilling
+    the rest to a file — right for something being read, wrong for something being *moved*,
+    where a cap would silently drop the markers past the two hundredth and the timeline
+    would look successfully carried. Callers moving markers take this instead.
+
+    "Readable" is the one thing it does not promise past: a marker whose frame will not
+    parse is logged and left out by :func:`_reported`, exactly as it is for ``list_markers``,
+    because a marker that cannot be placed on either clock cannot be moved to a third. A
+    caller reporting counts is reporting what it could read, and the log is where a
+    difference between that and what the GUI shows gets diagnosed.
+    """
+    return _all(MarkerClock(connection, timeline, fps))
 
 
 def markers_by_name(
