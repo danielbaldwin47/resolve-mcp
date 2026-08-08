@@ -67,7 +67,8 @@ Top level:
 | `timing.py` | frames authoritative; seconds/timecode/fps derived |
 
 `analysis/` — compute jobs that read audio and write findings to disk:
-`applause` (bursts → tune boundaries), `beats` (grid + downbeats, model
+`applause` (bursts → tune boundaries, then a beat-density floor drops the calls
+with no pulse under them, #133), `beats` (grid + downbeats, model
 injected per ADR 0002; `trust` says which beats the grid describes well enough
 to count, #112), `correlate` (measure a cut against its music, gating the beat
 statistics on `trust` and leaving the transient ones ungated), `cuda` (preloads
@@ -77,7 +78,8 @@ pure decisions, #128),
 (loudness curves), `fills` (drum-fill candidates), `halves` (shared
 identify/cache/write pattern), `music` (beats + energy + gist job),
 `records` (sliceable record files), `silence` (RMS spans), `solos` (front
-of band changes), `structure` (tunes + solo changes job), `transcribe`
+of band changes), `structure` (tunes + solo changes job; both halves read the
+shared beats half), `transcribe`
 (job), `transcript` (document + Word/Transcription/Transcriber vocabulary),
 `virtual` (a cut file read back as the words it will contain — the P4
 self-review, warnings only, touches no Resolve handle), `whisper`
