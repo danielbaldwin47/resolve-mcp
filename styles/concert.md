@@ -379,8 +379,8 @@ Free prose, first-class.
   mechanism leaving exactly the corpus's residue), but **32 early / 15 late** —
   a 2:1 early lean where the corpus shows no direction habit, consistent with
   phrase-boundary cuts landing just before the next entrance. His bar
-  histogram reads 18/9/5/8 (45% beat 1) where the agent build on the *same
-  gated grid* read 16/11/5/12 — which corrects an observation recorded on #46
+  histogram reads 18/9/5/8 (45% beat 1 of the 40 grid-measurable cuts) where
+  the agent build on the *same gated grid* read 16/11/5/12 — which corrects an observation recorded on #46
   during the build: the flat histogram was a fact about the agent's cut, not
   about sound grids, and a mild beat-1 skew survives the soundest grid in the
   corpus. Report: `MCP-Monkfish-Tune-02-v3---Director-186049ae51cc.correlate.json`.
