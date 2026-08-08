@@ -33,7 +33,8 @@ timelines. The server measures; Claude decides.
   `inspect_clip`, `relink_media`, and per item on `set_clip_metadata` and
   `organize_media`'s `move_clips` — also takes `recursive`, false meaning
   that bin's own clips alone: the address of a copy a subfolder shadows
-  (#134). The analysis and video tools keep the recursive lookup only.
+  (#134). The analysis and video tools resolve a clip by name too but take
+  no flag, so their refusals never offer the shallow form.
 - **the seam** — `resolve/connection.py` singleton, substituted by
   `tests/fakes/` via `set_connection()`; the only place fakes attach.
 - **fake tier / live tier** — `pytest -m 'not live'` against fakes (the

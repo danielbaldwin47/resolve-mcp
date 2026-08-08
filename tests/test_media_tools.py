@@ -992,6 +992,32 @@ def test_organize_moves_the_copy_a_shallow_from_bin_names(
     assert len(angles.GetSubFolderList()[0].GetClipList()) == 1  # the nested copy stayed
 
 
+def test_a_recursive_key_that_is_not_a_boolean_is_refused_not_coerced(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """A JSON string reads as True under bool(), which would search the opposite way."""
+    pool = a_shallow_copy_pool(tmp_path)
+    attach(studio(pool=pool))
+
+    result = set_clip_metadata(
+        [
+            {
+                "clip": "C0012.mp4",
+                "bin": "Angles",
+                "recursive": "false",
+                "fields": {"Description": "no"},
+            },
+            {"clip": "C0012.mp4", "bin": "Angles/Cam A", "fields": {"Description": "yes"}},
+        ]
+    )
+
+    first, second = result["results"]
+    assert first["ok"] is False
+    assert first["error"]["code"] == "invalid_request"
+    assert second["ok"] is True  # one bad item never sinks the batch
+    assert pool.GetRootFolder().GetSubFolderList()[0].GetClipList()[0].property_writes == []
+
+
 def test_relink_takes_the_shallow_form_too(attach: Attach, tmp_path: Path) -> None:
     moved = a_file(tmp_path, "new/C0012.mp4")
     attach(

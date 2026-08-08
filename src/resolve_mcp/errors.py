@@ -171,7 +171,7 @@ class AmbiguousClipError(ResolveMcpError):
         name: str,
         bins: list[str],
         addressable: list[str],
-        shallow: list[str] | None = None,
+        shallow: list[str],
     ) -> None:
         """``bins`` is the bin of every matching clip; the rest are the values that work.
 
@@ -179,7 +179,9 @@ class AmbiguousClipError(ResolveMcpError):
         refusal is not a fix (#122), and the empty string is offered like any other because
         it addresses the pool root itself. ``shallow`` holds the bins that single a copy out
         only once the search stops descending, which is what ``recursive=False`` asks for
-        (#134); the remainder — a bin holding two of the name — no lookup can answer.
+        (#134) — empty when the caller has no such flag to pass, since an argument the tool
+        does not take is no more of a fix than a bin that refuses. What neither list holds —
+        a bin with two of the name in it — no lookup can answer.
         """
         offered = []
         if addressable:
