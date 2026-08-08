@@ -172,7 +172,7 @@ def test_a_call_with_no_pulse_is_dropped_and_the_playing_one_is_kept() -> None:
         _beats(0.0, 100.0, 1.8),
     )
 
-    called = applause.dense(counted, minimum_density=0.5)
+    called = applause.sifted(counted, minimum_density=0.5)
 
     assert [(one.start, one.end) for one in called.kept] == [(0.0, 100.0)]
     assert [(one.start, one.end) for one in called.dropped] == [(110.0, 210.0)]
@@ -181,14 +181,14 @@ def test_a_call_with_no_pulse_is_dropped_and_the_playing_one_is_kept() -> None:
 def test_a_call_sitting_exactly_on_the_floor_is_kept() -> None:
     counted = applause.counted(_called((0.0, 100.0)), _beats(0.0, 100.0, 0.5))
 
-    assert len(applause.dense(counted, minimum_density=0.5).kept) == 1
+    assert len(applause.sifted(counted, minimum_density=0.5).kept) == 1
 
 
 def test_a_floor_of_zero_keeps_every_call() -> None:
     """The escape hatch: nothing is dropped, so a caller can see the unfiltered set."""
     counted = applause.counted(_called((0.0, 100.0), (110.0, 210.0)), ())
 
-    called = applause.dense(counted, minimum_density=0.0)
+    called = applause.sifted(counted, minimum_density=0.0)
 
     assert len(called.kept) == 2
     assert called.dropped == ()
@@ -196,7 +196,7 @@ def test_a_floor_of_zero_keeps_every_call() -> None:
 
 def test_an_unmeasured_call_is_never_dropped() -> None:
     """No grid was read, so there is no evidence to drop it on."""
-    called = applause.dense(_called((0.0, 100.0)), minimum_density=0.5)
+    called = applause.sifted(_called((0.0, 100.0)), minimum_density=0.5)
 
     assert len(called.kept) == 1
     assert called.dropped == ()
@@ -245,7 +245,7 @@ def test_the_gist_counts_the_tunes_and_the_applause_without_listing_them() -> No
     found = _spans(curve)
     tunes = applause.tunes(found, 54.0, minimum_seconds=10.0)
 
-    summary = applause.gist(curve, found, tunes)
+    summary = applause.gist(curve, found, applause.Calls(tunes, ()))
 
     assert summary["count"] == 2
     assert summary["applause_count"] == 1
@@ -264,9 +264,9 @@ def test_the_gist_says_how_many_calls_had_no_pulse_and_how_close_the_floor_came(
         applause.tunes(spans, 64.0, minimum_seconds=10.0),
         _beats(0.0, 30.0, 1.8),
     )
-    called = applause.dense(counted, minimum_density=0.5)
+    calls = applause.sifted(counted, minimum_density=0.5)
 
-    summary = applause.gist(curve, spans, called.kept, called.dropped)
+    summary = applause.gist(curve, spans, calls)
 
     assert summary["count"] == 1
     assert summary["dropped"] == 1
@@ -281,8 +281,21 @@ def test_the_gist_of_a_set_that_lost_nothing_has_no_dropped_shoulder() -> None:
     spans = _spans(curve)
     tunes = applause.tunes(spans, 54.0, minimum_seconds=10.0)
 
-    summary = applause.gist(curve, spans, tunes)
+    summary = applause.gist(curve, spans, applause.Calls(tunes, ()))
 
     assert summary["dropped"] == 0
     assert summary["dropped_seconds"] == 0.0
     assert summary["densest_dropped"] is None
+
+
+def test_a_dropped_call_is_recorded_with_the_measurement_that_dropped_it() -> None:
+    """A filter whose rejects cannot be inspected is one nobody can check (#38)."""
+    counted = applause.counted(_called((0.0, 100.0), (110.0, 210.0)), _beats(0.0, 100.0, 1.8))
+    calls = applause.sifted(counted, minimum_density=0.5)
+
+    rows = applause.dropped_calls(calls.dropped, 0.5)
+
+    assert [(row["t"], row["end"]) for row in rows] == [(110.0, 210.0)]
+    assert rows[0]["beats"] == 0
+    assert rows[0]["beats_per_second"] == 0.0
+    assert "0.5" in rows[0]["reason"]

@@ -66,13 +66,13 @@ DEFAULT_TUNE_SECONDS = 60.0
 DEFAULT_DENSITY_PER_SECOND = 0.5
 """Beats per second a call needs before it counts as music.
 
-Measured, not guessed (#133; the sweep is recorded on the ticket). On the concert master
-the tagger called thirteen tunes, and the beat grid puts the ten real ones between 1.36 and
-2.70 beats per second while the three the ear rejected sit at 0.07, 0.00 and 0.00. The floor
-goes in the gap, nearer the false side than the middle: 0.5 is a third of the sparsest real
-tune and seven times the densest false one, so neither shoulder is close. It is also below
-any tempo a band plays — 0.5 beats per second is 30 bpm — which is the reason the number is
-defensible beyond this one concert.
+Measured, not guessed — the sweep and the live run are recorded on #133. On the concert
+master the tagger called thirteen tunes, and the beat grid puts the ten real ones between
+1.36 and 2.70 beats per second while the three the ear rejected sit at 0.07, 0.00 and 0.00.
+Every floor from 0.1 to 1.25 calls that concert the same way, so 0.5 is not on a cliff but
+in the middle of a plateau an order of magnitude wide. It is also below any tempo a band
+plays — 0.5 beats per second is 30 bpm — which is the reason the number should hold on
+material this concert cannot speak for.
 
 Set it to 0.0 to turn the check off and get the unfiltered set back, which is also what
 avoids needing a beat grid at all (see ``structure``)."""
@@ -117,7 +117,7 @@ class Tune(NamedTuple):
         return round(self.end - self.start, 3)
 
 
-class Called(NamedTuple):
+class Calls(NamedTuple):
     """The tune set after the density check: what has a pulse under it, and what does not."""
 
     kept: tuple[Tune, ...]
@@ -300,26 +300,28 @@ def counted(found: Sequence[Tune], beats: Sequence[float]) -> tuple[Tune, ...]:
     """The same tunes with the grid's beats counted inside each one, and the density that is.
 
     The spans are half-open: a beat landing exactly on a boundary belongs to the call that
-    starts there, so consecutive tunes never count the same downbeat twice. ``beats`` is
-    expected sorted, which is what ``beats.detect`` guarantees.
+    starts there, so consecutive tunes never count the same downbeat twice. The grid is
+    sorted here rather than assumed sorted — the bisect below needs it, and this module does
+    not own the measurement it is dividing by.
     """
     ordered = sorted(beats)
-    return tuple(one._replace(**_density(one, ordered)) for one in found)
+    return tuple(_over(one, ordered) for one in found)
 
 
-def _density(one: Tune, ordered: Sequence[float]) -> dict[str, Any]:
+def _over(one: Tune, ordered: Sequence[float]) -> Tune:
+    """One call with the beats between its boundaries counted, and the density they make."""
     inside = bisect_left(ordered, one.end) - bisect_left(ordered, one.start)
     seconds = one.seconds
-    return {
-        "beats": inside,
-        "beats_per_second": round(inside / seconds, 3) if seconds > 0 else 0.0,
-    }
+    return one._replace(
+        beats=inside,
+        beats_per_second=round(inside / seconds, 3) if seconds > 0 else 0.0,
+    )
 
 
-def dense(
+def sifted(
     found: Sequence[Tune],
     minimum_density: float = DEFAULT_DENSITY_PER_SECOND,
-) -> Called:
+) -> Calls:
     """Split the calls into the ones with a pulse under them and the ones without.
 
     A call whose density was never measured is kept: there is no grid, so there is no
@@ -331,7 +333,7 @@ def dense(
     for one in found:
         pulseless = one.beats_per_second is not None and one.beats_per_second < minimum_density
         (dropped if pulseless else kept).append(one)
-    return Called(tuple(kept), tuple(dropped))
+    return Calls(tuple(kept), tuple(dropped))
 
 
 def numbered(found: Sequence[Tune]) -> tuple[dict[str, Any], ...]:
@@ -351,27 +353,47 @@ def numbered(found: Sequence[Tune]) -> tuple[dict[str, Any], ...]:
     )
 
 
-def gist(
-    curve: Curve,
-    applause: Sequence[Span],
-    found: Sequence[Tune],
-    dropped: Sequence[Tune] = (),
-) -> dict[str, Any]:
+def dropped_calls(dropped: Sequence[Tune], minimum_density: float) -> tuple[dict[str, Any], ...]:
+    """What the density check took out, with the measurement that took it out.
+
+    On disk beside the tune set rather than in the gist, for the reason every boundary is:
+    a tool result is stats. But it has to be somewhere a caller can read, because a filter
+    whose rejects cannot be inspected is one nobody can check (#38) — this is the record
+    that says the eighth call was two minutes of talking rather than a lost tune.
+
+    It rides in the file's header, which puts it on one line, and that is affordable because
+    it is bounded by the applause: there is at most one call per burst, so a whole concert
+    is tens of these and never the thousands a beat grid or an energy curve would be.
+    """
+    return tuple(
+        {
+            "t": one.start,
+            "end": one.end,
+            "seconds": one.seconds,
+            "beats": one.beats,
+            "beats_per_second": one.beats_per_second,
+            "reason": f"no pulse: under the beat-density floor of {minimum_density} per second",
+        }
+        for one in dropped
+    )
+
+
+def gist(curve: Curve, applause: Sequence[Span], calls: Calls) -> dict[str, Any]:
     """How many tunes, how much clapping, and which tune is the long one — no lists.
 
     The boundaries themselves are on disk. A set is a dozen records; what belongs in a tool
     result is the shape of the set, and "the file has 12 tunes, the longest starts at 41:12".
 
-    The density check reports the same way, and deliberately does not list what it dropped:
-    what a caller needs inline is whether the floor was anywhere near a decision, so it gets
-    the two shoulders — the densest call that was dropped and the sparsest that was kept.
-    A wide gap between them says the filter did not have to choose; a narrow one says the
-    threshold wants looking at, and the dropped calls themselves are named in the log.
+    The density check reports the same way, and deliberately does not list what it dropped —
+    that goes on disk with the boundaries, in ``dropped_calls``. What a caller needs inline
+    is whether the floor was anywhere near a decision, so it gets the two shoulders: the
+    densest call that was dropped and the sparsest that was kept. A wide gap between them
+    says the filter did not have to choose; a narrow one says the threshold wants looking at.
     """
-    longest = max(found, key=lambda one: one.seconds, default=None)
-    shortest = min(found, key=lambda one: one.seconds, default=None)
+    longest = max(calls.kept, key=lambda one: one.seconds, default=None)
+    shortest = min(calls.kept, key=lambda one: one.seconds, default=None)
     return {
-        "count": len(found),
+        "count": len(calls.kept),
         "applause_count": len(applause),
         "applause_seconds": round(sum(one.seconds for one in applause), 3),
         "peak_probability": round(max(curve.probability), 4) if curve.probability else None,
@@ -380,10 +402,10 @@ def gist(
         ),
         "longest": _summary(longest),
         "shortest": _summary(shortest),
-        "dropped": len(dropped),
-        "dropped_seconds": round(sum(one.seconds for one in dropped), 3),
-        "densest_dropped": _summary(max(dropped, key=_pulse, default=None)),
-        "sparsest_kept": _summary(min(found, key=_pulse, default=None)),
+        "dropped": len(calls.dropped),
+        "dropped_seconds": round(sum(one.seconds for one in calls.dropped), 3),
+        "densest_dropped": _summary(max(calls.dropped, key=_pulse, default=None)),
+        "sparsest_kept": _summary(min(calls.kept, key=_pulse, default=None)),
     }
 
 

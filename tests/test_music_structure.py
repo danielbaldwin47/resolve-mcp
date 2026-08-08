@@ -235,6 +235,29 @@ def test_a_call_with_no_pulse_under_it_never_reaches_the_tunes_file(concert: Pat
     assert result["tunes"]["dropped"] == 1
 
 
+def test_the_dropped_call_is_on_disk_with_the_reason_it_was_dropped(concert: Path) -> None:
+    """Out of the tune set but not out of the record — the filter has to be auditable."""
+    result = _result(
+        _started(audio=concert, tagger=_heard(), detector=_pulse_in_the_first_tune_only())
+    )
+
+    written = json.loads(Path(result["tunes"]["path"]).read_text(encoding="utf-8"))
+
+    assert [(one["t"], one["end"]) for one in written["dropped_calls"]] == [(6.0, 10.0)]
+    assert written["dropped_calls"][0]["beats_per_second"] == 0.0
+    assert "no pulse" in written["dropped_calls"][0]["reason"]
+
+
+def test_the_dropped_calls_stay_out_of_what_comes_back_inline(concert: Path) -> None:
+    """The gist is stats; the rejects are boundaries, so they live on disk with the rest."""
+    result = _result(
+        _started(audio=concert, tagger=_heard(), detector=_pulse_in_the_first_tune_only())
+    )
+
+    assert "dropped_calls" not in result["tunes"]
+    assert not any(isinstance(value, list) for value in result["tunes"].values())
+
+
 def test_a_kept_tune_carries_the_density_it_was_kept_on(concert: Path) -> None:
     result = _result(
         _started(audio=concert, tagger=_heard(), detector=_pulse_in_the_first_tune_only())
@@ -504,6 +527,28 @@ def test_a_missing_tagger_names_the_install(concert: Path, monkeypatch: Any) -> 
     assert record.error is not None
     assert record.error["code"] == "analysis_dependency_missing"
     assert "panns" in record.error["fix"]
+
+
+def test_a_missing_beat_model_names_the_way_to_run_without_one(
+    concert: Path,
+    monkeypatch: Any,
+) -> None:
+    """beats' own advice is beats=false, which is no help to a caller asking for tunes."""
+    real = importlib.import_module
+
+    def missing(name: str, *args: Any, **kwargs: Any) -> Any:
+        if name == beats_module.MODULE:
+            raise ImportError(name)
+        return real(name, *args, **kwargs)
+
+    monkeypatch.setattr(importlib, "import_module", missing)
+
+    record = _finished(_started(audio=concert, tagger=_heard(), detector=None))
+
+    assert record.error is not None
+    assert record.error["code"] == "analysis_dependency_missing"
+    assert "density_per_second=0" in record.error["fix"]
+    assert "beat_this" in record.error["fix"]
 
 
 def test_a_tagger_that_falls_over_is_an_analysis_failure(concert: Path) -> None:
