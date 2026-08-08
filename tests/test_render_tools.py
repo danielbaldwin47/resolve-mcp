@@ -37,7 +37,7 @@ def test_the_preset_list_names_what_the_deliver_page_offers(attach: Attach) -> N
 
     assert reply["ok"] is True
     assert reply["presets"] == PRESETS_ON_THIS_PROJECT
-    assert reply["count"] == 4
+    assert reply["count"] == len(PRESETS_ON_THIS_PROJECT)
 
 
 def test_the_preset_list_reports_the_format_currently_loaded(attach: Attach) -> None:
@@ -377,7 +377,9 @@ def test_a_default_preset_this_project_lacks_refuses_rather_than_falling_back(
     assert reply["ok"] is False
     assert reply["error"]["code"] == "render_preset_not_found"
     assert reply["error"]["detail"]["requested"] == DEFAULT_PRESET
-    assert reply["error"]["detail"]["available"] == ["Audio Only", "H.264 Master", "ProRes 422 HQ"]
+    assert reply["error"]["detail"]["available"] == [
+        one for one in PRESETS_ON_THIS_PROJECT if one != DEFAULT_PRESET
+    ]
     assert _project(resolve).render_jobs == []
 
 

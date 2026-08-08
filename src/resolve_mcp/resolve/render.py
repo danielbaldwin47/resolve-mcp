@@ -75,6 +75,15 @@ RESTORE_THE_PRESET_FIX = (
 """What to tell a caller that never chose the preset name: the worker hardcodes it, so the
 install is what is wrong, not the request."""
 
+PRESET_UNUSABLE_FIX = (
+    "Restore the stock {preset!r} preset in this Resolve, or open the Deliver page and see "
+    "what it selects — nothing else names the output this render needs."
+)
+
+UNKNOWN_FORMAT = "unknown"
+"""What 21.0.3.7 answers for the current format after ``Audio Only`` loads — and it renders a
+WAV regardless (live). A reading of it says the build will not say, not that it disagrees."""
+
 STATUS = "JobStatus"
 PERCENT = "CompletionPercentage"
 
@@ -155,15 +164,22 @@ def submit(
     settings are applied after the preset either way, so the caller's target directory and
     name still win.
 
-    What the preset route deliberately does *not* do is confirm the preset selected the
-    format that was asked for. On the build this exists for, ``GetCurrentRenderFormatAndCodec``
-    answers ``{"format": "unknown"}`` after ``Audio Only`` loads and still renders a WAV —
-    so a check against the requested format would reject the one route that works. The
-    file the job writes is what settles it, and ``render`` already refuses a job that
-    produced nothing.
+    Going first costs the preset something the fallback ordering never had to pay: a preset
+    carries a *whole* render config, so on a build that would have taken the pair, loading it
+    replaces settings the caller never asked to change. That is the price of the swap and it
+    is accepted — ``Audio Only`` is the shape this render wants anyway, the caller's settings
+    are re-applied over it, and the alternative is the guaranteed-failing call on the build
+    that is actually supported.
+
+    What is *not* accepted is a preset quietly rendering something else. Only a reading that
+    succeeded may say so: ``GetCurrentRenderFormatAndCodec`` answers ``{"format": "unknown"}``
+    after ``Audio Only`` loads on 21.0.3.7 and renders a WAV regardless (live), so an
+    unreadable format leaves the preset in charge — a check that treated it as disagreement
+    would reject the one route that works. A readable format that differs demotes the preset
+    to the pair, because a customised preset otherwise beats an explicit request silently and
+    the job lands a file under a name that says it is something it is not.
     """
-    if preset is not None or format_and_codec is not None:
-        _select_output(project, format_and_codec, preset)
+    _select_output(project, format_and_codec, preset)
     if not project.SetRenderSettings(settings):
         raise RenderQueueError(
             cause="Resolve refused the render settings.",
@@ -181,56 +197,91 @@ def _select_output(
     format_and_codec: tuple[str, str] | None,
     preset: str | None,
 ) -> None:
-    """Put the project on the asked-for output: by preset if this build takes one, else pair."""
-    unusable: ResolveMcpError | None = None
-    if preset is not None:
-        # load_preset, not LoadRenderPreset: a bare False means both "no such preset" and
-        # "will not load", and the two want different answers from the caller.
-        try:
-            load_preset(project, preset)
-        except ResolveMcpError as exc:
-            unusable = exc
-        else:
-            return
-        if format_and_codec is None:
-            # Nothing else names the output, and queuing anyway would render whatever the
-            # project was last set to — a file the caller never asked for.
-            raise RenderQueueError(
-                cause=f"The {preset!r} render preset is unusable: {unusable.cause}",
-                fix=RESTORE_THE_PRESET_FIX.format(preset=preset),
-                detail={**unusable.detail, "preset": preset},
-            ) from unusable
+    """Put the project on the asked-for output: by preset where this build takes one, else pair.
 
+    This is where ``submit``'s ordering lives, and its docstring is where the reasons are.
+    Nothing is selected when the caller named neither — the deliver route loaded its own
+    preset before calling and would have this overwrite it.
+    """
+    refusal: str | None = None
+    detail: dict[str, Any] = {}
+    if preset is not None:
+        refusal, detail = _load_the_preset(project, preset, format_and_codec)
+        if refusal is None:
+            return
     if format_and_codec is None:
-        return
+        if refusal is None:
+            return
+        # Nothing else names the output, and queuing anyway would render whatever the
+        # project was last set to — a file the caller never asked for.
+        raise RenderQueueError(
+            cause=f"Resolve would not render through the {preset!r} preset: {refusal}",
+            fix=PRESET_UNUSABLE_FIX.format(preset=preset),
+            detail={**detail, "preset": preset},
+        )
     format_, codec = format_and_codec
     if project.SetCurrentRenderFormatAndCodec(format_, codec):
-        if unusable is not None:
+        if refusal is not None:
             log.info(
-                "The %r preset is unusable (%s) — asking Resolve for %s/%s directly",
+                "Not rendering through the %r preset (%s) — asking Resolve for %s/%s directly",
                 preset,
-                unusable.cause,
+                refusal,
                 format_,
                 codec,
             )
         return
-    if unusable is None:
+    if refusal is None:
         raise RenderQueueError(
             cause=f"Resolve would not render {format_}/{codec}.",
             detail={"format": format_, "codec": codec, "preset": None},
         )
     raise RenderQueueError(
         cause=(
-            f"The {preset!r} render preset is unusable: {unusable.cause} "
-            f"Resolve would not render {format_}/{codec} directly either."
+            f"Resolve would not render {format_}/{codec}, and the {preset!r} preset is no "
+            f"route to it either: {refusal}"
         ),
-        # Not unusable.fix: that one tells the caller to re-spell the preset, and the caller
-        # never chose this name — the worker hardcodes it. What is wrong is the install.
+        # Not the underlying error's fix: that one tells the caller to re-spell the preset,
+        # and the caller never chose this name — the worker hardcodes it. What is actually
+        # wrong is the install.
         fix=RESTORE_THE_PRESET_FIX.format(preset=preset),
-        # unusable.detail carries what presets do exist, which is the one fact that
-        # identifies a renamed or localised install.
-        detail={**unusable.detail, "format": format_, "codec": codec, "preset": preset},
-    ) from unusable
+        detail={**detail, "format": format_, "codec": codec, "preset": preset},
+    )
+
+
+def _load_the_preset(
+    project: Project,
+    preset: str,
+    format_and_codec: tuple[str, str] | None,
+) -> tuple[str | None, dict[str, Any]]:
+    """Load ``preset``; answer why it is no route to the asked-for format, ``None`` if it is.
+
+    The detail returned alongside carries what presets do exist, which is the one fact that
+    identifies a renamed or localised install.
+    """
+    # load_preset, not LoadRenderPreset: a bare False means both "no such preset" and
+    # "will not load", and the two want different answers from the caller.
+    try:
+        load_preset(project, preset)
+    except ResolveMcpError as exc:
+        return exc.cause, exc.detail
+    if format_and_codec is None:
+        return None, {}
+    selected = current_format(project).get("format", "")
+    # Only a reading that *succeeded* may demote the preset. The build this ordering exists
+    # for answers "unknown" here after ``Audio Only`` loads and then renders a WAV anyway
+    # (live, 21.0.3.7), so treating an unreadable format as disagreement would reject the one
+    # route that works. A readable format that differs is another matter: a preset customised
+    # to render something else would otherwise silently beat an explicit request, and the job
+    # would land a file under a name that says it is something it is not.
+    if selected.casefold() in ("", UNKNOWN_FORMAT):
+        return None, {}
+    wanted = format_and_codec[0]
+    if selected.casefold() == wanted.casefold():
+        return None, {}
+    return (
+        f"it renders {selected}, not {wanted}",
+        {"selected": selected},
+    )
 
 
 def render(

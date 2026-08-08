@@ -278,7 +278,50 @@ def test_a_preset_that_will_not_load_falls_back_to_the_pair(tmp_path: Path) -> N
 
     assert job_id
     assert project.loaded_presets == []
+    assert project.format_calls == [("wav", "lpcm")]
     assert project.render_format == ("wav", "lpcm")
+
+
+def test_a_preset_that_renders_something_else_does_not_beat_the_pair(tmp_path: Path) -> None:
+    """A customised stock preset would otherwise silently win over an explicit request, and
+    the job would land a file under a name saying it is something it is not."""
+    project = FakeProject("sunset-set")
+    project.render_presets["Audio Only"] = ("mp4", "AAC")
+
+    job_id = render.submit(
+        project,
+        {"TargetDir": str(tmp_path)},
+        ("wav", "lpcm"),
+        preset="Audio Only",
+    )
+
+    assert job_id
+    assert project.loaded_presets == ["Audio Only"]
+    assert project.render_format == ("wav", "lpcm")
+
+
+def test_a_preset_the_build_will_not_report_a_format_for_keeps_the_render(
+    tmp_path: Path,
+) -> None:
+    """21.0.3.7 answers "unknown" after ``Audio Only`` loads and renders a WAV anyway (live).
+
+    Only a reading that succeeded may demote the preset: treating an unreadable format as
+    disagreement would reject the one route that works on the supported build.
+    """
+    project = FakeProject("sunset-set")
+    project.render_presets["Audio Only"] = ("unknown", "")
+    project.accepts_format = False
+
+    job_id = render.submit(
+        project,
+        {"TargetDir": str(tmp_path)},
+        ("wav", "lpcm"),
+        preset="Audio Only",
+    )
+
+    assert job_id
+    assert project.loaded_presets == ["Audio Only"]
+    assert project.format_calls == []
 
 
 def test_a_preset_with_no_pair_behind_it_fails_rather_than_queueing_the_wrong_format(
