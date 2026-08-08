@@ -6,7 +6,10 @@ Two halves, because they answer the two questions a concert's shape is made of (
 * **Tune boundaries** come off the master mix. Applause is the only reliable segmentation a
   jazz set offers — there is no verse and no chorus to find — so the mix is tagged for it
   and the music between the bursts is the tune. This is what a ``songs.json`` author reads
-  before placing a single marker (#22, story 33).
+  before placing a single marker (#22, story 33). Applause alone over-calls, though: on the
+  first live concert three of thirteen calls were talking bounded by clapping, so a call
+  also has to have a pulse under it, and this half reads the beat grid too (#133). Set
+  ``density_per_second`` to zero and it does not.
 
 * **Solo changes** come off the stems, because "who is out front" is not a question the mix
   can answer. They are also snapped to downbeats, which means this job needs a beat grid —
@@ -30,13 +33,13 @@ from typing import Any
 from ..audio import separator
 from ..audio import stems as stems_module
 from ..config import Config, get_config
-from ..errors import InvalidRequestError
+from ..errors import AnalysisDependencyError, InvalidRequestError
 from ..jobs import cache
 from ..jobs.runner import JobOutput, Progress, start_job
 from ..logging_config import get_logger
 from . import applause as applause_module
 from . import beats as beats_module
-from . import halves, music, records
+from . import halves, music
 from . import solos as solos_module
 
 log = get_logger("analysis")
@@ -45,7 +48,19 @@ KIND = "analyze_structure"
 TUNES = "tunes"
 SOLOS = "solos"
 
-APPLAUSE_SHAPE = ("threshold", "burst_seconds", "gap_seconds", "tune_seconds")
+APPLAUSE_SHAPE = (
+    "threshold",
+    "burst_seconds",
+    "gap_seconds",
+    "tune_seconds",
+    "density_per_second",
+)
+"""Every setting that changes what the tune half says — and so what it is keyed on.
+
+``density_per_second`` is in here even though it only filters what the tagger already
+produced, which means moving it re-tags the room. That is the same bargain
+``tune_seconds`` has always made, and the alternative is worse: two floors sharing one
+cache entry would serve whichever set happened to be computed first."""
 SOLO_SHAPE = (
     "window_seconds",
     "hop_seconds",
@@ -66,6 +81,7 @@ def analyze_structure(
     burst_seconds: float = applause_module.DEFAULT_MINIMUM_SECONDS,
     gap_seconds: float = applause_module.DEFAULT_GAP_SECONDS,
     tune_seconds: float = applause_module.DEFAULT_TUNE_SECONDS,
+    density_per_second: float = applause_module.DEFAULT_DENSITY_PER_SECOND,
     window_seconds: float = solos_module.DEFAULT_WINDOW_SECONDS,
     hop_seconds: float = solos_module.DEFAULT_HOP_SECONDS,
     solo_seconds: float = solos_module.DEFAULT_MINIMUM_SECONDS,
@@ -81,7 +97,7 @@ def analyze_structure(
     config = config or get_config()
     source = halves.readable(audio)
     _asked_for_something(tunes, solos)
-    _sane_numbers(threshold, window_seconds, hop_seconds)
+    _sane_numbers(threshold, window_seconds, hop_seconds, density_per_second)
     found = _stems(stems, solos)
 
     settings: dict[str, Any] = {
@@ -91,6 +107,7 @@ def analyze_structure(
         "burst_seconds": float(burst_seconds),
         "gap_seconds": float(gap_seconds),
         "tune_seconds": float(tune_seconds),
+        "density_per_second": float(density_per_second),
         "window_seconds": float(window_seconds),
         "hop_seconds": float(hop_seconds),
         "solo_seconds": float(solo_seconds),
@@ -135,19 +152,35 @@ def _asked_for_something(tunes: bool, solos: bool) -> None:
         )
 
 
-def _sane_numbers(threshold: float, window_seconds: float, hop_seconds: float) -> None:
-    if not 0.0 < threshold <= 1.0 or window_seconds <= 0 or hop_seconds <= 0:
+def _sane_numbers(
+    threshold: float,
+    window_seconds: float,
+    hop_seconds: float,
+    density_per_second: float,
+) -> None:
+    if (
+        not 0.0 < threshold <= 1.0
+        or window_seconds <= 0
+        or hop_seconds <= 0
+        or density_per_second < 0
+    ):
         raise InvalidRequestError(
-            cause="The applause threshold must be a probability, and the windows positive.",
+            cause=(
+                "The applause threshold must be a probability, the windows positive, and the "
+                "beat-density floor zero or more."
+            ),
             fix=(
                 f"Defaults are threshold={applause_module.DEFAULT_THRESHOLD}, "
                 f"window_seconds={solos_module.DEFAULT_WINDOW_SECONDS}, "
-                f"hop_seconds={solos_module.DEFAULT_HOP_SECONDS}."
+                f"hop_seconds={solos_module.DEFAULT_HOP_SECONDS}, "
+                f"density_per_second={applause_module.DEFAULT_DENSITY_PER_SECOND} "
+                "(0 turns the density check off)."
             ),
             detail={
                 "threshold": threshold,
                 "window_seconds": window_seconds,
                 "hop_seconds": hop_seconds,
+                "density_per_second": density_per_second,
             },
         )
 
@@ -239,7 +272,17 @@ def analyze(
         result[TUNES] = halves.cached(
             f"{KIND}:{TUNES}",
             cache.cache_key(f"{KIND}:{TUNES}", [identity], shape),
-            lambda path: _tunes(source, path, described, shape, tagger),
+            lambda path: _tunes(
+                source,
+                path,
+                described,
+                shape,
+                tagger,
+                identity,
+                detector,
+                refresh,
+                config,
+            ),
             source,
             refresh,
             config,
@@ -286,6 +329,10 @@ def _tunes(
     described: Mapping[str, Any],
     shape: Mapping[str, Any],
     tagger: applause_module.Tagger | None,
+    identity: Mapping[str, Any],
+    detector: beats_module.Detector | None,
+    refresh: bool,
+    config: Config,
 ) -> dict[str, Any]:
     curve = applause_module.tag(source, tagger)
     spans = applause_module.spans(
@@ -299,9 +346,101 @@ def _tunes(
         float(described["duration_seconds"]),
         float(shape["tune_seconds"]),
     )
-    gist = {**applause_module.gist(curve, spans, found), **shape}
-    log.info("Found %d tunes and %d bursts of applause in %s", len(found), len(spans), source.name)
-    return halves.written(target, TUNES, described, gist, applause_module.numbered(found))
+    floor = float(shape["density_per_second"])
+    calls = _with_a_pulse(found, floor, source, described, identity, detector, refresh, config)
+    gist = {**applause_module.gist(curve, spans, calls), **shape}
+    log.info(
+        "Found %d tunes and %d bursts of applause in %s",
+        len(calls.kept),
+        len(spans),
+        source.name,
+    )
+    for one in calls.dropped:
+        log.info(
+            "Dropped the call at %.2fs (%.1fs, %.2f beats/s) from %s: no pulse under it",
+            one.start,
+            one.seconds,
+            one.beats_per_second or 0.0,
+            source.name,
+        )
+    return halves.written(
+        target,
+        TUNES,
+        described,
+        gist,
+        applause_module.numbered(calls.kept),
+        {"dropped_calls": list(applause_module.dropped_calls(calls.dropped, floor))},
+    )
+
+
+def _with_a_pulse(
+    found: Sequence[applause_module.Tune],
+    minimum_density: float,
+    source: Path,
+    described: Mapping[str, Any],
+    identity: Mapping[str, Any],
+    detector: beats_module.Detector | None,
+    refresh: bool,
+    config: Config,
+) -> applause_module.Calls:
+    """The calls the beat grid says are music, and the ones it says are talking (#133).
+
+    The grid is the one ``analyze_music`` writes, for the same reason ``_downbeats`` reads
+    it: one detection per piece of audio, whichever job asks first. A floor of zero is the
+    way out — the check is off, no grid is read, and this half needs nothing but the tagger.
+
+    That way out is why this half asks ``_grid`` for the escape hatch to name.
+    """
+    if minimum_density <= 0:
+        return applause_module.Calls(tuple(found), ())
+    rows = _grid(
+        source,
+        described,
+        identity,
+        detector,
+        refresh,
+        config,
+        "run the job with density_per_second=0 to keep every call the applause tagger makes",
+    )
+    grid = tuple(float(row["t"]) for row in rows)
+    return applause_module.sifted(applause_module.counted(found, grid), minimum_density)
+
+
+def _grid(
+    source: Path,
+    described: Mapping[str, Any],
+    identity: Mapping[str, Any],
+    detector: beats_module.Detector | None,
+    refresh: bool,
+    config: Config,
+    without: str,
+) -> list[dict[str, Any]]:
+    """The beat grid both halves read, with a missing beat model shaped for the half asking.
+
+    ``beats`` tells a caller who has no model to pass ``beats=false``, which is advice for
+    ``analyze_music`` and no help in this job at all. Each half here has its own way to run
+    without a grid — a density floor of zero, or solos off — and ``without`` is the half
+    naming its own. The relabelling is gated on the model actually being the thing that is
+    missing, so some other dependency failing inside the beats half still says what it is.
+    """
+    try:
+        return music.numbered_beats(
+            source, dict(described), dict(identity), detector, refresh, config
+        )
+    except AnalysisDependencyError as exc:
+        if exc.detail.get("module") != beats_module.MODULE:
+            raise
+        raise AnalysisDependencyError(
+            cause=(
+                "This job reads the beat grid, and beat_this is not installed, so there is "
+                "no grid to read."
+            ),
+            fix=(
+                f"Install it on the machine running the server ({beats_module.INSTALL}), or "
+                f"{without}."
+            ),
+            detail={"module": beats_module.MODULE},
+        ) from exc
 
 
 def _solos(
@@ -368,8 +507,16 @@ def _downbeats(
     Deliberately the *same* cache entry ``analyze_music`` writes, not a private copy: the
     grid for a piece of audio is the grid, and a second detection over an hour of concert
     to learn what is already on disk is the cost that keying halves separately exists to
-    avoid.
+    avoid. Both halves of this job reach it through the one accessor, so neither can drift
+    into keying its own copy.
     """
-    half = music.beats_of(source, dict(described), dict(identity), detector, refresh, config)
-    rows: Sequence[Mapping[str, Any]] = records.read(Path(half["path"]))[music.BEATS]
+    rows = _grid(
+        source,
+        described,
+        identity,
+        detector,
+        refresh,
+        config,
+        "run the job with solos=false for tune boundaries only",
+    )
     return tuple(float(row["t"]) for row in rows if row["downbeat"])

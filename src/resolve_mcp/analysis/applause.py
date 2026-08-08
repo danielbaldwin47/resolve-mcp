@@ -17,12 +17,23 @@ is ordinary arithmetic that a test can pin exactly. Three rules do that work:
 * **A gap between bursts is not always a tune.** Announcing the band takes twenty seconds
   and is bounded by applause at both ends, so anything under ``minimum_seconds`` of music
   is banter and is left out of the boundaries rather than reported as a very short tune.
+
+The length rule is not enough on its own, which the first live pass showed: three of the
+thirteen calls on a real concert had no musical pulse under them and one of those was two
+minutes of talking (#119 section D, #133). Length cannot separate those from a tune, so a
+fourth rule reads the beat grid the music analysis already wrote:
+
+* **A tune has a pulse.** Beats per second over the call, against ``minimum_density``.
+  Talking and long announcements come back near zero; the sparsest real tune on the
+  measured concert was 1.36. That is the whole check — the grid is somebody else's
+  measurement (#37) and this module only divides by it.
 """
 
 from __future__ import annotations
 
 import importlib
 import statistics
+from bisect import bisect_left
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any, NamedTuple
@@ -52,6 +63,20 @@ DEFAULT_GAP_SECONDS = 1.5
 DEFAULT_TUNE_SECONDS = 60.0
 """Under a minute between two bursts of applause is an announcement, not a tune."""
 
+DEFAULT_DENSITY_PER_SECOND = 0.5
+"""Beats per second a call needs before it counts as music.
+
+Measured, not guessed — the sweep and the live run are recorded on #133. On the concert
+master the tagger called thirteen tunes, and the beat grid puts the ten real ones between
+1.36 and 2.70 beats per second while the three the ear rejected sit at 0.07, 0.00 and 0.00.
+Every floor from 0.1 to 1.25 calls that concert the same way, so 0.5 is not on a cliff but
+in the middle of a plateau an order of magnitude wide. It is also below any tempo a band
+plays — 0.5 beats per second is 30 bpm — which is the reason the number should hold on
+material this concert cannot speak for.
+
+Set it to 0.0 to turn the check off and get the unfiltered set back, which is also what
+avoids needing a beat grid at all (see ``structure``)."""
+
 
 class Curve(NamedTuple):
     """How likely the room is clapping, frame by frame. ``seconds`` is each frame's start."""
@@ -73,16 +98,30 @@ class Span(NamedTuple):
 
 
 class Tune(NamedTuple):
-    """Music between two bursts of applause — or between a burst and the end of the file."""
+    """Music between two bursts of applause — or between a burst and the end of the file.
+
+    ``beats`` and ``beats_per_second`` are ``None`` until ``counted`` reads a grid over the
+    call. None is not zero: no grid was read, so nothing is known about the pulse, and a
+    call in that state is never dropped for want of one.
+    """
 
     start: float
     end: float
     applause_before: float | None
     applause_after: float | None
+    beats: int | None = None
+    beats_per_second: float | None = None
 
     @property
     def seconds(self) -> float:
         return round(self.end - self.start, 3)
+
+
+class Calls(NamedTuple):
+    """The tune set after the density check: what has a pulse under it, and what does not."""
+
+    kept: tuple[Tune, ...]
+    dropped: tuple[Tune, ...]
 
 
 Tagger = Callable[[Path], Curve]
@@ -257,6 +296,46 @@ def tunes(
     return tuple(one for one in found if one.seconds >= minimum_seconds)
 
 
+def counted(found: Sequence[Tune], beats: Sequence[float]) -> tuple[Tune, ...]:
+    """The same tunes with the grid's beats counted inside each one, and the density that is.
+
+    The spans are half-open: a beat landing exactly on a boundary belongs to the call that
+    starts there, so consecutive tunes never count the same downbeat twice. The grid is
+    sorted here rather than assumed sorted — the bisect below needs it, and this module does
+    not own the measurement it is dividing by.
+    """
+    ordered = sorted(beats)
+    return tuple(_over(one, ordered) for one in found)
+
+
+def _over(one: Tune, ordered: Sequence[float]) -> Tune:
+    """One call with the beats between its boundaries counted, and the density they make."""
+    inside = bisect_left(ordered, one.end) - bisect_left(ordered, one.start)
+    seconds = one.seconds
+    return one._replace(
+        beats=inside,
+        beats_per_second=round(inside / seconds, 3) if seconds > 0 else 0.0,
+    )
+
+
+def sifted(
+    found: Sequence[Tune],
+    minimum_density: float = DEFAULT_DENSITY_PER_SECOND,
+) -> Calls:
+    """Split the calls into the ones with a pulse under them and the ones without.
+
+    A call whose density was never measured is kept: there is no grid, so there is no
+    evidence to drop it on, and inventing one by treating "unknown" as "zero" would delete
+    tunes on any path that skipped the beat model.
+    """
+    kept: list[Tune] = []
+    dropped: list[Tune] = []
+    for one in found:
+        pulseless = one.beats_per_second is not None and one.beats_per_second < minimum_density
+        (dropped if pulseless else kept).append(one)
+    return Calls(tuple(kept), tuple(dropped))
+
+
 def numbered(found: Sequence[Tune]) -> tuple[dict[str, Any], ...]:
     """One record per tune, numbered from one — the rows a songs.json author reads."""
     return tuple(
@@ -267,21 +346,54 @@ def numbered(found: Sequence[Tune]) -> tuple[dict[str, Any], ...]:
             "seconds": one.seconds,
             "applause_before": one.applause_before,
             "applause_after": one.applause_after,
+            "beats": one.beats,
+            "beats_per_second": one.beats_per_second,
         }
         for index, one in enumerate(found, start=1)
     )
 
 
-def gist(curve: Curve, applause: Sequence[Span], found: Sequence[Tune]) -> dict[str, Any]:
+def dropped_calls(dropped: Sequence[Tune], minimum_density: float) -> tuple[dict[str, Any], ...]:
+    """What the density check took out, with the measurement that took it out.
+
+    On disk beside the tune set rather than in the gist, for the reason every boundary is:
+    a tool result is stats. But it has to be somewhere a caller can read, because a filter
+    whose rejects cannot be inspected is one nobody can check (#38) — this is the record
+    that says the eighth call was two minutes of talking rather than a lost tune.
+
+    It rides in the file's header, which puts it on one line, and that is affordable because
+    it is bounded by the applause: there is at most one call per burst, so a whole concert
+    is tens of these and never the thousands a beat grid or an energy curve would be.
+    """
+    return tuple(
+        {
+            "t": one.start,
+            "end": one.end,
+            "seconds": one.seconds,
+            "beats": one.beats,
+            "beats_per_second": one.beats_per_second,
+            "reason": f"no pulse: under the beat-density floor of {minimum_density} per second",
+        }
+        for one in dropped
+    )
+
+
+def gist(curve: Curve, applause: Sequence[Span], calls: Calls) -> dict[str, Any]:
     """How many tunes, how much clapping, and which tune is the long one — no lists.
 
     The boundaries themselves are on disk. A set is a dozen records; what belongs in a tool
     result is the shape of the set, and "the file has 12 tunes, the longest starts at 41:12".
+
+    The density check reports the same way, and deliberately does not list what it dropped —
+    that goes on disk with the boundaries, in ``dropped_calls``. What a caller needs inline
+    is whether the floor was anywhere near a decision, so it gets the two shoulders: the
+    densest call that was dropped and the sparsest that was kept. A wide gap between them
+    says the filter did not have to choose; a narrow one says the threshold wants looking at.
     """
-    longest = max(found, key=lambda one: one.seconds, default=None)
-    shortest = min(found, key=lambda one: one.seconds, default=None)
+    longest = max(calls.kept, key=lambda one: one.seconds, default=None)
+    shortest = min(calls.kept, key=lambda one: one.seconds, default=None)
     return {
-        "count": len(found),
+        "count": len(calls.kept),
         "applause_count": len(applause),
         "applause_seconds": round(sum(one.seconds for one in applause), 3),
         "peak_probability": round(max(curve.probability), 4) if curve.probability else None,
@@ -290,8 +402,19 @@ def gist(curve: Curve, applause: Sequence[Span], found: Sequence[Tune]) -> dict[
         ),
         "longest": _summary(longest),
         "shortest": _summary(shortest),
+        "dropped": len(calls.dropped),
+        "dropped_seconds": round(sum(one.seconds for one in calls.dropped), 3),
+        "densest_dropped": _summary(max(calls.dropped, key=_pulse, default=None)),
+        "sparsest_kept": _summary(min(calls.kept, key=_pulse, default=None)),
     }
 
 
+def _pulse(one: Tune) -> float:
+    """A call's density for ordering, with "never measured" sorting above every measured one."""
+    return float("inf") if one.beats_per_second is None else one.beats_per_second
+
+
 def _summary(one: Tune | None) -> dict[str, Any] | None:
-    return None if one is None else {"t": one.start, "seconds": one.seconds}
+    if one is None:
+        return None
+    return {"t": one.start, "seconds": one.seconds, "beats_per_second": one.beats_per_second}

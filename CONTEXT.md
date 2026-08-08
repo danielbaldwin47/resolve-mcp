@@ -16,6 +16,9 @@ timelines. The server measures; Claude decides.
   `cut/schema.py`); validated then materialised, never edited in place.
 - **titles file** — agent-authored JSON of Text+ title events, applied to
   one owned track.
+- **songs file** — `projects/<project>/songs.json`, song key → title +
+  personnel; agent-authored, never read by server code — the facts behind
+  the titles file (`docs/agents/rough-cut.md`, #132).
 - **job** — background compute (analysis, stems, scenes) with one JSON
   record on disk; disk is the only source of truth.
 - **envelope** — the shared tool-result shape every MCP tool returns
@@ -33,7 +36,8 @@ timelines. The server measures; Claude decides.
 - **fake tier / live tier** — `pytest -m 'not live'` against fakes (the
   default) vs `-m live` against a running Resolve Studio. See CLAUDE.md.
 - **stem** — separated audio (mix → vocals/drums/bass/other; drums →
-  kick/snare/toms), path is a content hash (ADR 0003).
+  kick/snare/toms/ride/crash), path is a content hash (ADR 0003). The drum
+  model writes `hh` too; it is not collected (#125).
 - **style layer** — `styles/` at the repo root: layered Markdown style
   profiles (`base.md` + `concert.md`), the corpus record (`corpus.md`) and
   per-project angle sidecars (`angles/*.json`). Agent-authored,
@@ -67,17 +71,21 @@ Top level:
 | `timing.py` | frames authoritative; seconds/timecode/fps derived |
 
 `analysis/` — compute jobs that read audio and write findings to disk:
-`applause` (bursts → tune boundaries), `beats` (grid + downbeats, model
+`applause` (bursts → tune boundaries, then a beat-density floor drops the calls
+with no pulse under them, #133), `beats` (grid + downbeats, model
 injected per ADR 0002; `trust` says which beats the grid describes well enough
-to count, #112), `correlate` (measure a cut against its music, gating the beat
-statistics on `trust` and leaving the transient ones ungated), `cuda` (preloads
+to count, #112), `correlate` (measure a cut against its music — by default the *visible* edit,
+every frame resolved to the topmost enabled video item with uncovered stretches
+as black shots, #142; `track=` measures one video track alone. Gates the beat
+statistics on `trust` and leaves the transient ones ungated), `cuda` (preloads
 the CUDA runtime the `analysis` extra ships, so CTranslate2 finds it on Windows;
 pure decisions, #128),
 `decode` (WAV → numpy, no third-party decoder), `drums` (hits per stem), `energy`
 (loudness curves), `fills` (drum-fill candidates), `halves` (shared
 identify/cache/write pattern), `music` (beats + energy + gist job),
 `records` (sliceable record files), `silence` (RMS spans), `solos` (front
-of band changes), `structure` (tunes + solo changes job), `transcribe`
+of band changes), `structure` (tunes + solo changes job; both halves read the
+shared beats half), `transcribe`
 (job), `transcript` (document + Word/Transcription/Transcriber vocabulary),
 `virtual` (a cut file read back as the words it will contain — the P4
 self-review, warnings only, touches no Resolve handle), `whisper`
@@ -188,5 +196,7 @@ see. Live tier: `test_live_smoke.py` (module-level
   labels, domain-docs usage, the style layer (sidecar + profile formats,
   provenance tags, how a corpus pass is run), the rough-cut pillar
   (`rough-cut.md`: the brief and b-roll catalog the agent owns, the
-  assembly loop, the `virtual_transcript` self-review and the cut report).
+  assembly loop, the `virtual_transcript` self-review and the cut report;
+  also home of the `projects/<project>/` convention and the songs file's
+  ownership, #132).
 - Wayfinder: map = issue #1, scope = #2, spec = #22, build tickets #23–#47.
