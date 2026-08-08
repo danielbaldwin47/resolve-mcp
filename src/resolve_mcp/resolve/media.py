@@ -56,7 +56,7 @@ from ..errors import (
 )
 from ..logging_config import get_logger
 from ..spill import spill
-from ..timing import dual_time
+from ..timing import dual_time, frames_from_timecode
 from .camera_sidecar import camera_model as recorded_camera_model
 from .connection import ResolveConnection
 
@@ -84,6 +84,7 @@ SEQUENCE_TOKEN = "%"
 SEQUENCE_RANGE = re.compile(r"\[(\d+)-\d+\]")
 
 FILE_PATH = "File Path"
+DURATION = "Duration"
 FRAMES = "Frames"
 FPS = "FPS"
 START = "Start"
@@ -355,17 +356,37 @@ def frame_rate(reported: dict[str, str]) -> float | None:
         return None
 
 
-def frame_bounds(reported: dict[str, str]) -> tuple[int | None, int | None]:
+def frame_bounds(
+    reported: dict[str, str], fps: float | None = None
+) -> tuple[int | None, int | None]:
     """Media bounds as half-open ``[start, out)``.
 
     Resolve reports ``End`` as the last frame; every range in this server is half-open, so
     the out point is that frame plus one. Frame count is the fallback when ``End`` is
     missing. The rule lives here so bounds mean the same thing to a listing and to a cut.
+
+    Audio-only clips report ``Start``, ``End`` and ``Frames`` as empty strings (#46,
+    live-verified): only ``Duration`` carries the length, as timecode. When nothing else
+    is readable that timecode is the bounds — ``[0, duration)``, counted at the clip's
+    own rate or, since audio reports no rate either, at the caller's ``fps`` (the
+    timeline's, for a cut). With no rate at all the bounds stay unknown.
     """
     start = _number(reported, START)
     end = _number(reported, END)
     frames = _number(reported, FRAMES)
     out = end + 1 if end is not None else (start + frames if start is not None and frames else None)
+    if start is None and out is None:
+        rate = frame_rate(reported) or fps
+        duration = frames_from_timecode(reported.get(DURATION, ""), rate) if rate else None
+        if duration:
+            log.info(
+                "Start/End/Frames unreported; bounds 0-%d read from %s %r at %s fps",
+                duration,
+                DURATION,
+                reported.get(DURATION),
+                rate,
+            )
+            return 0, duration
     return start, out
 
 

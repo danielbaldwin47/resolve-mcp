@@ -19,6 +19,7 @@ takes share a boundary frame without either owning it twice.
 from __future__ import annotations
 
 import math
+import re
 from typing import Any, Literal
 
 from .errors import InvalidRequestError
@@ -52,6 +53,25 @@ def timecode(frames: int, fps: float) -> str:
     minutes, seconds = divmod(whole_seconds, 60)
     hours, minutes = divmod(minutes, 60)
     return f"{hours:02d}:{minutes:02d}:{seconds:02d}:{frame:02d}"
+
+
+_TIMECODE = re.compile(r"(\d+):(\d\d):(\d\d):(\d\d)")
+
+
+def frames_from_timecode(value: str, fps: float) -> int | None:
+    """``HH:MM:SS:FF`` back to frames — the mirror of :func:`timecode`, and just as
+    non-drop: the frame count runs at the nearest whole rate.
+
+    This reads strings Resolve reported rather than times a caller typed, so anything
+    that is not a timecode — blank being the usual way Resolve says "no value" — is
+    ``None`` rather than an error.
+    """
+    matched = _TIMECODE.fullmatch(value.strip())
+    if matched is None:
+        return None
+    rate = max(round(fps), 1)
+    hours, minutes, seconds, frame = (int(part) for part in matched.groups())
+    return ((hours * 60 + minutes) * 60 + seconds) * rate + frame
 
 
 def frames_from_seconds(seconds: float, fps: float, snap: Snap) -> int:

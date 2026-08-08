@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from resolve_mcp.resolve.media import frame_bounds
 from resolve_mcp.tools.media import (
     import_media,
     inspect_clip,
@@ -1081,3 +1082,30 @@ def test_a_media_pool_resolve_will_not_hand_over_is_reported(attach: Attach) -> 
     assert result["ok"] is False
     assert result["error"]["code"] == "media_pool_unavailable"
     assert result["error"]["fix"]
+
+
+# --- frame bounds -----------------------------------------------------------------------
+
+
+def test_frame_bounds_falls_back_to_duration_for_an_audio_only_clip() -> None:
+    """Audio-only clips report Start/End/Frames as empty strings (#46, live-verified);
+    Duration is the only length they carry, counted at the caller's rate because audio
+    reports no rate of its own either."""
+    reported = {
+        "Type": "Audio",
+        "FPS": "",
+        "Frames": "",
+        "Start": "",
+        "End": "",
+        "Duration": "01:26:38:09",
+        "Sample Rate": "48000",
+        "Audio Ch": "1",
+    }
+
+    assert frame_bounds(reported, fps=23.976) == (0, 124761)
+
+
+def test_frame_bounds_with_no_rate_at_all_stays_unknown() -> None:
+    reported = {"FPS": "", "Frames": "", "Start": "", "End": "", "Duration": "01:26:38:09"}
+
+    assert frame_bounds(reported) == (None, None)

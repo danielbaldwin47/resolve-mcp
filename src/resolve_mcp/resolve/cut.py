@@ -107,8 +107,9 @@ def preflight(
         log.info("Cut file %s is not schema-valid; the media pool was not read", loaded.path)
         return Preflight(loaded, findings, [])
 
+    timeline_fps = float(loaded.doc["timeline"]["fps"])
     sources = [
-        Source(_facts(found.bin_path, found.clip), found)
+        Source(_facts(found.bin_path, found.clip, timeline_fps), found)
         for found in _located(connection, loaded.doc)
     ]
     facts = [source.facts for source in sources]
@@ -149,10 +150,12 @@ def _located(connection: ResolveConnection, doc: dict[str, Any]) -> list[media.L
     return located
 
 
-def _facts(bin_path: str, clip: Clip) -> ClipFacts:
+def _facts(bin_path: str, clip: Clip, timeline_fps: float) -> ClipFacts:
     name = str(clip.GetName() or "")
     reported = media.properties(clip)
-    start, out = media.frame_bounds(reported)
+    # The timeline's rate is what the Duration fallback counts at: an audio-only clip
+    # reports no Start/End/Frames and no rate of its own (#46), only a Duration timecode.
+    start, out = media.frame_bounds(reported, fps=timeline_fps)
     channels = media.audio_channels(reported)
     if channels is None:
         # E7's has-audio leg reads an undocumented property key. If Resolve renames it

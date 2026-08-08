@@ -12,6 +12,7 @@ from resolve_mcp.timing import (
     dual_time,
     duration_frames,
     frames_from_seconds,
+    frames_from_timecode,
     ranges_overlap,
     timecode,
     to_frames,
@@ -32,6 +33,28 @@ def test_timecode_counts_frames_at_the_nearest_whole_rate(
     frames: int, fps: float, expected: str
 ) -> None:
     assert timecode(frames, fps) == expected
+
+
+@pytest.mark.parametrize(
+    ("value", "fps", "expected"),
+    [
+        ("00:00:00:00", 24.0, 0),
+        ("00:00:01:00", 24.0, 24),
+        ("00:00:01:30", 59.94, 90),
+        # The Duration an audio-only pool clip reports (#46, live-verified): 23.976
+        # counts at the nominal 24, exactly as timecode() writes it.
+        ("01:26:38:09", 23.976, 124761),
+    ],
+)
+def test_frames_from_timecode_mirrors_timecode(value: str, fps: float, expected: int) -> None:
+    assert frames_from_timecode(value, fps) == expected
+    assert timecode(expected, fps) == value
+
+
+@pytest.mark.parametrize("value", ["", "300", "audio", "01:26:38", "2.5s"])
+def test_a_string_that_is_not_a_timecode_reads_as_none(value: str) -> None:
+    """Resolve says "no value" with an empty string — an absence, not an error."""
+    assert frames_from_timecode(value, 24.0) is None
 
 
 def test_a_backwards_distance_is_signed_not_wrapped() -> None:
