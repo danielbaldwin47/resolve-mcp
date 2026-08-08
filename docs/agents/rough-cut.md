@@ -14,11 +14,12 @@ timeline is as an `overlays[]` entry in the cut file you author, and the only wa
 reaches anything is by changing what you decide. `tests/test_rough_cut_pillar.py` guards
 that — no module under `src/` names a brief or a catalog by path.
 
-They live per project, in the repo:
+They live per project, in the repo, in the agent-owned per-project root:
 
 ```
 projects/<project>/brief.md      # what the director wants this to be
 projects/<project>/broll.json    # what you have to cover with
+projects/<project>/songs.json    # concert pillar: song key → title + personnel (below)
 ```
 
 In the repo, one file per project, keyed to the project — the same reading the angle
@@ -27,6 +28,40 @@ control rather than sitting beside the footage on a media drive
 (`docs/agents/style-layer.md`). They are not under `styles/` because that layer is taste:
 a profile says how you cut, and neither a brief nor a shot list does. If the director would
 rather have one agent-owned root than two, moving them is a rename and a regex.
+
+### songs.json — the concert pillar's file, homed here
+
+`songs.json` is not a rough-cut document — it is the song data behind concert titling
+(#14 §2) — but this directory is the agent-owned per-project root, and this doc owns
+that convention, so its ownership is recorded here (#132, 2026-08-08).
+
+Yours in exactly the same sense as the two above. You author it from whatever loose
+input exists — chat, a setlist photo, a text file — and the director eyeballs it once.
+The server never reads or writes it: no tool takes a songs path, `apply_titles` reads
+only `titles.json`, and the server never formats prose — every string that reaches a
+title is one you passed. `songs.json` is where the facts live; `titles.json` is where
+you turn them into events. The path guard in `tests/test_rough_cut_pillar.py` bars
+`src/` from anything under `projects/`, so the location carries the same protection as
+the two documents above without a test change.
+
+One object per song key, the key being the name of the blue marker that starts the song:
+
+```jsonc
+{
+  "sunset": {
+    "title": "Sunset Over Water",
+    "personnel": [
+      { "name": "Dana Reeve", "instrument": "keys" }   // optional, ordered as rendered
+    ]
+  }
+}
+```
+
+Because no tool reads the file, #14 §2's validation is your authoring check, not a
+server rule: before `apply_titles`, confirm every blue marker's key exists here, and
+treat a key with no marker as a note to yourself. Tool-side, the only echo of this is
+W2 — a blue marker whose song has no title events — and that is deliberately a warning,
+because titling a set song-by-song is normal (#42).
 
 ### The brief
 

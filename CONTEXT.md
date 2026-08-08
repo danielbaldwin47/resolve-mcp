@@ -16,6 +16,9 @@ timelines. The server measures; Claude decides.
   `cut/schema.py`); validated then materialised, never edited in place.
 - **titles file** — agent-authored JSON of Text+ title events, applied to
   one owned track.
+- **songs file** — `projects/<project>/songs.json`, song key → title +
+  personnel; agent-authored, never read by server code — the facts behind
+  the titles file (`docs/agents/rough-cut.md`, #132).
 - **job** — background compute (analysis, stems, scenes) with one JSON
   record on disk; disk is the only source of truth.
 - **envelope** — the shared tool-result shape every MCP tool returns
@@ -186,5 +189,7 @@ see. Live tier: `test_live_smoke.py` (module-level
   labels, domain-docs usage, the style layer (sidecar + profile formats,
   provenance tags, how a corpus pass is run), the rough-cut pillar
   (`rough-cut.md`: the brief and b-roll catalog the agent owns, the
-  assembly loop, the `virtual_transcript` self-review and the cut report).
+  assembly loop, the `virtual_transcript` self-review and the cut report;
+  also home of the `projects/<project>/` convention and the songs file's
+  ownership, #132).
 - Wayfinder: map = issue #1, scope = #2, spec = #22, build tickets #23–#47.
