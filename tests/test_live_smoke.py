@@ -41,6 +41,7 @@ from resolve_mcp.resolve.connection import get_connection
 from resolve_mcp.resolve.media import (
     AUDIO_CHANNELS,
     apply_still_workaround,
+    audio_channels,
     ensure_bin,
     find_clip,
     import_into,
@@ -161,12 +162,14 @@ def test_inspects_a_real_clip_with_the_property_keys_the_wrappers_assume() -> No
     assert result["bounds"]["media"]["duration"] is not None
 
 
-def test_the_audio_ch_key_is_spelled_the_way_e7_reads_it() -> None:
-    """#62 item 5: E7 fails open when this key is unreadable, so if Resolve ever renamed
-    it, `validate_cut` would silently pass every clip as having audio.
+def test_the_audio_ch_key_reads_the_way_e7_reads_it() -> None:
+    """#62 item 5: E7 fails open whenever ``audio_channels`` reads ``None``.
 
-    Swept across the pool rather than pinned to one clip: an image sequence may not
-    enumerate audio keys, and that absence is not the rename this test guards against.
+    That happens on a renamed key *and* on a kept key whose value stopped parsing —
+    either way `validate_cut` would silently pass every clip as having audio, so the
+    assertion is E7's own read, not key presence. Swept across the pool rather than
+    pinned to one clip, and skipped when no clip carries audio keys at all: an
+    image-sequence-only pool has nothing E7 could misread.
     """
     listing = list_media()
     if not listing["ok"]:
@@ -175,16 +178,22 @@ def test_the_audio_ch_key_is_spelled_the_way_e7_reads_it() -> None:
     if not decodable:
         pytest.skip("No clips with media behind them in the media pool")
 
-    seen: set[str] = set()
+    seen_keys: set[str] = set()
     for clip in decodable:
         result = inspect_clip(clip["name"], bin=clip["bin"])
         if not result["ok"]:
             continue
-        seen.update(result["properties"])
-        if AUDIO_CHANNELS in seen:
-            break
+        properties = result["properties"]
+        seen_keys.update(properties)
+        if audio_channels(properties) is not None:
+            return
 
-    assert AUDIO_CHANNELS in seen
+    audio_ish = sorted(key for key in seen_keys if "audio" in key.lower())
+    if not audio_ish:
+        pytest.skip("No clip in the pool enumerates audio keys at all")
+    raise AssertionError(
+        f"No clip gave a readable {AUDIO_CHANNELS!r} count; audio keys seen: {audio_ish}"
+    )
 
 
 def test_lists_the_real_timelines() -> None:
