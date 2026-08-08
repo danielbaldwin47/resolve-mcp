@@ -11,6 +11,7 @@ real WAVs under the real naming convention rather than empty files.
 from __future__ import annotations
 
 import shutil
+import sys
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -448,7 +449,46 @@ def test_a_separator_that_writes_nothing_at_all_is_a_failure_not_an_empty_result
     assert "drums" in raised.value.cause
 
 
+# --- reading the real process's output ------------------------------------------------------
+#
+# The runner parameter is what every test above substitutes, so the one thing it cannot cover
+# is the decode ``_run`` itself performs. These two spawn a real child — this interpreter, so
+# no binary has to exist — and hand it bytes the separator genuinely emits.
+
+
+def test_a_byte_the_consoles_codepage_cannot_decode_does_not_kill_the_run() -> None:
+    """#139: a progress line held one 0x8f and a twenty-minute job died at 1%.
+
+    ``0x8f`` is undefined in cp1252 and illegal in UTF-8 and ASCII alike, so this goes red
+    under any console the runner happens to have — a strict decode raises whatever the
+    platform's codec is called, and the exception surfaces out of the read loop, not the
+    child, so nothing downstream can catch it.
+    """
+    seen: list[str] = []
+
+    returncode = separator._run(_emitting(b"separating four stems (1%): \x8f"), seen.append)
+
+    assert returncode == 0
+    assert len(seen) == 1
+    assert "separating four stems (1%)" in seen[0]
+
+
+def test_the_output_is_read_as_utf_8_whatever_the_console_is() -> None:
+    """The bar audio-separator draws is UTF-8; decoded as cp1252 it comes back as mojibake."""
+    seen: list[str] = []
+
+    separator._run(_emitting("100%|██████| 4/4 café".encode()), seen.append)
+
+    assert seen == ["100%|██████| 4/4 café\n"]
+
+
 # --- helpers -------------------------------------------------------------------------------
+
+
+def _emitting(payload: bytes) -> list[str]:
+    """Argv for a child that writes exactly these bytes to stdout and exits cleanly."""
+    source = f"import sys; sys.stdout.buffer.write({payload!r} + b'\\n')"
+    return [sys.executable, "-c", source]
 
 
 def _flag(argv: Sequence[str], name: str) -> str:
