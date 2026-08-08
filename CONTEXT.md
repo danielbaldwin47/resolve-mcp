@@ -36,7 +36,8 @@ timelines. The server measures; Claude decides.
 - **fake tier / live tier** — `pytest -m 'not live'` against fakes (the
   default) vs `-m live` against a running Resolve Studio. See CLAUDE.md.
 - **stem** — separated audio (mix → vocals/drums/bass/other; drums →
-  kick/snare/toms), path is a content hash (ADR 0003).
+  kick/snare/toms/ride/crash), path is a content hash (ADR 0003). The drum
+  model writes `hh` too; it is not collected (#125).
 - **style layer** — `styles/` at the repo root: layered Markdown style
   profiles (`base.md` + `concert.md`), the corpus record (`corpus.md`) and
   per-project angle sidecars (`angles/*.json`). Agent-authored,

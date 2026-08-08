@@ -9,11 +9,14 @@ the rule layer over two readings that already exist — drum-stem hits (#36 sepa
   the time. So everything is measured against the median beat of this performance: busy
   means busy *for this drummer, tonight*.
 
-* **Toms are the tell.** Kick and snare keep time; toms are mostly reserved for fills, so
-  tom activity on its own is enough to nominate a beat, and tom share is a quarter of the
-  confidence. Cymbals would be the other tell, and there is no cymbal stem — the
-  decomposition is kick, snare and toms (#36) — so a fill's crash resolution is inferred
-  from a hit landing on the following downbeat rather than heard.
+* **No instrument is eventful by decree.** A beat is nominated two ways: it is busier than
+  the median beat of the performance, or it carries hits some stem does not usually play
+  *around here*, measured against that stem's own median over a window of bars. Which
+  instruments announce something is a fact about the tune, not about the kit — the toms are
+  reserved for fills in rock and are ordinary comping in jazz, and a rule that knew that in
+  advance found the real fills in a jazz tune and then discarded them (#125). Tom *share*
+  is still a quarter of the confidence, because once a beat is nominated the toms are
+  evidence about what kind of event it is.
 
 * **The grid decides the edges.** A candidate starts at a beat and ends at the beat it
   resolves into, because that resolution point is what a cut is placed against. Nothing
@@ -54,24 +57,70 @@ FILLS = "fills"
 PLACES = 3
 
 TOM_STEM = "toms"
+CYMBAL_STEM = "cymbals"
+CYMBAL_SOURCES = ("ride", "crash")
+"""Ride and crash are tallied as one stem, because in this idiom they are one gesture.
+
+The ride *becomes* crashy at a phrase end. Counted apart, that reads as a ride dropping out
+and a crash appearing — two half-signals that partly cancel — putting a hole in exactly the
+moment the cymbals were carried in to catch (#125).
+"""
+COUNTED_STEMS = tuple(
+    dict.fromkeys(CYMBAL_STEM if one in CYMBAL_SOURCES else one for one in DRUM_STEMS)
+)
+"""The stems as this file counts them: the separated ones, with the cymbals merged into one."""
 BUSY_MULTIPLE = 1.6
 """How much busier than the median beat a beat must be before it is part of a fill."""
 STRONG_MULTIPLE = 3.0
 """The ratio at which the density factor is already as convinced as it gets."""
 MINIMUM_HITS = 3
-"""Hits in a beat below which "busier than usual" is noise, not a fill."""
-TOM_HITS = 2
-"""Toms in one beat are a fill on their own, however quiet the beat reads."""
+"""Hits below which "busier than usual" is noise, not a fill.
+
+Read two ways, one per gate: hits in the beat for the density gate, and hits *beyond the
+local baseline* for the departure gate. One number rather than two, because it is answering
+one question — how small a difference this file is willing to call a difference.
+"""
 MAXIMUM_BEATS = 8
 """Two bars in four. Longer is a solo, and this file does not answer that question."""
 MAXIMUM_GAP_BEATS = 1
 """One beat the detector found nothing in does not end a fill that carries on after it."""
+BASELINE_BARS = 16
+"""Bars of context a stem's local baseline is taken over.
+
+Deliberately not anchored to the phrase (#125). The only phrase length here is
+``PHRASE_BARS``, a constant, so keying the window to it would hard-code phrase length one
+level up — the very mistake that ticket exists to undo. The window does not need to know
+phrase length; it needs to be wide enough to hold several phrases, and a median over sixteen
+bars behaves the same whether they run four, eight or twelve.
+"""
+EXCLUDED_BEATS = MAXIMUM_BEATS
+"""How far either side of a beat is left out of its own baseline.
+
+The longest run this file will call a fill, so a fill can never be a large part of the window
+it is judged against. Without this a fill inflates the very median meant to reveal it, which
+is this ticket's failure arriving by another door.
+"""
+DEFAULT_METER = 4
+"""Beats to the bar when the grid cannot say.
+
+The guard on a type rather than a state the detector reaches: ``beats.meter`` is typed
+``int | None`` and answers ``None`` only for an empty record sequence, which ``candidates``
+has already turned away by the time the window is sized.
+"""
 TOM_SHARE = 0.5
 """The tom share of a run at which the tom factor is fully convinced."""
 RESOLUTION_BEATS = 0.25
 """How near the resolution point a hit must land to count as landing on it."""
 PHRASE_BARS = 4
-"""Bars to the phrase. A fill into bar 5 of 8 is doing more work than one into bar 4."""
+"""Bars to the phrase. A fill into bar 5 is doing more work than one into bar 4.
+
+Four rather than eight, settled rather than inherited (#125 asked for the disagreement
+between this constant and its old docstring to be resolved deliberately). Phrases in this
+material run four, eight or twelve bars, and every eight- and twelve-bar boundary is also a
+four-bar one — so four is the divisor that marks all of them, at the cost of also marking
+the bar line halfway through a longer phrase. That cost is affordable because this is a
+quarter of the confidence and not a gate.
+"""
 PHRASE_AT_BAR_LINE = 0.6
 PHRASE_MID_BAR = 0.15
 WEIGHTS = {"density": 0.35, "toms": 0.25, "resolution": 0.15, "phrase": 0.25}
@@ -155,10 +204,10 @@ def candidates(
         times=sorted(hit.seconds for hit in hits),
         baseline=baseline,
     )
+    local = _local_baselines(tallies, _bar_length(beats))
     busy = [
-        (density >= baseline * BUSY_MULTIPLE and sum(tally.values()) >= MINIMUM_HITS)
-        or tally[TOM_STEM] >= TOM_HITS
-        for tally, density in zip(tallies, densities, strict=True)
+        _dense(tally, density, baseline) or _departs(tally, usual)
+        for tally, density, usual in zip(tallies, densities, local, strict=True)
     ]
 
     kept: list[Candidate] = []
@@ -189,8 +238,79 @@ def _tally(hits: Sequence[drums.Hit], edges: Sequence[float]) -> list[Counter[st
     for hit in hits:
         index = bisect.bisect_right(edges, hit.seconds) - 1
         if 0 <= index < len(tallies):
-            tallies[index][hit.stem] += 1
+            tallies[index][_counted_as(hit.stem)] += 1
     return tallies
+
+
+def _counted_as(stem: str) -> str:
+    """The name a stem is tallied under. The cymbals arrive separated and are counted as one.
+
+    Here rather than in the weighting, so that everything downstream — both gates, the run
+    builder, the scorer — sees one cymbal signal instead of separating them and then undoing
+    the separation.
+    """
+    return CYMBAL_STEM if stem in CYMBAL_SOURCES else stem
+
+
+def _bar_length(beats: Sequence[Mapping[str, Any]]) -> int:
+    """Beats to the bar, from the grid's own account of itself."""
+    found = beats_module.meter(beats)
+    return found if found is not None and found > 0 else DEFAULT_METER
+
+
+def _dense(tally: Counter[str], density: float, baseline: float) -> bool:
+    """Gate one: busier than the median beat of the performance, and busy in absolute terms."""
+    return density >= baseline * BUSY_MULTIPLE and sum(tally.values()) >= MINIMUM_HITS
+
+
+def _departs(tally: Counter[str], usual: Mapping[str, float]) -> bool:
+    """Gate two: hits beyond what the stems carrying them usually play around here.
+
+    Only the excess counts, and only upwards. A timekeeper contributes nothing however loud
+    it is, because it is already in its own baseline — which is what makes a stem safe to
+    carry whether it turns out to be a fill instrument in this performance or the pulse. A
+    stem that *stops* is left out on purpose: an absence is not activity, and nominating on
+    it would make every rest the start of a fill.
+    """
+    excess = sum(max(0.0, count - usual.get(stem, 0.0)) for stem, count in tally.items())
+    return excess >= MINIMUM_HITS
+
+
+def _local_baselines(
+    tallies: Sequence[Counter[str]],
+    bar_length: int,
+) -> list[dict[str, float]]:
+    """Per beat, per stem: what that stem is usually doing around there.
+
+    Local rather than whole-tune, because a single baseline over the performance would catch
+    a drummer who comps on the toms all night and miss one who switches into a tom groove
+    halfway — the average lands between the two and describes neither (#125).
+    """
+    stems = sorted({stem for tally in tallies for stem in tally})
+    half = max(1, BASELINE_BARS * bar_length // 2)
+    return [
+        {stem: _usual(tallies, stem, index, half) for stem in stems}
+        for index in range(len(tallies))
+    ]
+
+
+def _usual(
+    tallies: Sequence[Counter[str]],
+    stem: str,
+    index: int,
+    half: int,
+) -> float:
+    """The median count for one stem around one beat, that beat's own neighbourhood left out.
+
+    A grid shorter than the exclusion zone has no context left after the zone is taken out,
+    and a baseline of zero there would read every beat as a departure. So the zone is given
+    up before the baseline is: on a clip that short, the rest of the clip is the context.
+    """
+    window = range(max(0, index - half), min(len(tallies), index + half + 1))
+    sample = [tallies[other][stem] for other in window if abs(other - index) > EXCLUDED_BEATS]
+    if not sample:
+        sample = [tallies[other][stem] for other in window if other != index]
+    return statistics.median(sample) if sample else 0.0
 
 
 def _runs(busy: Sequence[bool]) -> list[tuple[int, int]]:
@@ -228,9 +348,12 @@ def _weighed(reading: Reading, first: int, last: int) -> Candidate:
 
     into = reading.grid[last + 1] if last + 1 < len(reading.grid) else None
     tolerance = RESOLUTION_BEATS * (end - start) / length
+    # Tom share is of the kit without the cymbals, so that carrying two more stems does not
+    # quietly lower the score of every tom fill the detector already reads correctly (#125).
+    kit = total - counts[CYMBAL_STEM]
     factors = {
         "density": _clamp((density / reading.baseline - 1.0) / (STRONG_MULTIPLE - 1.0)),
-        "toms": _clamp(counts[TOM_STEM] / total / TOM_SHARE) if total else 0.0,
+        "toms": _clamp(counts[TOM_STEM] / kit / TOM_SHARE) if kit else 0.0,
         "resolution": 1.0 if _hit_near(reading.times, end, tolerance) else 0.0,
         "phrase": _phrase(into),
     }
@@ -282,7 +405,7 @@ def rows(detection: Detection) -> tuple[dict[str, Any], ...]:
             "beats": one.beats,
             "resolves_into_bar": one.resolves_into_bar,
             "hits": one.hits,
-            **{stem: one.counts.get(stem, 0) for stem in DRUM_STEMS},
+            **{stem: one.counts.get(stem, 0) for stem in COUNTED_STEMS},
             "density": one.density,
             "density_ratio": one.density_ratio,
             "confidence": one.confidence,

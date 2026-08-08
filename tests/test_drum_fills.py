@@ -95,6 +95,15 @@ def _step(rows: Sequence[Mapping[str, Any]]) -> float:
     return float(rows[1]["t"]) - float(rows[0]["t"])
 
 
+def _timekeeper(
+    rows: Sequence[Mapping[str, Any]],
+    stem: str,
+    count: int = 2,
+) -> list[Hit]:
+    """A stem played the same way on every beat — the thing a fill has to stand out from."""
+    return [hit for beat in range(1, len(rows) + 1) for hit in _burst(rows, beat, count, stem)]
+
+
 # --- the rule layer -----------------------------------------------------------------
 
 
@@ -151,6 +160,108 @@ def test_a_run_that_outlasts_a_fill_is_dropped_and_counted() -> None:
 
     assert found.candidates == ()
     assert found.dropped == 1
+
+
+def test_a_fill_is_found_under_constant_tom_comping() -> None:
+    """#125: toms on nearly every beat used to nominate the whole tune, which was then dropped.
+
+    The regression test for the ticket. A drummer comping on the low toms all night is playing
+    a timekeeper, not filling; the burst on beat 40 is the fill, and it is the only thing here
+    that departs from what the kit is otherwise doing.
+    """
+    rows = _grid(bars=16)
+    hits = _comping(rows) + _timekeeper(rows, "toms", count=2) + _burst(rows, 40, count=6)
+
+    found = fills.candidates(hits, rows)
+
+    assert [one.beat for one in found.candidates] == [40]
+    assert found.dropped == 0
+
+
+def test_constant_tom_comping_alone_makes_no_run_to_discard() -> None:
+    """The other half of #125: with nothing departing, nothing is nominated in the first place."""
+    rows = _grid(bars=16)
+
+    found = fills.candidates(_comping(rows) + _timekeeper(rows, "toms", count=2), rows)
+
+    assert found.candidates == ()
+    assert found.considered == 0
+    assert found.dropped == 0
+
+
+def test_a_clip_too_short_for_the_exclusion_zone_still_has_a_baseline() -> None:
+    """Twelve beats leaves nothing outside the excluded neighbourhood of a middle beat.
+
+    A baseline of zero there would read steady comping as a departure on every beat, so the
+    exclusion is what gets given up on a clip this short, not the baseline.
+    """
+    rows = _grid(bars=3)
+
+    found = fills.candidates(_comping(rows) + _timekeeper(rows, "toms", count=3), rows)
+
+    assert found.candidates == ()
+    assert found.considered == 0
+    assert found.dropped == 0
+
+
+def test_a_sustained_dense_passage_is_still_discarded() -> None:
+    """A run past ``MAXIMUM_BEATS`` is a solo or a groove, and dropping it whole stays right."""
+    rows = _grid(bars=16)
+    sustained = [
+        hit
+        for beat in range(20, 20 + fills.MAXIMUM_BEATS + 4)
+        for hit in _burst(rows, beat, count=6)
+    ]
+
+    found = fills.candidates(_comping(rows) + _timekeeper(rows, "toms", count=2) + sustained, rows)
+
+    assert found.candidates == ()
+    assert found.dropped == 1
+
+
+def test_a_fill_under_a_loud_timekeeper_survives_the_density_gate() -> None:
+    """A cymbal riding six to the beat inflates both halves of the ratio until it says nothing.
+
+    The local gate is what finds this one: the ride is baseline here and the toms are not.
+    """
+    rows = _grid(bars=16)
+    hits = _comping(rows) + _timekeeper(rows, "ride", count=6) + _burst(rows, 40, count=3)
+
+    found = fills.candidates(hits, rows)
+
+    assert [one.beat for one in found.candidates] == [40]
+    assert found.candidates[0].density_ratio < fills.BUSY_MULTIPLE
+
+
+def test_ride_and_crash_are_counted_as_one_cymbal_signal() -> None:
+    """A ride turning crashy at a phrase end is one gesture, so it is tallied as one stem."""
+    rows = _grid()
+    hits = (
+        _comping(rows)
+        + _burst(rows, 15, count=3, stem="ride")
+        + _burst(rows, 16, count=3, stem="crash")
+    )
+
+    found = fills.candidates(hits, rows)
+    record = fills.rows(found)[0]
+
+    assert found.candidates[0].counts["cymbals"] == 6
+    assert record["cymbals"] == 6
+    assert "ride" not in record
+    assert "crash" not in record
+
+
+def test_the_tom_share_is_not_diluted_by_the_cymbals() -> None:
+    """Carrying the cymbals must not quietly lower the confidence of every tom fill."""
+    rows = _grid()
+    played = _comping(rows) + _timekeeper(rows, "snare", count=3)
+    fill = _burst(rows, 15, count=3) + _burst(rows, 16, count=3)
+
+    without = fills.candidates(played + fill, rows)
+    carried = fills.candidates(played + fill + _timekeeper(rows, "ride", count=2), rows)
+
+    assert without.candidates[0].factors["toms"] < 1.0
+    assert carried.candidates[0].factors["toms"] == without.candidates[0].factors["toms"]
 
 
 def test_one_quiet_beat_inside_a_fill_does_not_split_it() -> None:
@@ -291,7 +402,7 @@ def test_the_job_writes_one_record_per_candidate_and_returns_the_gist(
     assert document[fills.FILLS][0]["confidence"] == pytest.approx(
         result["strongest"]["confidence"]
     )
-    assert result["stems"] == list(DRUM_STEMS)
+    assert result["stems"] == sorted(DRUM_STEMS)
 
 
 def test_the_document_holds_one_candidate_per_line(
@@ -312,14 +423,14 @@ def test_the_directory_a_separation_reports_is_accepted(
     """The job hands back the parent of both passes, so the parent is what this takes."""
     result = _ran(separation, master, _grid())
 
-    assert result["stems"] == list(DRUM_STEMS)
+    assert result["stems"] == sorted(DRUM_STEMS)
     assert result["count"] == 1
 
 
 def test_the_drum_pass_on_its_own_is_accepted_too(master: Path, separation: Path) -> None:
     result = _ran(separation / DRUM_PASS, master, _grid())
 
-    assert result["stems"] == list(DRUM_STEMS)
+    assert result["stems"] == sorted(DRUM_STEMS)
 
 
 def test_the_four_stem_pass_is_not_mistaken_for_the_drum_stems(
@@ -344,7 +455,7 @@ def test_a_drum_pass_holding_nothing_labelled_falls_back_to_the_directory(
 
     result = _ran(directory, master, _grid())
 
-    assert result["stems"] == list(DRUM_STEMS)
+    assert result["stems"] == sorted(DRUM_STEMS)
 
 
 def test_a_kit_missing_a_stem_is_read_rather_than_refused(

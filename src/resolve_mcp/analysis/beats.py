@@ -13,7 +13,7 @@ import bisect
 import importlib
 import statistics
 from collections import Counter
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -191,7 +191,7 @@ def gist(grid: BeatGrid, records: Sequence[dict[str, Any]]) -> dict[str, Any]:
         "tempo_bpm": round(statistics.median(tempos), 2) if tempos else None,
         "tempo_min_bpm": round(tempos[0], 2) if tempos else None,
         "tempo_max_bpm": round(tempos[-1], 2) if tempos else None,
-        "meter": _meter(records),
+        "meter": meter(records),
         "first_seconds": round(grid.beats[0], 3) if grid.beats else None,
         "last_seconds": round(grid.beats[-1], 3) if grid.beats else None,
     }
@@ -211,8 +211,8 @@ def trust(records: Sequence[dict[str, Any]]) -> GridTrust:
     positions and only the timing gives it away. beat_this exposes no per-beat confidence of
     its own (it returns two lists of times), so steadiness is derived from the intervals.
     """
-    meter = _meter(records)
-    describes_bars = meter is not None and meter >= MINIMUM_METER
+    bar_length = meter(records)
+    describes_bars = bar_length is not None and bar_length >= MINIMUM_METER
     steady = _steady_flags([float(record["t"]) for record in records])
     reasons: Counter[str] = Counter()
     trusted: list[bool] = []
@@ -220,23 +220,24 @@ def trust(records: Sequence[dict[str, Any]]) -> GridTrust:
         in_bar = record.get("in_bar")
         placed = (
             describes_bars
-            and meter is not None
+            and bar_length is not None
             and isinstance(in_bar, int)
-            and 1 <= in_bar <= meter
+            and 1 <= in_bar <= bar_length
         )
         if not placed:
             reasons["bar_position"] += 1
         if not holds_time:
             reasons["tempo"] += 1
         trusted.append(placed and holds_time)
-    return GridTrust(tuple(trusted), meter, dict(reasons))
+    return GridTrust(tuple(trusted), bar_length, dict(reasons))
 
 
-def _meter(records: Sequence[dict[str, Any]]) -> int | None:
+def meter(records: Sequence[Mapping[str, Any]]) -> int | None:
     """The meter the grid behaves as if it is in: the commonest bar length it produced.
 
-    One definition, shared by the gist that reports it and the gate that judges bar positions
-    against it, so a grid can never be described as one meter and gated against another.
+    One definition, shared by the gist that reports it, the gate that judges bar positions
+    against it, and the fill detector sizing a window in bars (#125), so a grid can never be
+    described as one meter and measured against another.
     """
     lengths = list(Counter(record["bar"] for record in records).values())
     return statistics.mode(lengths) if lengths else None

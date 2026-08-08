@@ -1,7 +1,7 @@
 """Two passes, because fill detection needs near-clean drums.
 
 Pass one splits the mix into four stems; pass two takes the drum stem alone and decomposes
-it into kick, snare and toms. Running the drum model on the full mix is what the second
+it into the pieces of the kit. Running the drum model on the full mix is what the second
 pass exists to avoid — it has bass and vocals bleeding into every hit, and a fill detector
 reading that is reading the band, not the drummer.
 
@@ -51,7 +51,15 @@ log = get_logger("audio")
 KIND = "separate_stems"
 
 FOUR_STEMS = ("vocals", "drums", "bass", "other")
-DRUM_STEMS = ("kick", "snare", "toms")
+DRUM_STEMS = ("kick", "snare", "toms", "ride", "crash")
+"""What the second pass is kept for. The drum model writes ``hh`` too and it is left behind.
+
+Fills in the material this was built against are frequently cymbal-led (#125), and the model
+already computes the cymbals — collecting three of its six outputs was throwing away the
+evidence that tells a fill from ordinary comping. ``hh`` stays out for now: it is the stem most
+likely to be pure timekeeping, and it is the strongest test of the detector's local baseline
+rather than the first one to run.
+"""
 DRUM_SOURCE = "drums"
 """Which of the four stems the second pass decomposes."""
 
@@ -173,7 +181,7 @@ def two_pass(
     reuse: bool = True,
     config: Config | None = None,
 ) -> JobOutput:
-    """The worker: four stems, then the drum stem decomposed into kick, snare and toms."""
+    """The worker: four stems, then the drum stem decomposed into the pieces of the kit."""
     config = config or get_config()
     key = stem_key(audio, params)
     directory = config.stems_dir / f"{slug(Path(str(audio['path'])).stem, 'stems')}-{key[:12]}"
