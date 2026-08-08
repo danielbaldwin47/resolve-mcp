@@ -842,7 +842,10 @@ def _bounds(clip: Clip, reported: dict[str, str]) -> dict[str, Any]:
     the out point is that frame plus one and ``duration = out - in`` everywhere.
     """
     fps = frame_rate(reported)
-    # The same rate feeds the Duration fallback, so a listing and a cut read one bounds.
+    # The same rate feeds the Duration fallback, so a listing and a cut read one bounds —
+    # except when the clip itself reports no rate (audio-only media): a listing has no
+    # timeline to borrow a rate from, so its bounds stay unknown while a cut, which does,
+    # can still derive them.
     start, out = frame_bounds(reported, fps=fps)
     duration = (
         out - start if out is not None and start is not None else _number(reported, FRAMES)
