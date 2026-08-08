@@ -101,6 +101,12 @@ One row per timeline, appended in order, never rewritten: a rerun that
 disagrees with an earlier row gets its own row and a note, because the
 disagreement is itself evidence.
 
+The per-entry cautions below that treat rubato gating as pending were written
+before the gate existed; **the gated pass has since run** and answers them, in
+"The gated pass (#112 AC4)" further down. Every bar-position histogram in the
+entries below is ungated and half of them are now known to have come from a
+grid the gate refuses whole — read them with that section beside them.
+
 `alignment` is `correlate_timeline`'s reading of where the times were measured
 from. **`timeline_start` rows are excluded from every timing claim** — those
 times count from the timeline's own first frame rather than from the mix, and a
@@ -299,10 +305,10 @@ Two notes:
 - The transient median (41 ms) is the highest in the corpus and still inside
   two frames. Six timelines now span 17–41 ms.
 
-## Rubato gating exists; the corpus pass that uses it is still to run (#112)
+## The gated pass (#112 AC4), measured 2026-08-07
 
-`correlate_timeline` now gates the beat statistics. A beat is refused on either
-of two independent grounds — a bar position its own meter cannot hold, or an
+`correlate_timeline` gates the beat statistics. A beat is refused on either of
+two independent grounds — a bar position its own meter cannot hold, or an
 interval that does not match the tempo around it — and a grid whose meter comes
 out as 1 is refused whole rather than filtered, since keeping only its
 position-1 beats would leave a histogram reading 100% beat one *by
@@ -310,21 +316,157 @@ construction*. Cuts landing on a refused beat stay in the records marked
 `in_grid: false` and are counted out of the bar and beat-offset statistics only;
 the transient numbers are computed over every cut and are untouched.
 
-**No gated histogram is recorded here yet, deliberately.** A number in this file
-is evidence, and evidence comes from the tool: step 4 of the analysis workflow
-in `docs/agents/style-layer.md` is explicit that `correlate_timeline` is the one
-tested measurement path and that statistics are never recomputed ad hoc. The six
-gated rows therefore need a live re-run through the tool, which needs each
-project open in Resolve. Until that pass runs, the ungated bar histograms
-recorded in the entries above stand as they are — already marked, in entries 1,
-2 and 4, as saying nothing.
+**The pass has now run.** Each of the three projects was opened in Resolve in
+turn and each timeline re-measured through `correlate_timeline` with
+`refresh=True`, on the live Windows 11 box against Resolve Studio 21.0.3.7 on
+CPython 3.12.10 — and the attach held throughout, so that interpreter is not a
+uv-managed standalone (ADR 0001, where the failure is a process-killing access
+violation rather than an error).
+Every parameter — beats file, audio, `angles`, `track`, `audio_at` — was copied
+verbatim out of the matching pre-gate `.correlate.json` header, so the gate is
+the only thing that differs between an entry's row above and its row here. No
+number below was computed anywhere but in the tool.
 
-A provisional offline pass over the cut records and grids in the analysis cache
-was run to size the job, and is recorded on the ticket rather than here. Its one
-result worth acting on: three of the six grids look likely to report `meter: 1`
-and so to produce no bar histogram at all under the gate, which would mean half
-the corpus never described a bar position in the first place. Treat that as a
-prediction about what the live pass will show, not as a measurement.
+| # | Timeline | Meter | Cuts in span | Gated out | Measured | Bar position, gated | Beat offset: median / mean / max |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | Zinc - Set 2 Main | **1** | 360 | 360 | **0** | — refused whole | — |
+| 2 | Freefall Timeline | 4 | 43 | 8 | 35 | 1:15, 2:14, 3:2, 4:4 | 69 ms / 249 ms / 6.08 s |
+| 2 | Sunshine Timeline | **1** | 49 | 49 | **0** | — refused whole | — |
+| 2 | Mercies Timeline | **1** | 37 | 37 | **0** | — refused whole | — |
+| 3 | Concert Full Cut | 4 | 326 | 108 | 218 | 1:128, 2:40, 3:27, 4:23 | 81 ms / 102 ms / 324 ms |
+| 5 | Monkfish Main | 4 | 228 | 26 | 202 | 1:80, 2:49, 3:34, 4:39 | 84 ms / 94 ms / 390 ms |
+
+"Cuts in span" is `count − openings`: an opening has no outgoing angle and no
+offset to measure. The transient columns in the entries above are unchanged by
+this pass, as designed — the gate never touches them.
+
+**Half the corpus never described a bar position in the first place.** The
+offline prediction held exactly: three of the six grids report `meter: 1` and
+are refused whole. Every beat in all three is refused on bar position — 11,130
+on the anchor, 2,348 on Sunshine, 1,261 on Mercies — and their bar histograms
+were therefore never evidence, whatever the entries above appeared to say. The
+anchor is the expensive case: 366 shots, the strongest exemplar in the corpus,
+and it contributes nothing to any beat claim. It still contributes its 360
+transient measurements, which is the half that was always the trustworthy one.
+
+**On the three that survive, the gate removed a tail rather than a centre.**
+
+| Timeline | Beat-offset mean, ungated → gated | Max, ungated → gated | Median, ungated → gated |
+| --- | --- | --- | --- |
+| Freefall | 228 ms → 249 ms | 6.08 s → 6.08 s | 63 ms → 69 ms |
+| Concert Full Cut | 846 ms → **102 ms** | 22.69 s → **0.324 s** | 97 ms → 81 ms |
+| Monkfish Main | 457 ms → **94 ms** | 13.92 s → **0.390 s** | 95 ms → 84 ms |
+
+Ungated, every mean ran three to nine times its own median — the signature of a
+grid that fits in places and wanders elsewhere, and the reason entry 1's row
+carries that caution. Gated, Scullers' and Monkfish's means sit just above their
+medians (102 against 81 ms, 94 against 84 ms) and their worst cut is under
+0.4 s from a beat, where ungated it was 23 s and 14 s. The medians barely moved,
+which is the useful part: the gate is not shifting where cuts sit, it is
+deleting the passages where the grid could not say.
+
+**The bar histograms are now strictly 1–4.** Positions 5, 6 and 7 — the ones
+that cannot exist in 4/4 and that made the ungated histograms unusable — are
+gone from every surviving row, refused rather than argued away.
+
+Summing the three surviving rows (three timelines, one from each of the three
+projects, 455 cuts):
+
+| Beat of the bar | 1 | 2 | 3 | 4 |
+| --- | --- | --- | --- | --- |
+| Cuts | 223 | 103 | 63 | 66 |
+| Share | **49.0%** | 22.6% | 13.8% | 14.5% |
+
+Against a uniform 25%, that is a real skew to the first beat, and 71.6% of cuts
+fall on beats 1–2. **Gating did not manufacture it and did not remove it**: over
+the same three timelines the ungated share on beat 1 was 53.1%, so refusing a
+third of the beats moved it four points. That is the shape of a finding rather
+than of an artefact — an artefact of a broken grid should have collapsed when
+the broken grids were refused.
+
+One confound stays attached, and the gate cannot address it: `beat_this` places
+downbeats from the audio, and a downbeat detector keys on strong onsets, which
+is also roughly where cuts land. Some part of a beat-1 skew could be the
+detector agreeing with the director about where the strong moments are rather
+than the director cutting to bar lines. Nothing measurable here separates the
+two; it would take a grid from a source independent of the mix — a click track,
+or a hand-tapped grid.
+
+### `UNSTEADY_FRACTION = 0.15` stands — it is a shoulder, not a cliff
+
+The one constant in the gate with no fake-tier ground truth. It was checked the
+way #35's silence defaults were: run the same tool over the same timelines with
+only the constant changed, and see whether any conclusion depends on it. 0.15
+was run last of the four so the artifacts left on disk are the shipped value's.
+
+| Timeline | | 0.10 | 0.15 | 0.20 | 0.30 |
+| --- | --- | --- | --- | --- | --- |
+| Freefall | measured | 34 | 35 | 38 | 38 |
+| | median | 66 ms | 69 ms | 61 ms | 61 ms |
+| | beat-1 share | 41.2% | 42.9% | 42.1% | 42.1% |
+| Concert Full Cut | measured | 207 | 218 | 225 | 231 |
+| | median | 82 ms | 81 ms | 80 ms | 82 ms |
+| | beat-1 share | 58.0% | 58.7% | 60.0% | 59.7% |
+| Monkfish Main | measured | 199 | 202 | 204 | 205 |
+| | median | 86 ms | 84 ms | 86 ms | 87 ms |
+| | beat-1 share | 39.7% | 39.6% | 39.2% | 39.0% |
+
+Over a **threefold** range of the constant, the surviving cut count moves by
+about a tenth, no median moves by more than 8 ms, and no beat-1 share moves by
+more than two points. Nothing in this corpus is sensitive to it, so 0.15 is
+confirmed by the pass rather than merely left alone — and the honest reading is
+that the number is not load-bearing, not that it is precisely right. The three
+`meter: 1` refusals are untouched at every value: that refusal comes from the
+meter rule, and no setting of this constant rescues them.
+
+### What the gate does not fix: a cut beside a refused stretch
+
+Freefall keeps a cut 6.08 s from its nearest beat at every setting, and it is
+the reason Freefall's mean still sits 3.6× its median while the other two came
+into line. The record shows why: the cut at t=676.802 is 34 ms from a transient
+and marked `in_grid: true` with `in_bar: 1`. The gate refuses *beats*, not cuts
+— so where it refuses a run of beats, a cut sitting in that hole is still scored
+against the nearest **surviving** beat, however far away that is. It is one cut
+in 455 and it does not touch the histogram, but a mean is not safe from it.
+The clean fix would be to refuse a cut whose nearest trusted beat is further
+than some multiple of the local beat interval; that is a change to the gate, not
+to this corpus, and one instance across 455 cuts is thin justification for
+making it. Recorded here so the next mean that looks wrong has an explanation
+waiting.
+
+### Two bookkeeping consequences of re-running
+
+- **The anchor's clock moved one frame, and the gate did not do it.** Zinc's
+  alignment now reads `zero_frame: 83824` where the pre-gate row read 83825 —
+  that is **PR #121**'s fix to #120, `GetSourceStartFrame` being lossy by a frame
+  at 23.976, reaching a second reader. The `audio_clip` zero is derived from it.
+  Nothing in the entry-1 row above changes materially — median transient offset
+  is still 33 ms and the mean still 46 ms — but the early/late split moved from
+  195/163 to 174/183, which is what shifting every measurement by 41.7 ms does
+  to a distribution whose median is 33 ms. It reinforces entry 1's own note that
+  the direction split carries no habit: a one-frame clock correction reverses it.
+  Monkfish is also `audio_clip` and did **not** move, because its audio starts
+  exactly on the timeline's first frame and had no fraction to lose.
+- **Five of the six result files were overwritten in place.** The cache key
+  covers the inputs and the parameters, not the version of the code, so a
+  re-run with identical parameters lands on the same filename. The `Result`
+  paths in the Measured table above now hold *gated* content; the ungated
+  numbers survive in this document and nowhere else. Zinc is the exception —
+  its key changed with the one-frame clock, so its gated result is
+  `…/analysis/Zinc---Set-2-Main-1cc8ebd14cb3.correlate.json` and its ungated
+  `dcb16e19eca1` file is still on disk.
+
+### #40's live AC, discharged the same sitting
+
+`test_correlate_measures_a_real_hand_edited_timeline` had never been recorded
+against a real cut. Rather than decide whether this corpus pass supersedes it,
+it was run: `RESOLVE_MCP_CORRELATE_BEATS` / `_TIMELINE` / `_AUDIO` pointed at
+Monkfish Main and its master, `uv run pytest -m live -k correlate -s` — **1
+passed in 30.79 s**, on the same box and Resolve build. It ran without an
+`angles` sidecar and into pytest's own temporary cache, and still reported
+`measured: 202`, `median_abs: 0.084`, `max_abs: 0.39` — identical to the
+labelled run in the table above. That is one more independent demonstration
+that labels add names and move no number.
 
 ## What the labels settled: operation, not framing
 
