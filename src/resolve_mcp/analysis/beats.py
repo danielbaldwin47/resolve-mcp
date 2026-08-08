@@ -13,7 +13,7 @@ import bisect
 import importlib
 import statistics
 from collections import Counter
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -175,6 +175,30 @@ def nearest(beats: Sequence[float], seconds: float) -> int | None:
     after = bisect.bisect_left(beats, seconds)
     candidates = [one for one in (after - 1, after) if 0 <= one < len(beats)]
     return min(candidates, key=lambda one: abs(beats[one] - seconds))
+
+
+GROUP_BARS = 4
+"""Bars to the group. Western popular music phrases in fours, and the grid can say so."""
+AT_BAR_LINE = 0.6
+MID_BAR = 0.15
+
+
+def bar_line_strength(row: Mapping[str, Any] | None) -> float:
+    """How strong a place to put something this beat is: the top of a four-bar group, an
+    ordinary bar line, or the middle of a bar.
+
+    Public for the same reason ``nearest`` is: more than one reading places an event against
+    the grid and they must agree about what a strong placement is. Drum fills score the beat
+    they resolve into (#39) and phrase boundaries score the beat the ending is called on
+    (#143); the question — where does this beat sit in a four-bar group — is the grid's, not
+    either detector's, and scoring it twice is how the two would drift apart.
+
+    Note this is *hypermeter*, not a phrase boundary: it says a beat is a plausible place for
+    a phrase to turn over, never that one did. ``analysis.phrases`` answers that.
+    """
+    if row is None or not row["downbeat"]:
+        return MID_BAR
+    return 1.0 if (int(row["bar"]) - 1) % GROUP_BARS == 0 else AT_BAR_LINE
 
 
 def gist(grid: BeatGrid, records: Sequence[dict[str, Any]]) -> dict[str, Any]:

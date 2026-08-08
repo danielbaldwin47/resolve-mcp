@@ -119,27 +119,50 @@ def test_a_gap_shorter_than_the_nomination_floor_is_not_an_ending() -> None:
     assert detection.considered == 1
 
 
-def test_a_note_held_far_longer_than_the_median_ends_a_phrase_with_no_rest_at_all() -> None:
-    """The player leans on the last note and the next phrase comes straight in over the top."""
+def test_a_held_note_ends_a_phrase_at_the_default_floor_with_no_rest_at_all() -> None:
+    """The player leans on the last note and the next phrase comes straight in over the top.
+
+    At the **default** floor, deliberately: the three cues stand in for each other, so a cue
+    that only survives with the floor turned off is a cue this detector does not really have.
+    """
     played = _running(6)
     played[5] = played[5]._replace(end=played[5].seconds + 0.4 * phrases.LONG_MULTIPLE)
     played += _running(6, first=played[5].end)
 
-    detection = phrases.boundaries(played, _grid(), minimum_confidence=0.0)
+    detection = phrases.boundaries(played, _grid())
 
     assert any(one.measured == pytest.approx(played[5].end) for one in detection.boundaries)
 
 
-def test_a_leap_of_a_fifth_ends_a_phrase_with_no_rest_and_no_held_note() -> None:
-    """The contour reset on its own: the new phrase starts somewhere the last one was not."""
+def test_a_leap_of_a_fifth_ends_a_phrase_at_the_default_floor_on_its_own() -> None:
+    """The contour reset with no rest and no held note: the new phrase starts somewhere else."""
     played = _running(6) + _line(
         [6 * BEAT + index * BEAT for index in range(6)],
         hz=440.0 * 2 ** (phrases.RESET_SEMITONES / 12.0),
     )
 
-    detection = phrases.boundaries(played, _grid(), minimum_confidence=0.0)
+    detection = phrases.boundaries(played, _grid())
 
     assert any(one.measured == pytest.approx(5 * BEAT + 0.4) for one in detection.boundaries)
+
+
+@pytest.mark.parametrize("cue", phrases.CUES)
+def test_one_saturated_cue_clears_the_floor_however_weak_the_placement(cue: str) -> None:
+    """Stated directly, because a weighted sum here is what made two of the three cues dead.
+
+    ``grid`` is pinned at zero — weaker than any real placement, since the grid never scores
+    below ``beats.MID_BAR`` — so this is the cue carrying the reading with no help at all.
+    """
+    alone = {name: (1.0 if name == cue else 0.0) for name in phrases.CUES} | {"grid": 0.0}
+
+    assert phrases.scored(alone) > phrases.DEFAULT_MINIMUM_CONFIDENCE
+
+
+def test_cues_that_agree_read_stronger_than_one_cue_on_its_own() -> None:
+    lonely = {"rest": 1.0, "held": 0.0, "contour": 0.0, "grid": 0.0}
+    corroborated = {"rest": 1.0, "held": 1.0, "contour": 1.0, "grid": 0.0}
+
+    assert phrases.scored(corroborated) > phrases.scored(lonely)
 
 
 def test_a_leap_is_not_read_across_a_note_with_no_pitch() -> None:

@@ -84,13 +84,17 @@ RESET_SEMITONES = 7.0
 """A fifth. Both the leap that nominates a boundary and the leap that fully convinces one."""
 MINIMUM_PHRASE_BEATS = 2.0
 """Half a bar in four. Two endings closer than this are one ending, heard twice."""
-PHRASE_BARS = 4
-"""Bars to the phrase, as ``fills`` counts them — an ending into bar 5 of 8 is the strong one."""
-PHRASE_AT_BAR_LINE = 0.6
-PHRASE_MID_BAR = 0.15
 SNAP_BEATS = 1.0
 """How far the called placement may move to reach the grid before it stops being the same event."""
-WEIGHTS = {"rest": 0.35, "held": 0.25, "contour": 0.15, "grid": 0.25}
+
+CUES = ("rest", "held", "contour")
+"""The three ways of hearing an ending. Each stands alone; see ``_scored``."""
+CUE_WEIGHT = 0.55
+"""What the strongest cue is worth by itself — enough to clear any floor worth having."""
+AGREEMENT_WEIGHT = 0.2
+"""What the other two cues add when they agree with it."""
+GRID_WEIGHT = 0.25
+"""What the placement is worth. Scored apart from the cues, because it is not evidence."""
 DEFAULT_MINIMUM_CONFIDENCE = 0.35
 """Below this a boundary is counted but not written — the floor on what is worth reading."""
 
@@ -174,13 +178,13 @@ def boundaries(
         if not _nominated(reading, index):
             continue
         considered += 1
-        candidate = _weighed(reading, index)
+        candidate = _weighed(reading, index, anchor)
         if candidate.confidence < minimum_confidence:
             continue
         if kept and candidate.measured - kept[-1].measured < MINIMUM_PHRASE_BEATS * reading.beat:
             dropped += 1
             continue
-        kept.append(candidate._replace(notes=index - anchor))
+        kept.append(candidate)
         anchor = index
     return Detection(tuple(kept), considered, dropped, baseline)
 
@@ -198,30 +202,29 @@ def _nominated(reading: Reading, index: int) -> bool:
     leap = _interval(reading, index)
     return (
         rest >= REST_BEATS * reading.beat
-        or (note.end - note.seconds) >= HELD_MULTIPLE * reading.baseline
+        or note.held >= HELD_MULTIPLE * reading.baseline
         or (leap is not None and abs(leap) >= RESET_SEMITONES)
     )
 
 
-def _weighed(reading: Reading, index: int) -> Boundary:
+def _weighed(reading: Reading, index: int, anchor: int) -> Boundary:
     """One note ending turned into a boundary: where it is called, and how sure the rules are.
 
-    ``notes`` is filled in by the caller, which is the only thing that knows where the phrase
-    this one closes began.
+    ``anchor`` is the note index the previous boundary closed on, or ``-1`` before there is
+    one — the only thing that knows where the phrase this ending closes began.
     """
     note = reading.notes[index]
     rest = _rest(reading, index)
     resumes = reading.notes[index + 1].seconds if index + 1 < len(reading.notes) else None
     leap = _interval(reading, index)
-    held = note.end - note.seconds
     called, snapped = _placed(reading, note.end, resumes)
     row = _at(reading, called)
 
     factors = {
         "rest": 1.0 if rest is None else _clamp(rest / (REST_FULL_BEATS * reading.beat)),
-        "held": _clamp((held / reading.baseline - 1.0) / (LONG_MULTIPLE - 1.0)),
+        "held": _clamp((note.held / reading.baseline - 1.0) / (LONG_MULTIPLE - 1.0)),
         "contour": 0.0 if leap is None else _clamp(abs(leap) / RESET_SEMITONES),
-        "grid": _phrase(row),
+        "grid": beats_module.bar_line_strength(row),
     }
     return Boundary(
         seconds=round(called, PLACES),
@@ -233,14 +236,12 @@ def _weighed(reading: Reading, index: int) -> Boundary:
         in_bar=int(row["in_bar"]) if row is not None else 0,
         downbeat=bool(row["downbeat"]) if row is not None else False,
         rest=round(rest, PLACES) if rest is not None else None,
-        held=round(held, PLACES),
-        held_ratio=round(held / reading.baseline, PLACES),
+        held=note.held,
+        held_ratio=round(note.held / reading.baseline, PLACES),
         interval=round(leap, 2) if leap is not None else None,
-        notes=0,
+        notes=index - anchor,
         factors={name: round(value, PLACES) for name, value in factors.items()},
-        confidence=round(
-            _clamp(sum(WEIGHTS[name] * value for name, value in factors.items())), PLACES
-        ),
+        confidence=round(scored(factors), PLACES),
     )
 
 
@@ -286,11 +287,27 @@ def _at(reading: Reading, seconds: float) -> Mapping[str, Any] | None:
     return reading.grid[index] if 0 <= index < len(reading.grid) else None
 
 
-def _phrase(row: Mapping[str, Any] | None) -> float:
-    """An ending on the top of a four-bar phrase is a stronger placement than one mid-bar."""
-    if row is None or not row["downbeat"]:
-        return PHRASE_MID_BAR
-    return 1.0 if (int(row["bar"]) - 1) % PHRASE_BARS == 0 else PHRASE_AT_BAR_LINE
+def scored(factors: Mapping[str, float]) -> float:
+    """The confidence. The three cues stand in for each other, so they are not added up.
+
+    ``fills`` sums four weighted factors, and that is right for a drum fill: its density, its
+    tom share and its resolution all describe the same burst *at once*, so a burst missing one
+    of them really is a weaker candidate. The cues here are alternatives. A phrase can end on a
+    rest with no leap and no held note and it has still ended — and under a weighted sum a
+    single saturated cue is divided by the three that were never going to fire, landing below
+    any floor worth having. That is not a timid reading; it is a detector that only hears
+    rests, which is two thirds of what this ticket asked for silently missing.
+
+    So the strongest cue carries the reading, the other two add on top when they corroborate
+    it, and the grid is scored separately because it is not evidence that a phrase ended at
+    all — only that this is a frame worth cutting on.
+    """
+    ranked = sorted((factors[name] for name in CUES), reverse=True)
+    others = ranked[1:]
+    agreement = sum(others) / len(others) if others else 0.0
+    return _clamp(
+        CUE_WEIGHT * ranked[0] + AGREEMENT_WEIGHT * agreement + GRID_WEIGHT * factors["grid"]
+    )
 
 
 def _clamp(value: float) -> float:
@@ -298,7 +315,13 @@ def _clamp(value: float) -> float:
 
 
 def rows(detection: Detection) -> tuple[dict[str, Any], ...]:
-    """One flat record per boundary — both placements, so a cut can use either."""
+    """One flat record per boundary — both placements, so a cut can use either.
+
+    The record keys are ``solos.numbered``'s and not this module's field names: ``t`` for the
+    time an event is called on and ``measured_t`` for where it was seen is what every record
+    file in this stack already says, and a boundary is the same kind of thing as a solo change.
+    A reader who greps one analysis document should not have to learn a second vocabulary.
+    """
     return tuple(
         {
             "t": one.seconds,
@@ -370,7 +393,7 @@ def detect_phrases(
     config = config or get_config()
     source = _readable(audio)
     found = _stem(stems, stem)
-    _sane_floor(minimum_confidence)
+    halves.sane_floor(minimum_confidence, DEFAULT_MINIMUM_CONFIDENCE)
 
     settings = {"stem": stem, "minimum_confidence": float(minimum_confidence)}
     identity = cache.identity(source, config.audio_dir)
@@ -470,15 +493,6 @@ def _collected(directory: Path) -> dict[str, Path]:
         if found:
             return found
     return {}
-
-
-def _sane_floor(minimum_confidence: float) -> None:
-    if not 0.0 <= minimum_confidence <= 1.0:
-        raise InvalidRequestError(
-            cause="The confidence floor is a fraction between 0 and 1.",
-            fix=f"The default is {DEFAULT_MINIMUM_CONFIDENCE}; 0 writes every boundary.",
-            detail={"minimum_confidence": minimum_confidence},
-        )
 
 
 def _key(
