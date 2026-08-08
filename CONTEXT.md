@@ -29,8 +29,12 @@ timelines. The server measures; Claude decides.
   tool addressing one clip by name: omitted is the whole pool, a name is
   that bin and everything nested inside it, `""` is the root folder alone
   — the value `list_media` reports for a root clip, so a listing reads
-  back verbatim (#122). `list_media` itself takes the same paths but says
-  how deep to walk with its own `recursive` flag.
+  back verbatim (#122). Each media tool taking a bin — `list_media`,
+  `inspect_clip`, `relink_media`, and per item on `set_clip_metadata` and
+  `organize_media`'s `move_clips` — also takes `recursive`, false meaning
+  that bin's own clips alone: the address of a copy a subfolder shadows
+  (#134). The analysis and video tools resolve a clip by name too but take
+  no flag, so their refusals never offer the shallow form.
 - **the seam** — `resolve/connection.py` singleton, substituted by
   `tests/fakes/` via `set_connection()`; the only place fakes attach.
 - **fake tier / live tier** — `pytest -m 'not live'` against fakes (the

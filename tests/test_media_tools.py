@@ -798,8 +798,9 @@ def test_an_ambiguity_offers_only_the_bins_that_reach_one_clip(
     assert result["ok"] is False
     assert result["error"]["code"] == "ambiguous_clip"
     assert result["error"]["fix"] == (
-        'Pass one of these to say which: bin="Angles/Cam A".'
-    )  # not bin="Angles": searching it reaches the nested copy too
+        'Pass one of these to say which: bin="Angles/Cam A". Or bin="Angles" with '
+        "recursive=false for the copy in that bin itself."
+    )  # bin="Angles" alone reaches the nested copy too, so it is only offered shallow
     assert inspect_clip("C0012.mp4", bin="Angles/Cam A")["ok"] is True
 
 
@@ -815,6 +816,7 @@ def test_two_copies_in_one_bin_are_refused_with_advice_that_is_not_a_bin(
     assert result["ok"] is False
     assert result["error"]["code"] == "ambiguous_clip"
     assert "bin=" not in result["error"]["fix"]
+    assert "recursive" not in result["error"]["fix"]  # a shallow lookup cannot answer either
     assert "Rename one in the Resolve GUI" in result["error"]["fix"]
 
 
@@ -848,6 +850,193 @@ def test_inspect_of_a_missing_root_clip_says_it_searched_the_root(
     assert result["ok"] is False
     assert result["error"]["code"] == "clip_not_found"
     assert result["error"]["detail"]["searched"] == "the media pool root"
+
+
+# --- recursive -------------------------------------------------------------------------
+
+
+def a_shallow_copy_pool(tmp_path: Path) -> FakeMediaPool:
+    """The #134 shape: one clip name held by a bin *and* by a bin nested inside it."""
+    same = a_file(tmp_path, "C0012.mp4")
+    return media_pool(
+        bins={
+            "Angles": [a_clip(same, Description="in Angles")],
+            "Angles/Cam A": [a_clip(same, Description="nested")],
+        }
+    )
+
+
+def test_a_shallow_lookup_reaches_the_copy_held_by_the_named_bin_itself(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """#134: recursive=False says this bin alone, so the shadowed copy has an address."""
+    attach(studio(pool=a_shallow_copy_pool(tmp_path)))
+
+    result = inspect_clip("C0012.mp4", bin="Angles", recursive=False)
+
+    assert result["ok"] is True
+    assert result["clip"]["bin"] == "Angles"
+    assert result["properties"]["Description"] == "in Angles"
+
+
+def test_a_named_bin_stays_recursive_unless_recursive_is_passed(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The flag is opt-in: the default keeps searching what is nested inside the bin."""
+    attach(studio(pool=a_shallow_copy_pool(tmp_path)))
+
+    assert inspect_clip("C0012.mp4", bin="Angles")["error"]["code"] == "ambiguous_clip"
+    assert inspect_clip("C0012.mp4", bin="Angles/Cam A", recursive=False)["ok"] is True
+
+
+def test_an_ambiguity_offers_the_shallow_form_when_that_is_what_reaches_a_copy(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Every value the fix names must work — including the one that needs recursive=false."""
+    attach(studio(pool=a_shallow_copy_pool(tmp_path)))
+
+    fix = inspect_clip("C0012.mp4", bin="Angles")["error"]["fix"]
+
+    assert 'bin="Angles/Cam A"' in fix
+    assert "recursive=false" in fix
+    assert inspect_clip("C0012.mp4", bin="Angles/Cam A")["ok"] is True
+    assert inspect_clip("C0012.mp4", bin="Angles", recursive=False)["ok"] is True
+
+
+def test_a_shallow_lookup_without_a_bin_stays_in_the_root(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """No bin means the root, and recursive=False narrows it the way list_media does."""
+    same = a_file(tmp_path, "C0012.mp4")
+    attach(
+        studio(
+            pool=media_pool(
+                bins={
+                    "": [a_clip(same, Description="at the root")],
+                    "Angles": [a_clip(same, Description="filed away")],
+                }
+            )
+        )
+    )
+
+    result = inspect_clip("C0012.mp4", recursive=False)
+
+    assert result["ok"] is True
+    assert result["clip"]["bin"] == ""
+    assert result["properties"]["Description"] == "at the root"
+
+
+def test_a_shallow_lookup_that_finds_nothing_says_it_did_not_descend(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The refusal names what was searched, so the fix is to drop the flag, not the bin."""
+    attach(studio(pool=media_pool(bins={"Angles/Cam A": [a_clip(a_file(tmp_path, "C0012.mp4"))]})))
+
+    result = inspect_clip("C0012.mp4", bin="Angles", recursive=False)
+
+    assert result["ok"] is False
+    assert result["error"]["code"] == "clip_not_found"
+    assert result["error"]["detail"]["searched"] == "the bin 'Angles' alone"
+
+
+def test_metadata_writes_to_the_copy_a_shallow_item_names(
+    attach: Attach, tmp_path: Path
+) -> None:
+    pool = a_shallow_copy_pool(tmp_path)
+    attach(studio(pool=pool))
+
+    result = set_clip_metadata(
+        [
+            {
+                "clip": "C0012.mp4",
+                "bin": "Angles",
+                "recursive": False,
+                "fields": {"Description": "the shallow copy"},
+            }
+        ]
+    )
+
+    assert result["results"][0]["ok"] is True
+    assert result["results"][0]["bin"] == "Angles"
+    angles = pool.GetRootFolder().GetSubFolderList()[0]
+    assert angles.GetClipList()[0].property_writes == [("Description", "the shallow copy")]
+    nested = angles.GetSubFolderList()[0].GetClipList()[0]
+    assert nested.property_writes == []
+    assert nested.metadata_writes == []
+
+
+def test_organize_moves_the_copy_a_shallow_from_bin_names(
+    attach: Attach, tmp_path: Path
+) -> None:
+    pool = a_shallow_copy_pool(tmp_path)
+    attach(studio(pool=pool))
+
+    result = organize_media(
+        [
+            {
+                "op": "move_clips",
+                "clips": ["C0012.mp4"],
+                "from_bin": "Angles",
+                "recursive": False,
+                "to_bin": "Broll",
+            }
+        ]
+    )
+
+    assert result["results"][0]["ok"] is True
+    root = pool.GetRootFolder()
+    angles = root.GetSubFolderList()[0]
+    broll = [sub for sub in root.GetSubFolderList() if sub.GetName() == "Broll"][0]
+    assert angles.GetClipList() == []  # the copy Angles held itself
+    assert [item.GetName() for item in broll.GetClipList()] == ["C0012.mp4"]
+    assert len(angles.GetSubFolderList()[0].GetClipList()) == 1  # the nested copy stayed
+
+
+def test_a_recursive_key_that_is_not_a_boolean_is_refused_not_coerced(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """A JSON string reads as True under bool(), which would search the opposite way."""
+    pool = a_shallow_copy_pool(tmp_path)
+    attach(studio(pool=pool))
+
+    result = set_clip_metadata(
+        [
+            {
+                "clip": "C0012.mp4",
+                "bin": "Angles",
+                "recursive": "false",
+                "fields": {"Description": "no"},
+            },
+            {"clip": "C0012.mp4", "bin": "Angles/Cam A", "fields": {"Description": "yes"}},
+        ]
+    )
+
+    first, second = result["results"]
+    assert first["ok"] is False
+    assert first["error"]["code"] == "invalid_request"
+    assert second["ok"] is True  # one bad item never sinks the batch
+    assert pool.GetRootFolder().GetSubFolderList()[0].GetClipList()[0].property_writes == []
+
+
+def test_relink_takes_the_shallow_form_too(attach: Attach, tmp_path: Path) -> None:
+    moved = a_file(tmp_path, "new/C0012.mp4")
+    attach(
+        studio(
+            pool=media_pool(
+                bins={
+                    "Angles": [a_clip(tmp_path / "old" / "C0012.mp4")],
+                    "Angles/Cam A": [a_clip(tmp_path / "old" / "C0012.mp4")],
+                }
+            )
+        )
+    )
+
+    result = relink_media(["C0012.mp4"], str(moved.parent), bin="Angles", recursive=False)
+
+    assert result["ok"] is True
+    assert result["results"][0]["bin"] == "Angles"
+    assert result["results"][0]["offline"] is False
+    assert list_media(offline_only=True)["count"] == 1  # the nested copy is still offline
 
 
 # --- metadata --------------------------------------------------------------------------

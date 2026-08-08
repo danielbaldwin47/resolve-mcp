@@ -404,6 +404,27 @@ def test_the_tool_shapes_a_refusal_rather_than_raising(attach: Attach, fixture_v
     assert "context" in envelope
 
 
+def test_a_tool_without_the_flag_is_never_told_to_pass_recursive(
+    attach: Attach, fixture_video: Path
+) -> None:
+    """#134: grab_frames resolves a clip by name but takes no recursive, so it is not offered.
+
+    The bins here are the shadowed shape the flag exists for — a media tool would be told
+    to pass recursive=false. This one cannot, and a fix naming an argument the tool does
+    not take is the #122 defect over again.
+    """
+    holder = FakeMediaPoolItem(fixture_video.name, file_path=str(fixture_video))
+    nested = FakeMediaPoolItem(fixture_video.name, file_path=str(fixture_video))
+    attach(studio(pool=media_pool({"Angles": [holder], "Angles/Cam A": [nested]})))
+
+    envelope = video_tools.grab_frames(fixture_video.name, [0], bin="Angles")
+
+    assert envelope["ok"] is False
+    assert envelope["error"]["code"] == "ambiguous_clip"
+    assert 'bin="Angles/Cam A"' in envelope["error"]["fix"]
+    assert "recursive" not in envelope["error"]["fix"]
+
+
 # --- against real ffmpeg -----------------------------------------------------------------------
 
 

@@ -79,6 +79,7 @@ def list_media(
 def inspect_clip(
     clip: str,
     bin: str | None = None,  # noqa: A002
+    recursive: bool = True,
 ) -> dict[str, Any]:
     """Read one clip in full: properties, metadata, audio mapping, markers, in/out bounds.
 
@@ -90,15 +91,18 @@ def inspect_clip(
     bin: omit it to search the whole pool, name a bin to search it and its subfolders, or
     pass "" for the pool root alone — the form that names a root clip whose name is also
     used inside a bin. list_media's reported bin is always the value to pass here.
+    recursive=false stops the search descending, so only the clips the named bin holds
+    itself are looked at — the way to reach a copy that a subfolder also holds a copy of.
     """
     connection = get_connection()
-    return media.inspect_clip(connection, clip, bin_path=bin)
+    return media.inspect_clip(connection, clip, bin_path=bin, recursive=recursive)
 
 
 @tool
 def set_clip_metadata(items: list[dict[str, Any]]) -> dict[str, Any]:
     """Apply a batch of metadata writes: [{"clip": name, "bin": optional, "fields": {...}}].
 
+    An item may add "recursive": false to keep its bin lookup out of that bin's subfolders.
     Each field is routed by what the clip itself reports: a key Resolve lists as a clip
     property (FPS, Super Scale, Out …) is written as one, everything else becomes clip
     metadata. The route taken comes back per field in applied. One item failing never sinks
@@ -116,7 +120,8 @@ def organize_media(operations: list[dict[str, Any]]) -> dict[str, Any]:
       {"op": "create_bin", "bin": "Concert/Angles"} — creates missing parents, and is
         happy if the bin already exists (created says which happened);
       {"op": "move_clips", "clips": ["C0012.mp4"], "to_bin": "Concert/Angles",
-        "from_bin": optional} — moves clips, creating the target bin if needed.
+        "from_bin": optional, "recursive": optional} — moves clips, creating the target
+        bin if needed. recursive: false keeps the from_bin lookup out of its subfolders.
     """
     connection = get_connection()
     return media.organize_media(connection, operations)
@@ -127,6 +132,7 @@ def relink_media(
     clips: list[str],
     path: str,
     bin: str | None = None,  # noqa: A002
+    recursive: bool = True,
 ) -> dict[str, Any]:
     """Point offline clips at media that has moved, and report what came back online.
 
@@ -136,9 +142,10 @@ def relink_media(
     The file route also renames the pool clip after the new file — Resolve's behaviour,
     not ours — so follow-up calls must use the name the result reports, not the one
     passed in.
+    recursive=false keeps the bin lookup out of that bin's subfolders.
     """
     connection = get_connection()
-    return media.relink_media(connection, clips, path, bin_path=bin)
+    return media.relink_media(connection, clips, path, bin_path=bin, recursive=recursive)
 
 
 TOOLS: tuple[Any, ...] = (

@@ -166,22 +166,38 @@ class ClipNotFoundError(ResolveMcpError):
 class AmbiguousClipError(ResolveMcpError):
     code = "ambiguous_clip"
 
-    def __init__(self, name: str, bins: list[str], addressable: list[str]) -> None:
-        """``bins`` is the bin of every matching clip; ``addressable`` those that work.
+    def __init__(
+        self,
+        name: str,
+        bins: list[str],
+        addressable: list[str],
+        shallow: list[str],
+    ) -> None:
+        """``bins`` is the bin of every matching clip; the rest are the values that work.
 
-        Only an addressable bin is offered. A value that lands back on this same refusal is
-        not a fix (#122), and the empty string is offered like any other because it
-        addresses the pool root itself.
+        Only a value that reaches one clip is offered. One that lands back on this same
+        refusal is not a fix (#122), and the empty string is offered like any other because
+        it addresses the pool root itself. ``shallow`` holds the bins that single a copy out
+        only once the search stops descending, which is what ``recursive=False`` asks for
+        (#134) — empty when the caller has no such flag to pass, since an argument the tool
+        does not take is no more of a fix than a bin that refuses. What neither list holds —
+        a bin with two of the name in it — no lookup can answer.
         """
+        offered = []
         if addressable:
             listed = ", ".join(f'bin="{path}"' for path in addressable)
             root = ' (bin="" is the pool root itself)' if "" in addressable else ""
-            fix = f"Pass one of these to say which: {listed}{root}."
+            offered.append(f"Pass one of these to say which: {listed}{root}.")
+        if shallow:
+            listed = ", ".join(f'bin="{path}"' for path in shallow)
+            lead = "Or" if offered else "Pass"
+            offered.append(f"{lead} {listed} with recursive=false for the copy in that bin itself.")
+        if offered:
+            fix = " ".join(offered)
         else:
             fix = (
-                "No bin singles one out — they share a bin, or the one holding each also "
-                "holds another of the name. Rename one in the Resolve GUI, or work from "
-                "the file paths list_media reports."
+                "No lookup singles one out — one bin holds two clips of the name. Rename "
+                "one in the Resolve GUI, or work from the file paths list_media reports."
             )
         super().__init__(
             cause=f"{len(bins)} clips are named {name!r}, so the reference is ambiguous.",

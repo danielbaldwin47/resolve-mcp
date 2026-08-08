@@ -244,31 +244,42 @@ def _clips_under(where: LocatedBin, recursive: bool) -> Iterator[LocatedClip]:
             yield LocatedClip(path, clip)
 
 
-def _searched_label(bin_path: str | None, where: LocatedBin) -> str:
-    """What a clip_not_found says it looked in — the caller's own words for a named bin."""
-    if bin_path is None:
-        return "the media pool"
-    return f"the bin {bin_path!r}" if where.path else "the media pool root"
+def _searched_label(bin_path: str | None, where: LocatedBin, deep: bool) -> str:
+    """What a clip_not_found says it looked in — the caller's own words for a named bin.
+
+    A shallow search says ``alone`` so the refusal points at the flag: the clip may well
+    be one folder down, and dropping ``recursive`` is then the fix, not renaming anything.
+    """
+    if not where.path:
+        return "the media pool" if bin_path is None and deep else "the media pool root"
+    return f"the bin {bin_path!r}" if deep else f"the bin {bin_path!r} alone"
 
 
-def _addressable(bins: list[str]) -> list[str]:
-    """Which bins holding a duplicated name would, passed on their own, reach one clip.
+def _addressing(bins: list[str]) -> tuple[list[str], list[str]]:
+    """Which bins holding a duplicated name reach one clip: passed alone, then passed shallow.
 
     One entry per matching clip comes in, so a repeat means one bin holds two of the name —
-    passing it lands back on the same refusal. So does naming a bin whose subfolders hold
-    another copy, because a named bin is searched right through. The root is the exception:
-    ``""`` is the root folder alone, so a copy filed deeper never shadows it.
+    no lookup singles those out, and neither list offers them. A bin whose subfolder holds
+    another copy has no address of its own either, because a named bin is searched right
+    through; it does hold exactly one clip itself, so ``recursive=False`` reaches that one
+    (#134). The root is never shadowed: ``""`` is the root folder alone (#122).
     """
     counted = Counter(bins)
-    return sorted(
+    alone = {path for path, times in counted.items() if times == 1}
+    shadowed = {
         path
-        for path, times in counted.items()
-        if times == 1
-        and not (path and any(other.startswith(f"{path}{BIN_SEPARATOR}") for other in bins))
-    )
+        for path in alone
+        if path and any(other.startswith(f"{path}{BIN_SEPARATOR}") for other in bins)
+    }
+    return sorted(alone - shadowed), sorted(shadowed)
 
 
-def find_clip(pool: Pool, name: str, bin_path: str | None = None) -> LocatedClip:
+def find_clip(
+    pool: Pool,
+    name: str,
+    bin_path: str | None = None,
+    recursive: bool | None = None,
+) -> LocatedClip:
     """One clip by exact name.
 
     ``None`` searches the whole pool. A named bin searches that bin and everything nested
@@ -277,18 +288,51 @@ def find_clip(pool: Pool, name: str, bin_path: str | None = None) -> LocatedClip
     clip whose name a bin also used with no expressible address at all (#122). The empty
     string is what :func:`summarise` reports for a root clip, so the ``bin`` value a
     listing gives back always reads the clip it described.
+
+    ``recursive=False`` stops the search descending, so the clips a bin holds *itself* are
+    all that is looked at — the address of a copy shadowed by another of the name filed
+    deeper (#134). With no bin it narrows to the root, the way :func:`list_media` does;
+    ``bin=""`` and the root's own name are already that search, so they are unaffected.
+
+    ``recursive=None`` is a caller with no such flag of its own to pass on — the video and
+    analysis tools, which resolve a clip by name but take no ``recursive``. It searches
+    deep like ``True``, and an ambiguity is not offered the shallow form, because a fix
+    naming an argument its caller cannot accept is the #122 defect one axis over.
     """
     where = find_bin(pool, bin_path)
     the_root_itself = bin_path is not None and not where.path
-    searched = list(_clips_under(where, recursive=not the_root_itself))
+    deep = recursive is not False and not the_root_itself
+    searched = list(_clips_under(where, deep))
     matches = [found for found in searched if str(found.clip.GetName() or "") == name]
     if not matches:
         available = sorted({str(found.clip.GetName() or "") for found in searched})
-        raise ClipNotFoundError(name, _searched_label(bin_path, where), available)
+        raise ClipNotFoundError(name, _searched_label(bin_path, where, deep), available)
     if len(matches) > 1:
         found_in = [found.bin_path for found in matches]
-        raise AmbiguousClipError(name, found_in, _addressable(found_in))
+        deep_address, shallow_address = _addressing(found_in)
+        raise AmbiguousClipError(
+            name,
+            found_in,
+            deep_address,
+            shallow_address if recursive is not None else [],
+        )
     return matches[0]
+
+
+def _wants_recursion(item: dict[str, Any]) -> bool:
+    """A batch item's optional ``recursive`` key — deep unless it says otherwise (#134).
+
+    A batch item is free-form JSON, so the key is checked rather than coerced: ``bool()``
+    would read the string ``"false"`` as True and quietly search the opposite of what was
+    asked, which is the kind of silence a lookup flag cannot afford.
+    """
+    wanted = item.get("recursive", True)
+    if not isinstance(wanted, bool):
+        raise InvalidRequestError(
+            cause=f"recursive must be true or false, not {wanted!r}.",
+            fix='Pass a JSON boolean: "recursive": false to search the named bin alone.',
+        )
+    return wanted
 
 
 def clip_at_path(pool: Pool, bin_path: str, file_path: str) -> LocatedClip | None:
@@ -879,10 +923,11 @@ def inspect_clip(
     connection: ResolveConnection,
     name: str,
     bin_path: str | None = None,
+    recursive: bool = True,
 ) -> dict[str, Any]:
     """Everything worth knowing about one clip before cutting with it."""
     pool = media_pool(connection)
-    found_in, clip = find_clip(pool, name, bin_path)
+    found_in, clip = find_clip(pool, name, bin_path, recursive)
     reported = properties(clip)
     metadata = clip.GetMetadata()
     return {
@@ -948,8 +993,8 @@ def _apply_fields(pool: Pool, item: dict[str, Any]) -> dict[str, Any]:
             ).payload(),
         }
     try:
-        located = find_clip(pool, name, item.get("bin"))
-    except (ClipNotFoundError, AmbiguousClipError, BinNotFoundError) as exc:
+        located = find_clip(pool, name, item.get("bin"), _wants_recursion(item))
+    except (ClipNotFoundError, AmbiguousClipError, BinNotFoundError, InvalidRequestError) as exc:
         return {"clip": name, "bin": None, "ok": False, "error": exc.payload()}
 
     reported = properties(located.clip)
@@ -1026,7 +1071,8 @@ def _move_clips(pool: Pool, operation: dict[str, Any]) -> dict[str, Any]:
             fix='Example: {"op": "move_clips", "clips": ["C0012.mp4"], "to_bin": "Angles"}.',
         )
     source = operation.get("from_bin")
-    found = [find_clip(pool, str(name), source) for name in names]
+    deep = _wants_recursion(operation)
+    found = [find_clip(pool, str(name), source, deep) for name in names]
     target = ensure_bin(pool, str(target_path))
     if not pool.MoveClips([located.clip for located in found], target.folder):
         raise MediaOperationError(
@@ -1045,6 +1091,7 @@ def relink_media(
     clips: list[str],
     path: str,
     bin_path: str | None = None,
+    recursive: bool = True,
 ) -> dict[str, Any]:
     """Point clips at media that has moved.
 
@@ -1064,7 +1111,7 @@ def relink_media(
     if not target.exists():
         raise RelinkFailedError(cause=f"Nothing exists at {path!r} on this machine.")
 
-    found = [find_clip(pool, str(name), bin_path) for name in clips]
+    found = [find_clip(pool, str(name), bin_path, recursive) for name in clips]
     was_offline = [
         is_offline(properties(located.clip).get(FILE_PATH, "")) for located in found
     ]
