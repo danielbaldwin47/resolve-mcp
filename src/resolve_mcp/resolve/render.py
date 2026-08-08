@@ -206,7 +206,7 @@ def _select_output(
     refusal: str | None = None
     detail: dict[str, Any] = {}
     if preset is not None:
-        refusal, detail = _load_the_preset(project, preset, format_and_codec)
+        refusal, detail = _preset_refusal(project, preset, format_and_codec)
         if refusal is None:
             return
     if format_and_codec is None:
@@ -248,12 +248,15 @@ def _select_output(
     )
 
 
-def _load_the_preset(
+def _preset_refusal(
     project: Project,
     preset: str,
     format_and_codec: tuple[str, str] | None,
 ) -> tuple[str | None, dict[str, Any]]:
     """Load ``preset``; answer why it is no route to the asked-for format, ``None`` if it is.
+
+    Loading is how the question is asked — a preset that will not load, and one that loads
+    and selects something else, are both "no route", and only the attempt tells them apart.
 
     The detail returned alongside carries what presets do exist, which is the one fact that
     identifies a renamed or localised install.
