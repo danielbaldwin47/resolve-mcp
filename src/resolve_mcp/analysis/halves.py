@@ -43,18 +43,21 @@ def readable(audio: str | Path, fix: str | None = None) -> Path:
     return source
 
 
-def sane_floor(minimum_confidence: float, default: float) -> None:
+def sane_floor(minimum_confidence: float, default: float, writes: str = "candidate") -> None:
     """Refuse a confidence floor that is not a fraction, before a job exists to carry it.
 
     Here beside ``readable`` because it is the same kind of thing: the checks a detector runs
     on what it was *asked for*, rather than on what it read. Every detector that reports
-    candidates with a confidence takes this argument and must refuse the same values, and
-    ``default`` differs per detector only because the advice does.
+    candidates with a confidence takes this argument and must refuse the same values.
+
+    ``default`` and ``writes`` differ per detector because the advice does — a fill job says
+    "0 writes every candidate" and a phrase job "0 writes every boundary", and a reader who
+    got that error should not have to translate.
     """
     if not 0.0 <= minimum_confidence <= 1.0:
         raise InvalidRequestError(
             cause="The confidence floor is a fraction between 0 and 1.",
-            fix=f"The default is {default}; 0 writes every candidate.",
+            fix=f"The default is {default}; 0 writes every {writes}.",
             detail={"minimum_confidence": minimum_confidence},
         )
 

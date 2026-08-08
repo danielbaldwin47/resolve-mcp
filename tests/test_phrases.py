@@ -134,16 +134,31 @@ def test_a_held_note_ends_a_phrase_at_the_default_floor_with_no_rest_at_all() ->
     assert any(one.measured == pytest.approx(played[5].end) for one in detection.boundaries)
 
 
-def test_a_leap_of_a_fifth_ends_a_phrase_at_the_default_floor_on_its_own() -> None:
-    """The contour reset with no rest and no held note: the new phrase starts somewhere else."""
-    played = _running(6) + _line(
+def _leaping(semitones: float) -> list[Note]:
+    """Six notes, then six more a given distance away, with no rest and no held note between."""
+    return _running(6) + _line(
         [6 * BEAT + index * BEAT for index in range(6)],
-        hz=440.0 * 2 ** (phrases.RESET_SEMITONES / 12.0),
+        hz=440.0 * 2 ** (semitones / 12.0),
     )
 
-    detection = phrases.boundaries(played, _grid())
+
+def test_a_leap_of_a_fifth_ends_a_phrase_at_the_default_floor_on_its_own() -> None:
+    """The contour reset with no rest and no held note: the new phrase starts somewhere else."""
+    detection = phrases.boundaries(_leaping(phrases.RESET_SEMITONES), _grid())
 
     assert any(one.measured == pytest.approx(5 * BEAT + 0.4) for one in detection.boundaries)
+
+
+def test_a_bare_fifth_reads_weaker_than_an_octave() -> None:
+    """The cue nominates at a fifth and only saturates at an octave, so it stays filterable."""
+    fifth = phrases.boundaries(_leaping(phrases.RESET_SEMITONES), _grid(), 0.0).boundaries[0]
+    octave = phrases.boundaries(
+        _leaping(phrases.RESET_FULL_SEMITONES), _grid(), 0.0
+    ).boundaries[0]
+
+    assert fifth.factors["contour"] < 1.0
+    assert octave.factors["contour"] == 1.0
+    assert fifth.confidence < octave.confidence
 
 
 @pytest.mark.parametrize("cue", phrases.CUES)
@@ -191,14 +206,22 @@ def test_two_endings_closer_than_half_a_bar_are_reported_once() -> None:
     assert all(one >= phrases.MINIMUM_PHRASE_BEATS * BEAT for one in spacing)
 
 
-def test_the_confidence_floor_keeps_a_weak_ending_out_of_the_record() -> None:
-    played = _running(8) + _running(8, first=8 * BEAT + BEAT)
+def test_the_default_floor_keeps_a_marginal_ending_out_of_the_record() -> None:
+    """A rest at the nomination threshold: weighed, counted, and not written.
+
+    The floor is asserted at its shipped value rather than at 1.0. A floor of 1.0 rejects
+    everything by construction and so says nothing about the detector anyone will actually
+    run — which is how two dead cues survived the first pass.
+    """
+    #  The fourth note ends at 1.85 and the line resumes at 2.10 — a rest of exactly REST_BEATS.
+    played = _line([0.0, 0.5, 1.0, 1.5], held=0.35) + _line([2.10, 2.60], held=0.35)
 
     generous = phrases.boundaries(played, _grid(), minimum_confidence=0.0)
-    strict = phrases.boundaries(played, _grid(), minimum_confidence=1.0)
+    default = phrases.boundaries(played, _grid())
 
-    assert strict.considered == generous.considered
-    assert strict.boundaries == ()
+    assert any(one.measured == pytest.approx(1.85) for one in generous.boundaries)
+    assert not any(one.measured == pytest.approx(1.85) for one in default.boundaries)
+    assert default.considered == generous.considered
 
 
 def test_a_line_of_one_note_reads_nothing() -> None:

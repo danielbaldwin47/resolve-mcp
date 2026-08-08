@@ -81,7 +81,16 @@ HELD_MULTIPLE = 1.6
 LONG_MULTIPLE = 3.0
 """The ratio at which the held factor is fully convinced."""
 RESET_SEMITONES = 7.0
-"""A fifth. Both the leap that nominates a boundary and the leap that fully convinces one."""
+"""A fifth: the leap at which a contour reset is worth weighing at all."""
+RESET_FULL_SEMITONES = 12.0
+"""An octave, at which the contour factor is as convinced as it gets.
+
+Apart from ``RESET_SEMITONES`` on purpose, the way ``HELD_MULTIPLE`` is apart from
+``LONG_MULTIPLE`` and ``REST_BEATS`` from ``REST_FULL_BEATS``. One threshold doing both jobs
+makes the factor binary — every leap that nominates also saturates — and a cue that is only
+ever 0 or 1 cannot be turned down by any floor. A bare fifth should read as the marginal
+evidence it is.
+"""
 MINIMUM_PHRASE_BEATS = 2.0
 """Half a bar in four. Two endings closer than this are one ending, heard twice."""
 SNAP_BEATS = 1.0
@@ -163,8 +172,7 @@ def boundaries(
     times = [float(row["t"]) for row in rows]
     steps = [later - earlier for earlier, later in zip(times, times[1:], strict=False)]
     usable = [one for one in steps if one > 0]
-    lengths = [one.end - one.seconds for one in played]
-    baseline = statistics.median(lengths)
+    baseline = statistics.median([one.held for one in played])
     if not usable or baseline <= 0:
         # No tempo to measure a rest in, or no note that lasted: nothing here can be read.
         return Detection((), 0, 0, 0.0)
@@ -223,7 +231,7 @@ def _weighed(reading: Reading, index: int, anchor: int) -> Boundary:
     factors = {
         "rest": 1.0 if rest is None else _clamp(rest / (REST_FULL_BEATS * reading.beat)),
         "held": _clamp((note.held / reading.baseline - 1.0) / (LONG_MULTIPLE - 1.0)),
-        "contour": 0.0 if leap is None else _clamp(abs(leap) / RESET_SEMITONES),
+        "contour": 0.0 if leap is None else _clamp(abs(leap) / RESET_FULL_SEMITONES),
         "grid": beats_module.bar_line_strength(row),
     }
     return Boundary(
@@ -301,10 +309,15 @@ def scored(factors: Mapping[str, float]) -> float:
     So the strongest cue carries the reading, the other two add on top when they corroborate
     it, and the grid is scored separately because it is not evidence that a phrase ended at
     all — only that this is a frame worth cutting on.
+
+    The grid's quarter cannot manufacture a boundary out of nothing, because scoring only ever
+    happens to an ending some cue already nominated (``_nominated``). What it can do is carry a
+    marginal cue that lands on a bar line over the floor, and that is the intended reading: a
+    breath at the top of a four-bar group is likelier to be a phrase than the same breath in
+    the middle of bar three.
     """
     ranked = sorted((factors[name] for name in CUES), reverse=True)
-    others = ranked[1:]
-    agreement = sum(others) / len(others) if others else 0.0
+    agreement = sum(ranked[1:]) / (len(CUES) - 1)
     return _clamp(
         CUE_WEIGHT * ranked[0] + AGREEMENT_WEIGHT * agreement + GRID_WEIGHT * factors["grid"]
     )
@@ -393,7 +406,7 @@ def detect_phrases(
     config = config or get_config()
     source = _readable(audio)
     found = _stem(stems, stem)
-    halves.sane_floor(minimum_confidence, DEFAULT_MINIMUM_CONFIDENCE)
+    halves.sane_floor(minimum_confidence, DEFAULT_MINIMUM_CONFIDENCE, writes="boundary")
 
     settings = {"stem": stem, "minimum_confidence": float(minimum_confidence)}
     identity = cache.identity(source, config.audio_dir)
