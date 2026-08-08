@@ -178,12 +178,20 @@ def _run(argv: Sequence[str], on_line: Lines) -> int:
 
     Universal newlines makes the progress bar's carriage returns line breaks, which is the
     only reason a tqdm bar can be followed line by line at all.
+
+    The encoding is named rather than inherited. Left to the console, the decode is whatever
+    codepage the launching process happened to have — cp1252 for a detached process or a
+    service, where the first byte outside that page raises out of the read loop and takes a
+    twenty-minute job with it (#139). ``replace`` for the same reason: what arrives here is a
+    progress bar, and no character in one is worth failing a separation over.
     """
     with subprocess.Popen(
         argv,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         bufsize=1,
     ) as process:
         if process.stdout is not None:
