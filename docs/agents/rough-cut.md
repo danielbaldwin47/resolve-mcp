@@ -60,7 +60,7 @@ One object per song key, the key being the name of the blue marker that starts t
 Because no tool reads the file, #14 §2's validation is your authoring check, not a
 server rule: before `apply_titles`, confirm every blue marker's key exists here, and
 treat a key with no marker as a note to yourself. Tool-side, the only echo of this is
-W2 — a blue marker whose song has no title events — and that is deliberately a warning,
+W2 — a blue marker with no song entry in the titles file — and that is deliberately a warning,
 because titling a set song-by-song is normal (#42).
 
 ### The brief
