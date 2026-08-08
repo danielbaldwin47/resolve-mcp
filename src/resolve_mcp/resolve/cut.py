@@ -165,8 +165,11 @@ def _facts(bin_path: str, clip: Clip, timeline_fps: float) -> ClipFacts:
     return ClipFacts(
         name=name,
         bin_path=bin_path,
-        start=start if start is not None else 0,
-        end_exclusive=out if out is not None else 0,
+        # Bounds nothing could derive stay None — "cannot verify", so the range legs of
+        # E5/E7 skip the clip rather than fail every range against fictitious 0-0 media
+        # (the same fail-open stance has_audio takes below).
+        start=start,
+        end_exclusive=out,
         fps=media.frame_rate(reported),
         # An unreported channel count must not fail a cut that is fine: E7 blocks the
         # build, and "Resolve did not say" is not evidence of silence.

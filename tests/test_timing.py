@@ -44,6 +44,9 @@ def test_timecode_counts_frames_at_the_nearest_whole_rate(
         # The Duration an audio-only pool clip reports (#46, live-verified): 23.976
         # counts at the nominal 24, exactly as timecode() writes it.
         ("01:26:38:09", 23.976, 124761),
+        # A signed distance reads back signed: timecode() writes negatives, so its
+        # mirror parses them.
+        ("-00:00:16:40", 59.94, -1000),
     ],
 )
 def test_frames_from_timecode_mirrors_timecode(value: str, fps: float, expected: int) -> None:
@@ -55,6 +58,19 @@ def test_frames_from_timecode_mirrors_timecode(value: str, fps: float, expected:
 def test_a_string_that_is_not_a_timecode_reads_as_none(value: str) -> None:
     """Resolve says "no value" with an empty string — an absence, not an error."""
     assert frames_from_timecode(value, 24.0) is None
+
+
+def test_drop_frame_timecode_is_refused_not_miscounted() -> None:
+    """Resolve writes drop-frame as HH:MM:SS;FF. Non-drop arithmetic over it would be
+    silently wrong, so the semicolon form reads as None until drop-frame is a feature."""
+    assert frames_from_timecode("00:01:00;02", 29.97) is None
+
+
+def test_a_frame_field_at_or_past_the_whole_rate_reads_as_none() -> None:
+    """timecode() never writes ff >= rate, so a mirror that accepted 00:00:00:99 at 24
+    fps would be reading something that is not a timecode of this rate."""
+    assert frames_from_timecode("00:00:00:99", 24.0) is None
+    assert frames_from_timecode("00:00:00:24", 24.0) is None
 
 
 def test_a_backwards_distance_is_signed_not_wrapped() -> None:

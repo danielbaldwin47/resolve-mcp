@@ -2,9 +2,9 @@
   "project": "2026-06_Zinc_and_Monkfish",
   "context": "concert",
   "labelled": "2026-08-06 (Zinc), 2026-08-07 (Monkfish), 2026-08-08 (MCP Monkfish Main reference sources)",
-  "method": "Zinc: frame grabs off the multicam's source clips, read by the agent, then confirmed. Monkfish: stated by the director, nothing looked at. MCP Monkfish Main sources: frame grabs off the source clips themselves, read by the agent (2026-08-08), corroborating the director's statements about the night.",
+  "method": "Zinc: frame grabs off the multicam's source clips, read by the agent, then confirmed. Monkfish: stated by the director, nothing looked at. MCP Monkfish Main sources: frame grabs off the source clips themselves, read by the agent (2026-08-08), corroborating the director's statements about the night. The 2026-08-07 confirmation below covers the two multicam nights only; the 2026-08-08 clip-name entries rest on frame evidence, unconfirmed and, per the style-layer rule for frame-derived labels, not requiring it.",
   "confirmed_by_director": "2026-08-07",
-  "note": "Two nights in one project: Zinc - Set 2 (corpus entry 1) and Monkfish Main (entry 5), each with its own multicam and its own angle numbers. Both nights happen to put the operated camera on Video 1 and the drums on Video 2, but Video 1 is a wide at Zinc and a moving camera at Monkfish - the angle number does not carry the framing, which is why both nights are labelled separately rather than once.",
+  "note": "Two nights in one project: Zinc - Set 2 (corpus entry 1) and Monkfish Main (entry 5), each with its own multicam and its own angle numbers. Both nights happen to put the operated camera on Video 1 and the drums on Video 2, but Video 1 is a wide at Zinc and a moving camera at Monkfish - the angle number does not carry the framing, which is why both nights are labelled separately rather than once. A third keying scheme sits alongside the per-night multicam angle numbers: the MCP Monkfish Main reference timeline is plain tracks, not a multicam, so its two entries are keyed by source clip name, which is what correlate_timeline groups on there.",
   "angles": {
     "Zinc - Set 2 Multicam - Video 1": {
       "role": "ensemble-wide",

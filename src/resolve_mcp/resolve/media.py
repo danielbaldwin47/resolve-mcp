@@ -366,27 +366,39 @@ def frame_bounds(
     missing. The rule lives here so bounds mean the same thing to a listing and to a cut.
 
     Audio-only clips report ``Start``, ``End`` and ``Frames`` as empty strings (#46,
-    live-verified): only ``Duration`` carries the length, as timecode. When nothing else
-    is readable that timecode is the bounds — ``[0, duration)``, counted at the clip's
-    own rate or, since audio reports no rate either, at the caller's ``fps`` (the
-    timeline's, for a cut). With no rate at all the bounds stay unknown.
+    live-verified): only ``Duration`` carries the length, as timecode. So whenever the
+    out point is unreadable and ``Duration`` parses, the duration stands in — bounds are
+    ``[start, start + duration)`` with an unreported start read as 0 — counted at the
+    clip's own rate or, since audio reports no rate either, at the caller's ``fps`` (the
+    timeline's, for a cut). With no rate at all, or no parseable ``Duration``, the
+    unknowns stay ``None`` — unknown, never invented.
     """
     start = _number(reported, START)
     end = _number(reported, END)
     frames = _number(reported, FRAMES)
     out = end + 1 if end is not None else (start + frames if start is not None and frames else None)
-    if start is None and out is None:
+    if out is None:
         rate = frame_rate(reported) or fps
         duration = frames_from_timecode(reported.get(DURATION, ""), rate) if rate else None
-        if duration:
-            log.info(
-                "Start/End/Frames unreported; bounds 0-%d read from %s %r at %s fps",
-                duration,
+        if duration is not None:
+            begin = start if start is not None else 0
+            log.debug(
+                "End/Frames unreported; bounds %d-%d read from %s %r at %s fps",
+                begin,
+                begin + duration,
                 DURATION,
                 reported.get(DURATION),
                 rate,
             )
-            return 0, duration
+            return begin, begin + duration
+        # The case a live session most needs to see: nothing reported and nothing to
+        # derive from, so every bounds-based check downstream silently fails open.
+        log.debug(
+            "End/Frames unreported and %s %r cannot stand in (rate %s); bounds unknown",
+            DURATION,
+            reported.get(DURATION),
+            rate,
+        )
     return start, out
 
 
@@ -830,7 +842,8 @@ def _bounds(clip: Clip, reported: dict[str, str]) -> dict[str, Any]:
     the out point is that frame plus one and ``duration = out - in`` everywhere.
     """
     fps = frame_rate(reported)
-    start, out = frame_bounds(reported)
+    # The same rate feeds the Duration fallback, so a listing and a cut read one bounds.
+    start, out = frame_bounds(reported, fps=fps)
     duration = (
         out - start if out is not None and start is not None else _number(reported, FRAMES)
     )

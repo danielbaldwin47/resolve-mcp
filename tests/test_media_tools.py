@@ -1109,3 +1109,18 @@ def test_frame_bounds_with_no_rate_at_all_stays_unknown() -> None:
     reported = {"FPS": "", "Frames": "", "Start": "", "End": "", "Duration": "01:26:38:09"}
 
     assert frame_bounds(reported) == (None, None)
+
+
+def test_the_duration_fallback_applies_whenever_the_out_point_is_unreadable() -> None:
+    """A reported Start does not disqualify the fallback: only End/Frames being blank
+    leaves the out point unknown, and Duration stands in from wherever start is."""
+    reported = {"FPS": "", "Frames": "", "Start": "0", "End": "", "Duration": "01:26:38:09"}
+
+    assert frame_bounds(reported, fps=23.976) == (0, 124761)
+
+
+def test_a_zero_frame_duration_is_empty_media_not_unknown_media() -> None:
+    """[0, 0) is a statement about the media; only an unparseable length is unknown."""
+    reported = {"FPS": "", "Frames": "", "Start": "", "End": "", "Duration": "00:00:00:00"}
+
+    assert frame_bounds(reported, fps=24.0) == (0, 0)

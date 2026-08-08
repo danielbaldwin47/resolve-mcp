@@ -23,6 +23,9 @@ import re
 from typing import Any, Literal
 
 from .errors import InvalidRequestError
+from .logging_config import get_logger
+
+log = get_logger(__name__)
 
 SECONDS_PRECISION = 3
 SNAPS = ("floor", "ceil")
@@ -40,13 +43,18 @@ _BOUNDARY_TOLERANCE = 9
 """Decimal places kept before snapping — enough to kill float noise, not a real fraction."""
 
 
+def _nominal_rate(fps: float) -> int:
+    """The whole rate a non-drop count runs at: 59.94 counts at 60, and never below 1."""
+    return max(round(fps), 1)
+
+
 def timecode(frames: int, fps: float) -> str:
     """``HH:MM:SS:FF`` at the nearest whole frame rate, non-drop.
 
     A negative count is signed rather than wrapped: not every number here is a position on
     a timeline — a sync offset is a distance, and it routinely points backwards.
     """
-    rate = max(round(fps), 1)
+    rate = _nominal_rate(fps)
     if frames < 0:
         return f"-{timecode(-int(frames), fps)}"
     whole_seconds, frame = divmod(int(frames), rate)
@@ -55,23 +63,36 @@ def timecode(frames: int, fps: float) -> str:
     return f"{hours:02d}:{minutes:02d}:{seconds:02d}:{frame:02d}"
 
 
-_TIMECODE = re.compile(r"(\d+):(\d\d):(\d\d):(\d\d)")
+_TIMECODE = re.compile(r"(-?)(\d+):(\d\d):(\d\d):(\d\d)")
+_DROP_FRAME = re.compile(r"-?\d+:\d\d:\d\d;\d\d")
 
 
 def frames_from_timecode(value: str, fps: float) -> int | None:
     """``HH:MM:SS:FF`` back to frames — the mirror of :func:`timecode`, and just as
-    non-drop: the frame count runs at the nearest whole rate.
+    non-drop: the frame count runs at the nearest whole rate, and a leading sign reads
+    back as a negative count, exactly as :func:`timecode` writes one.
 
     This reads strings Resolve reported rather than times a caller typed, so anything
     that is not a timecode — blank being the usual way Resolve says "no value" — is
-    ``None`` rather than an error.
+    ``None`` rather than an error. That includes two things that look like timecode but
+    are not one :func:`timecode` could have written: the drop-frame form Resolve writes
+    as ``HH:MM:SS;FF`` (drop-frame arithmetic is not v1, so it is refused rather than
+    miscounted) and a frame field at or past the whole rate.
     """
-    matched = _TIMECODE.fullmatch(value.strip())
+    text = value.strip()
+    if _DROP_FRAME.fullmatch(text):
+        log.debug("drop-frame timecode not supported: %r", text)
+        return None
+    matched = _TIMECODE.fullmatch(text)
     if matched is None:
         return None
-    rate = max(round(fps), 1)
-    hours, minutes, seconds, frame = (int(part) for part in matched.groups())
-    return ((hours * 60 + minutes) * 60 + seconds) * rate + frame
+    rate = _nominal_rate(fps)
+    sign, *fields = matched.groups()
+    hours, minutes, seconds, frame = (int(part) for part in fields)
+    if frame >= rate:
+        return None
+    total = ((hours * 60 + minutes) * 60 + seconds) * rate + frame
+    return -total if sign else total
 
 
 def frames_from_seconds(seconds: float, fps: float, snap: Snap) -> int:

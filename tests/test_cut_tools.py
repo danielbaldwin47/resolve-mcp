@@ -207,10 +207,12 @@ AUDIO_ONLY_MASTER = {
     "End": "",
     "Duration": "01:26:38:09",
     "Sample Rate": "48000",
+    "Audio Ch": "2",
 }
 """What an audio-only pool clip really reports (#46, live-verified): Start/End/Frames are
 empty strings and only Duration carries the length — 01:26:38:09 is 124761 frames at the
-timeline's nominal 24."""
+timeline's nominal 24. The channel count is present so these tests exercise E7's bounds
+leg, not its has-audio fail-open."""
 
 
 def test_an_audio_clip_reporting_only_a_duration_still_bounds_the_audio_block(
@@ -242,6 +244,25 @@ def test_e7_still_catches_an_overrun_against_duration_read_bounds(
 
     assert [error["rule"] for error in result["errors"]] == ["E7"]
     assert "124761" in result["errors"][0]["message"]
+
+
+def test_bounds_nothing_could_derive_fail_open_rather_than_read_as_empty_media(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """An unparseable Duration leaves the bounds unknown, and unknown means "cannot
+    verify", never "media runs 0-0" (the E7 resurrection this guards against): the
+    bounds leg skips the clip, the same fail-open stance as the has-audio leg."""
+    master = {**AUDIO_ONLY_MASTER, "Duration": "01:26:38"}  # not a timecode
+    attach(studio(pool=a_pool(angle={"FPS": "23.976"}, master=master)))
+    doc = valid_doc()
+    doc["timeline"]["fps"] = 23.976
+    doc["audio"] = {"source": "master_mix", "in": 36439, "out": 47531}
+    doc["segments"] = [{"id": "s001", "source": "gtr_close", "in": 2000, "out": 13092}]
+
+    result = validate_cut(a_cut(tmp_path, doc))
+
+    assert result["errors"] == []
+    assert result["valid"] is True
 
 
 def test_a_short_segment_warns_without_blocking(attach: Attach, tmp_path: Path) -> None:

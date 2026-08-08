@@ -78,13 +78,15 @@ class ClipFacts:
 
     Gathered once from Resolve and then handed to pure functions, so the rules never
     hold a Resolve handle. Bounds are half-open — ``end_exclusive`` is Resolve's last
-    frame plus one — matching the cut file's own convention.
+    frame plus one — matching the cut file's own convention. A bound is ``None`` when
+    Resolve reported nothing and nothing could derive it: that means "cannot verify",
+    never "0-0", so the range rules fail open on it (#46).
     """
 
     name: str
     bin_path: str | None
-    start: int
-    end_exclusive: int
+    start: int | None
+    end_exclusive: int | None
     fps: float | None
     has_audio: bool = False
     is_still: bool = False
@@ -680,7 +682,14 @@ def _bounds_errors(doc: dict[str, Any], resolved: dict[str, ClipFacts]) -> list[
 
 
 def _outside_media(item: dict[str, Any], clip: ClipFacts) -> bool:
-    """Whether a half-open range asks for frames the clip's media does not have."""
+    """Whether a half-open range asks for frames the clip's media does not have.
+
+    Unknown bounds cannot convict: when Resolve never reported the clip's extent the
+    check fails open — the same stance E7's has-audio leg takes on an unreported
+    channel count, because "Resolve did not say" is not evidence of an overrun.
+    """
+    if clip.start is None or clip.end_exclusive is None:
+        return False
     return bool(item["in"] < clip.start or item["out"] > clip.end_exclusive)
 
 

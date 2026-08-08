@@ -171,8 +171,12 @@ def test_a_clip_resolve_reports_no_end_for_still_catalogs_the_shots_it_can(
     attach: Attach,
     fixture_video: Path,
 ) -> None:
-    """The tail runs to an out point nothing knows; every shot before it is still real."""
-    attach(_studio_holding(fixture_video, {"End": "", "Frames": ""}))
+    """The tail runs to an out point nothing knows; every shot before it is still real.
+
+    Duration is blanked with End/Frames: a reported Duration now stands in for a missing
+    out point (#46), and this test is about the case where nothing at all reports one.
+    """
+    attach(_studio_holding(fixture_video, {"End": "", "Frames": "", "Duration": ""}))
 
     record = wait_for(
         detect_scene_cuts(get_connection(), "broll_pan.mp4", runner=_finding([], [1.0, 4.0]))[
