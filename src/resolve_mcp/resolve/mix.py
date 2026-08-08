@@ -1,0 +1,90 @@
+"""Where the master mix sits under a timeline — the one axis a rebuild does not move.
+
+A concert cut is one continuous mix clip with the pictures laid over it (#22: the cutting
+substrate). Every *record* frame on such a timeline is provisional: tighten a segment near
+the head and everything downstream slides, which is why a rebuild produces a new version
+rather than editing the reviewed one. The mix's own frames do not slide, because the mix is
+one clip nobody re-times — so "which frame of the mix is under this record frame" is the
+only coordinate two versions of the same cut agree on.
+
+That reading is a single number, :attr:`MixShot.zero_frame`: the record frame the mix's own
+first frame lands on. Everything built from it is addition. Two callers need it and must
+never disagree about it — ``correlate_timeline`` turns timeline positions into seconds of
+the analysed mix, and ``build_timeline`` carries hand-placed markers from the previous
+version onto the one it just made — so the reading lives here once rather than in each.
+
+The subtlety worth the module: a source frame is counted from the *start of the media
+file*, not from the clip's own start timecode. A WAV stamped 01:00:00:00 reports source
+frames an hour in, and forgetting to subtract that stamp shifts every derived time by an
+hour — a failure that looks like a plausible reading rather than an error.
+"""
+
+from __future__ import annotations
+
+from typing import Any, NamedTuple
+
+from .timeline import Reader, clip_name, items_in_track, read_frames, source_bounds
+
+Timeline = Any
+TimelineItem = Any
+
+
+class MixShot(NamedTuple):
+    """One audio clip, in the two numbers that place it against its own media."""
+
+    name: str
+    record_in: int
+    source_in: int
+    """Counted from the first frame of the file, with any start stamp already subtracted."""
+
+    @property
+    def zero_frame(self) -> int:
+        """The record frame this clip's own frame 0 lands on, extended past its in point.
+
+        The number is not a position on the timeline — for a clip that starts part-way into
+        its media it is before the clip, and may be before the timeline's own start. It is
+        the constant that converts in both directions, which is all a caller wants from it.
+        """
+        return self.record_in - self.source_in
+
+
+def audio_shots(reader: Reader, timeline: Timeline) -> list[MixShot]:
+    """Every audio shot that will say where it sits, in track then timeline order.
+
+    A shot that cannot answer both numbers is left out rather than guessed at: a caller
+    choosing an anchor from this list must be choosing between readings it can trust.
+    """
+    count = int(read_frames(reader.optional(timeline, "GetTrackCount", 0, "audio")) or 0)
+    found: list[MixShot] = []
+    for index in range(1, count + 1):
+        for item in items_in_track(timeline, "audio", index):
+            record_in = read_frames(item.GetStart())
+            source_in, _ = source_bounds(reader, item, read_frames(item.GetDuration()))
+            if record_in is None or source_in is None:
+                continue
+            name = clip_name(reader, item) or str(item.GetName() or "")
+            found.append(MixShot(name, record_in, source_in - media_start(reader, item)))
+    return found
+
+
+def media_start(reader: Reader, item: TimelineItem) -> int:
+    """The first frame of the media itself, which is not zero on anything with a start stamp."""
+    clip = reader.optional(item, "GetMediaPoolItem", None)
+    if clip is None:
+        return 0
+    return read_frames(reader.optional(clip, "GetClipProperty", None, "Start")) or 0
+
+
+def named(shots: list[MixShot], name: str) -> MixShot | None:
+    """The one shot carrying ``name``, or ``None`` when none or several do.
+
+    Ambiguity is answered the same way as absence on purpose. A caller asking for *the* mix
+    on a timeline that holds two clips of the same name cannot be told which one was meant,
+    and picking the first would put a whole timeline's worth of derived positions on a
+    coin toss.
+    """
+    matched = [shot for shot in shots if shot.name == name]
+    return matched[0] if len(matched) == 1 else None
+
+
+__all__ = ["MixShot", "audio_shots", "media_start", "named"]

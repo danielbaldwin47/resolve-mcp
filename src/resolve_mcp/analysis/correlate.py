@@ -44,19 +44,18 @@ from ..jobs.runner import JobOutput, Progress, start_job
 from ..logging_config import get_logger
 from ..naming import keyed_name
 from ..resolve.connection import ResolveConnection
+from ..resolve.mix import MixShot, audio_shots
 from ..resolve.session import frame_rate
 from ..resolve.timeline import (
     FIRST_TRACK,
     Reader,
     angle_of,
-    clip_name,
     find_timeline,
     fingerprint,
     items_in_track,
     name_of,
     open_project,
     read_frames,
-    source_bounds,
     start_frame,
 )
 from ..timing import SECONDS_PRECISION, dual_time, to_frames
@@ -384,53 +383,21 @@ def _clock(
     if given is not None:
         return Clock(given, fps, GIVEN, mix.name if mix else None, mix is not None)
 
-    found = _audio_shots(reader, timeline)
+    found = audio_shots(reader, timeline)
     wanted = _matching(found, mix)
     chosen = wanted or (found[0] if found else None)
     if chosen is None:
         return Clock(start_frame(timeline), fps, "timeline_start", None, False)
-    name, record_in, source_in = chosen
-    return Clock(record_in - source_in, fps, "audio_clip", name, wanted is not None)
+    return Clock(chosen.zero_frame, fps, "audio_clip", chosen.name, wanted is not None)
 
 
-def _audio_shots(reader: Reader, timeline: Any) -> list[tuple[str, int, int]]:
-    """Every audio shot that will say where it sits: its clip name, record in and mix in.
-
-    The mix in is counted from the *start of the file*, not from the clip's own start
-    timecode: a WAV stamped 01:00:00:00 reports source frames an hour in, and subtracting
-    that stamp is the difference between a correct reading and one shifted by an hour.
-    """
-    count = int(read_frames(reader.optional(timeline, "GetTrackCount", 0, "audio")) or 0)
-    found: list[tuple[str, int, int]] = []
-    for index in range(1, count + 1):
-        for item in items_in_track(timeline, "audio", index):
-            record_in = read_frames(item.GetStart())
-            source_in, _ = source_bounds(reader, item, read_frames(item.GetDuration()))
-            if record_in is None or source_in is None:
-                continue
-            name = clip_name(reader, item) or str(item.GetName() or "")
-            found.append((name, record_in, source_in - _media_start(reader, item)))
-    return found
-
-
-def _media_start(reader: Reader, item: Any) -> int:
-    """The first frame of the media itself, which is not zero on anything with a start stamp."""
-    clip = reader.optional(item, "GetMediaPoolItem", None)
-    if clip is None:
-        return 0
-    return read_frames(reader.optional(clip, "GetClipProperty", None, "Start")) or 0
-
-
-def _matching(
-    found: Sequence[tuple[str, int, int]],
-    mix: Path | None,
-) -> tuple[str, int, int] | None:
+def _matching(found: Sequence[MixShot], mix: Path | None) -> MixShot | None:
     """The audio shot holding the file the analysis ran on, by name or by stem."""
     if mix is None:
         return None
     names = {mix.name.casefold(), mix.stem.casefold()}
     for shot in found:
-        if shot[0].casefold() in names or Path(shot[0]).stem.casefold() in names:
+        if shot.name.casefold() in names or Path(shot.name).stem.casefold() in names:
             return shot
     return None
 

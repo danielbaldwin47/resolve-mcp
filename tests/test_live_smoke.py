@@ -61,6 +61,7 @@ from resolve_mcp.tools.timeline import (
     inspect_timeline,
     list_markers,
     list_timelines,
+    set_markers,
 )
 from resolve_mcp.tools.titles import apply_titles, edit_title, list_titles
 from resolve_mcp.tools.video import detect_scene_cuts, grab_frames
@@ -80,6 +81,9 @@ SCENE_SCAN_CLIP_ENV = "RESOLVE_MCP_SCENE_SCAN_CLIP"
 """Opt-in for #34's live AC: a pool clip with hard cuts, so the scan has cuts to map."""
 
 SMOKE_CUT = "resolve-mcp-smoke"
+
+SMOKE_SONG = "resolve-mcp-130"
+"""The blue marker #130's carry moves — named so a leftover in the GUI says where it came from."""
 """Every build here materialises a new version of this name; delete them when you are done."""
 
 LOCKED_TRACK_PROBE = """
@@ -446,11 +450,18 @@ def a_smoke_cut(
     source: dict[str, Any],
     durations: tuple[int, ...],
     alternate_at: int | None = None,
+    audio_in: int | None = None,
+    name: str = "smoke.cut.json",
 ) -> str:
     """A rough-cut shaped file (no master audio) built from one real clip.
 
     ``alternate_at`` gives every segment one equal-duration alternate starting there — the
     same clip is a legitimate alternate source, and one clip is all a smoke run can count on.
+
+    ``audio_in`` turns it into a concert-shaped cut instead, laying the same clip's audio
+    under the whole thing from that source frame — the continuous substrate #130's marker
+    carry rides. Whether the clip has audio at all is the pool's business, so the caller
+    validates and skips rather than this guessing.
     """
     at = source["start"]
     segments: list[dict[str, Any]] = []
@@ -470,13 +481,15 @@ def a_smoke_cut(
     angle = {"clip": source["name"]}
     if source["bin"] is not None:
         angle["bin"] = source["bin"]
-    doc = {
+    doc: dict[str, Any] = {
         "schema": 1,
         "timeline": {"name": SMOKE_CUT, "fps": source["fps"]},
         "sources": {"angle": angle},
         "segments": segments,
     }
-    path = tmp_path / "smoke.cut.json"
+    if audio_in is not None:
+        doc["audio"] = {"source": "angle", "in": audio_in, "out": audio_in + sum(durations)}
+    path = tmp_path / name
     path.write_text(json.dumps(doc), encoding="utf-8")
     return str(path)
 
@@ -506,6 +519,54 @@ def test_a_real_build_places_every_shot_exactly_where_the_cut_puts_it(tmp_path: 
     timeline_start = built["timeline"]["start"]["frames"]
     assert [item["record"]["duration"]["frames"] for item in video["items"]] == list(durations)
     assert starts == [timeline_start, timeline_start + 48, timeline_start + 72]
+
+
+def test_a_real_rebuild_carries_the_song_markers_onto_the_new_version(tmp_path: Path) -> None:
+    """#130 end to end, and the part no fake can settle: whether a frame derived from
+    Resolve's own reading of where the mix sits is a frame Resolve will take a marker at.
+
+    A blue marker names a song, and a human places it. The rebuild has to move it by the
+    frame of the master mix under it rather than by copying the number — so this second cut
+    starts its mix 24 frames later and reorders the shots underneath. 24 frames earlier is
+    then the only correct answer, and copying, or re-deriving off the picture, gives another.
+
+    Leaves two more ``resolve-mcp-smoke`` versions behind, as every build test here does.
+    """
+    if get_status()["context"]["project"] is None:
+        pytest.skip("No project open in Resolve")
+    source = a_source_clip()
+    first = a_smoke_cut(tmp_path, source, (48, 24, 36), audio_in=source["start"], name="a.cut.json")
+    checked = validate_cut(first)
+    if not checked["valid"]:
+        pytest.skip(f"No pool clip this cut can lay a master mix from: {checked['errors']}")
+
+    made = build_timeline(first)
+    assert made["ok"] is True, made.get("error")
+    earlier = str(made["timeline"]["name"])
+    marked = set_markers(
+        [{"frame": made["timeline"]["start"]["frames"] + 60, "color": "Blue", "name": SMOKE_SONG}],
+        timeline=earlier,
+    )
+    assert marked["ok"] is True and marked["added"] == 1, marked
+
+    second = a_smoke_cut(
+        tmp_path,
+        source,
+        (36, 48, 24),
+        audio_in=source["start"] + 24,
+        name="b.cut.json",
+    )
+    rebuilt = build_timeline(second)
+
+    assert rebuilt["ok"] is True, rebuilt.get("error")
+    assert rebuilt["markers"]["from"] == earlier
+    assert rebuilt["markers"]["carried"] == 1, rebuilt["markers"]
+    assert rebuilt["markers"]["shift"] == -24
+    carried = list_markers(rebuilt["timeline"]["name"], color="Blue")
+    assert carried["ok"] is True
+    assert [(one["record"]["frames"], one["name"]) for one in carried["markers"]] == [
+        (rebuilt["timeline"]["start"]["frames"] + 36, SMOKE_SONG)
+    ]
 
 
 def test_a_real_take_selector_swaps_the_angle_without_moving_the_shot(tmp_path: Path) -> None:

@@ -220,6 +220,25 @@ def _colors(markers: list[dict[str, Any]]) -> dict[str, int]:
     return counts
 
 
+def markers_on(
+    connection: ResolveConnection,
+    timeline: Timeline,
+    fps: float | None,
+) -> list[dict[str, Any]]:
+    """Every marker on a timeline in record time, in frame order and uncapped.
+
+    ``list_markers`` is the agent's view and caps at :data:`DEFAULT_MARKER_LIMIT`, spilling
+    the rest to a file — right for something being read, wrong for something being *moved*,
+    where a cap would silently drop the markers past the two hundredth and the timeline
+    would look successfully carried. Callers moving markers take this instead and are
+    expected to report every one they touched.
+    """
+    clock = MarkerClock(connection, timeline, fps)
+    return [
+        _marker(relative, detail, clock) for relative, detail in sorted(_reported(clock).items())
+    ]
+
+
 def markers_by_name(
     connection: ResolveConnection,
     timeline: Timeline,

@@ -33,12 +33,13 @@ from dataclasses import dataclass
 from typing import Any, Final
 
 from ..cut.validate import locked_track_finding, overlay_positions, placements
-from ..errors import BuildFailedError, CutInvalidError
+from ..errors import BuildFailedError, CutInvalidError, TimelineNotFoundError
 from ..logging_config import get_logger
-from ..naming import next_version_name
-from . import cut, media, takes
+from ..naming import latest_version, next_version_name
+from . import cut, markers, media, mix, takes
 from . import timeline as timeline_read
 from .connection import ResolveConnection
+from .session import frame_rate
 
 log = get_logger("build")
 
@@ -58,6 +59,9 @@ AUDIO_TRACK_TYPE: Final = "stereo"
 
 MISPLACED_CAP: Final = 20
 """A drifted build misplaces everything downstream of the blockage; the count says how many."""
+
+REFUSED_MARKER_CAP: Final = 20
+"""Carried markers that would not land are listed, not just counted — up to this many."""
 
 
 @dataclass(frozen=True)
@@ -119,6 +123,7 @@ def build_timeline(
     connection: ResolveConnection,
     cut_file: str,
     min_segment_frames: int = cut.MIN_SEGMENT_FRAMES,
+    carry_markers: bool = True,
 ) -> dict[str, Any]:
     """Build ``cut_file`` as a fresh ``<name> v<N>`` timeline and report what landed."""
     checked = cut.preflight(connection, cut_file, min_segment_frames)
@@ -138,10 +143,12 @@ def build_timeline(
 
     project = timeline_read.open_project(connection)
     pool = media.media_pool(connection)
-    name = next_version_name(
-        str(doc["timeline"]["name"]),
-        timeline_read.timeline_names(project),
-    )
+    base = str(doc["timeline"]["name"])
+    existing = timeline_read.timeline_names(project)
+    # Read before the build, because creating the new version is what makes it the latest:
+    # the version being superseded is the one holding the markers a human placed by hand.
+    superseded = latest_version(base, existing)
+    name = next_version_name(base, existing)
     clips = cut.clips_by_alias(checked)
     _unlock_stills(clips)
 
@@ -155,6 +162,14 @@ def build_timeline(
     # read back — a selector on a shot that slid somewhere else would be alternates for a
     # shot the cut file does not have.
     made = takes.attach_takes(built, _selectors(doc, clips, shots), name)
+    carried = _carry_markers(
+        connection,
+        project,
+        built,
+        name,
+        f"{base} v{superseded}" if superseded else None,
+        carry_markers,
+    )
 
     log.info("Built %s: %d clips from %s", name, len(shots), checked.loaded.content_hash)
     return {
@@ -167,6 +182,7 @@ def build_timeline(
             "audio": bool(_count(shots, A1)),
             "selectors": made,
         },
+        "markers": carried,
         "warnings": [finding.as_dict() for finding in checked.warnings],
     }
 
@@ -174,6 +190,125 @@ def build_timeline(
 def _count(shots: list[Shot], track: Track) -> int:
     """How many of this build's appends one track took — segments and overlays are both V."""
     return sum(1 for shot in shots if shot.track == track)
+
+
+# --- markers --------------------------------------------------------------------------------
+
+
+def _carry_markers(
+    connection: ResolveConnection,
+    project: Project,
+    built: Timeline,
+    name: str,
+    previous: str | None,
+    asked: bool,
+) -> dict[str, Any]:
+    """Move the superseded version's markers onto the new one, through the mix under both.
+
+    Blue markers name the songs a titles file anchors its events to, and a human places
+    them by hand. A rebuild makes an *empty* timeline, so before #130 every rebuild cost
+    another pass of hand re-marking every song boundary before the titles file could be
+    re-applied — the one manual step left in that loop.
+
+    The carry is a derivation, not a copy. Record frames are exactly what a rebuild moves:
+    re-time one segment and everything after it slides, which is the whole reason a build
+    makes a new version. What does not move is the master mix — one continuous clip nobody
+    re-times — so a marker is carried by *the frame of the mix it sat over*, and the two
+    versions' readings of that (:mod:`resolve_mcp.resolve.mix`) differ by one constant.
+
+    A cut with no mix under it has no such shared axis. There is no honest answer for where
+    its markers go, so nothing is carried and the report says why: markers landing at
+    positions that merely look plausible would be worse than markers a human knows are
+    missing. Same for a previous version whose mix is a different clip, or two clips of the
+    same name — an anchor that cannot be identified is not an anchor.
+    """
+    if not asked:
+        return _no_carry("carry_markers was off, so the earlier version's markers stayed there.")
+    if previous is None:
+        return _no_carry("Nothing to carry: this is the first version of this cut.")
+
+    reader = timeline_read.Reader(connection)
+    try:
+        earlier = timeline_read.find_timeline(project, previous)
+    except TimelineNotFoundError:
+        # The name came off this project moments ago, so this is a timeline deleted mid-build
+        # rather than a mistake — and a build that placed every clip must not fail over it.
+        return _no_carry(f"{previous} was gone by the time its markers were read.", previous)
+
+    found = markers.markers_on(connection, earlier, frame_rate(project, earlier))
+    if not found:
+        return _no_carry(f"{previous} carries no markers.", previous)
+
+    here = mix.audio_shots(reader, built)
+    if len(here) != 1:
+        return _no_carry(
+            f"This cut has no single master mix under it, so it shares no axis with "
+            f"{previous}: its {len(found)} marker(s) have to be placed by hand.",
+            previous,
+        )
+    there = mix.named(mix.audio_shots(reader, earlier), here[0].name)
+    if there is None:
+        return _no_carry(
+            f"{previous} does not carry exactly one {here[0].name} under it, so there is no "
+            f"reading of where its {len(found)} marker(s) sit in the mix.",
+            previous,
+        )
+
+    shift = here[0].zero_frame - there.zero_frame
+    entries = [_carried(marker, shift) for marker in found]
+    results = markers.set_markers(connection, entries, name=name)["results"]
+    refused = [
+        {
+            "name": entry["name"],
+            "color": entry["color"],
+            "record": entry["frame"],
+            "error": result.get("error"),
+        }
+        for entry, result in zip(entries, results, strict=True)
+        if not result.get("ok")
+    ]
+    log.info(
+        "Carried %d of %d markers from %s onto %s, shifted %+d frames",
+        len(entries) - len(refused),
+        len(entries),
+        previous,
+        name,
+        shift,
+    )
+    return {
+        "carried": len(entries) - len(refused),
+        "skipped": len(refused),
+        "from": previous,
+        "shift": shift,
+        # A marker whose moment was cut out of this version lands outside the timeline and is
+        # refused by name, because "which song lost its marker" is the actionable half.
+        "refused": refused[:REFUSED_MARKER_CAP],
+        "reason": None,
+    }
+
+
+def _no_carry(reason: str, source: str | None = None) -> dict[str, Any]:
+    """The same shape as a carry that happened — a reader parses one block, not two."""
+    return {
+        "carried": 0,
+        "skipped": 0,
+        "from": source,
+        "shift": None,
+        "refused": [],
+        "reason": reason,
+    }
+
+
+def _carried(marker: dict[str, Any], shift: int) -> dict[str, Any]:
+    """One read marker as the write that puts it over the same moment of the mix."""
+    return {
+        "frame": marker["record"]["frames"] + shift,
+        "color": marker["color"],
+        "name": marker["name"],
+        "note": marker["note"],
+        "duration": marker["duration"]["frames"],
+        "custom_data": marker["custom_data"],
+    }
 
 
 # --- placement ------------------------------------------------------------------------------
