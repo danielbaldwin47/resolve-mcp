@@ -73,7 +73,7 @@ from resolve_mcp.tools.video import detect_scene_cuts, grab_frames
 
 from . import otio
 from .fakes import write_wav
-from .live_state import sweep_suite_timelines, write_hard_cut_clip
+from .live_state import restore_current, sweep_suite_timelines, write_hard_cut_clip
 from .text_plus_probe import TEMPLATE_ENV, probe_template_append
 
 pytestmark = pytest.mark.live
@@ -102,12 +102,18 @@ SMOKE_SONG = "resolve-mcp-130"
 """The blue marker #130's carry moves — named so a leftover in the GUI says where it came from."""
 
 LOCKED_TRACK_PROBE = """
+def under(folder):
+    found = list(folder.GetClipList() or [])
+    for sub in (folder.GetSubFolderList() or []):
+        found += under(sub)
+    return found
+
 pool = project.GetMediaPool()
 was_on = project.GetCurrentTimeline()
 timeline = pool.CreateEmptyTimeline("resolve-mcp-lock-probe")
 project.SetCurrentTimeline(timeline)
 timeline.SetTrackLock("video", 1, True)
-clips = [c for c in pool.GetRootFolder().GetClipList() if c.GetName() == {name}]
+clips = [c for c in under(pool.GetRootFolder()) if c.GetName() == {name}]
 returned = pool.AppendToTimeline([
     {{"mediaPoolItem": clips[0], "startFrame": {start}, "endFrame": {end},
       "mediaType": 1, "trackIndex": 1, "recordFrame": timeline.GetStartFrame()}}
@@ -121,6 +127,10 @@ result = {{
 result["swept"] = bool(result["put_back"] and pool.DeleteTimelines([timeline]))
 """
 """Spike #18 (d), reduced to its claim: a locked track reports a placement it did not make.
+
+The clip is looked for through the whole pool rather than in its root folder: a project that
+keeps its footage in bins — every real one — has an empty root, and the probe skipped on it,
+so the footgun this guards went unmeasured on the machine it guards (#135).
 
 The probe puts Resolve back on the timeline it found open and deletes its own empty cut
 before it answers. Leaving Resolve sitting on an empty locked timeline is what made the
@@ -139,8 +149,8 @@ def _requires_resolve() -> None:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _a_project_without_the_last_runs_leftovers() -> None:
-    """Delete the timelines the previous run built, before this run builds onto them.
+def _a_project_without_the_last_runs_leftovers() -> Iterator[None]:
+    """Delete the timelines the previous run built, and leave the director's cut open.
 
     Every build here materialises a new ``resolve-mcp-smoke`` version and every OTIO import
     materialises another named cut, so a project the suite has run against a few times holds
@@ -148,16 +158,31 @@ def _a_project_without_the_last_runs_leftovers() -> None:
     scene scan ended up picking a timeline, and how the locked-track probe met a name it had
     already created.
 
-    A run against an unreachable Resolve sweeps nothing and says nothing: the per-test
-    fixture is what reports that, and this one must not turn it into an error.
+    Both halves are housekeeping, and neither may sink the run: a failure here would error
+    *every* test at setup and bury the one message that says why — which is exactly what a
+    dying Resolve did to the first run of this fixture (#135). ``_requires_resolve`` is what
+    reports an unreachable Resolve, per test, with a cause.
     """
     if not get_status()["ok"]:
+        yield
         return
     connection = get_connection()
     project = current_project(connection, "No project is open, so there is nothing to sweep.")
-    swept = sweep_suite_timelines(media_pool(connection), project)
-    if swept.deleted or swept.kept:
-        print(f"\nswept {len(swept.deleted)} leftover timeline(s); kept {swept.kept}")
+    was_on = project.GetCurrentTimeline()
+    try:
+        swept = sweep_suite_timelines(media_pool(connection), project)
+    except Exception as unswept:  # noqa: BLE001 - see the docstring: never sink the run
+        print(f"\nnothing swept: {unswept}")
+    else:
+        if swept.deleted or swept.kept:
+            print(f"\nswept {len(swept.deleted)} leftover timeline(s); kept {swept.kept}")
+
+    yield
+
+    try:
+        restore_current(project, was_on)
+    except Exception as stuck:  # noqa: BLE001 - a departed Resolve must not fail the run
+        print(f"\nleft Resolve where the last test put it: {stuck}")
 
 
 def test_attaches_to_resolve_and_reports_a_version() -> None:
@@ -875,15 +900,17 @@ def test_the_locked_track_footgun_is_still_real(tmp_path: Path) -> None:
     assert probe["ok"] is True, probe.get("error")
     # run_python renders its value with repr, so the probe's dict comes back as source text.
     reported = ast.literal_eval(probe["result"])
-    if not reported["found"]:
-        pytest.skip("The chosen clip is not in the root folder, so the probe could not run")
-    assert reported["returned_truthy"] is True
-    assert reported["items_on_track"] == 0
-    # The probe is the one test here that moves Resolve, and the tests after it read the
-    # current timeline — so where it left the GUI is part of what it has to get right.
+    # Asserted before the skip below: the probe moves Resolve and creates a timeline
+    # whether or not it finds a clip to append, and the tests after it read the current
+    # timeline — so where it left the GUI is part of what it has to get right, on every
+    # path out of here.
     assert reported["put_back"] is True, "the probe left Resolve on its own empty timeline"
     assert reported["swept"] is True, "the probe left its empty timeline in the project"
     assert list_timelines()["current"] != "resolve-mcp-lock-probe"
+    if not reported["found"]:
+        pytest.skip("The chosen clip is nowhere in the media pool, so the probe could not run")
+    assert reported["returned_truthy"] is True
+    assert reported["items_on_track"] == 0
 
 
 def test_an_invalid_cut_creates_no_timeline_on_a_real_project(tmp_path: Path) -> None:

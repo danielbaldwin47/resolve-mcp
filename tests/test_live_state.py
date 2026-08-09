@@ -24,6 +24,7 @@ from .live_state import (
     ClipGenerationError,
     hard_cut_argv,
     is_suite_timeline,
+    restore_current,
     sweep_suite_timelines,
     write_hard_cut_clip,
 )
@@ -114,38 +115,86 @@ def test_a_project_with_no_leftovers_is_left_entirely_alone() -> None:
     assert project.timeline_switches == []
 
 
-def test_resolve_is_moved_off_a_leftover_before_the_sweep_deletes_it() -> None:
-    """Resolve refuses to delete the timeline it is sitting on, and says so only by
-    returning ``False`` — so a sweep that did not move first would leave the cut behind
-    and never hear why. A previous run ends on its own build, so this is the normal case.
-    """
+def test_the_leftover_resolve_is_sitting_on_is_reported_rather_than_moved_off_and_deleted() -> None:
+    """Resolve refuses the delete anyway, but the reason the sweep does not move off first
+    is worse than a refusal: switching away and deleting in the same breath is what Resolve
+    Studio 21.0.3 was doing when it crashed the run this was written for. So the cut stays,
+    and :func:`restore_current` is what stops it being permanent."""
+    pool, project, timelines = a_project(
+        "Monkfish Main",
+        "resolve-mcp-smoke v1",
+        "resolve-mcp-smoke v2",
+        current="resolve-mcp-smoke v1",
+    )
+
+    swept = sweep_suite_timelines(pool, project)
+
+    assert project.GetCurrentTimeline() is timelines["resolve-mcp-smoke v1"]
+    assert project.timeline_switches == []
+    assert swept.deleted == ["resolve-mcp-smoke v2"]
+    assert swept.kept == ["resolve-mcp-smoke v1"]
+
+
+def test_a_pool_that_answers_nothing_reports_every_leftover_kept() -> None:
+    """A handle Resolve has dropped answers ``None`` for every method rather than raising.
+    Calling that is a ``TypeError`` out of a session fixture, which errors every test at
+    setup and buries the message that says Resolve is gone."""
+    pool, project, _ = a_project("Monkfish Main", "resolve-mcp-smoke v1", current="Monkfish Main")
+    setattr(pool, "DeleteTimelines", None)  # noqa: B010 - the assignment is the point
+
+    swept = sweep_suite_timelines(pool, project)
+
+    assert swept.deleted == []
+    assert swept.kept == ["resolve-mcp-smoke v1"]
+
+
+# --- putting the director's cut back --------------------------------------------------------
+
+
+def test_the_session_ends_on_the_cut_it_found_open() -> None:
     pool, project, timelines = a_project(
         "Monkfish Main",
         "resolve-mcp-smoke v1",
         current="resolve-mcp-smoke v1",
     )
 
-    swept = sweep_suite_timelines(pool, project)
-
+    assert restore_current(project, timelines["Monkfish Main"]) is True
     assert project.GetCurrentTimeline() is timelines["Monkfish Main"]
-    assert swept.deleted == ["resolve-mcp-smoke v1"]
-    assert swept.kept == []
 
 
-def test_the_last_leftover_survives_when_it_is_the_only_cut_left_to_sit_on() -> None:
-    """A project holding nothing but the suite's own builds has nowhere to move to, so one
-    of them stays. It is reported rather than swallowed: the next run's version numbers
-    carry on from it, and a caller that assumed a clean project would be wrong."""
-    pool, project, _ = a_project(
-        "resolve-mcp-smoke v1",
-        "resolve-mcp-smoke v2",
-        current="resolve-mcp-smoke v2",
+def test_a_session_that_found_one_of_the_suites_own_cuts_open_moves_off_it_instead() -> None:
+    """Putting it back would make the leftover permanent: it is current, so the sweep
+    skips it, and the run after that finds it current again."""
+    _, project, timelines = a_project(
+        "Monkfish Main",
+        "resolve-mcp-smoke v14",
+        current="resolve-mcp-smoke v14",
     )
 
-    swept = sweep_suite_timelines(pool, project)
+    assert restore_current(project, timelines["resolve-mcp-smoke v14"]) is True
+    assert project.GetCurrentTimeline() is timelines["Monkfish Main"]
 
-    assert swept.deleted == ["resolve-mcp-smoke v1"]
-    assert swept.kept == ["resolve-mcp-smoke v2"]
+
+def test_a_session_that_found_nothing_open_still_leaves_a_directors_cut_current() -> None:
+    _, project, timelines = a_project("Monkfish Main", "resolve-mcp-smoke v1")
+
+    assert restore_current(project, None) is True
+    assert project.GetCurrentTimeline() is timelines["Monkfish Main"]
+
+
+def test_a_project_holding_only_the_suites_own_cuts_is_left_where_it_is() -> None:
+    """Nowhere to move to. The leftover survives, and the sweep has already said so."""
+    _, project, _ = a_project("resolve-mcp-smoke v1", "resolve-mcp-smoke v2")
+
+    assert restore_current(project, None) is False
+
+
+def test_a_cut_already_current_is_left_alone_rather_than_switched_to_itself() -> None:
+    """A redundant switch is the call that crashed the sweep; it is not made twice."""
+    _, project, timelines = a_project("Monkfish Main", current="Monkfish Main")
+
+    assert restore_current(project, timelines["Monkfish Main"]) is True
+    assert project.timeline_switches == []
 
 
 def test_one_cut_resolve_will_not_delete_does_not_stop_the_rest_from_going() -> None:

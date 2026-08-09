@@ -185,8 +185,9 @@ substrate: one talking head said twice, its transcript, and the b-roll that
 covers the join), `tests/otio.py` (hand-edited OTIO with a dissolve),
 `tests/text_plus_probe.py` (Text+ probe fixtures), `tests/live_state.py` (the
 state the live tier builds for itself: `sweep_suite_timelines()` clears the
-previous run's leftovers, `write_hard_cut_clip()` generates the clip the scene
-scan needs — decisions covered by `test_live_state.py` in the fake tier).
+previous run's leftovers, `restore_current()` leaves the director's cut open,
+`write_hard_cut_clip()` generates the clip the scene scan needs — decisions
+covered by `test_live_state.py` in the fake tier).
 
 Test files pair 1:1 with the module they cover (`test_cut_validate.py` ↔
 `cut/validate.py`, `test_timeline_tools.py` ↔ `tools/timeline.py` +

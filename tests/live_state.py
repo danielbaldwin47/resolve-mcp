@@ -58,34 +58,65 @@ def is_suite_timeline(name: str) -> bool:
 def sweep_suite_timelines(pool: Pool, project: Project) -> Swept:
     """Delete the previous run's leftovers, so this run builds onto a known project.
 
-    Resolve will not delete the timeline it is sitting on, and says so only by returning
-    ``False`` — and a run ends on its own last build, so the current timeline is normally
-    one of ours. Moving to a cut the suite did not build is therefore the first step; a
-    project holding nothing else has nowhere to move to, and the one left behind is
-    reported rather than swallowed.
+    The timeline Resolve is sitting on is left where it is. Resolve refuses to delete it
+    anyway, but the reason it is not moved off first is worse than a refusal: switching
+    away and deleting in the same breath is what Resolve Studio 21.0.3 was doing when it
+    logged ``Internal undo error 3`` and wrote a crash dump, in the autosave the deletions
+    triggered (#135). So the sweep takes what it can reach and reports the rest, and
+    :func:`restore_current` is what stops the leftover being permanent — a session that
+    ends on the director's own cut leaves nothing current for the next sweep to refuse.
 
     One call per timeline, not one batch call: a batch answers ``False`` for the whole
     list, which would leave the sweep unable to say which cut stuck.
     """
-    held = timelines_of(project)
-    ours = [timeline for timeline in held if is_suite_timeline(name_of(timeline))]
+    ours = [timeline for timeline in timelines_of(project) if is_suite_timeline(name_of(timeline))]
     if not ours:
         return Swept([], [])
 
-    current = project.GetCurrentTimeline()
-    if any(same_timeline(current, timeline) for timeline in ours):
-        elsewhere = next(
-            (timeline for timeline in held if not is_suite_timeline(name_of(timeline))), None
-        )
-        if elsewhere is not None:
-            project.SetCurrentTimeline(elsewhere)
+    delete = getattr(pool, "DeleteTimelines", None)
+    if not callable(delete):
+        # A handle Resolve has dropped answers None for every method rather than raising,
+        # so an unswept project is what a dying Resolve looks like from here. Reporting it
+        # beats a TypeError out of a session fixture, which errors every test at setup and
+        # buries the one message that says Resolve is gone.
+        return Swept([], [name_of(timeline) for timeline in ours])
 
+    current = project.GetCurrentTimeline()
     deleted: list[str] = []
     kept: list[str] = []
     for timeline in ours:
         name = name_of(timeline)
-        (deleted if pool.DeleteTimelines([timeline]) else kept).append(name)
+        if same_timeline(current, timeline):
+            kept.append(name)
+            continue
+        (deleted if delete([timeline]) else kept).append(name)
     return Swept(deleted, kept)
+
+
+def restore_current(project: Project, timeline: Timeline) -> bool:
+    """Leave the project on a cut the suite did not build.
+
+    A run that ends on its own build leaves a timeline the next sweep cannot delete — and
+    leaves whoever opens the GUI looking at a smoke test. ``timeline`` is what was open
+    when the session started and is normally the answer.
+
+    When the session *found* one of the suite's own cuts open, putting that back would make
+    the leftover permanent: it is current, so the sweep skips it, and the run after that
+    finds it current again. So any cut the suite did not build is preferred, and the
+    leftover goes on the next run instead of surviving every one.
+    """
+    switch = getattr(project, "SetCurrentTimeline", None)
+    if not callable(switch):
+        return False
+    target = timeline
+    if target is None or is_suite_timeline(name_of(target)):
+        held = timelines_of(project)
+        target = next((one for one in held if not is_suite_timeline(name_of(one))), target)
+    if target is None:
+        return False
+    if same_timeline(project.GetCurrentTimeline(), target):
+        return True
+    return bool(switch(target))
 
 
 class ClipGenerationError(RuntimeError):
