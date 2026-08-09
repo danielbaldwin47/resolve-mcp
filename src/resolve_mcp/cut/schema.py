@@ -44,15 +44,20 @@ ANNOTATED_EXAMPLE: Final = """\
         { "source": "keys_wide", "in": 8100, "out": 8278 }
       ],
       "note": "drum fill response"   // free text; server ignores; feeds cut report
-    }
+    },
+
+    // A gap: literal black on V1. Takes record time, places nothing, and so moves
+    // everything after it. id + gap + optional note, and nothing else (§1).
+    { "id": "g001", "gap": 58, "note": "false ending before the landing shot" }
   ],
 
   "overlays": [
     {
-      "id": "b03",                   // ids share one namespace with segments
+      "id": "b03",                   // ids share one namespace with segments and gaps
       "source": "broll_pan",
       "in": 1200, "out": 1440,
       "over": { "segment": "s014", "offset": 24 },  // anchor + frames into it
+      "track": 2,                    // optional; V2 by default, 2-8 (§4)
       "note": "cover retake seam"
     }
   ]
@@ -62,10 +67,21 @@ ANNOTATED_EXAMPLE: Final = """\
 _PLACEMENT: Final = """\
 ## 1. Placement model: sequential V1, positioned overlays
 
-V1 segments are butt-joined in array order; record positions computed at build.
-Gaps/flash-frame positions unrepresentable rather than checked; sidesteps the
-unclamped-recordFrame footgun; duration edits never require downstream position
-fixes. Only overlays carry position — anchored, not absolute (§4)."""
+V1 entries run in array order; record positions computed at build, never stated.
+Duration edits therefore never require downstream position fixes, and no entry can
+name a frame that is wrong.
+
+An entry is a **segment** (plays a clip) or a **gap** (literal black: `{"id", "gap":
+<frames>}`, plus an optional `note`, and nothing else — no source, in, out, audio or
+alternates). A gap places nothing and occupies record time, so it moves everything
+after it. That is how a cut opens cold, stages a false ending, or ends on black.
+
+Two things follow. An overlay may anchor **over a gap** — a V2 shot bridging black
+into the first picture is one anchor, not a special case. And black at the *end* of
+a cut is real only if an overlay covers it: nothing is appended for a gap, and a
+timeline ends at its last item (W8 says so).
+
+Only overlays carry position — anchored, not absolute (§4)."""
 
 _TAKES: Final = """\
 ## 3. Takes
@@ -89,9 +105,13 @@ _OVERLAYS: Final = """\
 
 Anchored to `{segment, offset}`, never absolute timeline frames — they ride with
 the content they cover through tightening passes; build computes absolute
-position = segment's computed start + offset. May run past the anchor's end
-(seam coverage), must land inside the total V1 span. Video only, audio always
-omitted, no alternates, V2."""
+position = segment's computed start + offset. The anchor may be a gap as readily
+as a segment. May run past the anchor's end (seam coverage), must land inside the
+total V1 span. Video only, audio always omitted, no alternates.
+
+`track` is optional and defaults to 2. It is the video track the overlay rides on,
+between V2 and V8; V1 belongs to the segments. Two overlays may cover the same
+frames only on different tracks (E10) — that is what a second layer is for."""
 
 _TITLES: Final = """\
 ## 5. Titles: not in the cut file
@@ -121,9 +141,10 @@ ceil out) at the tool boundary."""
 _RULES: Final = """\
 ## 7. Validation
 
-11 hard errors (E1-E11) block a build; 2 warnings (W1-W2) never do. The list is
-identical in the `validate_cut` dry run and `build_timeline`'s pre-flight, and a
-failing file aborts before Resolve is touched. Every finding is
+11 hard errors (E1-E11) block a build; 3 warnings (W1, W2, W8) never do. W3-W7 are
+`virtual_transcript`'s and describe the same cut file — one document, one numbering.
+The list is identical in the `validate_cut` dry run and `build_timeline`'s pre-flight,
+and a failing file aborts before Resolve is touched. Every finding is
 `{rule, id, message, fix_hint}` — see the `rules` field of this result."""
 
 SCHEMA_DOC: Final = "\n\n".join(

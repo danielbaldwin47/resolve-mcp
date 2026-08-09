@@ -91,10 +91,16 @@ def build_timeline(
     """Build a cut file into a new `<name> v<N>` timeline and report what landed.
 
     Every build makes a new version and never touches an earlier one, so rebuilding after
-    an edit is always safe. The segments land butt-joined in document order over one
-    continuous master-audio clip; positions are computed, so gaps cannot happen. Overlays
-    land on V2 at their anchor segment's start plus the offset — never a frame you state —
-    so tightening a segment and rebuilding leaves every overlay over the same content.
+    an edit is always safe. The segments land in document order over one continuous
+    master-audio clip; positions are computed, never stated, so no entry can name a frame
+    that is wrong. A `gap` entry is literal black: nothing is appended for it, and it moves
+    everything after it. Overlays land at their anchor's start plus the offset — on V2, or
+    on the `track` they name — so tightening a segment and rebuilding leaves every overlay
+    over the same content.
+
+    Black at the end of a cut only exists if an overlay covers it: a timeline ends at its
+    last item, so a trailing gap with nothing over it is a device that will not be there.
+    W8 says so before the build rather than after.
 
     The version being superseded usually carries hand-placed markers — the blue song
     anchors a titles file is written against, and the director's coloured notes. They are

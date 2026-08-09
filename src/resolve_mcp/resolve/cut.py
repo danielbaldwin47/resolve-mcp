@@ -22,7 +22,9 @@ from ..cut.validate import (
     DEFAULT_MIN_SEGMENT_FRAMES,
     RULE_DESCRIPTIONS,
     ClipFacts,
+    gaps,
     resolve_aliases,
+    shots,
     total_frames,
     validate_project,
     validate_structure,
@@ -204,7 +206,8 @@ def _summary(doc: dict[str, Any] | None) -> dict[str, Any] | None:
     fps = float(doc["timeline"]["fps"])
     return {
         "timeline": doc["timeline"]["name"],
-        "segments": len(doc["segments"]),
+        "segments": len(shots(doc)),
+        "gaps": len(gaps(doc)),
         "overlays": len(doc.get("overlays") or []),
         "duration": dual_time(total_frames(doc), fps),
     }

@@ -125,7 +125,13 @@ def test_a_cut_without_audio_builds_video_alone(attach: Attach, tmp_path: Path) 
     result = build_timeline(a_cut(tmp_path, doc))
 
     assert result["ok"] is True
-    assert result["placed"] == {"segments": 3, "overlays": 0, "audio": False, "selectors": 0}
+    assert result["placed"] == {
+        "segments": 3,
+        "gaps": 0,
+        "overlays": 0,
+        "audio": False,
+        "selectors": 0,
+    }
     assert placements(built(resolve, "sunset-set v1"), "audio") == []
 
 
@@ -151,7 +157,13 @@ def test_the_built_timeline_reports_its_own_span(attach: Attach, tmp_path: Path)
 
     assert result["timeline"]["duration"]["frames"] == TOTAL_FRAMES
     assert result["timeline"]["fps"] == 59.94
-    assert result["placed"] == {"segments": 3, "overlays": 0, "audio": True, "selectors": 0}
+    assert result["placed"] == {
+        "segments": 3,
+        "gaps": 0,
+        "overlays": 0,
+        "audio": True,
+        "selectors": 0,
+    }
 
 
 def test_the_build_opens_the_timeline_it_made(attach: Attach, tmp_path: Path) -> None:
@@ -736,7 +748,13 @@ def test_the_report_counts_the_overlays_apart_from_the_segments(
 
     result = build_timeline(a_cut(tmp_path, with_overlay()))
 
-    assert result["placed"] == {"segments": 3, "overlays": 1, "audio": True, "selectors": 0}
+    assert result["placed"] == {
+        "segments": 3,
+        "gaps": 0,
+        "overlays": 1,
+        "audio": True,
+        "selectors": 0,
+    }
 
 
 def test_a_cut_without_overlays_builds_no_second_video_track(
@@ -748,7 +766,13 @@ def test_a_cut_without_overlays_builds_no_second_video_track(
 
     result = build_timeline(a_cut(tmp_path, valid_doc()))
 
-    assert result["placed"] == {"segments": 3, "overlays": 0, "audio": True, "selectors": 0}
+    assert result["placed"] == {
+        "segments": 3,
+        "gaps": 0,
+        "overlays": 0,
+        "audio": True,
+        "selectors": 0,
+    }
     assert built(resolve, "sunset-set v1").GetTrackCount("video") == 1
 
 
@@ -956,7 +980,13 @@ def test_the_report_counts_the_selectors_it_made(attach: Attach, tmp_path: Path)
     result = build_timeline(a_cut(tmp_path, doc_with_alternates()))
 
     assert result["ok"] is True
-    assert result["placed"] == {"segments": 3, "overlays": 0, "audio": True, "selectors": 2}
+    assert result["placed"] == {
+        "segments": 3,
+        "gaps": 0,
+        "overlays": 0,
+        "audio": True,
+        "selectors": 2,
+    }
 
 
 def test_a_cut_without_alternates_makes_no_selectors(attach: Attach, tmp_path: Path) -> None:

@@ -32,7 +32,7 @@ from typing import Any, Final
 
 from ..config import Config, get_config
 from ..cut.document import read_cut_file
-from ..cut.validate import overlay_positions, positions, total_frames
+from ..cut.validate import is_gap, overlay_positions, positions, total_frames
 from ..document import LoadedDocument
 from ..errors import InvalidRequestError
 from ..findings import Finding, ordered
@@ -85,7 +85,8 @@ def virtual_transcript(
         )
     doc = loaded.doc
     fps = _fps(doc, loaded.path.name)
-    segments = _segments(doc, loaded.path.name)
+    entries = _entries(doc, loaded.path.name)
+    segments = _segments(entries)
     sources = dict(transcripts or {})
 
     words_by_source = {alias: _words_of(path) for alias, path in sources.items()}
@@ -140,7 +141,7 @@ def virtual_transcript(
         read_back.append(_read(id, alias, at, duration, fps, [word for word, _ in kept]))
 
     findings.extend(_repeats(read_back))
-    seams = _seams(segments, placed, doc, fps, loaded.path.name)
+    seams = _seams(entries, placed, doc, fps, loaded.path.name)
     findings.extend(_uncovered(seams))
     total = total_frames(doc)
 
@@ -259,16 +260,21 @@ def _repeats(read_back: Sequence[Mapping[str, Any]]) -> list[Finding]:
 
 
 def _seams(
-    segments: Sequence[Mapping[str, Any]],
+    entries: Sequence[Mapping[str, Any]],
     placed: Mapping[str, tuple[int, int]],
     doc: Any,
     fps: float,
     name: str,
 ) -> list[dict[str, Any]]:
-    """Every join between two segments, and whether an overlay rides across it.
+    """Every join between two adjacent segments, and whether an overlay rides across it.
 
     Only a join between two shots of the *same* source is a jump cut: cutting from one
     camera to another is an ordinary edit, and covering it would be covering nothing.
+
+    Black between two shots is not a join at all, which is why this walks the entries as
+    authored rather than the picture alone: cutting away to nothing and back is a device in
+    its own right, and reporting it as an uncovered jump cut would send an agent to cover a
+    seam that the gap has already broken.
 
     Both sides of the question come from the cut module's own placement — the seam from
     :func:`positions` and the overlay from :func:`overlay_positions`, the same two functions
@@ -276,7 +282,9 @@ def _seams(
     """
     spans = _overlay_spans(doc, name)
     seams: list[dict[str, Any]] = []
-    for earlier, later in zip(segments, segments[1:], strict=False):
+    for earlier, later in zip(entries, entries[1:], strict=False):
+        if is_gap(earlier) or is_gap(later):
+            continue
         at = placed[str(later.get("id"))][0]
         jump = str(earlier.get("source")) == str(later.get("source"))
         covering = [id for id, (start, length) in spans.items() if start < at < start + length]
@@ -355,7 +363,8 @@ def _fps(doc: Any, name: str) -> float:
     return float(fps)
 
 
-def _segments(doc: Any, name: str) -> list[Mapping[str, Any]]:
+def _entries(doc: Any, name: str) -> list[Mapping[str, Any]]:
+    """``segments`` as authored — picture and black, in order, because adjacency matters."""
     segments = doc.get("segments") if isinstance(doc, Mapping) else None
     if not isinstance(segments, list) or not segments:
         raise InvalidRequestError(
@@ -364,6 +373,11 @@ def _segments(doc: Any, name: str) -> list[Mapping[str, Any]]:
             detail={"cut_file": name},
         )
     return [segment for segment in segments if isinstance(segment, Mapping)]
+
+
+def _segments(entries: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+    """Only the entries that play a clip: black has no source, so it contains no words."""
+    return [entry for entry in entries if not is_gap(entry)]
 
 
 def _placed(doc: Any, name: str) -> dict[str, tuple[int, int]]:

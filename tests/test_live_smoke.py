@@ -649,7 +649,13 @@ def test_a_real_build_places_every_shot_exactly_where_the_cut_puts_it(tmp_path: 
     result = build_timeline(cut_file)
 
     assert result["ok"] is True, result.get("error")
-    assert result["placed"] == {"segments": 3, "overlays": 0, "audio": False, "selectors": 0}
+    assert result["placed"] == {
+        "segments": 3,
+        "gaps": 0,
+        "overlays": 0,
+        "audio": False,
+        "selectors": 0,
+    }
     built = inspect_timeline(result["timeline"]["name"], detail="clips")
     assert built["ok"] is True
     video = [track for track in built["tracks"] if track["type"] == "video"][0]
@@ -657,6 +663,98 @@ def test_a_real_build_places_every_shot_exactly_where_the_cut_puts_it(tmp_path: 
     timeline_start = built["timeline"]["start"]["frames"]
     assert [item["record"]["duration"]["frames"] for item in video["items"]] == list(durations)
     assert starts == [timeline_start, timeline_start + 48, timeline_start + 72]
+
+
+def a_device_cut(tmp_path: Path, source: dict[str, Any]) -> str:
+    """#141's two devices in one real cut: black on V1, and overlays on V2 and V3.
+
+    Two shots with 30 frames of black between them, so the second is appended at a
+    ``recordFrame`` 30 frames past the end of V1's media — the one thing about gaps no
+    fake can settle, because Resolve is free to slide it back to the free frame instead.
+    The overlays reuse the same clip's opening frames, so the run needs no second source.
+    """
+    at = source["start"]
+    angle: dict[str, Any] = {"clip": source["name"]}
+    if source["bin"] is not None:
+        angle["bin"] = source["bin"]
+    doc: dict[str, Any] = {
+        "schema": 1,
+        "timeline": {"name": SMOKE_CUT, "fps": source["fps"]},
+        "sources": {"angle": angle},
+        "segments": [
+            {"id": "s000", "source": "angle", "in": at, "out": at + 48},
+            {"id": "g001", "gap": 30, "note": "false ending"},
+            {"id": "s001", "source": "angle", "in": at + 48, "out": at + 84},
+        ],
+        "overlays": [
+            # Over the black itself, which is only expressible because the gap is.
+            {
+                "id": "b01",
+                "source": "angle",
+                "in": at,
+                "out": at + 24,
+                "over": {"segment": "g001", "offset": 0},
+            },
+            # V3, and deliberately over the same frames b01 would want if it shared a
+            # track — the per-track E10 reading, checked against a real timeline.
+            {
+                "id": "b02",
+                "source": "angle",
+                "in": at + 24,
+                "out": at + 44,
+                "over": {"segment": "s000", "offset": 40},
+                "track": 3,
+            },
+        ],
+    }
+    path = tmp_path / "devices.cut.json"
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    return str(path)
+
+
+def test_a_real_build_leaves_black_on_v1_and_stacks_overlays_above_it(tmp_path: Path) -> None:
+    """#141's live AC: a real timeline holds a gap and the overlays over it.
+
+    The gap is the risk. Every other placement in a cut is butt-joined, so this is the
+    first time the build sends a ``recordFrame`` past the end of what is on the track —
+    and #18 found Resolve willing to slide an append it cannot honour while reporting
+    success. If it slides, the second shot lands at 48 instead of 78 and this fails; the
+    build's own read-back would fail it too, which is the point of having both.
+
+    Leaves one more ``resolve-mcp-smoke`` version behind, as every build test here does.
+    """
+    if get_status()["context"]["project"] is None:
+        pytest.skip("No project open in Resolve")
+    source = a_source_clip()
+    cut_file = a_device_cut(tmp_path, source)
+    assert validate_cut(cut_file)["valid"] is True
+
+    result = build_timeline(cut_file)
+
+    assert result["ok"] is True, result.get("error")
+    assert result["placed"] == {
+        "segments": 2,
+        "gaps": 1,
+        "overlays": 2,
+        "audio": False,
+        "selectors": 0,
+    }
+    built = inspect_timeline(result["timeline"]["name"], detail="clips")
+    assert built["ok"] is True
+    start = built["timeline"]["start"]["frames"]
+    video = [track for track in built["tracks"] if track["type"] == "video"]
+    assert len(video) == 3, "the V3 overlay should have grown the timeline to three tracks"
+    placed = [
+        [
+            (item["record"]["in"]["frames"] - start, item["record"]["duration"]["frames"])
+            for item in track["items"]
+        ]
+        for track in video
+    ]
+    # V1: 48 frames of picture, 30 of nothing, then 36 more — the hole is the device.
+    assert placed[0] == [(0, 48), (78, 36)]
+    assert placed[1] == [(48, 24)]
+    assert placed[2] == [(40, 20)]
 
 
 def test_a_real_rebuild_carries_the_song_markers_onto_the_new_version(tmp_path: Path) -> None:
@@ -728,7 +826,13 @@ def test_a_real_take_selector_swaps_the_angle_without_moving_the_shot(tmp_path: 
     result = build_timeline(cut_file)
 
     assert result["ok"] is True, result.get("error")
-    assert result["placed"] == {"segments": 3, "overlays": 0, "audio": False, "selectors": 3}
+    assert result["placed"] == {
+        "segments": 3,
+        "gaps": 0,
+        "overlays": 0,
+        "audio": False,
+        "selectors": 3,
+    }
     name = result["timeline"]["name"]
     before = _video_items(name)
     assert [item["takes"] for item in before] == [2, 2, 2]

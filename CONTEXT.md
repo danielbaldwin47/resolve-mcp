@@ -112,8 +112,11 @@ IEEE float and extensible headers, because stdlib `wave` opens PCM only),
 separation), `wav` (header facts + the one unreadable-WAV error).
 
 `cut/` — cut-file schema v1: `document` (read off disk), `schema`
-(verbatim, served by `get_cut_schema`), `validate` (11 errors + 2
-warnings, shared by dry run and build pre-flight).
+(verbatim, served by `get_cut_schema`), `validate` (11 errors + W1, W2,
+W8 — W3-W7 are `virtual_transcript`'s over the same document — shared by
+dry run and build pre-flight). A `segments` entry is a shot or a **gap**
+(`{"id", "gap": <frames>}`, literal black); `is_gap`/`entry_duration`/
+`overlay_track` are the accessors every walker of that array shares.
 
 `jobs/` — `cache` (hash-keyed results), `runner` (start heavy work without
 stalling stdio), `store` (one JSON record per job on disk).
@@ -198,10 +201,13 @@ Test files pair 1:1 with the module they cover (`test_cut_validate.py` ↔
 `resolve/timeline.py`, …). `test_wav_container.py` ↔ `audio/riff.py` is the
 exception that earns its keep: the headers it covers are read by `audio/wav.py`,
 `analysis/decode.py` and `analysis/silence.py` alike, and #110 was a bug in what
-all three agreed about. `test_rough_cut_pillar.py` is the other exception: it
-covers no single module, walking the P4 pillar across `cut`, `build`, `takes`
-and `virtual` in one pass because the joins are what a per-module test cannot
-see. Live tier: `test_live_smoke.py` (module-level
+all three agreed about. `test_rough_cut_pillar.py` is one of two other
+exceptions: it covers no single module, walking the P4 pillar across `cut`,
+`build`, `takes` and `virtual` in one pass because the joins are what a
+per-module test cannot see. `test_cut_devices.py` (#141) is the second, for the
+same reason: gaps and overlay tracks are one device each across `cut/validate`,
+`resolve/build`, `resolve/takes` and `analysis/virtual`, and the interesting
+failures are the disagreements between them. Live tier: `test_live_smoke.py` (module-level
 `pytest.mark.live`) and two `@pytest.mark.live` tests in
 `test_live_analysis.py`; everything else is fake-tier. The live tier assumes no
 project state it can build itself (#135): a session-scoped sweep clears the last

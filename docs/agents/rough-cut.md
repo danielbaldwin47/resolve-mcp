@@ -128,7 +128,9 @@ subject rather than the shot.
 5. **Cover the jump cuts.** Two segments from the same source, back to back, are a visible
    jump. Anchor an overlay from the catalog over the earlier segment at an offset that puts
    it across the seam — anchored, so it survives a tightening pass. Cutting from one camera
-   to another is not a jump cut and needs no cover.
+   to another is not a jump cut and needs no cover. Neither is a cut with black between it:
+   a `gap` entry breaks the join, and `virtual_transcript` will not ask you to cover one.
+   Two covers that want the same frames go on different `track`s rather than colliding.
 6. **`validate_cut`, then `build_timeline`.** Every revision is a new `<name> v<N>`.
 7. **Self-review with `virtual_transcript`.** Below.
 8. **Fix what it found, rebuild, and mark the rest** as the cut report.
@@ -154,8 +156,9 @@ Then work the warnings. There are no errors; this refuses nothing:
 | W7 | an uncovered seam between two shots of one source | a jump cut with no b-roll over it |
 
 The numbering starts at W3 because `validate_cut` already owns W1 and W2 **for the same cut
-file**. One document, one numbering — two W2s meaning different things would be a trap in a
-session holding both results.
+file** (and W8, added after these, for a cut that ends on uncovered black). One document,
+one numbering — two W2s meaning different things would be a trap in a session holding both
+results.
 
 W4 is the one to take seriously: a cut file that keeps a false start in front of the good
 take is structurally perfect — it validates, it builds, it plays — and only reading the

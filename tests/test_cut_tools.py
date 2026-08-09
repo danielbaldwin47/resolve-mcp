@@ -83,7 +83,12 @@ def test_the_schema_lists_every_rule_with_its_severity(attach: Attach) -> None:
     assert [rule for rule, severity in rules.items() if severity == "error"] == [
         f"E{number}" for number in range(1, 12)
     ]
-    assert [rule for rule, severity in rules.items() if severity == "warning"] == ["W1", "W2"]
+    # W3-W7 are virtual_transcript's over the same document, so this list skips to W8.
+    assert [rule for rule, severity in rules.items() if severity == "warning"] == [
+        "W1",
+        "W2",
+        "W8",
+    ]
 
 
 def test_the_schema_serves_without_resolve(attach: Attach) -> None:
@@ -118,6 +123,7 @@ def test_a_valid_cut_file_reports_what_it_describes(attach: Attach, tmp_path: Pa
     assert result["cut"] == {
         "timeline": "sunset-set",
         "segments": 1,
+        "gaps": 0,
         "overlays": 0,
         "duration": {
             "frames": 178,
