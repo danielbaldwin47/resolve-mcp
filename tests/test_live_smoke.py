@@ -25,15 +25,17 @@ import json
 import os
 import shutil
 import zlib
+from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import pytest
 
 from resolve_mcp.audio.acquire import acquire_timeline_audio
 from resolve_mcp.audio.stems import DRUM_STEMS, FOUR_STEMS, separation_params, two_pass
 from resolve_mcp.config import get_config
+from resolve_mcp.errors import BinNotFoundError, FfmpegUnavailableError
 from resolve_mcp.jobs import cache
 from resolve_mcp.jobs.runner import wait_for
 from resolve_mcp.naming import timestamped_name
@@ -43,11 +45,14 @@ from resolve_mcp.resolve.media import (
     apply_still_workaround,
     audio_channels,
     ensure_bin,
+    find_bin,
     find_clip,
     import_into,
     media_pool,
     properties,
 )
+from resolve_mcp.resolve.session import current_project
+from resolve_mcp.resolve.timeline import current_timeline, find_timeline
 from resolve_mcp.tools.analysis import correlate_timeline
 from resolve_mcp.tools.cut import build_timeline, swap_take, validate_cut
 from resolve_mcp.tools.escape_hatch import run_python
@@ -68,6 +73,12 @@ from resolve_mcp.tools.video import detect_scene_cuts, grab_frames
 
 from . import otio
 from .fakes import write_wav
+from .live_state import (
+    named_scan_clip,
+    restore_current,
+    sweep_suite_timelines,
+    write_hard_cut_clip,
+)
 from .text_plus_probe import TEMPLATE_ENV, probe_template_append
 
 pytestmark = pytest.mark.live
@@ -78,7 +89,16 @@ CORRELATE_AUDIO_ENV = "RESOLVE_MCP_CORRELATE_AUDIO"
 """Opt-in for #40's live AC: a real beats file, and the hand-edited cut to measure with it."""
 
 SCENE_SCAN_CLIP_ENV = "RESOLVE_MCP_SCENE_SCAN_CLIP"
-"""Opt-in for #34's live AC: a pool clip with hard cuts, so the scan has cuts to map."""
+"""Override for #34's live AC: a pool clip with hard cuts, so the scan has cuts to map.
+
+Leave it unset and the suite builds its own — see :func:`a_clip_with_hard_cuts`. Set it to
+scan a real edit instead, which is the stronger check when the project has a flattened
+render in the pool: a generated clip proves the mapping on synthetic cuts, a real one
+proves it on the cuts a camera and an editor made.
+"""
+
+SCAN_BIN = "resolve-mcp-scratch"
+"""Where the generated scan clip is imported. Deleted with its clip when the test ends."""
 
 SMOKE_CUT = "resolve-mcp-smoke"
 """Every build here materialises a new version of this name; delete them when you are done."""
@@ -87,11 +107,18 @@ SMOKE_SONG = "resolve-mcp-130"
 """The blue marker #130's carry moves — named so a leftover in the GUI says where it came from."""
 
 LOCKED_TRACK_PROBE = """
+def under(folder):
+    found = list(folder.GetClipList() or [])
+    for sub in (folder.GetSubFolderList() or []):
+        found += under(sub)
+    return found
+
 pool = project.GetMediaPool()
+was_on = project.GetCurrentTimeline()
 timeline = pool.CreateEmptyTimeline("resolve-mcp-lock-probe")
 project.SetCurrentTimeline(timeline)
 timeline.SetTrackLock("video", 1, True)
-clips = [c for c in pool.GetRootFolder().GetClipList() if c.GetName() == {name}]
+clips = [c for c in under(pool.GetRootFolder()) if c.GetName() == {name}]
 returned = pool.AppendToTimeline([
     {{"mediaPoolItem": clips[0], "startFrame": {start}, "endFrame": {end},
       "mediaType": 1, "trackIndex": 1, "recordFrame": timeline.GetStartFrame()}}
@@ -100,9 +127,25 @@ result = {{
     "found": bool(clips),
     "returned_truthy": bool(returned),
     "items_on_track": len(timeline.GetItemListInTrack("video", 1) or []),
+    "was_open": was_on is not None,
+    "put_back": bool(was_on is None or project.SetCurrentTimeline(was_on)),
 }}
+result["swept"] = bool(result["was_open"] and result["put_back"]
+                       and pool.DeleteTimelines([timeline]))
 """
-"""Spike #18 (d), reduced to its claim: a locked track reports a placement it did not make."""
+"""Spike #18 (d), reduced to its claim: a locked track reports a placement it did not make.
+
+The clip is looked for through the whole pool rather than in its root folder: a project that
+keeps its footage in bins — every real one — has an empty root, and the probe skipped on it,
+so the footgun this guards went unmeasured on the machine it guards (#135).
+
+The probe puts Resolve back on the timeline it found open and deletes its own empty cut
+before it answers. Leaving Resolve sitting on an empty locked timeline is what made the
+audio export downstream render nothing (#119 §B) — the probe's currency switch is the
+cause, so undoing it belongs here rather than in the tests that trip over it. Both
+outcomes travel back in the result, because a silent failure to put it back would be the
+same bug wearing a fix.
+"""
 
 
 @pytest.fixture(autouse=True)
@@ -110,6 +153,48 @@ def _requires_resolve() -> None:
     result = get_status()
     if not result["ok"]:
         pytest.skip(f"Resolve unreachable: {result['error']['cause']}")
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _a_project_without_the_last_runs_leftovers() -> Iterator[None]:
+    """Delete the timelines the previous run built, and leave the director's cut open.
+
+    Every build here materialises a new ``resolve-mcp-smoke`` version and every OTIO import
+    materialises another named cut, so a project the suite has run against a few times holds
+    dozens of them — and the run after that reads the pool through them. That is how #34's
+    scene scan ended up picking a timeline, and how the locked-track probe met a name it had
+    already created.
+
+    Both halves are housekeeping, and neither may sink the run: a failure here would error
+    *every* test at setup and bury the one message that says why — which is exactly what a
+    dying Resolve did to the first run of this fixture (#135). ``_requires_resolve`` is what
+    reports an unreachable Resolve, per test, with a cause.
+    """
+    if not get_status()["ok"]:
+        yield
+        return
+    connection = get_connection()
+    project = was_on = None
+    try:
+        # Inside the guard, not before it: a Resolve that is up with no project open raises
+        # NoProjectOpenError here, and that is the shape this fixture exists not to have.
+        project = current_project(connection, "No project is open, so there is nothing to sweep.")
+        was_on = project.GetCurrentTimeline()
+        swept = sweep_suite_timelines(media_pool(connection), project)
+    except Exception as unswept:  # noqa: BLE001 - see the docstring: never sink the run
+        print(f"\nnothing swept: {unswept}")
+    else:
+        if swept.deleted or swept.kept:
+            print(f"\nswept {len(swept.deleted)} leftover timeline(s); kept {swept.kept}")
+
+    yield
+
+    if project is None:
+        return
+    try:
+        restore_current(project, was_on)
+    except Exception as stuck:  # noqa: BLE001 - a departed Resolve must not fail the run
+        print(f"\nleft Resolve where the last test put it: {stuck}")
 
 
 def test_attaches_to_resolve_and_reports_a_version() -> None:
@@ -320,17 +405,23 @@ def _smoke_name(what: str) -> str:
     return f"resolve-mcp smoke {what} {datetime.now().strftime('%H%M%S')}"
 
 
-def test_an_otio_round_trip_preserves_the_timeline_structure(tmp_path: Path) -> None:
+def test_an_otio_round_trip_preserves_the_timeline_structure(
+    tmp_path: Path, a_known_cut: KnownCut
+) -> None:
     """AC: export to OTIO, import it back, and the cut is the same cut.
 
     The fakes prove the naming and the error shaping; only Resolve proves that what it
     wrote is what it reads back, which is the whole basis of the transition route.
-    """
-    if get_status()["context"]["timeline"] is None:
-        pytest.skip("No timeline open in Resolve")
-    before = _shape()
 
-    exported = export_timeline(path=str(tmp_path / "round-trip.otio"))
+    Read on a cut this suite built, so the comparison is three shots rather than however
+    many are in whatever was open — ``_shape`` refuses a timeline too long to read in one
+    go, and a concert-length edit is exactly that (#135).
+    """
+    before = _shape(a_known_cut.name)
+
+    exported = export_timeline(
+        timeline=a_known_cut.name, path=str(tmp_path / "round-trip.otio")
+    )
     assert exported["ok"] is True, exported.get("error")
     assert exported["export_type"] == "EXPORT_OTIO"
 
@@ -343,7 +434,9 @@ def test_an_otio_round_trip_preserves_the_timeline_structure(tmp_path: Path) -> 
         assert after["tracks"].get(track) == shots, f"{track} came back differently"
 
 
-def test_a_hand_injected_dissolve_imports_as_a_transition(tmp_path: Path) -> None:
+def test_a_hand_injected_dissolve_imports_as_a_transition(
+    tmp_path: Path, a_known_cut: KnownCut
+) -> None:
     """AC: a dissolve edited into an exported OTIO comes back as a real transition.
 
     Transitions are the wall this route exists to get around, and the scripting API has no
@@ -351,11 +444,11 @@ def test_a_hand_injected_dissolve_imports_as_a_transition(tmp_path: Path) -> Non
     and rebuilt the cut from it. **The dissolve and the fade to black themselves are
     confirmed by eye in the Resolve GUI on the imported timeline**, and the result goes on
     the ticket; a run that stops at green here has verified half the AC.
-    """
-    if get_status()["context"]["timeline"] is None:
-        pytest.skip("No timeline open in Resolve")
 
-    exported = export_timeline(path=str(tmp_path / "injected.otio"))
+    The cut it injects into is the suite's own three-shot build (#135): two cuts, both
+    between shots long enough to carry six frames of dissolve, every run.
+    """
+    exported = export_timeline(timeline=a_known_cut.name, path=str(tmp_path / "injected.otio"))
     assert exported["ok"] is True, exported.get("error")
     document = json.loads(Path(exported["path"]).read_text(encoding="utf-8"))
 
@@ -492,6 +585,51 @@ def a_smoke_cut(
     path = tmp_path / name
     path.write_text(json.dumps(doc), encoding="utf-8")
     return str(path)
+
+
+class KnownCut(NamedTuple):
+    """The cut :func:`a_known_cut` built, and whether a mix went under it."""
+
+    name: str
+    audio: bool
+
+
+@pytest.fixture
+def a_known_cut(tmp_path: Path) -> Iterator[KnownCut]:
+    """A short cut of the suite's own making, current for the length of one test.
+
+    Three tests here work on *the current timeline* — the OTIO round trip, the dissolve
+    import and the audio export — and for a long time that meant whatever the test before
+    them left open. Suite ordering decided it, so the audio export was measuring an empty
+    locked probe timeline and the round trip was comparing a concert-length edit shot by
+    shot (#119 §B). None of them is about that timeline; each is about what Resolve does
+    with one, so the suite builds one and says which.
+
+    Master audio is laid under it when the source clip has any, because the export test
+    needs a mix to render — ``validate_cut`` answers that, and a pool of silent clips
+    leaves the picture-only cut, which still serves the other two.
+
+    The director's timeline goes back afterwards: the later render tests need a long one,
+    and somebody may be sitting in front of the GUI.
+    """
+    if get_status()["context"]["project"] is None:
+        pytest.skip("No project open in Resolve")
+    source = a_source_clip()
+    durations = (48, 24, 36)
+    path = a_smoke_cut(tmp_path, source, durations, audio_in=source["start"], name="known.cut.json")
+    with_audio = bool(validate_cut(path)["valid"])
+    if not with_audio:
+        path = a_smoke_cut(tmp_path, source, durations, name="known.cut.json")
+        checked = validate_cut(path)
+        assert checked["valid"] is True, checked["errors"]
+
+    built = build_timeline(path)
+    assert built["ok"] is True, built.get("error")
+    name = str(built["timeline"]["name"])
+
+    project = current_project(get_connection())
+    with current_timeline(project, find_timeline(project, name)):
+        yield KnownCut(name=name, audio=with_audio)
 
 
 def test_a_real_build_places_every_shot_exactly_where_the_cut_puts_it(tmp_path: Path) -> None:
@@ -724,10 +862,14 @@ def test_a_still_lands_at_the_duration_the_cut_asked_for(tmp_path: Path) -> None
     if get_status()["context"]["project"] is None:
         pytest.skip("No project open in Resolve")
     listing = list_media()
+    # Resolve's own type name, not the suffix: a PNG *sequence* is a multi-frame clip with
+    # a ``.png`` path, and asking one for 90 frames is not the one-time Out write this test
+    # is about — it is a request for frames the clip does not have (#135).
     stills = [
         entry
         for entry in listing["clips"]
-        if Path(str(entry.get("file_path") or "")).suffix.lower() in {".png", ".jpg", ".jpeg"}
+        if entry["type"] == "Still"
+        and Path(str(entry.get("file_path") or "")).suffix.lower() in {".png", ".jpg", ".jpeg"}
     ]
     if not stills:
         pytest.skip("No still image in the media pool")
@@ -736,7 +878,10 @@ def test_a_still_lands_at_the_duration_the_cut_asked_for(tmp_path: Path) -> None
     doc = {
         "schema": 1,
         "timeline": {"name": SMOKE_CUT, "fps": fps},
-        "sources": {"still": {"clip": still["name"]}},
+        # Verbatim, not ``or None``: a still that also sits in the pool root is two clips
+        # of one name, a source naming no bin cannot say which, and "" is the root itself
+        # — which is where this project's duplicates live (#122).
+        "sources": {"still": {"clip": still["name"], "bin": still["bin"]}},
         "segments": [{"id": "s000", "source": "still", "in": 0, "out": 90}],
     }
     path = tmp_path / "still.cut.json"
@@ -772,8 +917,19 @@ def test_the_locked_track_footgun_is_still_real(tmp_path: Path) -> None:
     assert probe["ok"] is True, probe.get("error")
     # run_python renders its value with repr, so the probe's dict comes back as source text.
     reported = ast.literal_eval(probe["result"])
+    # Asserted before the skip below: the probe moves Resolve and creates a timeline
+    # whether or not it finds a clip to append, and the tests after it read the current
+    # timeline — so where it left the GUI is part of what it has to get right, on every
+    # path out of here.
+    assert reported["put_back"] is True, "the probe left Resolve on its own empty timeline"
+    if reported["was_open"]:
+        assert reported["swept"] is True, "the probe left its empty timeline in the project"
+        assert list_timelines()["current"] != "resolve-mcp-lock-probe"
+    # A session that had no timeline open has nowhere to move to, and Resolve will not
+    # delete the cut it is sitting on — so the probe's timeline stays, and the next run's
+    # sweep is what takes it. Failing here instead would report a leak as a broken probe.
     if not reported["found"]:
-        pytest.skip("The chosen clip is not in the root folder, so the probe could not run")
+        pytest.skip("The chosen clip is nowhere in the media pool, so the probe could not run")
     assert reported["returned_truthy"] is True
     assert reported["items_on_track"] == 0
 
@@ -795,16 +951,21 @@ def test_an_invalid_cut_creates_no_timeline_on_a_real_project(tmp_path: Path) ->
     assert {entry["name"] for entry in list_timelines()["timelines"]} == before
 
 
-def test_the_render_queue_exports_the_real_timeline_mix() -> None:
+def test_the_render_queue_exports_the_real_timeline_mix(a_known_cut: KnownCut) -> None:
     """The AC no seam can check: that these render-settings keys are the ones Resolve takes.
 
     The fakes prove the job machinery, the caching and the failure shaping. Whether
     ``SetRenderSettings`` accepts ``ExportVideo``/``AudioBitDepth``/``AudioSampleRate`` under
     those names, and whether an audio-only wav/lpcm job renders at all, is only answerable
-    here. Slow: this renders the open timeline's audio in full.
+    here.
+
+    The queue renders the *current* timeline, so what is current is the whole input: this
+    used to render whatever the test before it left open, which after the locked-track probe
+    was an empty timeline with no mix on it at all (#119 §B). It now renders a cut this
+    suite built, with a master mix laid under it — four seconds rather than a whole concert.
     """
-    if get_status()["context"]["timeline"] is None:
-        pytest.skip("No timeline open in Resolve")
+    if not a_known_cut.audio:
+        pytest.skip("No pool clip this suite can lay a master mix from, so there is no mix")
 
     started = acquire_timeline_audio(get_connection())
     record = wait_for(started["job_id"], timeout=1800.0)
@@ -918,31 +1079,70 @@ def test_a_real_frame_grab_lands_on_the_moment_resolve_numbers_it_at() -> None:
     assert again["cached"] is True, "unchanged media must be a cache hit"
 
 
-def test_a_real_scene_scan_reports_cuts_on_the_clips_own_clock() -> None:
-    """The other half of the clock check: pts_time counts from the file, cuts from the clip.
+def _sweep_scan_bin(pool: Any) -> None:
+    """Delete the scan bin a crashed run left behind, so the import lands one clip not two."""
+    try:
+        located = find_bin(pool, SCAN_BIN)
+    except BinNotFoundError:
+        return
+    pool.DeleteFolders([located.folder])
 
-    Slow — this decodes a whole clip, so it takes the shortest one in the pool. What it is
-    for is the mapping the fakes replay rather than produce: that ffmpeg's reported times
-    become frame numbers inside the bounds ``inspect_clip`` reports for the same clip.
 
-    The shortest pool clip is usually a continuous take (or a still), and a clip with no
-    cuts passes the mapping loop vacuously — the half of #34 this test exists for goes
-    unchecked. ``RESOLVE_MCP_SCENE_SCAN_CLIP`` names a pool clip known to contain hard
-    cuts; when set, that clip is scanned instead and the scan must find at least one cut.
+@pytest.fixture
+def a_clip_with_hard_cuts(tmp_path: Path) -> Iterator[dict[str, Any]]:
+    """A pool clip the scan is guaranteed to find cuts in, built here unless one is named.
+
+    This used to be "the shortest clip in the pool", which is how the scan ended up on a
+    27-frame PNG sequence with nothing to detect — a clip with no cuts passes the mapping
+    loop vacuously, so the half of #34 the test exists for went unchecked every run (#119
+    §B). A shot log is not something a project owes the suite, and the live box's pool
+    holds only raw continuous angles, so the suite generates what it needs: four solid
+    colours a second apart, which is three cuts no detector can miss.
+
+    ``RESOLVE_MCP_SCENE_SCAN_CLIP`` still names a real pool clip to scan instead, which is
+    the stronger check where a project has a flattened render to point it at.
     """
     listing = list_media()
     if not listing["ok"]:
         pytest.skip("No project open in Resolve")
-    footage = _decodable(listing["clips"])
-    if not footage:
-        pytest.skip("No online clip with a frame rate in the media pool")
-    named = os.environ.get(SCENE_SCAN_CLIP_ENV, "").strip()
-    if named:
-        matches = [one for one in footage if one["name"] == named]
-        assert matches, f"{SCENE_SCAN_CLIP_ENV}={named!r} names no decodable pool clip"
-        chosen = matches[0]
-    else:
-        chosen = min(footage, key=lambda one: one["frames"])
+    named = named_scan_clip(_decodable(listing["clips"]), os.environ.get(SCENE_SCAN_CLIP_ENV, ""))
+    if named is not None:
+        yield named
+        return
+
+    try:
+        generated = write_hard_cut_clip(tmp_path / "resolve-mcp-hard-cuts.mp4")
+    except FfmpegUnavailableError as unavailable:
+        pytest.skip(f"No ffmpeg to build a scan clip with: {unavailable.cause}")
+
+    pool = media_pool(get_connection())
+    _sweep_scan_bin(pool)
+    target = ensure_bin(pool, SCAN_BIN)
+    try:
+        assert import_into(pool, [str(generated)], target), (
+            f"Resolve imported nothing from {generated}"
+        )
+        entries = _decodable(list_media(bin=SCAN_BIN)["clips"])
+        assert entries, "the generated clip did not read back as decodable footage"
+        yield entries[0]
+    finally:
+        # The bin goes, and the clip with it: the file itself lives in tmp_path and is
+        # about to vanish, and a pool entry pointing at a deleted file reads as offline
+        # media in the GUI for whoever opens the project next.
+        pool.DeleteFolders([target.folder])
+
+
+def test_a_real_scene_scan_reports_cuts_on_the_clips_own_clock(
+    a_clip_with_hard_cuts: dict[str, Any],
+) -> None:
+    """The other half of the clock check: pts_time counts from the file, cuts from the clip.
+
+    What it is for is the mapping the fakes replay rather than produce: that ffmpeg's
+    reported times become frame numbers inside the bounds ``inspect_clip`` reports for the
+    same clip. That needs a clip with cuts in it, which is what the fixture guarantees — so
+    finding none is now a failure rather than a skip.
+    """
+    chosen = a_clip_with_hard_cuts
     bounds = inspect_clip(chosen["name"], bin=chosen["bin"])["bounds"]["media"]
 
     started = detect_scene_cuts(chosen["name"], bin=chosen["bin"])
@@ -952,18 +1152,13 @@ def test_a_real_scene_scan_reports_cuts_on_the_clips_own_clock() -> None:
     assert record.state == "completed", record.error
     assert record.result is not None
     assert Path(record.result["path"]).exists()
-    if named:
-        assert record.result["first_cuts"], (
-            f"{named!r} was named as a clip with hard cuts, but the scan found none — "
-            "the clip-clock mapping went unexercised"
-        )
+    assert record.result["first_cuts"], (
+        f"{chosen['name']!r} was chosen for its hard cuts and the scan found none — "
+        "the clip-clock mapping went unexercised"
+    )
     for cut in record.result["first_cuts"]:
         assert bounds["in"]["frames"] < cut["frames"] < bounds["out"]["frames"]
-    if not record.result["first_cuts"]:
-        pytest.skip(
-            f"scan completed but {chosen['name']!r} has no cuts — the mapping went "
-            f"unexercised; set {SCENE_SCAN_CLIP_ENV} to a pool clip with hard cuts"
-        )
+
 
 def test_the_preset_list_is_the_one_in_the_deliver_page() -> None:
     """#33: whether ``GetRenderPresetList`` answers at all, and with what spelling.

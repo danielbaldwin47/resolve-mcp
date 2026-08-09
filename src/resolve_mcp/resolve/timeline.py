@@ -95,7 +95,7 @@ def open_project(connection: ResolveConnection) -> Project:
     return current_project(connection, "No project is open, so there are no timelines to read.")
 
 
-def _timelines(project: Project) -> list[Timeline]:
+def timelines_of(project: Project) -> list[Timeline]:
     """Every timeline the project holds, in Resolve's own order.
 
     ``GetTimelineByIndex`` is one-based and hands back ``None`` for an index it cannot
@@ -130,7 +130,7 @@ def find_timeline(project: Project, name: str | None) -> Timeline:
                 cause="No timeline is open in the project, and none was named.",
             )
         return current
-    held = _timelines(project)
+    held = timelines_of(project)
     for timeline in held:
         if name_of(timeline) == name:
             return timeline
@@ -139,7 +139,7 @@ def find_timeline(project: Project, name: str | None) -> Timeline:
 
 def timeline_names(project: Project) -> list[str]:
     """Every timeline name the project holds — what a new name must not collide with."""
-    return [name_of(timeline) for timeline in _timelines(project)]
+    return [name_of(timeline) for timeline in timelines_of(project)]
 
 
 def current_name(project: Project) -> str | None:
@@ -398,7 +398,8 @@ def list_timelines(
     reader = Reader(connection)
     current = current_name(project)
 
-    timelines = [summarise(reader, timeline, project, current) for timeline in _timelines(project)]
+    held = timelines_of(project)
+    timelines = [summarise(reader, timeline, project, current) for timeline in held]
 
     cap = max(int(limit), 0)
     truncated = len(timelines) > cap

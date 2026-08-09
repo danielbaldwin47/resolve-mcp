@@ -187,7 +187,11 @@ hermetic `Config` around every test). Other helpers: `tests/cutfile.py`
 (miniature concert cut file + media pool), `tests/roughcut.py` (the P4
 substrate: one talking head said twice, its transcript, and the b-roll that
 covers the join), `tests/otio.py` (hand-edited OTIO with a dissolve),
-`tests/text_plus_probe.py` (Text+ probe fixtures).
+`tests/text_plus_probe.py` (Text+ probe fixtures), `tests/live_state.py` (the
+state the live tier builds for itself: `sweep_suite_timelines()` clears the
+previous run's leftovers, `restore_current()` leaves the director's cut open,
+`write_hard_cut_clip()` generates the clip the scene scan needs — decisions
+covered by `test_live_state.py` in the fake tier).
 
 Test files pair 1:1 with the module they cover (`test_cut_validate.py` ↔
 `cut/validate.py`, `test_timeline_tools.py` ↔ `tools/timeline.py` +
@@ -199,7 +203,14 @@ covers no single module, walking the P4 pillar across `cut`, `build`, `takes`
 and `virtual` in one pass because the joins are what a per-module test cannot
 see. Live tier: `test_live_smoke.py` (module-level
 `pytest.mark.live`) and two `@pytest.mark.live` tests in
-`test_live_analysis.py`; everything else is fake-tier.
+`test_live_analysis.py`; everything else is fake-tier. The live tier assumes no
+project state it can build itself (#135): a session-scoped sweep clears the last
+run's timelines, `a_known_cut` builds and makes current the short cut the export
+and round-trip tests read, and `a_clip_with_hard_cuts` generates the scan clip
+unless `RESOLVE_MCP_SCENE_SCAN_CLIP` names a real one. That variable is
+**unset on the live box**: its pool was checked in #135 and holds no flattened
+render, only raw continuous angles — so the generated clip is the default there,
+and the variable is for a project that does have an edit to scan.
 
 ## Docs
 
