@@ -1,4 +1,4 @@
-"""Materialising a cut file: sequential V1 and anchored V2, over one master-audio clip.
+"""Materialising a cut file: a sequential V1 and anchored overlays, over one master mix.
 
 The one write primitive Resolve gives us is append-with-exact-placement, and the #18 spike
 found it full of silent failures. Everything in this file exists to make one guarantee:
@@ -8,11 +8,16 @@ found it full of silent failures. Everything in this file exists to make one gua
   run here first, over the same pool reading, and a single error aborts before a timeline
   is created — a timeline missing part of its own cut is the half-built outcome the
   pre-flight exists to prevent.
-* **Overlays are placed, never positioned.** An overlay states an anchor segment and an
-  offset, so its V2 record frame is computed from the same layout E9 validated against
-  (``overlay_positions``). Re-timing an earlier segment and rebuilding therefore leaves
-  every overlay over the content it was anchored to, which is the whole point of the
-  anchor: an absolute frame would have to be re-authored on every tightening pass.
+* **Overlays are placed, never positioned.** An overlay states an anchor entry and an
+  offset, so its record frame is computed from the same layout E9 validated against
+  (``overlay_positions``); the track it lands on is its own ``track``, V2 by default.
+  Re-timing an earlier segment and rebuilding therefore leaves every overlay over the
+  content it was anchored to, which is the whole point of the anchor: an absolute frame
+  would have to be re-authored on every tightening pass.
+* **A gap is an append that does not happen.** Black on V1 takes record time and places
+  nothing, so it appears here only as the reason the next shot's ``recordFrame`` jumps —
+  which is precisely the unclamped-``recordFrame`` case below, and why the read-back
+  matters more for a cut with gaps than for one without.
 * **A new version every time.** The name is ``<base> v<N+1>`` scanned off the project's
   existing names, so no build ever writes into a timeline someone has already reviewed.
 * **Resolve's answer is never the evidence.** An append onto a locked track returns
@@ -32,6 +37,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Final
 
+from ..cut.validate import gaps as cut_gaps
 from ..cut.validate import (
     is_gap,
     locked_track_finding,
@@ -186,7 +192,11 @@ def build_timeline(
         "timeline": timeline_read.summarise(timeline_read.Reader(connection), built, project, name),
         "placed": {
             "segments": _count(shots, V1),
-            "gaps": sum(1 for entry in doc["segments"] if is_gap(entry)),
+            # Read off the document rather than the track, because black is the one thing
+            # here that has no item to read back. What proves the hole is real is the
+            # shots on either side of it: ``_verify`` has already confirmed they landed on
+            # the record frames the gap put them at.
+            "gaps": len(cut_gaps(doc)),
             "overlays": _overlay_count(shots),
             "audio": bool(_count(shots, A1)),
             "selectors": made,

@@ -1,4 +1,4 @@
-"""The cut-file validation rules: 11 hard errors, 2 warnings, one implementation.
+"""The cut-file validation rules: 11 hard errors, 3 warnings, one implementation.
 
 The list is identical in the ``validate_cut`` dry run and in ``build_timeline``'s
 pre-flight, so it lives here once and both call it. A failing file must abort before
@@ -8,7 +8,8 @@ Two passes, because they need different things:
 
 * :func:`validate_structure` reads the document alone — no project, no connection. It
   answers everything about shape, ids, ranges, takes and overlay anchoring (E1-E4 for
-  undeclared aliases, E7 for an undeclared audio alias, E8-E10, W1-W2).
+  undeclared aliases, E7 for an undeclared audio alias, E8-E10, W1-W2, W8). W3-W7 are
+  ``virtual_transcript``'s over this same document — one file, one numbering.
 * :func:`validate_project` takes clip facts already gathered from the media pool and
   answers everything about the media behind the aliases (E4-E7). It is a pure function
   over those facts, so every rule in this file is unit-testable without Resolve.
@@ -64,7 +65,7 @@ RULE_DESCRIPTIONS: Final[dict[str, str]] = {
     "E11": "build-time: target tracks unlocked; connection and creation failures",
     "W1": "segment or gap shorter than min_segment_frames (flash-frame guard)",
     "W2": "V1 total does not match the master-audio span",
-    "W8": "the cut ends on black that no overlay covers, so nothing materialises there",
+    "W8": "the cut ends on black that nothing runs under, so it materialises as nothing",
 }
 
 _FIX_HINTS: Final[dict[str, str]] = {
@@ -83,8 +84,8 @@ _FIX_HINTS: Final[dict[str, str]] = {
     "E11": "Unlock the track in Resolve's timeline header and build again.",
     "W1": "Lengthen the segment or gap, or keep it if the flash is deliberate.",
     "W2": "Expected when the cut opens cold or runs past the mix; otherwise check the ends.",
-    "W8": "Anchor an overlay over the trailing gap to make the black real, or drop the "
-    "gap if the cut is meant to end on picture.",
+    "W8": "Anchor an overlay over the trailing gap, or let the master mix run past the "
+    "last picture — either makes the black real. Otherwise drop the gap.",
 }
 
 
@@ -422,17 +423,20 @@ def _entries(doc: dict[str, Any]) -> list[dict[str, Any]]:
     return entries
 
 
-def _segments(doc: dict[str, Any]) -> list[dict[str, Any]]:
-    """Only the entries that place a clip.
+def shots(doc: dict[str, Any]) -> list[dict[str, Any]]:
+    """Only the entries that place a clip — *not* the same list as ``doc["segments"]``.
 
     Every rule about *media* — aliases, bounds, rates, takes — reads this rather than the
     raw array, so a gap is skipped by all of them at once instead of by a guard each of
-    them could be written without.
+    them could be written without. Public alongside :func:`gaps` because the build and the
+    summaries need the same two counts, and counting them by hand at each call site is how
+    one of them ends up disagreeing about what black is.
     """
     return [entry for entry in _entries(doc) if not is_gap(entry)]
 
 
-def _gaps(doc: dict[str, Any]) -> list[dict[str, Any]]:
+def gaps(doc: dict[str, Any]) -> list[dict[str, Any]]:
+    """Only the entries that are black."""
     return [entry for entry in _entries(doc) if is_gap(entry)]
 
 
@@ -456,7 +460,7 @@ def _id_errors(doc: dict[str, Any]) -> list[Finding]:
 def _range_errors(doc: dict[str, Any]) -> list[Finding]:
     """E3: half-open ranges need in < out, or they name no frames at all."""
     findings: list[Finding] = []
-    for segment in _segments(doc):
+    for segment in shots(doc):
         findings += _range_error(segment, str(segment["id"]), "Segment")
         for index, alternate in enumerate(segment.get("alternates") or []):
             findings += _range_error(
@@ -464,7 +468,7 @@ def _range_errors(doc: dict[str, Any]) -> list[Finding]:
             )
     for overlay in _overlays(doc):
         findings += _range_error(overlay, str(overlay["id"]), "Overlay")
-    for gap in _gaps(doc):
+    for gap in gaps(doc):
         findings += _gap_length_error(gap)
     audio = doc.get("audio")
     if isinstance(audio, dict):
@@ -530,7 +534,7 @@ def _declared_alias_errors(doc: dict[str, Any]) -> list[Finding]:
 
 def _alias_uses(doc: dict[str, Any]) -> Iterator[tuple[str, str]]:
     """Every (alias, owning id) the cut references, audio block excluded."""
-    for segment in _segments(doc):
+    for segment in shots(doc):
         yield str(segment["source"]), str(segment["id"])
         for alternate in segment.get("alternates") or []:
             yield str(alternate["source"]), str(segment["id"])
@@ -545,7 +549,7 @@ def _listed(names: Sequence[str]) -> str:
 def _alternate_duration_errors(doc: dict[str, Any]) -> list[Finding]:
     """E8: a take selector cannot change length, so an alternate cannot either."""
     findings: list[Finding] = []
-    for segment in _segments(doc):
+    for segment in shots(doc):
         main = duration_frames(segment["in"], segment["out"])
         for index, alternate in enumerate(segment.get("alternates") or []):
             alternate_duration = duration_frames(alternate["in"], alternate["out"])
@@ -747,12 +751,14 @@ def _audio_span_warnings(doc: dict[str, Any]) -> list[Finding]:
 
 
 def _trailing_black_warnings(doc: dict[str, Any]) -> list[Finding]:
-    """W8: black at the end of a cut is real only if something is laid over it.
+    """W8: black at the end of a cut is real only if something else runs under it.
 
-    A gap places nothing, so a trailing one is record time with no clip anywhere on it —
-    and a timeline ends at its last item. Ending on black therefore takes an overlay over
-    the gap, which is exactly how #46's ending inserts worked. Without one the built
-    timeline simply stops at the last picture and the device silently is not there.
+    A gap places nothing, so a trailing one is record time with no clip on V1 — and a
+    timeline ends at its last item, on any track. Ending on black therefore takes
+    something that outlives the last picture: an overlay over the gap, as #46's ending
+    inserts were, or the master mix still playing under it, which is the ordinary concert
+    shape. With neither, the built timeline simply stops at the last picture and the
+    device silently is not there.
 
     A warning rather than an error: the tail is the author's call, and a cut that ends a
     little long on purpose should not be blocked over it.
@@ -761,21 +767,28 @@ def _trailing_black_warnings(doc: dict[str, Any]) -> list[Finding]:
     if tail is None:
         return []
     at, total = tail
-    covered = [
-        (start, length)
-        for start, length in overlay_positions(doc).values()
-        if start < total and start + length > at
-    ]
-    if covered:
+    if any(start + length > at for start, length in _appended_spans(doc)):
         return []
     return [
         _finding(
             "W8",
             None,
-            f"The cut ends with {total - at} frames of black that no overlay covers; the "
+            f"The cut ends with {total - at} frames of black that nothing runs under; the "
             f"built timeline will end at frame {at}, on the last picture.",
         )
     ]
+
+
+def _appended_spans(doc: dict[str, Any]) -> Iterator[tuple[int, int]]:
+    """Every ``(start, duration)`` the build places off V1, in the cut's own frames.
+
+    Only the tracks that can outlive the picture: overlays above the cut, and the master
+    mix, which starts at the cut's first frame and runs its own declared length.
+    """
+    yield from overlay_positions(doc).values()
+    audio = doc.get("audio")
+    if isinstance(audio, dict):
+        yield (0, duration_frames(audio["in"], audio["out"]))
 
 
 def _trailing_black(doc: dict[str, Any]) -> tuple[int, int] | None:
@@ -863,7 +876,7 @@ def resolve_aliases(
 def _bounds_errors(doc: dict[str, Any], resolved: dict[str, ClipFacts]) -> list[Finding]:
     """E5: every range has to name frames the media actually has."""
     findings: list[Finding] = []
-    for segment in _segments(doc):
+    for segment in shots(doc):
         id = str(segment["id"])
         findings += _bounds_error(segment, resolved, id, f"Segment {id!r}")
         for index, alternate in enumerate(segment.get("alternates") or []):
@@ -968,6 +981,7 @@ __all__ = [
     "RULE_DESCRIPTIONS",
     "ClipFacts",
     "entry_duration",
+    "gaps",
     "is_gap",
     "locked_track_finding",
     "overlay_positions",
@@ -976,6 +990,7 @@ __all__ = [
     "placements",
     "positions",
     "resolve_aliases",
+    "shots",
     "total_frames",
     "validate_project",
     "validate_structure",

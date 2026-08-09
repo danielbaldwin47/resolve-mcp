@@ -156,8 +156,9 @@ Then work the warnings. There are no errors; this refuses nothing:
 | W7 | an uncovered seam between two shots of one source | a jump cut with no b-roll over it |
 
 The numbering starts at W3 because `validate_cut` already owns W1 and W2 **for the same cut
-file**. One document, one numbering — two W2s meaning different things would be a trap in a
-session holding both results.
+file** (and W8, added after these, for a cut that ends on uncovered black). One document,
+one numbering — two W2s meaning different things would be a trap in a session holding both
+results.
 
 W4 is the one to take seriously: a cut file that keeps a false start in front of the good
 take is structurally perfect — it validates, it builds, it plays — and only reading the

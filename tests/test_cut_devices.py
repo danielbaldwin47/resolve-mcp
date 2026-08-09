@@ -102,7 +102,6 @@ def test_a_gap_needs_no_source_alias() -> None:
 
 
 def test_a_gap_may_carry_a_note() -> None:
-    assert validate_structure(with_gap()) == []
     doc = with_gap()
     doc["segments"][1]["note"] = "false ending"
 
@@ -232,8 +231,26 @@ def test_trailing_black_under_an_overlay_is_not_warned_about() -> None:
     assert validate_structure(doc) == []
 
 
-def test_a_cut_that_ends_on_picture_is_not_warned_about() -> None:
-    assert validate_structure(with_gap()) == []
+def test_trailing_black_under_the_master_mix_is_not_warned_about() -> None:
+    """The ordinary concert shape: the music plays on over the black, so the black is real.
+
+    A timeline ends at its last item on *any* track, and the mix is appended to A1 for its
+    own declared length — so a cut whose master audio runs past the last picture ends on
+    black whether or not anything is on V2.
+    """
+    doc = with_gap(at=2, audio={"source": "master_mix", "in": 0, "out": 458})
+    doc["sources"]["master_mix"] = {"clip": "sunset-master.wav"}
+
+    assert validate_structure(doc) == []
+
+
+def test_a_mix_that_stops_at_the_last_picture_does_not_make_the_black_real() -> None:
+    """The warning turns on what outlives the picture, not on whether audio exists at all."""
+    doc = with_gap(at=2, audio={"source": "master_mix", "in": 0, "out": 400})
+    doc["sources"]["master_mix"] = {"clip": "sunset-master.wav"}
+
+    # W2 too: the 400-frame mix no longer matches the 458-frame V1 span.
+    assert rules(validate_structure(doc)) == ["W2", "W8"]
 
 
 # --- overlays above V2 ------------------------------------------------------------------------
