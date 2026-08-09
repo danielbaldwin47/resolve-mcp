@@ -11,6 +11,7 @@ CLAUDE.md draws.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -22,8 +23,10 @@ from .fakes import FakeMediaPool, FakeProject, FakeTimeline
 from .live_state import (
     HARD_CUT_COLOURS,
     ClipGenerationError,
+    NamedClipMissingError,
     hard_cut_argv,
     is_suite_timeline,
+    named_scan_clip,
     restore_current,
     sweep_suite_timelines,
     write_hard_cut_clip,
@@ -266,6 +269,38 @@ def test_a_refused_generation_says_what_ffmpeg_said_about_it() -> None:
         write_hard_cut_clip(Path("out.mp4"), runner=runner, ffmpeg="ffmpeg")
 
     assert "Unknown filter 'concat'" in str(raised.value)
+
+
+# --- which clip the scan is pointed at ------------------------------------------------------
+
+
+def a_pool() -> list[dict[str, Any]]:
+    return [
+        {"name": "A016C002_260618Y6.MXF", "bin": "Monkfish/FX6"},
+        {"name": "Monkfish Flattened.mov", "bin": "Monkfish/Renders"},
+    ]
+
+
+@pytest.mark.parametrize("named", ["", "   "])
+def test_an_unset_variable_means_build_a_clip_rather_than_scan_anything(named: str) -> None:
+    """The old rule was "scan the shortest clip in the pool", which is how the scan ended
+    up on a PNG sequence with nothing to detect. Nothing named means nothing chosen."""
+    assert named_scan_clip(a_pool(), named) is None
+
+
+def test_a_named_clip_is_the_one_scanned() -> None:
+    chosen = named_scan_clip(a_pool(), "Monkfish Flattened.mov")
+
+    assert chosen is not None
+    assert chosen["bin"] == "Monkfish/Renders"
+
+
+def test_a_variable_naming_a_clip_the_pool_cannot_offer_stops_the_run() -> None:
+    """Generating a clip instead would report a pass for a scan nobody asked for."""
+    with pytest.raises(NamedClipMissingError) as raised:
+        named_scan_clip(a_pool(), "Monkfish Flattened.mp4")
+
+    assert "Monkfish Flattened.mp4" in str(raised.value)
 
 
 def test_a_missing_ffmpeg_is_the_error_that_names_the_binary() -> None:

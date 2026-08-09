@@ -326,14 +326,18 @@ class FakeMediaPool:
         off it first would leave it behind and never hear why.
         """
         self._check("DeleteTimelines")
-        self.deleted_timelines.extend(timelines)
         if any(timeline in self.refuse_deleting for timeline in timelines):
             return False
         project = self._reached_project()
+        if project is not None and any(
+            timeline is project.GetCurrentTimeline() for timeline in timelines
+        ):
+            return False
+        # Recorded only once the refusals are past: a cut Resolve would not delete has not
+        # been deleted, and a fake that says otherwise lets a caller assert its own bug.
+        self.deleted_timelines.extend(timelines)
         if project is None:
             return True
-        if any(timeline is project.GetCurrentTimeline() for timeline in timelines):
-            return False
         for timeline in timelines:
             project.remove_timeline(timeline)
         return True

@@ -123,6 +123,27 @@ class ClipGenerationError(RuntimeError):
     """ffmpeg refused to generate the scan clip. Scaffolding, so not a server error."""
 
 
+class NamedClipMissingError(AssertionError):
+    """The env var names a clip the pool does not hold, or cannot decode."""
+
+
+def named_scan_clip(footage: Sequence[dict[str, Any]], named: str) -> dict[str, Any] | None:
+    """The pool entry the scan was pointed at, or ``None`` when it was pointed at nothing.
+
+    An empty or unset variable means "build one" rather than "scan anything", which is the
+    whole difference between this and the old "shortest clip in the pool" rule. A variable
+    that names a clip the pool cannot offer is a mistake worth stopping on: silently
+    generating a clip instead would report a pass for a scan the director never asked for.
+    """
+    wanted = named.strip()
+    if not wanted:
+        return None
+    for entry in footage:
+        if entry["name"] == wanted:
+            return entry
+    raise NamedClipMissingError(f"{wanted!r} names no decodable pool clip")
+
+
 HARD_CUT_COLOURS = ("red", "green", "blue", "white")
 """One solid colour per segment, so every boundary is a whole frame changing at once.
 
@@ -135,6 +156,7 @@ HARD_CUT_SIZE = "320x240"
 
 HARD_CUT_FPS = 24
 HARD_CUT_SECONDS = 1
+"""A second a colour: long enough that a cut lands on a frame boundary either way."""
 
 
 def hard_cut_argv(
@@ -143,7 +165,6 @@ def hard_cut_argv(
     colours: Sequence[str] = HARD_CUT_COLOURS,
     fps: int = HARD_CUT_FPS,
     size: str = HARD_CUT_SIZE,
-    seconds: int = HARD_CUT_SECONDS,
 ) -> list[str]:
     """The command that builds a clip whose only content is hard cuts.
 
@@ -152,7 +173,7 @@ def hard_cut_argv(
     """
     argv = [ffmpeg, "-y"]
     for colour in colours:
-        argv += ["-f", "lavfi", "-i", f"color=c={colour}:s={size}:r={fps}:d={seconds}"]
+        argv += ["-f", "lavfi", "-i", f"color=c={colour}:s={size}:r={fps}:d={HARD_CUT_SECONDS}"]
     streams = "".join(f"[{index}:v]" for index in range(len(colours)))
     argv += [
         "-filter_complex",
@@ -173,7 +194,6 @@ def write_hard_cut_clip(
     colours: Sequence[str] = HARD_CUT_COLOURS,
     fps: int = HARD_CUT_FPS,
     size: str = HARD_CUT_SIZE,
-    seconds: int = HARD_CUT_SECONDS,
 ) -> Path:
     """Generate the clip, raising what says why if ffmpeg will not.
 
@@ -182,7 +202,7 @@ def write_hard_cut_clip(
     an exit code.
     """
     binary = ffmpeg if ffmpeg is not None else get_config().ffmpeg
-    argv = hard_cut_argv(binary, destination, colours, fps, size, seconds)
+    argv = hard_cut_argv(binary, destination, colours, fps, size)
     finished = invoke(argv, runner=runner)
     if finished.returncode != 0:
         raise ClipGenerationError(

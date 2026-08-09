@@ -28,7 +28,7 @@ import zlib
 from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import pytest
 
@@ -73,7 +73,12 @@ from resolve_mcp.tools.video import detect_scene_cuts, grab_frames
 
 from . import otio
 from .fakes import write_wav
-from .live_state import restore_current, sweep_suite_timelines, write_hard_cut_clip
+from .live_state import (
+    named_scan_clip,
+    restore_current,
+    sweep_suite_timelines,
+    write_hard_cut_clip,
+)
 from .text_plus_probe import TEMPLATE_ENV, probe_template_append
 
 pytestmark = pytest.mark.live
@@ -122,9 +127,11 @@ result = {{
     "found": bool(clips),
     "returned_truthy": bool(returned),
     "items_on_track": len(timeline.GetItemListInTrack("video", 1) or []),
-    "put_back": bool(was_on is not None and project.SetCurrentTimeline(was_on)),
+    "was_open": was_on is not None,
+    "put_back": bool(was_on is None or project.SetCurrentTimeline(was_on)),
 }}
-result["swept"] = bool(result["put_back"] and pool.DeleteTimelines([timeline]))
+result["swept"] = bool(result["was_open"] and result["put_back"]
+                       and pool.DeleteTimelines([timeline]))
 """
 """Spike #18 (d), reduced to its claim: a locked track reports a placement it did not make.
 
@@ -167,9 +174,12 @@ def _a_project_without_the_last_runs_leftovers() -> Iterator[None]:
         yield
         return
     connection = get_connection()
-    project = current_project(connection, "No project is open, so there is nothing to sweep.")
-    was_on = project.GetCurrentTimeline()
+    project = was_on = None
     try:
+        # Inside the guard, not before it: a Resolve that is up with no project open raises
+        # NoProjectOpenError here, and that is the shape this fixture exists not to have.
+        project = current_project(connection, "No project is open, so there is nothing to sweep.")
+        was_on = project.GetCurrentTimeline()
         swept = sweep_suite_timelines(media_pool(connection), project)
     except Exception as unswept:  # noqa: BLE001 - see the docstring: never sink the run
         print(f"\nnothing swept: {unswept}")
@@ -179,6 +189,8 @@ def _a_project_without_the_last_runs_leftovers() -> Iterator[None]:
 
     yield
 
+    if project is None:
+        return
     try:
         restore_current(project, was_on)
     except Exception as stuck:  # noqa: BLE001 - a departed Resolve must not fail the run
@@ -394,7 +406,7 @@ def _smoke_name(what: str) -> str:
 
 
 def test_an_otio_round_trip_preserves_the_timeline_structure(
-    tmp_path: Path, a_known_cut: dict[str, Any]
+    tmp_path: Path, a_known_cut: KnownCut
 ) -> None:
     """AC: export to OTIO, import it back, and the cut is the same cut.
 
@@ -405,10 +417,10 @@ def test_an_otio_round_trip_preserves_the_timeline_structure(
     many are in whatever was open — ``_shape`` refuses a timeline too long to read in one
     go, and a concert-length edit is exactly that (#135).
     """
-    before = _shape(a_known_cut["name"])
+    before = _shape(a_known_cut.name)
 
     exported = export_timeline(
-        timeline=a_known_cut["name"], path=str(tmp_path / "round-trip.otio")
+        timeline=a_known_cut.name, path=str(tmp_path / "round-trip.otio")
     )
     assert exported["ok"] is True, exported.get("error")
     assert exported["export_type"] == "EXPORT_OTIO"
@@ -423,7 +435,7 @@ def test_an_otio_round_trip_preserves_the_timeline_structure(
 
 
 def test_a_hand_injected_dissolve_imports_as_a_transition(
-    tmp_path: Path, a_known_cut: dict[str, Any]
+    tmp_path: Path, a_known_cut: KnownCut
 ) -> None:
     """AC: a dissolve edited into an exported OTIO comes back as a real transition.
 
@@ -436,7 +448,7 @@ def test_a_hand_injected_dissolve_imports_as_a_transition(
     The cut it injects into is the suite's own three-shot build (#135): two cuts, both
     between shots long enough to carry six frames of dissolve, every run.
     """
-    exported = export_timeline(timeline=a_known_cut["name"], path=str(tmp_path / "injected.otio"))
+    exported = export_timeline(timeline=a_known_cut.name, path=str(tmp_path / "injected.otio"))
     assert exported["ok"] is True, exported.get("error")
     document = json.loads(Path(exported["path"]).read_text(encoding="utf-8"))
 
@@ -575,8 +587,15 @@ def a_smoke_cut(
     return str(path)
 
 
+class KnownCut(NamedTuple):
+    """The cut :func:`a_known_cut` built, and whether a mix went under it."""
+
+    name: str
+    audio: bool
+
+
 @pytest.fixture
-def a_known_cut(tmp_path: Path) -> Iterator[dict[str, Any]]:
+def a_known_cut(tmp_path: Path) -> Iterator[KnownCut]:
     """A short cut of the suite's own making, current for the length of one test.
 
     Three tests here work on *the current timeline* — the OTIO round trip, the dissolve
@@ -610,7 +629,7 @@ def a_known_cut(tmp_path: Path) -> Iterator[dict[str, Any]]:
 
     project = current_project(get_connection())
     with current_timeline(project, find_timeline(project, name)):
-        yield {"name": name, "audio": with_audio, "durations": durations}
+        yield KnownCut(name=name, audio=with_audio)
 
 
 def test_a_real_build_places_every_shot_exactly_where_the_cut_puts_it(tmp_path: Path) -> None:
@@ -856,15 +875,13 @@ def test_a_still_lands_at_the_duration_the_cut_asked_for(tmp_path: Path) -> None
         pytest.skip("No still image in the media pool")
     still = stills[0]
     fps = get_status()["context"]["fps"] or 24.0
-    # Verbatim, the way ``a_smoke_cut`` passes it: a still that also sits in the pool root
-    # is two clips of one name, and a source naming no bin cannot say which (#122).
-    source: dict[str, Any] = {"clip": still["name"]}
-    if still["bin"] is not None:
-        source["bin"] = still["bin"]
     doc = {
         "schema": 1,
         "timeline": {"name": SMOKE_CUT, "fps": fps},
-        "sources": {"still": source},
+        # Verbatim, not ``or None``: a still that also sits in the pool root is two clips
+        # of one name, a source naming no bin cannot say which, and "" is the root itself
+        # — which is where this project's duplicates live (#122).
+        "sources": {"still": {"clip": still["name"], "bin": still["bin"]}},
         "segments": [{"id": "s000", "source": "still", "in": 0, "out": 90}],
     }
     path = tmp_path / "still.cut.json"
@@ -905,8 +922,12 @@ def test_the_locked_track_footgun_is_still_real(tmp_path: Path) -> None:
     # timeline — so where it left the GUI is part of what it has to get right, on every
     # path out of here.
     assert reported["put_back"] is True, "the probe left Resolve on its own empty timeline"
-    assert reported["swept"] is True, "the probe left its empty timeline in the project"
-    assert list_timelines()["current"] != "resolve-mcp-lock-probe"
+    if reported["was_open"]:
+        assert reported["swept"] is True, "the probe left its empty timeline in the project"
+        assert list_timelines()["current"] != "resolve-mcp-lock-probe"
+    # A session that had no timeline open has nowhere to move to, and Resolve will not
+    # delete the cut it is sitting on — so the probe's timeline stays, and the next run's
+    # sweep is what takes it. Failing here instead would report a leak as a broken probe.
     if not reported["found"]:
         pytest.skip("The chosen clip is nowhere in the media pool, so the probe could not run")
     assert reported["returned_truthy"] is True
@@ -930,7 +951,7 @@ def test_an_invalid_cut_creates_no_timeline_on_a_real_project(tmp_path: Path) ->
     assert {entry["name"] for entry in list_timelines()["timelines"]} == before
 
 
-def test_the_render_queue_exports_the_real_timeline_mix(a_known_cut: dict[str, Any]) -> None:
+def test_the_render_queue_exports_the_real_timeline_mix(a_known_cut: KnownCut) -> None:
     """The AC no seam can check: that these render-settings keys are the ones Resolve takes.
 
     The fakes prove the job machinery, the caching and the failure shaping. Whether
@@ -943,7 +964,7 @@ def test_the_render_queue_exports_the_real_timeline_mix(a_known_cut: dict[str, A
     was an empty timeline with no mix on it at all (#119 §B). It now renders a cut this
     suite built, with a master mix laid under it — four seconds rather than a whole concert.
     """
-    if not a_known_cut["audio"]:
+    if not a_known_cut.audio:
         pytest.skip("No pool clip this suite can lay a master mix from, so there is no mix")
 
     started = acquire_timeline_audio(get_connection())
@@ -1084,11 +1105,9 @@ def a_clip_with_hard_cuts(tmp_path: Path) -> Iterator[dict[str, Any]]:
     listing = list_media()
     if not listing["ok"]:
         pytest.skip("No project open in Resolve")
-    named = os.environ.get(SCENE_SCAN_CLIP_ENV, "").strip()
-    if named:
-        matches = [one for one in _decodable(listing["clips"]) if one["name"] == named]
-        assert matches, f"{SCENE_SCAN_CLIP_ENV}={named!r} names no decodable pool clip"
-        yield matches[0]
+    named = named_scan_clip(_decodable(listing["clips"]), os.environ.get(SCENE_SCAN_CLIP_ENV, ""))
+    if named is not None:
+        yield named
         return
 
     try:

@@ -203,7 +203,10 @@ see. Live tier: `test_live_smoke.py` (module-level
 project state it can build itself (#135): a session-scoped sweep clears the last
 run's timelines, `a_known_cut` builds and makes current the short cut the export
 and round-trip tests read, and `a_clip_with_hard_cuts` generates the scan clip
-unless `RESOLVE_MCP_SCENE_SCAN_CLIP` names a real one.
+unless `RESOLVE_MCP_SCENE_SCAN_CLIP` names a real one. That variable is
+**unset on the live box**: its pool was checked in #135 and holds no flattened
+render, only raw continuous angles — so the generated clip is the default there,
+and the variable is for a project that does have an edit to scan.
 
 ## Docs
 
