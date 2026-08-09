@@ -128,7 +128,9 @@ subject rather than the shot.
 5. **Cover the jump cuts.** Two segments from the same source, back to back, are a visible
    jump. Anchor an overlay from the catalog over the earlier segment at an offset that puts
    it across the seam — anchored, so it survives a tightening pass. Cutting from one camera
-   to another is not a jump cut and needs no cover.
+   to another is not a jump cut and needs no cover. Neither is a cut with black between it:
+   a `gap` entry breaks the join, and `virtual_transcript` will not ask you to cover one.
+   Two covers that want the same frames go on different `track`s rather than colliding.
 6. **`validate_cut`, then `build_timeline`.** Every revision is a new `<name> v<N>`.
 7. **Self-review with `virtual_transcript`.** Below.
 8. **Fix what it found, rebuild, and mark the rest** as the cut report.

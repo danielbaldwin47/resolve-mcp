@@ -511,7 +511,13 @@ def test_a_real_build_places_every_shot_exactly_where_the_cut_puts_it(tmp_path: 
     result = build_timeline(cut_file)
 
     assert result["ok"] is True, result.get("error")
-    assert result["placed"] == {"segments": 3, "overlays": 0, "audio": False, "selectors": 0}
+    assert result["placed"] == {
+        "segments": 3,
+        "gaps": 0,
+        "overlays": 0,
+        "audio": False,
+        "selectors": 0,
+    }
     built = inspect_timeline(result["timeline"]["name"], detail="clips")
     assert built["ok"] is True
     video = [track for track in built["tracks"] if track["type"] == "video"][0]
@@ -590,7 +596,13 @@ def test_a_real_take_selector_swaps_the_angle_without_moving_the_shot(tmp_path: 
     result = build_timeline(cut_file)
 
     assert result["ok"] is True, result.get("error")
-    assert result["placed"] == {"segments": 3, "overlays": 0, "audio": False, "selectors": 3}
+    assert result["placed"] == {
+        "segments": 3,
+        "gaps": 0,
+        "overlays": 0,
+        "audio": False,
+        "selectors": 3,
+    }
     name = result["timeline"]["name"]
     before = _video_items(name)
     assert [item["takes"] for item in before] == [2, 2, 2]

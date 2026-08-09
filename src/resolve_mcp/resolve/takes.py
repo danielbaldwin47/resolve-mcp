@@ -27,7 +27,7 @@ from dataclasses import dataclass
 from typing import Any, Final
 
 from ..cut.document import read_cut_file
-from ..cut.validate import placements, validate_structure
+from ..cut.validate import is_gap, placements, validate_structure
 from ..document import LoadedDocument
 from ..errors import (
     BuildFailedError,
@@ -233,10 +233,22 @@ def _checked_cut(cut_file: str) -> LoadedDocument:
 
 def _segment(doc: dict[str, Any], segment: str) -> dict[str, Any]:
     for candidate in doc["segments"]:
-        if str(candidate["id"]) == segment:
-            found: dict[str, Any] = candidate
-            return found
-    available = [str(candidate["id"]) for candidate in doc["segments"]]
+        if str(candidate["id"]) != segment:
+            continue
+        if is_gap(candidate):
+            # A gap places no clip, so there is no shot on the timeline to hold a selector.
+            # Refused by name rather than falling through to "no such segment": the id is
+            # real and the cut file is fine, so the answer has to say what is actually wrong.
+            raise InvalidRequestError(
+                cause=f"{segment!r} is a gap — {candidate['gap']} frames of black — so it "
+                f"has no takes to swap between.",
+                fix="Swap a take on the segment either side of the black, or make the gap a "
+                "segment in the cut file and build a new version.",
+                detail={"requested": segment, "gap": int(candidate["gap"])},
+            )
+        found: dict[str, Any] = candidate
+        return found
+    available = [str(candidate["id"]) for candidate in doc["segments"] if not is_gap(candidate)]
     raise InvalidRequestError(
         cause=f"The cut file has no segment {segment!r}.",
         fix=f"Segment ids come from the cut file and must match exactly: {', '.join(available)}.",

@@ -39,36 +39,52 @@ DEFAULT_MIN_SEGMENT_FRAMES: Final = 12
 FPS_TOLERANCE: Final = 0.01
 """Reported rates carry float noise; real rate differences (23.976 vs 24) are far wider."""
 
+FIRST_OVERLAY_TRACK: Final = 2
+"""V1 is the sequential cut's own track, so the lowest an overlay can claim is V2."""
+
+MAX_OVERLAY_TRACK: Final = 8
+"""A ceiling on ``track``, because the build adds every track below the one it is given.
+
+Not a Resolve limit — a typo guard. ``"track": 99`` is an author slip, and without this it
+would grow a 99-track timeline and report success. Eight layers is far past what the
+pillar has ever used; a cut that genuinely needs more is a conversation, not a typo.
+"""
+
 RULE_DESCRIPTIONS: Final[dict[str, str]] = {
     "E1": "JSON parses; schema-valid; schema version supported",
-    "E2": "ids unique across segments and overlays (one namespace)",
-    "E3": "in < out everywhere",
+    "E2": "ids unique across segments, gaps and overlays (one namespace)",
+    "E3": "in < out everywhere; a gap runs at least one frame",
     "E4": "every alias resolves to exactly one media-pool clip",
     "E5": "in/out inside clip media bounds",
     "E6": "source fps matches timeline fps (stills exempt)",
     "E7": "audio block resolves, has audio, bounds valid",
     "E8": "alternate duration equals main duration",
     "E9": "overlay anchor exists; offset inside anchor; span inside the total V1",
-    "E10": "overlays do not overlap each other",
+    "E10": "overlays on one track do not overlap each other",
     "E11": "build-time: target tracks unlocked; connection and creation failures",
-    "W1": "segment shorter than min_segment_frames (flash-frame guard)",
+    "W1": "segment or gap shorter than min_segment_frames (flash-frame guard)",
     "W2": "V1 total does not match the master-audio span",
+    "W8": "the cut ends on black that no overlay covers, so nothing materialises there",
 }
 
 _FIX_HINTS: Final[dict[str, str]] = {
     "E1": "Call get_cut_schema and match the annotated example exactly.",
-    "E2": "Give every segment and overlay its own id — they share one namespace.",
-    "E3": "Ranges are half-open [in, out); make out strictly greater than in.",
+    "E2": "Give every segment, gap and overlay its own id — they share one namespace.",
+    "E3": "Ranges are half-open [in, out); make out strictly greater than in. A gap's "
+    "frame count is the black itself, so it must be at least 1.",
     "E4": "Fix the alias in sources, or import the clip and re-run validate_cut.",
     "E5": "Call inspect_clip for the clip's media bounds and pull the range inside them.",
     "E6": "Conform the source first, or set timeline.fps to the rate the sources are at.",
     "E7": "Point audio.source at a clip that has audio and keep its range inside the media.",
     "E8": "Alternates must match the main take frame for frame — swap_take cannot ripple.",
     "E9": "Anchor the overlay to a segment that exists, at an offset inside it.",
-    "E10": "Move one overlay or shorten it — only one overlay may cover a frame.",
+    "E10": "Move one overlay, shorten it, or put it on its own 'track' — one track holds "
+    "one clip per frame.",
     "E11": "Unlock the track in Resolve's timeline header and build again.",
-    "W1": "Lengthen the segment, or keep it if the flash is deliberate.",
+    "W1": "Lengthen the segment or gap, or keep it if the flash is deliberate.",
     "W2": "Expected when the cut opens cold or runs past the mix; otherwise check the ends.",
+    "W8": "Anchor an overlay over the trailing gap to make the black real, or drop the "
+    "gap if the cut is meant to end on picture.",
 }
 
 
@@ -214,6 +230,8 @@ def _segments_errors(doc: dict[str, Any]) -> Iterator[Finding]:
     if not isinstance(segments, list) or not segments:
         yield _finding("E1", None, "'segments' must be a non-empty array; a cut needs content.")
         return
+    picture = 0
+    black = 0
     for index, segment in enumerate(segments):
         where = f"segments[{index}]"
         if not isinstance(segment, dict):
@@ -222,6 +240,11 @@ def _segments_errors(doc: dict[str, Any]) -> Iterator[Finding]:
         id = segment.get("id") if isinstance(segment.get("id"), str) else None
         if not id:
             yield _finding("E1", None, f"'{where}.id' must be a non-empty string.")
+        if is_gap(segment):
+            black += 1
+            yield from _gap_shape_errors(segment, where, id)
+            continue
+        picture += 1
         if not isinstance(segment.get("source"), str):
             yield _finding("E1", id, f"'{where}.source' must be a source alias.")
         yield from _range_shape_errors(segment, where, id)
@@ -230,6 +253,37 @@ def _segments_errors(doc: dict[str, Any]) -> Iterator[Finding]:
         if "note" in segment and not isinstance(segment["note"], str):
             yield _finding("E1", id, f"'{where}.note' must be a string.")
         yield from _alternates_errors(segment, where, id)
+    if black and not picture:
+        yield _finding(
+            "E1",
+            None,
+            "'segments' is nothing but gaps; a cut needs at least one picture segment for "
+            "the black to be an absence of.",
+        )
+
+
+_GAP_FORBIDS: Final = ("source", "in", "out", "audio", "alternates")
+"""Everything a gap cannot carry, because black plays no clip and holds no take."""
+
+
+def _gap_shape_errors(segment: dict[str, Any], where: str, id: str | None) -> Iterator[Finding]:
+    """A gap is an id, a frame count, and nothing else — a half-gap is an author mid-edit."""
+    if not _is_int(segment["gap"]):
+        yield _finding(
+            "E1",
+            id,
+            f"'{where}.gap' must be an integer frame count, got {segment['gap']!r}.",
+        )
+    for field in _GAP_FORBIDS:
+        if field in segment:
+            yield _finding(
+                "E1",
+                id,
+                f"'{where}' is a gap, so it must not carry '{field}': black plays no clip. "
+                f"Drop '{field}', or drop 'gap' and make it a segment.",
+            )
+    if "note" in segment and not isinstance(segment["note"], str):
+        yield _finding("E1", id, f"'{where}.note' must be a string.")
 
 
 def _alternates_errors(segment: dict[str, Any], where: str, id: str | None) -> Iterator[Finding]:
@@ -268,6 +322,30 @@ def _overlays_errors(doc: dict[str, Any]) -> Iterator[Finding]:
             yield _finding("E1", id, f"'{where}.source' must be a source alias.")
         yield from _range_shape_errors(overlay, where, id)
         yield from _anchor_shape_errors(overlay, where, id)
+        yield from _track_shape_errors(overlay, where, id)
+
+
+def _track_shape_errors(overlay: dict[str, Any], where: str, id: str | None) -> Iterator[Finding]:
+    """The layer an overlay rides on: optional, defaults to V2, never V1.
+
+    The bounds are shape rather than a rule of their own because they are answerable from
+    the one value — nothing else in the document has to be consulted to know that V1 is the
+    segments' track and that V99 is a typo.
+    """
+    if "track" not in overlay:
+        return
+    track = overlay["track"]
+    if not _is_int(track):
+        yield _finding("E1", id, f"'{where}.track' must be an integer track index.")
+        return
+    if not FIRST_OVERLAY_TRACK <= track <= MAX_OVERLAY_TRACK:
+        yield _finding(
+            "E1",
+            id,
+            f"'{where}.track' is {track}; overlays ride above the cut, so the index must be "
+            f"between {FIRST_OVERLAY_TRACK} (V{FIRST_OVERLAY_TRACK}, the default) and "
+            f"{MAX_OVERLAY_TRACK}. V1 belongs to the segments.",
+        )
 
 
 def _anchor_shape_errors(overlay: dict[str, Any], where: str, id: str | None) -> Iterator[Finding]:
@@ -311,12 +389,51 @@ def validate_structure(
     findings += _overlay_errors(doc)
     findings += _segment_length_warnings(doc, min_segment_frames)
     findings += _audio_span_warnings(doc)
+    findings += _trailing_black_warnings(doc)
     return ordered(findings)
 
 
+def is_gap(entry: Any) -> bool:
+    """Whether a ``segments`` entry is black rather than a shot.
+
+    Public because the build, the swap and the read-back all walk the same array and each
+    has to answer this the same way: a second definition of what black looks like is how a
+    gap ends up placed on one side of the seam and ignored on the other.
+    """
+    return isinstance(entry, dict) and "gap" in entry
+
+
+def entry_duration(entry: dict[str, Any]) -> int:
+    """How much record time one ``segments`` entry takes — a gap's is the black itself."""
+    if is_gap(entry):
+        return int(entry["gap"])
+    return duration_frames(entry["in"], entry["out"])
+
+
+def overlay_track(overlay: dict[str, Any]) -> int:
+    """Which video track an overlay rides on. Absent means V2, the layer above the cut."""
+    track = overlay.get("track")
+    return int(track) if _is_int(track) else FIRST_OVERLAY_TRACK
+
+
+def _entries(doc: dict[str, Any]) -> list[dict[str, Any]]:
+    """``segments`` as authored: picture and black, in the order that lays out the V1."""
+    entries: list[dict[str, Any]] = doc["segments"]
+    return entries
+
+
 def _segments(doc: dict[str, Any]) -> list[dict[str, Any]]:
-    segments: list[dict[str, Any]] = doc["segments"]
-    return segments
+    """Only the entries that place a clip.
+
+    Every rule about *media* — aliases, bounds, rates, takes — reads this rather than the
+    raw array, so a gap is skipped by all of them at once instead of by a guard each of
+    them could be written without.
+    """
+    return [entry for entry in _entries(doc) if not is_gap(entry)]
+
+
+def _gaps(doc: dict[str, Any]) -> list[dict[str, Any]]:
+    return [entry for entry in _entries(doc) if is_gap(entry)]
 
 
 def _overlays(doc: dict[str, Any]) -> list[dict[str, Any]]:
@@ -325,10 +442,10 @@ def _overlays(doc: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _id_errors(doc: dict[str, Any]) -> list[Finding]:
-    """E2: segments and overlays share one id namespace."""
+    """E2: segments, gaps and overlays share one id namespace."""
     seen: set[str] = set()
     findings: list[Finding] = []
-    for item in (*_segments(doc), *_overlays(doc)):
+    for item in (*_entries(doc), *_overlays(doc)):
         id = str(item["id"])
         if id in seen:
             findings.append(_finding("E2", id, f"The id {id!r} is used more than once."))
@@ -347,6 +464,8 @@ def _range_errors(doc: dict[str, Any]) -> list[Finding]:
             )
     for overlay in _overlays(doc):
         findings += _range_error(overlay, str(overlay["id"]), "Overlay")
+    for gap in _gaps(doc):
+        findings += _gap_length_error(gap)
     audio = doc.get("audio")
     if isinstance(audio, dict):
         findings += _range_error(audio, None, "The audio block")
@@ -363,6 +482,22 @@ def _range_error(item: dict[str, Any], id: str | None, subject: str) -> list[Fin
             id,
             f"{named} has in={item['in']} and out={item['out']}; a half-open range "
             f"names no frames unless in < out.",
+        )
+    ]
+
+
+def _gap_length_error(gap: dict[str, Any]) -> list[Finding]:
+    """E3 for black: no frames of it is not a device, it is a line that does nothing."""
+    frames = int(gap["gap"])
+    if frames >= 1:
+        return []
+    id = str(gap["id"])
+    return [
+        _finding(
+            "E3",
+            id,
+            f"Gap {id!r} runs {frames} frames; black has to run at least one frame to be "
+            f"anything at all.",
         )
     ]
 
@@ -427,17 +562,22 @@ def _alternate_duration_errors(doc: dict[str, Any]) -> list[Finding]:
 
 
 def positions(doc: dict[str, Any]) -> dict[str, tuple[int, int]]:
-    """Each segment id to its computed ``(start, duration)`` — sequential V1, butt-joined.
+    """Each ``segments`` id to its computed ``(start, duration)`` — sequential V1, in order.
 
     The overlay rules and the build both place against these numbers, and they have to be
     the same numbers: an offset validated against one layout and built against another
     would put the overlay somewhere nobody checked.
+
+    A gap is here with the rest. It places no clip, but it occupies record time and so it
+    moves everything after it — and an overlay may anchor over it, which is what makes a
+    V2 bridge across black expressible at all. Positions stay *computed* either way: black
+    is a duration in the array, never a frame number an author had to keep up to date.
     """
     placed: dict[str, tuple[int, int]] = {}
     at = 0
-    for segment in _segments(doc):
-        duration = duration_frames(segment["in"], segment["out"])
-        placed[str(segment["id"])] = (at, duration)
+    for entry in _entries(doc):
+        duration = entry_duration(entry)
+        placed[str(entry["id"])] = (at, duration)
         at += duration
     return placed
 
@@ -455,8 +595,8 @@ def placements(doc: dict[str, Any], start: int) -> dict[str, tuple[int, int]]:
 
 
 def total_frames(doc: dict[str, Any]) -> int:
-    """The V1 span: sequential segments, so the sum of their durations."""
-    return sum(duration_frames(s["in"], s["out"]) for s in _segments(doc))
+    """The V1 span: sequential entries, so the sum of their durations, black included."""
+    return sum(entry_duration(entry) for entry in _entries(doc))
 
 
 def overlay_positions(doc: dict[str, Any]) -> dict[str, tuple[int, int]]:
@@ -494,7 +634,7 @@ def _overlay_errors(doc: dict[str, Any]) -> list[Finding]:
     placed = positions(doc)
     total = total_frames(doc)
     findings: list[Finding] = []
-    spans: list[tuple[str, int, int]] = []
+    spans: dict[int, list[tuple[str, int, int]]] = {}
 
     for overlay, resolved in _anchored(doc):
         id = str(overlay["id"])
@@ -531,14 +671,18 @@ def _overlay_errors(doc: dict[str, Any]) -> list[Finding]:
                 )
             )
             continue
-        spans.append((id, at, at + duration))
+        spans.setdefault(overlay_track(overlay), []).append((id, at, at + duration))
 
-    findings += _overlap_errors(spans)
+    for track in sorted(spans):
+        findings += _overlap_errors(spans[track], track)
     return findings
 
 
-def _overlap_errors(spans: list[tuple[str, int, int]]) -> list[Finding]:
-    """E10: overlays share one V2 track, and Resolve will not overwrite on overlap.
+def _overlap_errors(spans: list[tuple[str, int, int]], track: int) -> list[Finding]:
+    """E10: one track holds one clip per frame, and Resolve will not overwrite on overlap.
+
+    Judged per track, because that is the constraint being modelled: two inserts that
+    would collide on V2 are an ordinary stack once one of them names V3.
 
     Swept against the span reaching furthest right rather than the previous one: a short
     overlay sitting wholly inside a long one is not adjacent to it once sorted, and
@@ -554,7 +698,7 @@ def _overlap_errors(spans: list[tuple[str, int, int]]) -> list[Finding]:
                     "E10",
                     span[0],
                     f"Overlays {furthest[0]!r} ({furthest[1]}-{furthest[2]}) and {span[0]!r} "
-                    f"({span[1]}-{span[2]}) cover the same frames.",
+                    f"({span[1]}-{span[2]}) cover the same frames of V{track}.",
                 )
             )
         if furthest is None or span[2] > furthest[2]:
@@ -563,16 +707,21 @@ def _overlap_errors(spans: list[tuple[str, int, int]]) -> list[Finding]:
 
 
 def _segment_length_warnings(doc: dict[str, Any], minimum: int) -> list[Finding]:
-    """W1: a flash frame is usually a typo, occasionally the point. Never a block."""
+    """W1: a flash frame is usually a typo, occasionally the point. Never a block.
+
+    Black is measured by the same guard as picture: two frames of it reads as a slip in a
+    duration far more often than as a device.
+    """
     findings: list[Finding] = []
-    for segment in _segments(doc):
-        duration = duration_frames(segment["in"], segment["out"])
+    for entry in _entries(doc):
+        duration = entry_duration(entry)
         if duration < minimum:
+            subject = "Gap" if is_gap(entry) else "Segment"
             findings.append(
                 _finding(
                     "W1",
-                    str(segment["id"]),
-                    f"Segment {segment['id']!r} runs {duration} frames, under the "
+                    str(entry["id"]),
+                    f"{subject} {entry['id']!r} runs {duration} frames, under the "
                     f"{minimum}-frame flash guard.",
                 )
             )
@@ -595,6 +744,52 @@ def _audio_span_warnings(doc: dict[str, Any]) -> list[Finding]:
             f"The cut runs {total} frames over a {span}-frame master-audio span.",
         )
     ]
+
+
+def _trailing_black_warnings(doc: dict[str, Any]) -> list[Finding]:
+    """W8: black at the end of a cut is real only if something is laid over it.
+
+    A gap places nothing, so a trailing one is record time with no clip anywhere on it —
+    and a timeline ends at its last item. Ending on black therefore takes an overlay over
+    the gap, which is exactly how #46's ending inserts worked. Without one the built
+    timeline simply stops at the last picture and the device silently is not there.
+
+    A warning rather than an error: the tail is the author's call, and a cut that ends a
+    little long on purpose should not be blocked over it.
+    """
+    tail = _trailing_black(doc)
+    if tail is None:
+        return []
+    at, total = tail
+    covered = [
+        (start, length)
+        for start, length in overlay_positions(doc).values()
+        if start < total and start + length > at
+    ]
+    if covered:
+        return []
+    return [
+        _finding(
+            "W8",
+            None,
+            f"The cut ends with {total - at} frames of black that no overlay covers; the "
+            f"built timeline will end at frame {at}, on the last picture.",
+        )
+    ]
+
+
+def _trailing_black(doc: dict[str, Any]) -> tuple[int, int] | None:
+    """``(frame the last picture ends on, the cut's total)``, or ``None`` if they are equal."""
+    placed = positions(doc)
+    ends = [
+        start + duration
+        for entry in _entries(doc)
+        if not is_gap(entry)
+        for start, duration in [placed[str(entry["id"])]]
+    ]
+    total = total_frames(doc)
+    last = max(ends, default=0)
+    return None if last >= total else (last, total)
 
 
 # --- the project pass -------------------------------------------------------------------
@@ -768,10 +963,15 @@ def _audio_errors(doc: dict[str, Any], resolved: dict[str, ClipFacts]) -> list[F
 
 __all__ = [
     "DEFAULT_MIN_SEGMENT_FRAMES",
+    "FIRST_OVERLAY_TRACK",
+    "MAX_OVERLAY_TRACK",
     "RULE_DESCRIPTIONS",
     "ClipFacts",
+    "entry_duration",
+    "is_gap",
     "locked_track_finding",
     "overlay_positions",
+    "overlay_track",
     "parse_failure_finding",
     "placements",
     "positions",

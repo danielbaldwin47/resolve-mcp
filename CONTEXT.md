@@ -112,8 +112,11 @@ IEEE float and extensible headers, because stdlib `wave` opens PCM only),
 separation), `wav` (header facts + the one unreadable-WAV error).
 
 `cut/` — cut-file schema v1: `document` (read off disk), `schema`
-(verbatim, served by `get_cut_schema`), `validate` (11 errors + 2
-warnings, shared by dry run and build pre-flight).
+(verbatim, served by `get_cut_schema`), `validate` (11 errors + W1, W2,
+W8 — W3-W7 are `virtual_transcript`'s over the same document — shared by
+dry run and build pre-flight). A `segments` entry is a shot or a **gap**
+(`{"id", "gap": <frames>}`, literal black); `is_gap`/`entry_duration`/
+`overlay_track` are the accessors every walker of that array shares.
 
 `jobs/` — `cache` (hash-keyed results), `runner` (start heavy work without
 stalling stdio), `store` (one JSON record per job on disk).

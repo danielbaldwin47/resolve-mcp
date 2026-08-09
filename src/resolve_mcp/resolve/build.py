@@ -32,7 +32,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Final
 
-from ..cut.validate import locked_track_finding, overlay_positions, placements
+from ..cut.validate import (
+    is_gap,
+    locked_track_finding,
+    overlay_positions,
+    overlay_track,
+    placements,
+)
 from ..errors import BuildFailedError, CutInvalidError, TimelineNotFoundError
 from ..logging_config import get_logger
 from ..naming import latest_version, next_version_name, version_name
@@ -82,10 +88,12 @@ class Track:
 
 
 V1: Final = Track("video", 1)
-"""The sequential cut: segments butt-joined in document order."""
+"""The sequential cut: segments in document order, with black where a gap says so.
 
-V2: Final = Track("video", 2)
-"""Overlays ride above the cut here, so covering a seam never displaces the segments."""
+The only track this module names. An overlay's is whatever its ``track`` says, defaulting
+to V2 in ``overlay_track`` — one definition of "the layer above the cut", in the module
+that validates it, rather than a constant here that could drift from the rule.
+"""
 
 A1: Final = Track("audio", 1)
 """One continuous master mix under the whole cut."""
@@ -178,7 +186,8 @@ def build_timeline(
         "timeline": timeline_read.summarise(timeline_read.Reader(connection), built, project, name),
         "placed": {
             "segments": _count(shots, V1),
-            "overlays": _count(shots, V2),
+            "gaps": sum(1 for entry in doc["segments"] if is_gap(entry)),
+            "overlays": _overlay_count(shots),
             "audio": bool(_count(shots, A1)),
             "selectors": made,
         },
@@ -190,6 +199,11 @@ def build_timeline(
 def _count(shots: list[Shot], track: Track) -> int:
     """How many of this build's appends one track took — segments and overlays are both V."""
     return sum(1 for shot in shots if shot.track == track)
+
+
+def _overlay_count(shots: list[Shot]) -> int:
+    """Every video append above the cut's own track, however many layers they spread over."""
+    return sum(1 for shot in shots if shot.track.type == "video" and shot.track != V1)
 
 
 # --- markers --------------------------------------------------------------------------------
@@ -335,6 +349,11 @@ def _shots(doc: dict[str, Any], clips: dict[str, media.LocatedClip], start: int)
     placed = placements(doc, start)
     shots = []
     for segment in doc["segments"]:
+        if is_gap(segment):
+            # Black is the absence of a clip, so a gap is an append that does not happen.
+            # It is still in ``placed``, which is what makes the next shot start late: the
+            # hole comes from the record frames on either side of it, never from a clip.
+            continue
         id = str(segment["id"])
         record, duration = placed[id]
         shots.append(
@@ -356,7 +375,7 @@ def _shots(doc: dict[str, Any], clips: dict[str, media.LocatedClip], start: int)
         shots.append(
             _shot(
                 id=id,
-                track=V2,
+                track=Track("video", overlay_track(overlay)),
                 located=clips[str(overlay["source"])],
                 source_in=int(overlay["in"]),
                 record=start + offset,
