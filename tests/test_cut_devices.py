@@ -226,9 +226,28 @@ def test_trailing_black_that_nothing_covers_is_warned_about() -> None:
 
 def test_trailing_black_under_an_overlay_is_not_warned_about() -> None:
     """#46's ending: inserts on V2 are what make the black after the crash exist at all."""
-    doc = with_gap(at=2, overlays=[overlay(over={"segment": "s002", "offset": 150})])
+    doc = with_gap(
+        at=2,
+        overlays=[overlay(out=1258, over={"segment": "g001", "offset": 0})],
+    )
 
     assert validate_structure(doc) == []
+
+
+def test_black_only_half_covered_is_warned_about_for_the_rest() -> None:
+    """Half a tail is lost as silently as all of it, so the rule measures the whole gap.
+
+    The insert covers 40 of the 58 trailing frames, so the timeline ends at 440 and the
+    last 18 frames of authored black are not there.
+    """
+    doc = with_gap(
+        at=2,
+        overlays=[overlay(out=1240, over={"segment": "g001", "offset": 0})],
+    )
+
+    findings = validate_structure(doc)
+    assert rules(findings) == ["W8"]
+    assert "18 frames" in findings[0].message
 
 
 def test_trailing_black_under_the_master_mix_is_not_warned_about() -> None:
@@ -414,7 +433,7 @@ def test_the_director_recut_shape_builds(attach: Attach, tmp_path: Path) -> None
                 "id": "insert",
                 "source": "keys_wide",
                 "in": 7000,
-                "out": 7040,
+                "out": 7058,
                 "over": {"segment": "g_end", "offset": 0},
             },
         ]
@@ -433,8 +452,10 @@ def test_the_director_recut_shape_builds(attach: Attach, tmp_path: Path) -> None
     assert placements(built(resolve, "sunset-set v1"))[0] == ("C0012.mp4", 40, 100)
     assert placements(built(resolve, "sunset-set v1"), "video", 2) == [
         ("C0031.mp4", 0, 100),
-        ("C0031.mp4", 280, 40),
+        ("C0031.mp4", 280, 58),
     ]
+    # The insert covers the trailing black exactly, so nothing is silently lost.
+    assert result["warnings"] == []
 
 
 # --- reading the cut back ------------------------------------------------------------------------

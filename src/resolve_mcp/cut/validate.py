@@ -767,14 +767,19 @@ def _trailing_black_warnings(doc: dict[str, Any]) -> list[Finding]:
     if tail is None:
         return []
     at, total = tail
-    if any(start + length > at for start, length in _appended_spans(doc)):
+    # Where the built timeline actually ends: the furthest of the last picture and anything
+    # laid off V1. Measured against the total rather than against the last picture, because
+    # a tail *half* covered loses the rest just as silently as one covered by nothing.
+    ends = max((start + length for start, length in _appended_spans(doc)), default=0)
+    reach = max(at, ends)
+    if reach >= total:
         return []
     return [
         _finding(
             "W8",
             None,
-            f"The cut ends with {total - at} frames of black that nothing runs under; the "
-            f"built timeline will end at frame {at}, on the last picture.",
+            f"The cut ends with {total - reach} frames of black that nothing runs under; "
+            f"the built timeline will end at frame {reach}, not {total}.",
         )
     ]
 
