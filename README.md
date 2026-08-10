@@ -41,7 +41,7 @@ scene-cut detection, the render/deliver tools, and the `run_python` escape hatch
 | `edit_title` | Fixes one placed title in place — its words or its exposed params, neighbours untouched |
 | `grab_frames` | Grabs chosen moments on a clip as JPEGs (≤1568px) the agent reads off disk |
 | `detect_scene_cuts` | Job: catalogs where a clip changes shot, gist inline and the full list on disk |
-| `separate_stems` | Two-pass GPU stem separation: mix → 4 stems, drums → kick/snare/toms/ride/crash |
+| `separate_stems` | GPU stem separation: mix → 4 stems, drums → kick/snare/toms/ride/crash, and on `split_wind` other → wind/comp |
 | `list_render_presets` | The project's render presets, spelled the way `render_timeline` needs |
 | `render_timeline` | Renders a timeline or a range of one as a background job |
 | `get_job` | Polls one background job: progress, result, or a structured failure |

@@ -490,8 +490,9 @@ def _stem(stems: Mapping[str, str | Path] | str | Path, wanted: str) -> Path:
 def _collected(directory: Path) -> dict[str, Path]:
     """The stems under a separation's directory — the four-stem pass, or the parent of it.
 
-    A separation writes its two passes into ``<directory>/mix`` and ``<directory>/drums``, and
-    the job reports the parent. The melodic stems are in the first pass, so that is looked in
+    A separation writes a directory per pass — ``<directory>/mix``, ``<directory>/drums``, and
+    ``<directory>/other`` when the wind split was asked for — and the job reports the parent of
+    all of them. The melodic stems are in the first pass, so that is looked in
     first; the parent itself is checked too, because a director who copied the stems into a
     folder of their own should not have to name a subdirectory that is not there.
     """

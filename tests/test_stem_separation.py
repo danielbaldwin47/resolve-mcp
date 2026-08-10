@@ -1,11 +1,13 @@
-"""Two-pass stem separation.
+"""Stem separation: two passes always, a third over ``other`` on request.
 
 The separator is a subprocess, so the seam is the same one ffmpeg uses: the call is a
-parameter, and every decision around it — the two commands, which file pass two reads,
-where the stems land, what a refusal looks like, what a rerun costs — is verified with the
-CLI substituted. What no seam here can answer is whether audio-separator on the 4080 Super
-produces those models' stems at all; that is the live tier, and it is why the fake writes
-real WAVs under the real naming convention rather than empty files.
+parameter, and every decision around it — the commands, which file each later pass reads,
+where the stems land, what a refusal looks like, what a rerun costs, and which of the two
+keys the opt-in flag belongs to — is verified with the CLI substituted. What no seam here
+can answer is whether audio-separator on the 4080 Super produces those models' stems at all,
+or that ``17_HP-Wind_Inst-UVR`` labels its halves the way ``WIND_STEMS`` spells them; that is
+the live tier, and it is why the fake writes real WAVs under the real naming convention
+rather than empty files.
 """
 
 from __future__ import annotations
@@ -22,14 +24,21 @@ import pytest
 from resolve_mcp.audio import separator
 from resolve_mcp.audio.acquire import audio_source
 from resolve_mcp.audio.stems import (
+    DRUM_PASS,
     DRUM_STEMS,
     FOUR_STEMS,
     KIND,
+    MIX_PASS,
+    OTHER_PASS,
+    SEPARATED,
     SEPARATION,
+    WIND_FLOOR,
+    WIND_KEYS,
+    WIND_STEMS,
     acquired,
+    multi_pass,
     separate_stems,
     separation_params,
-    two_pass,
 )
 from resolve_mcp.config import Config, get_config, set_config
 from resolve_mcp.errors import InvalidRequestError, StemSeparationError
@@ -38,6 +47,7 @@ from resolve_mcp.ffmpeg import Runner as FfmpegRunner
 from resolve_mcp.jobs import cache
 from resolve_mcp.jobs.runner import Progress, wait_for
 from resolve_mcp.resolve.connection import get_connection
+from resolve_mcp.tools import stems as stems_tool
 
 from .conftest import Attach
 from .fakes import (
@@ -64,6 +74,17 @@ def fixture_audio(tmp_path: Path) -> Path:
 def separating() -> FakeSeparator:
     """A separator that produces four stems on the first pass and six drums on the second."""
     return FakeSeparator(FOUR_STEMS, SIX_DRUM_STEMS)
+
+
+@pytest.fixture
+def splitting() -> FakeSeparator:
+    """The same, plus the third pass's two halves — for the runs that ask for the wind split.
+
+    Kept apart from ``separating`` rather than folded into it because the fake hands out its
+    passes by call number: a two-pass run against a three-pass fake would be given the wind
+    labels on its next first pass.
+    """
+    return FakeSeparator(FOUR_STEMS, SIX_DRUM_STEMS, WIND_STEMS)
 
 
 # --- the two passes ----------------------------------------------------------------------
@@ -155,6 +176,182 @@ def test_the_stems_of_both_passes_are_kept_apart_on_disk(
     assert drum_stem.exists()
 
 
+# --- the opt-in third pass -----------------------------------------------------------------
+
+
+def test_the_wind_pass_does_not_run_unless_it_is_asked_for(
+    attach: Attach,
+    separating: FakeSeparator,
+) -> None:
+    """#126: on a band with no piano the split recovers nothing, so it is not free to run.
+
+    ``other`` is already the wind candidate there, and an unconditional third pass would buy
+    that nothing with minutes of compute on every job.
+    """
+    attach(studio(timeline=with_a_mix(FakeTimeline("sunset-set v3", "59.94"))))
+
+    record = wait_for(separate_stems(get_connection(), runner=separating)["job_id"])
+
+    assert record.state == "completed", record.error
+    assert len(separating.calls) == 2
+    assert record.result is not None
+    assert OTHER_PASS not in record.result
+    assert set(record.result["models"]) == {"stems", "drums"}
+
+
+def test_the_other_stem_is_what_the_third_pass_splits(
+    attach: Attach,
+    splitting: FakeSeparator,
+) -> None:
+    attach(studio(timeline=with_a_mix(FakeTimeline("sunset-set v3", "59.94"))))
+    config = get_config()
+
+    record = wait_for(
+        separate_stems(get_connection(), runner=splitting, split_wind=True)["job_id"]
+    )
+
+    assert record.state == "completed", record.error
+    assert len(splitting.calls) == 3
+    assert record.result is not None
+    assert record.result["stems"]["other"] == splitting.calls[2][1]
+    assert _flag(splitting.calls[2], "--model_filename") == config.wind_model
+    assert record.result["models"]["other"] == config.wind_model
+    assert set(record.result[OTHER_PASS]) == set(WIND_KEYS.values())
+    assert all(Path(one).exists() for one in record.result[OTHER_PASS].values())
+
+
+def test_the_third_pass_writes_beside_the_other_two_not_into_them(
+    attach: Attach,
+    splitting: FakeSeparator,
+) -> None:
+    """The same rule pass two follows: a model that relabels its input must not land on it."""
+    attach(studio(timeline=with_a_mix(FakeTimeline("sunset-set v3", "59.94"))))
+
+    record = wait_for(
+        separate_stems(get_connection(), runner=splitting, split_wind=True)["job_id"]
+    )
+
+    assert record.result is not None
+    directory = Path(record.result["directory"])
+    wind = Path(record.result[OTHER_PASS]["wind"])
+    assert wind.parent == directory / OTHER_PASS
+    assert wind.parent not in {directory / MIX_PASS, directory / DRUM_PASS}
+    assert Path(record.result["stems"]["other"]).exists()
+
+
+def test_the_residual_half_is_never_offered_as_a_piano_stem(
+    attach: Attach,
+    splitting: FakeSeparator,
+) -> None:
+    """#126: ``No Woodwinds`` is piano *plus* guitar, vibes, percussion and leaked bass.
+
+    On a bass-weak capture it is mostly the bass line, so the one name it must not carry is
+    the one an agent would reach for. The tool's own docstring is where an agent learns that,
+    which makes it part of the envelope rather than a comment.
+    """
+    attach(studio(timeline=with_a_mix(FakeTimeline("sunset-set v3", "59.94"))))
+
+    record = wait_for(
+        separate_stems(get_connection(), runner=splitting, split_wind=True)["job_id"]
+    )
+
+    assert record.result is not None
+    assert "piano" not in record.result[OTHER_PASS]
+    described = stems_tool.separate_stems.__doc__ or ""
+    assert "not a piano stem" in described
+    assert "bass" in described
+
+
+def test_a_wind_model_that_leaves_a_half_out_fails_naming_it(attach: Attach) -> None:
+    """The drum pass's shape: a model that renames its output is a named failure, not a gap."""
+    attach(studio(timeline=with_a_mix(FakeTimeline("sunset-set v3", "59.94"))))
+    partial = FakeSeparator(FOUR_STEMS, SIX_DRUM_STEMS, ("woodwinds",))
+
+    record = wait_for(separate_stems(get_connection(), runner=partial, split_wind=True)["job_id"])
+
+    assert record.state == "failed"
+    assert record.error is not None
+    assert record.error["code"] == "stem_separation_failed"
+    assert "no woodwinds" in record.error["cause"]
+    assert record.error["detail"]["produced"] == ["woodwinds"]
+
+
+def test_the_flag_keys_the_job_while_the_model_keys_the_stems(
+    attach: Attach,
+    separating: FakeSeparator,
+    splitting: FakeSeparator,
+) -> None:
+    """Both halves of where the third pass lives in the two keys.
+
+    The flag is a job param, or the run that asks for the wind pass is handed the cached
+    two-pass answer and never runs anything. It is *not* a stems-key param, or turning it on
+    would separate the same audio into a second directory and orphan the first.
+    """
+    attach(studio(timeline=with_a_mix(FakeTimeline("sunset-set v3", "59.94"))))
+    two = wait_for(separate_stems(get_connection(), runner=separating)["job_id"])
+
+    three = separate_stems(get_connection(), runner=splitting, split_wind=True)
+
+    assert three["cached"] is False
+    record = wait_for(three["job_id"])
+    assert record.state == "completed", record.error
+    assert record.result is not None
+    assert two.result is not None
+    assert record.result["directory"] == two.result["directory"]
+    assert separation_params()["wind_model"] == get_config().wind_model
+    assert separation_params()["wind_stems"] == list(WIND_STEMS)
+
+
+def test_a_two_pass_result_on_disk_does_not_read_as_complete_when_the_wind_pass_is_on(
+    tmp_path: Path,
+    separating: FakeSeparator,
+    splitting: FakeSeparator,
+) -> None:
+    """A directory missing the pass this run wants is partial, and partial is redone whole."""
+    audio = _acquired(tmp_path)
+    multi_pass(audio, _params(), _ignored, runner=separating)
+
+    output = multi_pass(audio, _params(), _ignored, runner=splitting, split_wind=True)
+
+    assert output.result["reused"] is False
+    assert len(splitting.calls) == 3
+    assert set(output.result[OTHER_PASS]) == set(WIND_KEYS.values())
+
+
+def test_a_two_pass_result_on_disk_is_complete_when_the_wind_pass_is_off(
+    tmp_path: Path,
+    splitting: FakeSeparator,
+    separating: FakeSeparator,
+) -> None:
+    """The other half: a run that never wanted the third pass must not redo the first two.
+
+    Both directions matter because the two shapes share a directory — the reuse check has to
+    read completeness off what this run asked for, not off what happens to be on disk.
+    """
+    audio = _acquired(tmp_path)
+    multi_pass(audio, _params(), _ignored, runner=splitting, split_wind=True)
+
+    output = multi_pass(audio, _params(), _ignored, runner=separating)
+
+    assert output.result["reused"] is True
+    assert separating.calls == []
+    assert OTHER_PASS not in output.result
+
+
+def test_a_three_pass_result_is_reused_whole(
+    tmp_path: Path,
+    splitting: FakeSeparator,
+) -> None:
+    audio = _acquired(tmp_path)
+    first = multi_pass(audio, _params(), _ignored, runner=splitting, split_wind=True)
+
+    again = multi_pass(audio, _params(), _ignored, runner=splitting, split_wind=True)
+
+    assert len(splitting.calls) == 3
+    assert again.result["reused"] is True
+    assert again.result[OTHER_PASS] == first.result[OTHER_PASS]
+
+
 # --- progress ----------------------------------------------------------------------------
 
 
@@ -168,13 +365,42 @@ def test_progress_climbs_through_both_passes(tmp_path: Path) -> None:
         output=("  0%|          | 0/10", " 50%|#####     | 5/10", "100%|##########| 10/10"),
     )
 
-    two_pass(audio, {"scope": "clip"}, _recording(steps), runner=separating)
+    multi_pass(audio, {"scope": "clip"}, _recording(steps), runner=separating)
 
     assert [fraction for fraction, _ in steps] == sorted(fraction for fraction, _ in steps)
     first = [step for fraction, step in steps if "50%" in step]
     assert any("four stems" in step for step in first)
     assert any("drum" in step for _, step in steps)
     assert steps[-1][0] == pytest.approx(0.95, abs=0.05)
+    assert max(fraction for fraction, step in steps if "drum" in step) == pytest.approx(SEPARATED)
+
+
+def test_progress_climbs_through_three_passes_without_moving_where_the_last_one_ends(
+    tmp_path: Path,
+) -> None:
+    """The third pass splits the back half rather than extending past it.
+
+    Whichever pass is last has to finish where the bar's separation phase always finishes, or
+    the cheaper two-pass job would sit at a number that reads as unfinished while it is done.
+    """
+    steps: list[tuple[float, str]] = []
+    splitting = FakeSeparator(
+        FOUR_STEMS,
+        SIX_DRUM_STEMS,
+        WIND_STEMS,
+        output=("  0%|          | 0/10", " 50%|#####     | 5/10", "100%|##########| 10/10"),
+    )
+
+    multi_pass(_acquired(tmp_path), _params(), _recording(steps), split_wind=True, runner=splitting)
+
+    assert [fraction for fraction, _ in steps] == sorted(fraction for fraction, _ in steps)
+    winds = [fraction for fraction, step in steps if "wind" in step]
+    assert winds
+    assert min(winds) >= WIND_FLOOR
+    assert max(winds) == pytest.approx(SEPARATED)
+    assert max(fraction for fraction, step in steps if "drum" in step) == pytest.approx(
+        WIND_FLOOR
+    )
 
 
 def test_the_model_downloads_own_bar_is_not_this_passs_progress(tmp_path: Path) -> None:
@@ -194,7 +420,7 @@ def test_the_model_downloads_own_bar_is_not_this_passs_progress(tmp_path: Path) 
         ),
     )
 
-    two_pass(_acquired(tmp_path), _params(), _recording(steps), runner=downloading)
+    multi_pass(_acquired(tmp_path), _params(), _recording(steps), runner=downloading)
 
     first = [fraction for fraction, step in steps if "four stems" in step]
     assert first == [pytest.approx(0.32)]  # 20% of the pass one slice, and nothing before it
@@ -248,9 +474,9 @@ def test_the_same_audio_under_a_new_fingerprint_reuses_the_stems_on_disk(
 ) -> None:
     """The directory is keyed by content, so an edit that did not change the mix is free."""
     audio = _acquired(tmp_path)
-    two_pass(audio, {"scope": "timeline"}, _ignored, runner=separating)
+    multi_pass(audio, {"scope": "timeline"}, _ignored, runner=separating)
 
-    output = two_pass(audio, {"scope": "timeline"}, _ignored, runner=separating)
+    output = multi_pass(audio, {"scope": "timeline"}, _ignored, runner=separating)
 
     assert len(separating.calls) == 2
     assert output.result["reused"] is True
@@ -263,9 +489,9 @@ def test_where_the_audio_came_from_is_not_part_of_the_stems_key(
 ) -> None:
     """A renamed timeline is the same audio; separating it again would pay the GPU twice."""
     audio = _acquired(tmp_path)
-    first = two_pass(audio, _params(timeline="sunset-set v3"), _ignored, runner=separating)
+    first = multi_pass(audio, _params(timeline="sunset-set v3"), _ignored, runner=separating)
 
-    renamed = two_pass(audio, _params(timeline="sunset-set v4"), _ignored, runner=separating)
+    renamed = multi_pass(audio, _params(timeline="sunset-set v4"), _ignored, runner=separating)
 
     assert renamed.result["directory"] == first.result["directory"]
     assert renamed.result["reused"] is True
@@ -283,10 +509,10 @@ def test_a_different_model_is_a_different_stems_key(
     than no key at all.
     """
     audio = _acquired(tmp_path)
-    first = two_pass(audio, separation_params(), _ignored, runner=separating)
+    first = multi_pass(audio, separation_params(), _ignored, runner=separating)
 
     set_config(_configured(tmp_path, stem_model="htdemucs_6s.yaml"))
-    other = two_pass(audio, separation_params(), _ignored, runner=separating)
+    other = multi_pass(audio, separation_params(), _ignored, runner=separating)
 
     assert other.result["directory"] != first.result["directory"]
     assert len(separating.calls) == 4

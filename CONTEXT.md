@@ -42,6 +42,11 @@ timelines. The server measures; Claude decides.
 - **stem** — separated audio (mix → vocals/drums/bass/other; drums →
   kick/snare/toms/ride/crash), path is a content hash (ADR 0003). The drum
   model writes `hh` too; it is not collected (#125).
+- **wind / comp** — the two halves of the opt-in third pass over `other`
+  (#153). `wind` is horns and reeds; `comp` is accompaniment — piano,
+  guitar, vibes, percussion, and the bass line itself on a capture whose
+  `bass` stem came back near-silent (#126). `comp` is **never** a piano
+  stem and nothing may name it one.
 - **phrase** — the cut-placement unit (#46, `styles/concert.md` §1): a
   stretch of the soloist's line between two endings. `analysis/phrases.py`
   reports the **boundaries**, each with two times — `measured_t`, where the
@@ -108,8 +113,11 @@ self-review, warnings only, touches no Resolve handle), `whisper`
 `audio/` — concert audio out of Resolve onto disk: `acquire` (both routes),
 `ffmpeg` (per-source-clip route), `riff` (the WAV container itself: PCM,
 IEEE float and extensible headers, because stdlib `wave` opens PCM only),
-`separator` (python-audio-separator out of process), `stems` (two-pass
-separation), `wav` (header facts + the one unreadable-WAV error).
+`separator` (python-audio-separator out of process), `stems` (two passes —
+mix into four, then the drum stem into the kit — plus an opt-in third,
+`split_wind`, splitting `other` into `wind` and `comp`; `comp` is
+accompaniment, never a piano stem), `wav` (header facts + the one
+unreadable-WAV error).
 
 `cut/` — cut-file schema v1: `document` (read off disk), `schema`
 (verbatim, served by `get_cut_schema`), `validate` (11 errors + W1, W2,

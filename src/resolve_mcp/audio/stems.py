@@ -1,11 +1,17 @@
-"""Two passes, because fill detection needs near-clean drums.
+"""Two passes, because fill detection needs near-clean drums — and an opt-in third.
 
 Pass one splits the mix into four stems; pass two takes the drum stem alone and decomposes
 it into the pieces of the kit. Running the drum model on the full mix is what the second
 pass exists to avoid — it has bass and vocals bleeding into every hit, and a fill detector
 reading that is reading the band, not the drummer.
 
-Three decisions worth knowing:
+Pass three does the same to ``other``, the stem that holds everything no model has a stem
+for, splitting the winds out of it so a solo detector reading brightness has one instrument
+family to track rather than horns and piano mixed together. It is off unless the caller asks
+for it (#126): on a band with no piano ``other`` is already the wind candidate, and the pass
+recovers nothing for the compute it costs.
+
+Four decisions worth knowing:
 
 * **The job's key and the stems' key are not the same key, on purpose.** The job is keyed
   the way its acquisition is keyed — a timeline fingerprint, a clip's path/size/mtime —
@@ -25,6 +31,14 @@ Three decisions worth knowing:
 * **Each pass writes into its own directory.** Pass two reads the drum stem pass one
   wrote; sharing a directory would have the decomposition land beside — and, with a model
   that labels its output ``(Drums)``, on top of — the file it is reading.
+
+* **The third pass is a flag on the job, not on the stems key.** Which models could run is
+  part of what the stems on disk *are* and keys the directory; whether the optional one was
+  asked for this time is not, so both shapes land in one directory rather than separating
+  the same audio into two. That makes completeness depend on the flag — a two-pass directory
+  is complete with the pass off and partial with it on — and a partial directory is redone
+  whole rather than topped up, which is the existing rule and costs a re-run of passes one
+  and two the first time the flag is turned on for audio already separated.
 """
 
 from __future__ import annotations
@@ -63,16 +77,45 @@ rather than the first one to run.
 DRUM_SOURCE = "drums"
 """Which of the four stems the second pass decomposes."""
 
-SEPARATION = ("model", "drum_model", "stems", "drum_stems")
+WIND_STEMS = ("woodwinds", "no woodwinds")
+"""What the third pass asks its model for, in the labels that model writes them under."""
+
+WIND_KEYS = {"woodwinds": "wind", "no woodwinds": "comp"}
+"""The envelope's names for the two halves of the third pass.
+
+``no woodwinds`` is **not** a piano stem and nothing here may call it one. It is piano plus
+guitar, vibes, percussion and whatever bass leaked through, and on a bass-weak capture it is
+mostly the bass line — #126 measured roughly 60% of its energy below 200 Hz on a source whose
+``bass`` stem came back near-silent. ``comp`` says accompaniment, which is all that can be
+promised about it.
+"""
+
+OTHER_SOURCE = "other"
+"""Which of the four stems the third pass decomposes: everything no model has a stem for."""
+
+SEPARATION = ("model", "drum_model", "wind_model", "stems", "drum_stems", "wind_stems")
 """The params that change what the stems *are*, as opposed to where the audio came from."""
 
 MIX_PASS = "mix"
 DRUM_PASS = "drums"
+OTHER_PASS = "other"
 
 ACQUIRE_FLOOR = 0.02
 ACQUIRE_CEILING = 0.25
 PASS_ONE_CEILING = 0.6
-PASS_TWO_CEILING = 0.9
+WIND_FLOOR = 0.8
+"""Where the drum pass hands over to the wind pass — a boundary, not a ceiling.
+
+The optional third pass splits the back half rather than extending it, so this is where pass
+two stops only when pass three is coming. With the pass off, pass two runs the whole way to
+``SEPARATED`` instead.
+"""
+SEPARATED = 0.9
+"""Where the last pass ends, whichever pass that is.
+
+A bar that finished somewhere different depending on a flag would have the cheaper two-pass
+job look unfinished at exactly the point the expensive one reads as done.
+"""
 COLLECTING = 0.95
 
 PERCENT = 100
@@ -85,11 +128,17 @@ def separate_stems(
     clip: str | None = None,
     bin: str | None = None,  # noqa: A002 - "bin" is the Resolve term the agent uses
     refresh: bool = False,
+    split_wind: bool = False,
     runner: separator.Runner | None = None,
     ffmpeg_runner: Runner | None = None,
     config: Config | None = None,
 ) -> dict[str, Any]:
-    """Start a two-pass separation job. Returns the job record, not the stems.
+    """Start a separation job. Returns the job record, not the stems.
+
+    ``split_wind`` adds the third pass over ``other``. It is a job param but not a stems-key
+    param, so it stays in one stems directory rather than separating the same audio twice —
+    but a directory missing the pass this run wants is partial, and partial is redone whole,
+    so turning it on for audio already separated re-runs the earlier passes too.
 
     ``runner`` and ``ffmpeg_runner`` are the two subprocess seams: the default shells out
     for real, and a caller can hand in its own to exercise the route without the models or
@@ -106,12 +155,20 @@ def separate_stems(
         runner=ffmpeg_runner,
         config=config,
     )
-    params = {**source.params, **separation_params(config)}
+    params = {**source.params, **separation_params(config), "split_wind": split_wind}
     key = cache.cache_key(KIND, [source.fingerprint], params)
 
     def work(progress: Progress) -> JobOutput:
         audio = acquired(source, progress, config)
-        return two_pass(audio, params, progress, runner=runner, reuse=not refresh, config=config)
+        return multi_pass(
+            audio,
+            params,
+            progress,
+            split_wind=split_wind,
+            runner=runner,
+            reuse=not refresh,
+            config=config,
+        )
 
     return start_job(KIND, params, work, cache_key=key, refresh=refresh, config=config)
 
@@ -150,13 +207,21 @@ def acquired(
 
 
 def separation_params(config: Config | None = None) -> dict[str, Any]:
-    """What is being run, as opposed to what it is being run on. Keys the stems on disk."""
+    """What is being run, as opposed to what it is being run on. Keys the stems on disk.
+
+    The third pass's model is in here whether or not that pass is switched on: the key says
+    which models these stems could have come from, and leaving the name out when the pass is
+    off would let a changed ``wind_model`` be silently ignored by every directory separated
+    before it was turned on.
+    """
     config = config or get_config()
     return {
         "model": config.stem_model,
         "drum_model": config.drum_model,
+        "wind_model": config.wind_model,
         "stems": list(FOUR_STEMS),
         "drum_stems": list(DRUM_STEMS),
+        "wind_stems": list(WIND_STEMS),
     }
 
 
@@ -173,26 +238,30 @@ def stem_key(audio: dict[str, Any], params: dict[str, Any]) -> str:
     return cache.cache_key(KIND, [{"content_sha256": audio["content_sha256"]}], settings)
 
 
-def two_pass(
+def multi_pass(
     audio: dict[str, Any],
     params: dict[str, Any],
     progress: Progress,
+    split_wind: bool = False,
     runner: separator.Runner | None = None,
     reuse: bool = True,
     config: Config | None = None,
 ) -> JobOutput:
-    """The worker: four stems, then the drum stem decomposed into the pieces of the kit."""
+    """The worker: four stems, the drum stem decomposed, and on request the ``other`` stem too."""
     config = config or get_config()
     key = stem_key(audio, params)
     directory = config.stems_dir / f"{slug(Path(str(audio['path'])).stem, 'stems')}-{key[:12]}"
     mix_dir = directory / MIX_PASS
     drums_dir = directory / DRUM_PASS
+    other_dir = directory / OTHER_PASS
+    drums_ceiling = WIND_FLOOR if split_wind else SEPARATED
 
-    reused = reuse and _already_separated(mix_dir, drums_dir)
+    reused = reuse and _already_separated(mix_dir, drums_dir, other_dir if split_wind else None)
     if reused:
         log.info("Stems for %s are already on disk at %s", audio["path"], directory)
         stems = separator.collect(mix_dir)
         drums = separator.collect(drums_dir)
+        other = separator.collect(other_dir) if split_wind else {}
     else:
         stems = separator.separate(
             audio["path"],
@@ -209,13 +278,25 @@ def two_pass(
             drums_dir,
             config.drum_model,
             DRUM_STEMS,
-            progress=_pass(progress, PASS_ONE_CEILING, PASS_TWO_CEILING, "decomposing the drums"),
+            progress=_pass(progress, PASS_ONE_CEILING, drums_ceiling, "decomposing the drums"),
             runner=runner,
             config=config,
         )
+        other = {}
+        if split_wind:
+            progress(WIND_FLOOR, "splitting the winds out of the other stem")
+            other = separator.separate(
+                stems[OTHER_SOURCE],
+                other_dir,
+                config.wind_model,
+                WIND_STEMS,
+                progress=_pass(progress, WIND_FLOOR, SEPARATED, "splitting the winds"),
+                runner=runner,
+                config=config,
+            )
 
     progress(COLLECTING, "collecting the stems")
-    result = {
+    result: dict[str, Any] = {
         "key": key,
         "directory": str(directory),
         "stems": {name: str(path) for name, path in stems.items()},
@@ -224,16 +305,31 @@ def two_pass(
         "audio": audio,
         "reused": reused,
     }
-    artifacts = tuple([*stems.values(), *drums.values()])
+    if split_wind:
+        # Keyed like ``drums`` is: the name of the stem this pass took apart. Absent rather
+        # than empty when the pass is off, so the envelope never offers a stem nobody made.
+        # Only the two mapped halves go out — anything else the model wrote has no name here,
+        # and a raw model label leaking into the envelope is worse than a file left on disk.
+        result[OTHER_PASS] = {
+            WIND_KEYS[name]: str(path) for name, path in other.items() if name in WIND_KEYS
+        }
+        result["models"][OTHER_PASS] = config.wind_model
+    artifacts = tuple([*stems.values(), *drums.values(), *other.values()])
     log.info("Separated %s into %d stems at %s", audio["path"], len(artifacts), directory)
     return JobOutput(result, artifacts)
 
 
-def _already_separated(mix_dir: Path, drums_dir: Path) -> bool:
-    """Both passes are on disk in full — a partial run is worth redoing, not patching."""
-    return not separator.missing_from(mix_dir, FOUR_STEMS) and not separator.missing_from(
-        drums_dir, DRUM_STEMS
-    )
+def _already_separated(mix_dir: Path, drums_dir: Path, other_dir: Path | None = None) -> bool:
+    """Every pass this run was asked for is on disk in full — a partial run is worth redoing.
+
+    ``other_dir`` is ``None`` when the third pass is off, and then a two-pass directory is
+    complete rather than partial. The flag is not part of the stems key, so both shapes share
+    a directory: what completeness means has to come from what was asked for, or a job with
+    the pass off would rerun everything to fill a directory it does not want.
+    """
+    if separator.missing_from(mix_dir, FOUR_STEMS) or separator.missing_from(drums_dir, DRUM_STEMS):
+        return False
+    return other_dir is None or not separator.missing_from(other_dir, WIND_STEMS)
 
 
 def _pass(progress: Progress, floor: float, ceiling: float, step: str) -> separator.Fraction:

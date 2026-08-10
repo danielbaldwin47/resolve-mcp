@@ -22,6 +22,10 @@ DEFAULT_STEM_MODEL = "htdemucs_ft.yaml"
 # The name audio-separator 0.44.5 lists for the six-stem MDX23C drum model; the
 # "MDX23C-DrumSep-6stem-FT.ckpt" spelling is not in its catalog and fails to load.
 DEFAULT_DRUM_MODEL = "MDX23C-DrumSep-aufr33-jarredou.ckpt"
+# The wind split of the "other" stem (#126: settled by ear against a club recording, a DAW
+# render and a bootleg field capture — no measurement picked it, and two proxy metrics picked
+# wrong). Off unless the caller asks for it, so the name only costs a cache key, not a pass.
+DEFAULT_WIND_MODEL = "17_HP-Wind_Inst-UVR.pth"
 # faster-whisper's own defaults, kept as the defaults here: "auto" picks CUDA when there is
 # a card and CPU when there is not, and "default" means the model's stored precision. CUDA
 # buys speed, not accuracy — large-v3 stores float16, which a GPU runs natively and a CPU
@@ -50,6 +54,7 @@ class Config:
     audio_separator: str = DEFAULT_AUDIO_SEPARATOR
     stem_model: str = DEFAULT_STEM_MODEL
     drum_model: str = DEFAULT_DRUM_MODEL
+    wind_model: str = DEFAULT_WIND_MODEL
     default_render_preset: str = DEFAULT_RENDER_PRESET
     whisper_device: str = DEFAULT_WHISPER_DEVICE
     whisper_compute_type: str = DEFAULT_WHISPER_COMPUTE_TYPE
@@ -71,6 +76,7 @@ class Config:
             audio_separator=env.get("RESOLVE_MCP_AUDIO_SEPARATOR") or DEFAULT_AUDIO_SEPARATOR,
             stem_model=env.get("RESOLVE_MCP_STEM_MODEL") or DEFAULT_STEM_MODEL,
             drum_model=env.get("RESOLVE_MCP_DRUM_MODEL") or DEFAULT_DRUM_MODEL,
+            wind_model=env.get("RESOLVE_MCP_WIND_MODEL") or DEFAULT_WIND_MODEL,
             default_render_preset=(
                 env.get("RESOLVE_MCP_DEFAULT_RENDER_PRESET") or DEFAULT_RENDER_PRESET
             ),
@@ -112,7 +118,7 @@ class Config:
 
     @property
     def stems_dir(self) -> Path:
-        """Separated stems, one directory per content hash + params, two passes inside it."""
+        """Separated stems, one directory per content hash + params, a pass each inside it."""
         return self.cache_dir / "stems"
 
     @property
