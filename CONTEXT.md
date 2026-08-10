@@ -108,8 +108,11 @@ self-review, warnings only, touches no Resolve handle), `whisper`
 `audio/` — concert audio out of Resolve onto disk: `acquire` (both routes),
 `ffmpeg` (per-source-clip route), `riff` (the WAV container itself: PCM,
 IEEE float and extensible headers, because stdlib `wave` opens PCM only),
-`separator` (python-audio-separator out of process), `stems` (two-pass
-separation), `wav` (header facts + the one unreadable-WAV error).
+`separator` (python-audio-separator out of process), `stems` (two passes —
+mix into four, then the drum stem into the kit — plus an opt-in third,
+`split_wind`, splitting `other` into `wind` and `comp`; `comp` is
+accompaniment, never a piano stem), `wav` (header facts + the one
+unreadable-WAV error).
 
 `cut/` — cut-file schema v1: `document` (read off disk), `schema`
 (verbatim, served by `get_cut_schema`), `validate` (11 errors + W1, W2,

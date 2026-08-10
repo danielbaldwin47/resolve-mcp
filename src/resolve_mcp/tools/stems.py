@@ -21,12 +21,21 @@ def separate_stems(
     clip: str | None = None,
     bin: str | None = None,  # noqa: A002 - "bin" is the Resolve term the agent uses
     refresh: bool = False,
+    split_wind: bool = False,
 ) -> dict[str, Any]:
-    """Split audio into stems on the GPU, in two passes, as a background job.
+    """Split audio into stems on the GPU, in two passes or three, as a background job.
 
     Returns a job_id immediately — poll it with get_job. Pass one splits the mix into
     vocals, drums, bass and other; pass two decomposes the drum stem into kick, snare and
     toms, which is what fill detection reads. The result is paths on disk, not audio.
+
+    split_wind=true adds a third pass over the "other" stem, returned under "other" as
+    "wind" (horns and reeds) and "comp" (everything else that landed in "other" — piano,
+    guitar, vibes, percussion, and the bass line itself on a recording whose bass stem came
+    back near-silent; it is not a piano stem). Ask for it when a horn or reed is what you
+    need to hear apart from the piano, and leave it off otherwise: on a band with no piano
+    "other" is already the winds, and the pass costs time to recover nothing. Turning it on
+    for audio already separated re-runs the earlier passes too.
 
     scope=timeline exports and separates the timeline mix (the only route that captures
     Resolve's own summing of the tracks); scope=clip reads one media pool clip's file
@@ -42,6 +51,7 @@ def separate_stems(
             clip=clip,
             bin=bin,
             refresh=refresh,
+            split_wind=split_wind,
         )
     }
 
