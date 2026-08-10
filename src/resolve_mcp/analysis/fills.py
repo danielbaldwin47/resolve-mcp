@@ -518,8 +518,9 @@ def _stems(stems: Mapping[str, str | Path] | str | Path) -> dict[str, Path]:
 def _collected(directory: Path) -> dict[str, Path]:
     """The drum stems under a separation's directory — the pass's own, or the parent of it.
 
-    A separation writes its two passes into ``<directory>/mix`` and ``<directory>/drums``,
-    and the job reports the parent. That parent is what an agent has in hand, so it is what
+    A separation writes a directory per pass — ``<directory>/mix``, ``<directory>/drums``, and
+    ``<directory>/other`` when the wind split was asked for — and the job reports the parent
+    of all of them. That parent is what an agent has in hand, so it is what
     this accepts, and the drum pass inside it is looked in first. The parent itself is
     checked too, because a director who copied three stems into a folder of their own is
     doing something reasonable and should not have to name a subdirectory that is not there.

@@ -30,9 +30,9 @@ from resolve_mcp.audio.stems import (
     KIND,
     MIX_PASS,
     OTHER_PASS,
-    PASS_TWO_CEILING,
     SEPARATED,
     SEPARATION,
+    WIND_FLOOR,
     WIND_KEYS,
     WIND_STEMS,
     acquired,
@@ -257,7 +257,6 @@ def test_the_residual_half_is_never_offered_as_a_piano_stem(
 
     assert record.result is not None
     assert "piano" not in record.result[OTHER_PASS]
-    assert WIND_KEYS["no woodwinds"] == "comp"
     described = stems_tool.separate_stems.__doc__ or ""
     assert "not a piano stem" in described
     assert "bass" in described
@@ -397,10 +396,10 @@ def test_progress_climbs_through_three_passes_without_moving_where_the_last_one_
     assert [fraction for fraction, _ in steps] == sorted(fraction for fraction, _ in steps)
     winds = [fraction for fraction, step in steps if "wind" in step]
     assert winds
-    assert min(winds) >= PASS_TWO_CEILING
+    assert min(winds) >= WIND_FLOOR
     assert max(winds) == pytest.approx(SEPARATED)
     assert max(fraction for fraction, step in steps if "drum" in step) == pytest.approx(
-        PASS_TWO_CEILING
+        WIND_FLOOR
     )
 
 

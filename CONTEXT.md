@@ -42,6 +42,11 @@ timelines. The server measures; Claude decides.
 - **stem** — separated audio (mix → vocals/drums/bass/other; drums →
   kick/snare/toms/ride/crash), path is a content hash (ADR 0003). The drum
   model writes `hh` too; it is not collected (#125).
+- **wind / comp** — the two halves of the opt-in third pass over `other`
+  (#153). `wind` is horns and reeds; `comp` is accompaniment — piano,
+  guitar, vibes, percussion, and the bass line itself on a capture whose
+  `bass` stem came back near-silent (#126). `comp` is **never** a piano
+  stem and nothing may name it one.
 - **phrase** — the cut-placement unit (#46, `styles/concert.md` §1): a
   stretch of the soloist's line between two endings. `analysis/phrases.py`
   reports the **boundaries**, each with two times — `measured_t`, where the
