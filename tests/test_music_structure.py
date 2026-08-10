@@ -23,6 +23,7 @@ from resolve_mcp.analysis import beats as beats_module
 from resolve_mcp.analysis import decode, music, structure
 from resolve_mcp.analysis import solos as solos_module
 from resolve_mcp.analysis.beats import BeatGrid
+from resolve_mcp.audio import stems as stems_module
 from resolve_mcp.config import get_config
 from resolve_mcp.jobs import store
 from resolve_mcp.jobs.runner import wait_for
@@ -145,9 +146,44 @@ def _stems(tmp_path: Path, seconds: float = 24.0) -> Path:
     return directory.parent
 
 
+def _third_pass(directory: Path, seconds: float = 24.0, half: bool = False) -> Path:
+    """The opt-in third pass beside the mix pass: ``other`` taken apart into wind and comp.
+
+    The two halves sum to the residual, which is the whole point of them — the horns take
+    the first chorus of the second half of the set and the piano the next, so the handover
+    that lived entirely inside ``other`` is now one stem falling as another lifts.
+
+    ``half`` writes only the winds: a pass that died between its two files.
+    """
+    outer = directory / stems_module.OTHER_PASS
+    middle = seconds / 2
+    third = middle + seconds / 4
+    write_wav(
+        outer / "concert_(Woodwinds)_model.wav",
+        seconds=seconds,
+        sample_rate=SAMPLE_RATE,
+        frequency=880.0,
+        silence=((0.0, middle), (third, seconds)),
+    )
+    if not half:
+        write_wav(
+            outer / "concert_(No Woodwinds)_model.wav",
+            seconds=seconds,
+            sample_rate=SAMPLE_RATE,
+            frequency=220.0,
+            silence=((0.0, third),),
+        )
+    return directory
+
+
 @pytest.fixture
 def stems(tmp_path: Path) -> Path:
     return _stems(tmp_path)
+
+
+@pytest.fixture
+def split_stems(tmp_path: Path) -> Path:
+    return _third_pass(_stems(tmp_path))
 
 
 @pytest.fixture
@@ -188,6 +224,68 @@ def _solos(audio: Path, stems: Path, **kwargs: Any) -> dict[str, Any]:
     }
     settings.update(kwargs)
     return _started(**settings)
+
+
+# --- which stems the job reads ------------------------------------------------------------
+
+
+def test_the_third_pass_halves_are_read_alongside_the_stems_from_the_first(
+    split_stems: Path,
+) -> None:
+    """The wind pass writes its own directory, so nothing sees it unless this reaches for it."""
+    found = structure._stems(split_stems, solos=True)
+
+    assert sorted(found) == ["comp", "drums", "other", "vocals", "wind"]
+
+
+def test_a_stems_directory_with_no_third_pass_reads_exactly_as_it_did(stems: Path) -> None:
+    found = structure._stems(stems, solos=True)
+
+    assert sorted(found) == ["drums", "other", "vocals"]
+
+
+def test_the_mix_pass_directory_reaches_the_third_pass_beside_it(split_stems: Path) -> None:
+    """An agent looking at the disk has the pass directory; the job record has its parent."""
+    found = structure._stems(split_stems / stems_module.MIX_PASS, solos=True)
+
+    assert sorted(found) == ["comp", "drums", "other", "vocals", "wind"]
+
+
+def test_half_a_third_pass_is_no_third_pass(tmp_path: Path) -> None:
+    """One half alone would join a voice set that still holds ``other`` — the residual twice."""
+    found = structure._stems(_third_pass(_stems(tmp_path), half=True), solos=True)
+
+    assert sorted(found) == ["drums", "other", "vocals"]
+
+
+def test_a_split_stem_set_is_keyed_apart_from_an_unsplit_one() -> None:
+    """The directory name is the same either way — the flag keys the job, not the stems (#153).
+
+    Stems this server separated are keyed by that name, so the names of the stems in it are
+    the only thing between a wind run and a residual run: without them the second run is
+    served the first one's cached record.
+    """
+    inside = _stems(get_config().stems_dir.parent)
+
+    plain = structure._stem_identity(structure._stems(inside, solos=True), get_config())
+    split = structure._stem_identity(
+        structure._stems(_third_pass(inside), solos=True), get_config()
+    )
+
+    assert "stems" in plain
+    assert plain["stems"] == split["stems"]
+    assert plain != split
+
+
+def test_stems_from_outside_this_server_are_keyed_apart_too(tmp_path: Path) -> None:
+    """The other branch of the same function: fingerprints, one per stem, not the name."""
+    loose = structure._stems(_third_pass(_stems(tmp_path / "elsewhere")), solos=True)
+    plain = {name: path for name, path in loose.items() if name not in solos_module.SPLIT}
+
+    split_identity = structure._stem_identity(loose, get_config())
+
+    assert "files" in split_identity
+    assert split_identity != structure._stem_identity(plain, get_config())
 
 
 # --- what lands on disk ----------------------------------------------------------------
@@ -345,7 +443,41 @@ def test_the_solo_gist_says_who_held_the_front_and_how_much_snapped(
     assert result["solos"]["snapped"] == 1
     assert result["solos"]["longest_lead"]["stem"] in {"vocals", "other"}
     assert result["solos"]["stem_count"] == 3
-    assert result["solos"]["residual"] is True
+    assert result["solos"]["timbre_stem"] == "other"
+    assert result["solos"]["voices"] == "drums, other, vocals"
+
+
+def test_the_solo_gist_says_what_it_measured_once_the_winds_are_their_own_stem(
+    solo_audio: Path,
+    split_stems: Path,
+) -> None:
+    """Which stems were voices and which one the brightness came off — a wind run from a not.
+
+    Without this the record cannot be read back: the same directory, the same job settings
+    and two different measurements, with nothing in the gist saying which one ran.
+    """
+    result = _result(_solos(solo_audio, split_stems))
+
+    assert result["solos"]["timbre_stem"] == "wind"
+    assert result["solos"]["voices"] == "comp, drums, vocals, wind"
+    assert result["solos"]["stem_count"] == 5
+    assert not any(isinstance(value, list) for value in result["solos"].values())
+
+
+def test_the_winds_handing_over_to_the_comp_is_a_lead_change_on_disk(
+    solo_audio: Path,
+    split_stems: Path,
+) -> None:
+    """The handover timbre used to be the only witness of, named at both ends and in dB."""
+    result = _result(_solos(solo_audio, split_stems, solo_seconds=4.0))
+
+    written = json.loads(Path(result["solos"]["path"]).read_text(encoding="utf-8"))
+    handover = [one for one in written["solos"] if {one["from"], one["to"]} == {"wind", "comp"}]
+
+    assert handover
+    assert handover[0]["signal"] == "lead"
+    assert handover[0]["detail"] > 0.0
+    assert "other" not in {one["to"] for one in written["solos"]}
 
 
 # --- what a rerun costs -----------------------------------------------------------------

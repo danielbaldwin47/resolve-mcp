@@ -80,7 +80,13 @@ DRUM_SOURCE = "drums"
 WIND_STEMS = ("woodwinds", "no woodwinds")
 """What the third pass asks its model for, in the labels that model writes them under."""
 
-WIND_KEYS = {"woodwinds": "wind", "no woodwinds": "comp"}
+WIND = "wind"
+"""Horns and reeds, once the third pass has taken them out of ``other``."""
+
+COMP = "comp"
+"""What is left of ``other`` after the winds go: accompaniment, and never a piano stem."""
+
+WIND_KEYS = {"woodwinds": WIND, "no woodwinds": COMP}
 """The envelope's names for the two halves of the third pass.
 
 ``no woodwinds`` is **not** a piano stem and nothing here may call it one. It is piano plus

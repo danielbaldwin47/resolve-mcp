@@ -9,9 +9,16 @@ Two signals, because a jazz set hands the tune over in two different ways:
 
 * **Across the stems.** The vocal takes it, then the horns; the bass takes a chorus. That
   is one stem lifting while the others sit, and it is read off the four energy curves.
-* **Inside the residual.** Tenor out, piano in — both live in ``other``, the energy barely
-  moves, and the only thing that changes is the timbre. That is a step in the residual
-  stem's brightness, and it is the reason this module reads the residual twice.
+* **Inside one stem.** Tenor out, piano in — both live in ``other``, the energy barely
+  moves, and the only thing that changes is the timbre. That is a step in that stem's
+  brightness, and it is the reason this module reads one stem twice.
+
+The optional third separation pass (#153) moves the line between the two. With it, the horns
+live in ``wind`` and the piano in ``comp``, so tenor-out/piano-in is an energy handover like
+any other and the first signal reports it — named at both ends, with a margin in dB, which
+brightness cannot say. The second signal then reads ``wind`` rather than ``other``, where a
+step is one horn giving way to another instead of a horn giving way to a piano. Without the
+pass both stay as they were, and ``other`` is read twice.
 
 The measurement that makes the first signal work is **prominence over a stem's own quiet
 baseline**, not its level. Drums are the loudest stem in almost every mix and are almost
@@ -35,6 +42,7 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 import numpy as np
 from numpy.typing import NDArray
 
+from ..audio.stems import COMP, WIND
 from . import beats as beats_module
 
 if TYPE_CHECKING:  # pragma: no cover - the worker imports these when it runs
@@ -55,6 +63,9 @@ RANGE_DB = 40.0
 
 RESIDUAL = "other"
 """The stem the horns and the piano land in — everything no model has a stem for."""
+
+SPLIT = (WIND, COMP)
+"""What the residual comes back as when the third pass ran: the two halves it was split into."""
 
 LEAD = "lead"
 TIMBRE = "timbre"
@@ -87,7 +98,7 @@ class Run(NamedTuple):
 
 
 class Step(NamedTuple):
-    """A step in the residual stem's brightness — a handover inside one stem."""
+    """A step in one stem's brightness — a handover inside that stem. See ``timbre_stem``."""
 
     seconds: float
     before: float
@@ -110,6 +121,31 @@ class Change(NamedTuple):
     detail: float
 
 
+def measured(stems: Mapping[str, Path]) -> dict[str, Path]:
+    """Which of the stems on offer are read as voices — every one, bar a residual counted twice.
+
+    ``other`` **is** ``wind`` plus ``comp`` (#153). Measure all three and the residual is in
+    the set twice over: the sum sits above either of its own halves in nearly every window,
+    takes the front off both, and masks the wind↔comp handover the split exists to expose.
+    So when both halves are there the residual leaves, and when they are not it stays.
+
+    Both halves or neither. One half alone is a partial pass, and dropping ``other`` for it
+    would leave the piano in no measured stem at all.
+    """
+    split = all(name in stems for name in SPLIT)
+    return {name: path for name, path in stems.items() if not (split and name == RESIDUAL)}
+
+
+def timbre_stem(stems: Mapping[str, Path]) -> str | None:
+    """Which stem the brightness is read off — ``wind`` if the third pass ran, else ``other``.
+
+    Read off ``wind``, a step is one horn giving way to another, because that stem holds one
+    instrument family. Read off ``other``, it is anything at all that changed in the room.
+    ``None`` when neither stem was separated: there is nothing to read.
+    """
+    return next((name for name in (WIND, RESIDUAL) if name in stems), None)
+
+
 def voices(
     stems: Mapping[str, Path],
     window_seconds: float = DEFAULT_WINDOW_SECONDS,
@@ -121,14 +157,19 @@ def voices(
     of audio and a handover inside it moves both curves from the moment it happens, so the
     window where one stem passes the other is the window straddling the change — dating it
     by its leading edge would report every solo change half a window early, every time.
+
+    Which stems those are is ``measured``'s decision, applied here rather than left to the
+    caller: a stem set that reaches this function unfiltered reads a gigabyte of WAV to
+    produce a curve that then quietly wrecks the answer.
     """
     from . import decode
     from . import energy as energy_module
 
     middle = window_seconds / 2.0
     found: list[Voice] = []
-    for name in sorted(stems):
-        curve = energy_module.curve(decode.read(stems[name]), window_seconds, hop_seconds)
+    reading = measured(stems)
+    for name in sorted(reading):
+        curve = energy_module.curve(decode.read(reading[name]), window_seconds, hop_seconds)
         found.append(
             Voice(
                 name=name,
@@ -348,6 +389,7 @@ def changes(
     stepped: Sequence[Step] = (),
     together_seconds: float = DEFAULT_WINDOW_SECONDS,
     opened: float = 0.0,
+    stem: str = RESIDUAL,
 ) -> tuple[Change, ...]:
     """Every point where the front changed, from both signals, each event reported once.
 
@@ -355,11 +397,17 @@ def changes(
     measurement opened in, and ``opened`` is when that was, so a set that starts mid-solo
     reports its first *change* rather than its first soloist.
 
-    A stem taking the front and the residual's timbre stepping at the same moment is one
-    event seen twice — the horn leaving ``other`` is why the vocal is now clear of it — so
-    the timbre reading is dropped when a lead change is already within ``together_seconds``.
+    ``stem`` is the stem the brightness was read off, and it is what a timbre change names
+    at both ends: the handover is inside that one stem. It defaults to the residual because
+    that is what there is to read without the third pass, but it is never assumed — naming
+    ``other`` on a reading taken off ``wind`` is a record that says the wrong thing.
+
+    A stem taking the front and that stem's timbre stepping at the same moment is one event
+    seen twice — the horn leaving ``other`` is why the vocal is now clear of it — so the
+    timbre reading is dropped when a lead change is already within ``together_seconds``. The
+    lead reading is the one worth keeping: it names both stems and carries a margin in dB.
     Only against the lead changes: two timbre steps close together are two handovers inside
-    the residual, and ``steps`` has already decided how close two of those may be.
+    the one stem, and ``steps`` has already decided how close two of those may be.
     """
     found = [
         Change(
@@ -381,8 +429,8 @@ def changes(
             measured=one.seconds,
             downbeat=False,
             signal=TIMBRE,
-            left=RESIDUAL,
-            entered=RESIDUAL,
+            left=stem,
+            entered=stem,
             detail=one.semitones,
         )
         for one in stepped
