@@ -46,7 +46,9 @@ timelines. The server measures; Claude decides.
   (#153). `wind` is horns and reeds; `comp` is accompaniment — piano,
   guitar, vibes, percussion, and the bass line itself on a capture whose
   `bass` stem came back near-silent (#126). `comp` is **never** a piano
-  stem and nothing may name it one.
+  stem and nothing may name it one. Where both are on disk they replace
+  `other` as voices in `solos` — `other` *is* their sum, and measuring all
+  three counts the residual twice (#157).
 - **phrase** — the cut-placement unit (#46, `styles/concert.md` §1): a
   stretch of the soloist's line between two endings. `analysis/phrases.py`
   reports the **boundaries**, each with two times — `measured_t`, where the
@@ -103,8 +105,11 @@ is a rule layer over, as `drums` is to `fills`), `music` (beats + energy + gist
 job), `phrases` (phrase boundaries: where the soloist stops, which is the
 cut-placement unit #46 named, #143),
 `records` (sliceable record files), `silence` (RMS spans), `solos` (front
-of band changes), `structure` (tunes + solo changes job; both halves read the
-shared beats half), `transcribe`
+of band changes: lead off the stem energy, timbre off one stem's brightness —
+with the third pass on disk the voices are `wind`/`comp` rather than `other`
+and timbre reads `wind`, #157), `structure` (tunes + solo changes job; both
+halves read the shared beats half; its stem loader is what reaches the third
+pass), `transcribe`
 (job), `transcript` (document + Word/Transcription/Transcriber vocabulary),
 `virtual` (a cut file read back as the words it will contain — the P4
 self-review, warnings only, touches no Resolve handle), `whisper`

@@ -191,7 +191,8 @@ def _stems(stems: str | Path | None, solos: bool) -> dict[str, Path]:
     That job writes each pass into its own directory, so the path it hands back holds the
     four stems one level down; both that path and the pass directory itself are accepted,
     because an agent reading the job record has one and an agent looking at the disk has
-    the other.
+    the other. The opt-in third pass sits beside the first, and comes along when it is
+    there — see ``_wind``.
     """
     if not solos:
         return {}
@@ -216,7 +217,36 @@ def _stems(stems: str | Path | None, solos: bool) -> dict[str, Path]:
             ),
             detail={"requested": str(directory)},
         )
+    found.update(_wind(directory))
     return found
+
+
+def _wind(directory: Path) -> dict[str, Path]:
+    """The third pass's two halves under their envelope names — nothing, if it never ran.
+
+    That pass writes a sibling of the mix pass (#153), so it is reached from whichever of
+    the two accepted directories was given: the job's own directory holds it directly, and
+    the mix pass directory holds it one level up. Anywhere else there is no pass layout to
+    read, and a directory of loose stems gets nothing.
+
+    Both halves or neither, and only the two names the envelope knows. One half alone is a
+    partial pass, and it would join a voice set that still holds ``other`` — the residual
+    measured twice over, which is the one way this change reads worse than no change.
+    """
+    if (directory / stems_module.MIX_PASS).is_dir():
+        outer = directory / stems_module.OTHER_PASS
+    elif directory.name == stems_module.MIX_PASS:
+        outer = directory.parent / stems_module.OTHER_PASS
+    else:
+        return {}
+    if not outer.is_dir():
+        return {}
+    halved = {
+        stems_module.WIND_KEYS[name]: path
+        for name, path in separator.collect(outer).items()
+        if name in stems_module.WIND_KEYS
+    }
+    return halved if len(halved) == len(stems_module.WIND_KEYS) else {}
 
 
 def _stem_identity(found: Mapping[str, Path], config: Config) -> dict[str, Any]:
@@ -226,6 +256,11 @@ def _stem_identity(found: Mapping[str, Path], config: Config) -> dict[str, Any]:
     audio they came from and the models that made them, so the name *is* the identity and
     reading a gigabyte of WAV back to learn what it already says would be waste. Stems from
     anywhere else are fingerprinted one by one, because nothing about the name is known.
+
+    The third pass does not change that directory name — the flag keys the stems job, not
+    the stems (#153) — so on the named branch it is ``names`` that separates a wind run
+    from a residual run, and on the other branch the two extra fingerprints. Both branches
+    key the split apart from the unsplit; neither is served the other's cached record.
     """
     if not found:
         return {}
@@ -458,39 +493,60 @@ def _solos(
     hop = float(shape["hop_seconds"])
     minimum = float(shape["solo_seconds"])
 
+    brightness_stem = solos_module.timbre_stem(stems)
     voices = solos_module.voices(stems, window, hop)
     runs = solos_module.runs(voices, float(shape["margin_db"]), minimum)
-    stepped = _timbre(stems, window, hop, minimum, float(shape["semitones"]))
+    stepped = _timbre(stems, brightness_stem, window, hop, minimum, float(shape["semitones"]))
     opened = voices[0].seconds[0] if voices and voices[0].seconds else 0.0
     changes = solos_module.snapped(
-        solos_module.changes(runs, stepped, window, opened),
+        # The stem a timbre change happened inside. It is only ever ``None`` when there was
+        # nothing to read the brightness off, and then there are no steps to name, so the
+        # fallback is a label nothing wears rather than a wrong one.
+        solos_module.changes(
+            runs, stepped, window, opened, brightness_stem or solos_module.RESIDUAL
+        ),
         _downbeats(source, described, identity, detector, refresh, config),
         float(shape["snap_seconds"]),
     )
+    # Off the voices that came back rather than the stems handed in: ``voices`` decides
+    # which stems are read (a residual whose two halves are on disk is not), and a gist
+    # that counted the directory instead would name one set and count another.
+    measured = tuple(one.name for one in voices)
     gist = {
         **solos_module.gist(runs, changes),
         **shape,
-        "stem_count": len(stems),
-        "residual": solos_module.RESIDUAL in stems,
+        "stem_count": len(measured),
+        # What was measured, and which stem the timbre came off, because neither is
+        # inferable from the rest: the same stems directory reads differently depending on
+        # whether the third pass ran, and a record that cannot say which one ran cannot be
+        # reviewed. A joined string, because a gist holds no lists.
+        "voices": ", ".join(measured),
+        "timbre_stem": brightness_stem,
     }
-    log.info("Found %d solo changes across %d stems in %s", len(changes), len(stems), source.name)
+    log.info(
+        "Found %d solo changes across %d stems (timbre off %s) in %s",
+        len(changes),
+        len(measured),
+        brightness_stem or "nothing",
+        source.name,
+    )
     return halves.written(target, SOLOS, described, gist, solos_module.numbered(changes))
 
 
 def _timbre(
     stems: Mapping[str, Path],
+    stem: str | None,
     window: float,
     hop: float,
     minimum: float,
     semitones: float,
 ) -> tuple[solos_module.Step, ...]:
-    """Brightness steps inside the residual stem — nothing, if there is no residual stem."""
+    """Brightness steps inside the stem ``timbre_stem`` picked — nothing, if it picked none."""
     from . import decode
 
-    residual = stems.get(solos_module.RESIDUAL)
-    if residual is None:
+    if stem is None:
         return ()
-    seconds, hertz = solos_module.brightness(decode.read(residual), window, hop)
+    seconds, hertz = solos_module.brightness(decode.read(stems[stem]), window, hop)
     return solos_module.steps(seconds, hertz, semitones, minimum)
 
 
