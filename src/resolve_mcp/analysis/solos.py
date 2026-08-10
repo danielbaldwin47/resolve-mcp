@@ -56,7 +56,7 @@ DEFAULT_MARGIN_DB = 3.0
 """How far clear of the next stem a stem has to be before it is out front rather than level."""
 DEFAULT_SNAP_SECONDS = 2.0
 DEFAULT_SEMITONES = 4.0
-"""How far the residual's brightness has to step before it is a different instrument."""
+"""How far the read stem's brightness has to step before it is a different instrument."""
 
 QUIET_PERCENTILE = 5.0
 RANGE_DB = 40.0
@@ -271,7 +271,7 @@ def brightness(
     window_seconds: float = DEFAULT_WINDOW_SECONDS,
     hop_seconds: float = DEFAULT_HOP_SECONDS,
 ) -> tuple[tuple[float, ...], tuple[float, ...]]:
-    """The residual stem's spectral centroid per window, in hertz — its brightness curve.
+    """One stem's spectral centroid per window, in hertz — its brightness curve.
 
     Short frames averaged into the analysis window rather than one transform per window: a
     four-second FFT of a concert is both slow and smeared, and what is wanted is the timbre

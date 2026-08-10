@@ -460,7 +460,7 @@ def test_the_solo_gist_says_what_it_measured_once_the_winds_are_their_own_stem(
 
     assert result["solos"]["timbre_stem"] == "wind"
     assert result["solos"]["voices"] == "comp, drums, vocals, wind"
-    assert result["solos"]["stem_count"] == 5
+    assert result["solos"]["stem_count"] == 4
     assert not any(isinstance(value, list) for value in result["solos"].values())
 
 

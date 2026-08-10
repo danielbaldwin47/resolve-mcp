@@ -207,8 +207,7 @@ def _stems(stems: str | Path | None, solos: bool) -> dict[str, Path]:
         )
     directory = Path(stems)
     inner = directory / stems_module.MIX_PASS
-    passes = inner.is_dir()
-    found = separator.collect(inner if passes else directory)
+    found = separator.collect(inner if inner.is_dir() else directory)
     if not found:
         raise InvalidRequestError(
             cause=f"There are no separated stems in {directory}.",
@@ -218,11 +217,11 @@ def _stems(stems: str | Path | None, solos: bool) -> dict[str, Path]:
             ),
             detail={"requested": str(directory)},
         )
-    found.update(_wind(directory, passes))
+    found.update(_wind(directory))
     return found
 
 
-def _wind(directory: Path, passes: bool) -> dict[str, Path]:
+def _wind(directory: Path) -> dict[str, Path]:
     """The third pass's two halves under their envelope names — nothing, if it never ran.
 
     That pass writes a sibling of the mix pass (#153), so it is reached from whichever of
@@ -234,7 +233,7 @@ def _wind(directory: Path, passes: bool) -> dict[str, Path]:
     partial pass, and it would join a voice set that still holds ``other`` — the residual
     measured twice over, which is the one way this change reads worse than no change.
     """
-    if passes:
+    if (directory / stems_module.MIX_PASS).is_dir():
         outer = directory / stems_module.OTHER_PASS
     elif directory.name == stems_module.MIX_PASS:
         outer = directory.parent / stems_module.OTHER_PASS
@@ -494,35 +493,41 @@ def _solos(
     hop = float(shape["hop_seconds"])
     minimum = float(shape["solo_seconds"])
 
-    measured = solos_module.measured(stems)
-    read = solos_module.timbre_stem(stems)
-    voices = solos_module.voices(measured, window, hop)
+    brightness_stem = solos_module.timbre_stem(stems)
+    voices = solos_module.voices(stems, window, hop)
     runs = solos_module.runs(voices, float(shape["margin_db"]), minimum)
-    stepped = _timbre(stems, read, window, hop, minimum, float(shape["semitones"]))
+    stepped = _timbre(stems, brightness_stem, window, hop, minimum, float(shape["semitones"]))
     opened = voices[0].seconds[0] if voices and voices[0].seconds else 0.0
     changes = solos_module.snapped(
-        # ``read`` names the stem a timbre change happened inside. It is only ever ``None``
-        # when there was nothing to read the brightness off, and then there are no steps to
-        # name, so the fallback is a label nothing wears rather than a wrong one.
-        solos_module.changes(runs, stepped, window, opened, read or solos_module.RESIDUAL),
+        # The stem a timbre change happened inside. It is only ever ``None`` when there was
+        # nothing to read the brightness off, and then there are no steps to name, so the
+        # fallback is a label nothing wears rather than a wrong one.
+        solos_module.changes(
+            runs, stepped, window, opened, brightness_stem or solos_module.RESIDUAL
+        ),
         _downbeats(source, described, identity, detector, refresh, config),
         float(shape["snap_seconds"]),
     )
+    # Off the voices that came back rather than the stems handed in: ``voices`` decides
+    # which stems are read (a residual whose two halves are on disk is not), and a gist
+    # that counted the directory instead would name one set and count another.
+    measured = tuple(one.name for one in voices)
     gist = {
         **solos_module.gist(runs, changes),
         **shape,
-        "stem_count": len(stems),
-        # What was measured and where the timbre came from, because neither is inferable
-        # from the count: the same stems directory reads differently depending on whether
-        # the third pass ran, and a record that cannot say which one ran cannot be reviewed.
-        "voices": ", ".join(sorted(measured)),
-        "timbre_stem": read,
+        "stem_count": len(measured),
+        # What was measured, and which stem the timbre came off, because neither is
+        # inferable from the rest: the same stems directory reads differently depending on
+        # whether the third pass ran, and a record that cannot say which one ran cannot be
+        # reviewed. A joined string, because a gist holds no lists.
+        "voices": ", ".join(measured),
+        "timbre_stem": brightness_stem,
     }
     log.info(
         "Found %d solo changes across %d stems (timbre off %s) in %s",
         len(changes),
         len(measured),
-        read or "nothing",
+        brightness_stem or "nothing",
         source.name,
     )
     return halves.written(target, SOLOS, described, gist, solos_module.numbered(changes))
