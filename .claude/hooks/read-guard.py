@@ -17,6 +17,10 @@ Measured motivation (2026-08-05 transcript audit): read-after-edit ran ~46% of
 sessions pre-rules and ~39% after prose alone — the one axis prose never moved;
 and one session full-read a 656-line module three times under the grep-first
 prose rule.
+
+starter-version: 2026-08-10 (claude-principles; matches the starter — this
+docstring's framing is local, and the formatter-hook hint was added to the
+re-read message in the same sync)
 """
 import json
 import os
@@ -107,6 +111,8 @@ if event == "PreToolUse" and tool == "Read":
                 "Blocked (context discipline): this session already edited that file — its content is in your "
                 "context, and Edit/Write fail loudly on a miss, so a whole-file re-read buys nothing.\n"
                 "If you need a specific section, grep -n for it and Read with offset/limit.\n"
+                "(If Edit just failed with 'modified since read' — a formatter hook rewrote it — re-read the "
+                "changed region with offset/limit.)\n"
             )
             sys.exit(2)
 
