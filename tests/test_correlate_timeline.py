@@ -1193,6 +1193,52 @@ def test_the_reach_refusal_leaves_the_transient_measurement_exactly_as_it_was(
     assert result["transient_offsets"]["measured"] == 2
 
 
+def test_a_cut_in_a_hole_inside_the_grid_is_refused_by_the_beat_gate_rather_than_the_reach_rule(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Why #160 needed no "a refused beat lies between" rule: an interior hole gates itself.
+
+    ``nearest`` looks over every beat, so no beat can sit between a cut and the beat it was
+    scored against — a nearer one would be the one it was scored against. And the steadiness
+    check refuses *both* beats of an interval that does not belong, so the beat on the near
+    side of a hole is refused already. The reach rule is therefore about the ends of the grid
+    and the two counts stay apart here, which is the claim this pins.
+    """
+    attach(studio(timeline=a_cut()))
+
+    # Half-second beats with the third cut's second missing from the middle of them.
+    holed = (0.0, 0.5, 1.0, 1.5, 4.0, 4.5, 5.0, 5.5, 6.0)
+    result = _measured(
+        tmp_path, beats=str(beats_file(tmp_path, seconds=holed, name="holed-beats.json"))
+    )
+
+    cuts = _rows(result)
+    assert cuts[2]["in_grid"] is False
+    assert cuts[2]["stranded"] is False
+    assert result["gated"] == 1
+    assert result["stranded"] == 0
+
+
+def test_a_grid_that_calls_the_whole_span_one_beat_reaches_the_cuts_inside_it(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The rule is a beat wide, not a number of seconds: a slow grid reaches further.
+
+    Two beats six seconds apart is a grid saying the music runs at 10bpm. That is a bad grid,
+    but it is bad in the way #112 judges — nothing about a cut three seconds in contradicts
+    it, and refusing that cut for distance would be this rule inventing a tempo of its own.
+    """
+    attach(studio(timeline=a_cut()))
+
+    result = _measured(
+        tmp_path,
+        beats=str(beats_file(tmp_path, seconds=(0.0, 6.0), name="coarse-beats.json")),
+    )
+
+    assert [one["stranded"] for one in _rows(result)] == [False, False, False]
+    assert result["stranded"] == 0
+
+
 def test_a_cut_that_misses_the_last_beat_by_less_than_a_beat_is_still_measured(
     attach: Attach, tmp_path: Path
 ) -> None:

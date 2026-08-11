@@ -211,12 +211,7 @@ def bar_line_strength(row: Mapping[str, Any] | None) -> float:
 
 def gist(grid: BeatGrid, records: Sequence[dict[str, Any]]) -> dict[str, Any]:
     """The stats worth returning inline: how many, how fast, and in what meter."""
-    intervals = [
-        later - earlier
-        for earlier, later in zip(grid.beats, grid.beats[1:], strict=False)
-        if later > earlier
-    ]
-    tempos = sorted(60.0 / interval for interval in intervals)
+    tempos = sorted(60.0 / one for one in _intervals(grid.beats) if one > 0)
     return {
         "count": len(grid.beats),
         "downbeat_count": sum(1 for record in records if record["downbeat"]),
@@ -275,13 +270,42 @@ def meter(records: Sequence[Mapping[str, Any]]) -> int | None:
     return statistics.mode(lengths) if lengths else None
 
 
+def spacing(times: Sequence[float]) -> tuple[float | None, ...]:
+    """How wide a beat is at each beat, in seconds — the local tempo, parallel to ``times``.
+
+    Public for the reason ``nearest`` is: more than one reading has to ask how far a beat is
+    around here, and two answers to that would be two grids. It reads the same window the
+    steadiness check judges an interval against; the cut side asks whether a cut sits further
+    from its beat than a beat is wide, which is how a cut the grid does not reach is told from
+    one it does (#160).
+
+    Local rather than set-wide for the same reason the steadiness window is: a two-hour set
+    has tunes at different tempos, and a beat in the fast one is not half a beat of the slow
+    one. A beat is read from the window of the interval that *follows* it, and the last beat
+    borrows the one before it — an asymmetry the steadiness check does not have, because that
+    check is looking for the interval that does not belong and needs both sides to convict,
+    while this one is only asking how fast the music runs around here and both sides answer
+    the same. ``None`` where the grid cannot say: a lone beat has no interval, and inventing a
+    width for it would be a verdict rather than a reading.
+    """
+    intervals = _intervals(times)
+    if not intervals:
+        return tuple(None for _ in times)
+    return tuple(_local(intervals, min(index, len(intervals) - 1)) for index in range(len(times)))
+
+
+def _intervals(times: Sequence[float]) -> list[float]:
+    """The grid as the gaps between its beats — the one form every reading here is taken over."""
+    return [later - earlier for earlier, later in zip(times, times[1:], strict=False)]
+
+
 def _steady_flags(times: Sequence[float]) -> tuple[bool, ...]:
     """Whether each beat sits between intervals that match the tempo around them.
 
     A beat is judged by the intervals either side of it, so an interval that does not belong
     discredits both of the beats it joins rather than one arbitrary end of it.
     """
-    intervals = [later - earlier for earlier, later in zip(times, times[1:], strict=False)]
+    intervals = _intervals(times)
     if len(intervals) < 2:
         # One interval has no neighbours to be judged against; refusing it would be inventing
         # a verdict rather than reaching one.
@@ -293,25 +317,6 @@ def _steady_flags(times: Sequence[float]) -> tuple[bool, ...]:
         not any(unsteady[near] for near in (position - 1, position) if 0 <= near < len(unsteady))
         for position in range(len(times))
     )
-
-
-def spacing(times: Sequence[float]) -> tuple[float | None, ...]:
-    """How wide a beat is at each beat, in seconds — the local tempo, parallel to ``times``.
-
-    Public for the reason ``nearest`` is: more than one reading has to ask how far a beat is
-    around here, and two answers to that would be two grids. The steadiness check above judges
-    an interval against it; the cut side asks whether a cut sits further from its beat than a
-    beat is wide, which is how a cut the grid does not reach is told from one it does (#160).
-
-    Local rather than set-wide for the same reason the steadiness window is: a two-hour set
-    has tunes at different tempos, and a beat in the fast one is not half a beat of the slow
-    one. ``None`` where the grid cannot say — a lone beat has no interval, and inventing a
-    width for it would be a verdict rather than a reading.
-    """
-    intervals = [later - earlier for earlier, later in zip(times, times[1:], strict=False)]
-    if not intervals:
-        return tuple(None for _ in times)
-    return tuple(_local(intervals, min(index, len(intervals) - 1)) for index in range(len(times)))
 
 
 def _local(intervals: Sequence[float], index: int) -> float:

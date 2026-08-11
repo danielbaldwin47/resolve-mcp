@@ -441,12 +441,17 @@ hole *inside* the grid: Freefall's grid ends at 670.72 s and the cut is at
 mostly gates itself — the steadiness check refuses both beats of an aberrant
 interval, so the nearest beat to a cut in the hole is usually a refused one.)
 The gate now refuses a cut further from its beat than a beat is wide and counts
-it as `stranded`, apart from `gated`. Every Freefall beat figure in this
-document predates that refusal, so a re-run would move exactly this much: one
-cut leaves `beat_offsets` and `bars` (35 measured → 34 in the gated pass, 50 →
-49 in the visible-edit one, and one off the beat-1 column in each), the `max_abs`
-of 6.08 s goes with it, and the medians — 69 ms and 80 ms — are untouched,
-because a median never noticed the cut in the first place.
+it as `stranded`, apart from `gated`. Every beat figure in this document
+predates that refusal, and no pass has been re-run against it, so what follows
+is a prediction and not a measurement. This cut at least leaves `beat_offsets`
+and `bars` — Freefall 35 measured → 34 in the gated pass and 50 → 49 in the
+visible-edit one, one off the beat-1 column in each, and the `max_abs` of 6.08 s
+with it — while the medians (69 ms, 80 ms) are untouched, a median never having
+noticed the cut. The refusal is corpus-wide, though, so any other cut sitting
+more than a beat from a trusted beat — at a grid's *start* as well as its end —
+would go too, and only a re-run settles how many that is. Note also that this
+cut is past the end of its grid and so was already counted in `outside_grid`;
+the two counts overlap on it, as they may on any stranded cut beyond the ends.
 
 ### Two bookkeeping consequences of re-running
 
