@@ -3,15 +3,21 @@
 An MCP server that gives Claude Code hands inside **DaVinci Resolve Studio** — so the
 musical and editorial reasoning happens in Claude and the mechanical work happens in Resolve.
 
-Build contract: [issue #22](https://github.com/danielbaldwin47/resolve-mcp/issues/22).
+Build contract: [issue #22](https://github.com/danielbaldwin47/resolve-mcp/issues/22)
+(closed — the build is complete).
 
 ## Status
 
-P1 in progress, P2 titling started. Shipped so far: the server skeleton, the
-session/project tools, the media pool tools, the timeline read, marker and interchange
-tools, the declarative cut file and `build_timeline`, the titling tools on both the Text+
-and PNG routes, the background-job infrastructure with audio acquisition, frame grabs and
-scene-cut detection, the render/deliver tools, and the `run_python` escape hatch.
+**v0.1.0** — the spec #22 build, complete: all four pillars (foundation, titling, the
+style-driven concert cut, the transcript-driven rough cut), 40 tools. The fake tier,
+mypy strict and ruff gate every PR; the live smoke tier last ran fully green against
+Resolve Studio on the Windows 11 box (32 passed, 6 skipped, 2026-08-11).
+
+The tools below are the mechanics. How an edit session actually runs — what the
+director hands over, the analysis prep, the mandatory self-reviews, the review rounds —
+is process, and lives in [`docs/agents/concert.md`](docs/agents/concert.md) (the concert
+pillar) and [`docs/agents/rough-cut.md`](docs/agents/rough-cut.md) (the rough-cut
+pillar); the taste the concert cut is measured against lives in `styles/`.
 
 | Tool | What it does |
 | --- | --- |
@@ -34,6 +40,8 @@ scene-cut detection, the render/deliver tools, and the `run_python` escape hatch
 | `get_cut_schema` | The cut-file contract, its annotated example and the validation rules |
 | `validate_cut` | Dry-runs a cut file: every error and warning at once, with fix hints |
 | `build_timeline` | Builds a cut file into a fresh `<name> v<N>` timeline and verifies what landed |
+| `swap_take` | Flips a built segment to one of its `alternates[]` in place — the one edit that skips the rebuild |
+| `virtual_transcript` | Reads a cut file back as the words it will contain — the rough-cut self-review, run before every version ships |
 | `get_titles_schema` | The titles-file contract, its annotated example and the validation rules |
 | `validate_titles` | Dry-runs a titles file before the Titles track is touched |
 | `apply_titles` | Places Text+ and PNG titles from `titles.json` onto an owned Titles track, fades and all |
@@ -42,6 +50,12 @@ scene-cut detection, the render/deliver tools, and the `run_python` escape hatch
 | `grab_frames` | Grabs chosen moments on a clip as JPEGs (≤1568px) the agent reads off disk |
 | `detect_scene_cuts` | Job: catalogs where a clip changes shot, gist inline and the full list on disk |
 | `separate_stems` | GPU stem separation: mix → 4 stems, drums → kick/snare/toms/ride/crash, and on `split_wind` other → wind/comp |
+| `transcribe_audio` | Job: word-level transcript of a source clip or the timeline mix, with confidence and measured silence spans |
+| `analyze_music` | Job: beats, downbeats and energy of a mix WAV |
+| `analyze_structure` | Job: tune boundaries from applause, gated by musical pulse; `solos=true` adds solo changes measured off the stems |
+| `detect_drum_fills` | Job: drum fills from the separated drum stems, confidence-gated |
+| `detect_phrases` | Job: phrase boundaries in the soloist's stem |
+| `correlate_timeline` | Job: measures a cut against the music it was cut to — beat/transient offsets, bar position, tune, who's out front, per shot. Reports; never judges |
 | `list_render_presets` | The project's render presets, spelled the way `render_timeline` needs |
 | `render_timeline` | Renders a timeline or a range of one as a background job |
 | `get_job` | Polls one background job: progress, result, or a structured failure |
@@ -165,7 +179,7 @@ you pass `refresh`.
 ## Install
 
 ```sh
-uv venv --python "C:/Users/<you>/AppData/Local/Programs/Python/Python311/python.exe"
+uv venv --python "C:/Users/<you>/AppData/Local/Programs/Python/Python312/python.exe"
 uv sync
 ```
 
