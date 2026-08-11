@@ -29,9 +29,8 @@ timelines. The server measures; Claude decides.
   tool addressing one clip by name: omitted is the whole pool, a name is
   that bin and everything nested inside it, `""` is the root folder alone
   — the value `list_media` reports for a root clip, so a listing reads
-  back verbatim (#122).
-  _Avoid_: reading `""` as the whole pool — that is the omitted form; `""`
-  is the root folder alone. Each media tool taking a bin — `list_media`,
+  back verbatim (#122); `""` is never the whole pool — that is the
+  omitted form. Each media tool taking a bin — `list_media`,
   `inspect_clip`, `relink_media`, and per item on `set_clip_metadata` and
   `organize_media`'s `move_clips` — also takes `recursive`, false meaning
   that bin's own clips alone: the address of a copy a subfolder shadows
@@ -54,8 +53,7 @@ timelines. The server measures; Claude decides.
   stretch of the soloist's line between two endings. `analysis/phrases.py`
   reports the **boundaries**, each with two times — `measured_t`, where the
   line actually stopped, and `t`, the beat inside the rest that a cut is
-  placed on.
-  _Avoid_: the `phrase` factor inside `fills` — that one is only "how far
+  placed on. Not the `phrase` factor inside `fills`, which is only "how far
   into a four-bar group does this land".
 - **style layer** — `styles/` at the repo root: layered Markdown style
   profiles (`base.md` + `concert.md`), the corpus record (`corpus.md`) and
@@ -247,8 +245,9 @@ and the variable is for a project that does have an edit to scan.
   also home of the `projects/<project>/` convention and the songs file's
   ownership, #132).
 - Landing places for artifacts that today live only in issue and PR
-  threads: research reports → `docs/research/`, adversarial and other
-  standalone reviews → `reviews/` (dated filenames). Both merge to `main`
-  in the PR that produced them — a finding on an unmerged branch or in a
-  thread is unreadable from here.
+  threads: research reports → `docs/research/`, spike reports and design
+  bibles → `docs/reference/`, adversarial and other standalone reviews →
+  `reviews/` (dated filenames). All merge to `main` in the PR that
+  produced them — a finding on an unmerged branch or in a thread is
+  unreadable from here.
 - Wayfinder: map = issue #1, scope = #2, spec = #22, build tickets #23–#47.

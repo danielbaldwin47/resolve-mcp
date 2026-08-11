@@ -1,9 +1,8 @@
 # resolve-mcp
 
 An MCP server that lets an agent edit concert footage in DaVinci Resolve
-Studio: analyse audio, author cut and titles files as validated JSON, and
-materialise them as Resolve timelines. The server measures; Claude decides.
-Map and vocabulary: `CONTEXT.md`.
+Studio — the server measures; Claude decides. Map and vocabulary:
+`CONTEXT.md`.
 
 ## Test seams
 
@@ -98,12 +97,14 @@ produced no work; relaunch rather than assume.)
    alone proves nothing (#45: squashed PR #109 read as unlanded). The risk
    the check exists for is real either way: a PR that merges into a
    just-consumed parent branch reads MERGED while its commits never reach
-   main (#109's work needed re-landing as #111).
+   main.
 7. **If the PR was squashed, continue its ticket on a fresh branch.** The
    old branch then sits on history main no longer shares; a second PR from
    it drags the already-merged commits back in. Branch from `origin/main`
-   and cherry-pick only the new commits — never force-push. (After a
-   merge-commit PR, continuing on the same branch is safe.)
+   and cherry-pick only the new commits — never force-push. (#45: after
+   #109's squash, the continuation landed cleanly from the fresh branch
+   `issue-45-entries-2-3` as PR #111. After a merge-commit PR, continuing
+   on the same branch is safe.)
 8. **Close the ticket with the PR link**; name any unrun live ACs in the
    close comment.
 
@@ -160,25 +161,30 @@ sweeps that inlined everything ended at 2× the usable context budget.
 ## Gotchas
 
 Facts rediscovered across sessions, promoted from session memory. Each one
-cost a session real time at least twice before landing here.
+cost a session real time at least twice before landing here; a gotcha that
+later gets a real fix gets its line removed.
 
-- **Worktree sessions: pin every review and diff to `origin/main`.** The
-  local `main` checkout lags while other worktrees merge; a diff against
-  local `main` sweeps in commits that are not yours.
-- **Worktree pytest runs the main checkout's source.** The editable install
-  points at the main working copy, so a new test in a worktree fails
-  against old code with no import error to warn you. Reinstall in the
-  worktree (`uv sync`) before trusting a red run.
-- **`ruff format` is not a gate.** CI runs `ruff check` only;
-  `ruff format --check` fails repo-wide by design. Don't "fix" formatting
-  the repo never enforced.
+- **R1 — Worktree sessions: pin every review and diff to `origin/main`.**
+  The local `main` checkout lags while other worktrees merge; a diff
+  against local `main` sweeps in commits that are not yours. (Session
+  memory `worktree-main-is-stale`, 2026-08.)
+- **R2 — Worktree pytest runs the main checkout's source.** The editable
+  install points at the main working copy, so a new test in a worktree
+  fails against old code with no import error to warn you. Reinstall in
+  the worktree (`uv sync`) before trusting a red run. (Session memory
+  `worktree-tests-hit-main-checkout`, 2026-08.)
+- **R3 — `ruff format` is not a gate.** CI (`ci.yml`) runs `ruff check`
+  only; `ruff format --check` fails repo-wide by design. Don't "fix"
+  formatting the repo never enforced. (Session memory
+  `ruff-format-is-not-a-gate`, 2026-08.)
 
 ## Doc maintenance
 
 A dated `/writing-for-agents` pass over CLAUDE.md, CONTEXT.md and `docs/`
-runs periodically (last: 2026-08-10); session-memory facts that prove
-repo-general over multiple sessions graduate into this file and the memory
-note becomes history. Verified against mattpocock-skills 1.2.3.
+runs periodically (last: 2026-08-10, CLAUDE.md and CONTEXT.md only);
+session-memory facts that prove repo-general over multiple sessions
+graduate into this file and the memory note becomes history. Verified
+against mattpocock-skills 1.2.3.
 
 ## Agent skills
 
