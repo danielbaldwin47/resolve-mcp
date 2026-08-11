@@ -203,6 +203,13 @@ The five canonical triage roles, each label string equal to its role name. See `
 Single-context — `CONTEXT.md` (repo map + vocabulary) and `docs/adr/` at
 the repo root. See `docs/agents/domain.md`.
 
+### The concert pillar
+
+P3: the style-driven concert cut. The director's three inputs, session-start
+analysis prep, song-by-song planning, the mandatory `correlate_timeline`
+self-review, the cut report and review-round conventions:
+`docs/agents/concert.md`.
+
 ### The rough-cut pillar
 
 P4: transcript-driven A-roll assembly. The per-project brief and b-roll

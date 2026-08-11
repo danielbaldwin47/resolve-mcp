@@ -247,7 +247,10 @@ and the variable is for a project that does have an edit to scan.
   source start.
 - `docs/agents/` — issue-tracker conventions (wayfinder map ops), triage
   labels, domain-docs usage, the style layer (sidecar + profile formats,
-  provenance tags, how a corpus pass is run), the rough-cut pillar
+  provenance tags, how a corpus pass is run), the concert pillar
+  (`concert.md`: the director's three inputs, session-start analysis prep,
+  song-by-song planning, the mandatory `correlate_timeline` self-review,
+  the cut report and review-round conventions, #16), the rough-cut pillar
   (`rough-cut.md`: the brief and b-roll catalog the agent owns, the
   assembly loop, the `virtual_transcript` self-review and the cut report;
   also home of the `projects/<project>/` convention and the songs file's

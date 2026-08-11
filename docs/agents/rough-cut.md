@@ -140,7 +140,7 @@ subject rather than the shot.
 `virtual_transcript` reads the cut file back as the words the built timeline will contain.
 Pass it the cut file and a mapping of source alias to the transcript document for that
 source. Run it before the director sees the cut, every version. It is the P4 counterpart to
-the mandatory `correlate_timeline` pass on a concert cut.
+the mandatory `correlate_timeline` pass on a concert cut (`docs/agents/concert.md`).
 
 Read `text` first — that is the piece, as prose. If it does not read as something a person
 said, nothing else matters yet.
