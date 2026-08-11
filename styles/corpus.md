@@ -434,6 +434,25 @@ to this corpus, and one instance across 455 cuts is thin justification for
 making it. Recorded here so the next mean that looks wrong has an explanation
 waiting.
 
+**Fixed in #160**, and the diagnosis above was half right. The cut is not in a
+hole *inside* the grid: Freefall's grid ends at 670.72 s and the cut is at
+676.80 s, so the nearest surviving beat is the last one the detector emitted,
+6.08 s earlier, in a stretch whose beats are 0.39 s apart. (An interior hole
+mostly gates itself — the steadiness check refuses both beats of an aberrant
+interval, so the nearest beat to a cut in the hole is usually a refused one.)
+The gate now refuses a cut further from its beat than a beat is wide and counts
+it as `stranded`, apart from `gated`. Every beat figure in this document
+predates that refusal, and no pass has been re-run against it, so what follows
+is a prediction and not a measurement. This cut at least leaves `beat_offsets`
+and `bars` — Freefall 35 measured → 34 in the gated pass and 50 → 49 in the
+visible-edit one, one off the beat-1 column in each, and the `max_abs` of 6.08 s
+with it — while the medians (69 ms, 80 ms) are untouched, a median never having
+noticed the cut. The refusal is corpus-wide, though, so any other cut sitting
+more than a beat from a trusted beat — at a grid's *start* as well as its end —
+would go too, and only a re-run settles how many that is. Note also that this
+cut is past the end of its grid and so was already counted in `outside_grid`;
+the two counts overlap on it, as they may on any stranded cut beyond the ends.
+
 ### Two bookkeeping consequences of re-running
 
 - **The anchor's clock moved one frame, and the gate did not do it.** Zinc's

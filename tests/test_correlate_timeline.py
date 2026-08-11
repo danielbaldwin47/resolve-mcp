@@ -236,6 +236,7 @@ def test_every_shot_lands_on_disk_with_its_offsets_bar_and_section(
         "bar": 1,
         "in_bar": 3,
         "in_grid": True,
+        "stranded": False,
         "transient_offset": -0.017,
         "tune": 1,
         "front": "drums",
@@ -1117,3 +1118,142 @@ def test_every_cut_carries_the_marker_even_when_the_grid_is_sound(
 
     assert [one["in_grid"] for one in _rows(result)] == [True, True, True]
     assert result["gated"] == 0
+
+
+# --- the grid that does not reach the cut (#160) -----------------------------------------------
+
+
+def _short_grid(tmp_path: Path, last: float = 1.5) -> str:
+    """A grid that stops before the concert does, leaving the last cut with no beat near it.
+
+    This is the observed shape, not an invented one: the Freefall pass keeps a cut 6.08 s
+    from its nearest beat because the detector's grid ends at 670.72 s and the cut is at
+    676.80 s. The nearest *surviving* beat is trusted and far away, which is exactly the row
+    the gate was supposed to keep out of the trusted columns.
+    """
+    seconds = tuple(round(index * 0.5, 6) for index in range(int(last / 0.5) + 1))
+    return str(beats_file(tmp_path, seconds=seconds, name=f"short-grid-{last}-beats.json"))
+
+
+def test_a_cut_the_grid_does_not_reach_is_refused_rather_than_scored_against_a_distant_beat(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """#160: a beat a second away in a grid of half-second beats describes nothing at the cut."""
+    attach(studio(timeline=a_cut()))
+
+    result = _measured(tmp_path, beats=_short_grid(tmp_path))
+
+    cuts = _rows(result)
+    assert cuts[1]["in_grid"] is True  # 33 ms from its beat, well inside the grid
+    assert cuts[1]["stranded"] is False
+    # Two beats past the end of a grid whose beats are half a second apart.
+    assert cuts[2]["beat_offset"] == 0.983
+    assert cuts[2]["stranded"] is True
+    assert cuts[2]["in_grid"] is False
+
+
+def test_a_stranded_cut_is_counted_apart_from_the_beats_the_gate_refused(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """A third refusal beside ``outside_grid`` and ``gated``, so neither count changes meaning.
+
+    ``gated`` is beats the grid describes badly; this is a cut the grid does not describe at
+    all. Folding the two together would make a hole in the detector's output read as rubato.
+    """
+    attach(studio(timeline=a_cut()))
+
+    result = _measured(tmp_path, beats=_short_grid(tmp_path))
+
+    assert result["stranded"] == 1
+    assert result["gated"] == 0
+    assert result["grid_refused"] == {}
+
+
+def test_a_stranded_cut_is_kept_out_of_the_bar_and_beat_statistics(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The whole point of the refusal: the mean it would drag is the one style is read from."""
+    attach(studio(timeline=a_cut()))
+
+    result = _measured(tmp_path, beats=_short_grid(tmp_path))
+
+    assert result["beat_offsets"]["measured"] == 1
+    assert result["beat_offsets"]["max_abs"] == 0.033
+    assert result["bars"] == {"3": 1}
+
+
+def test_the_reach_refusal_leaves_the_transient_measurement_exactly_as_it_was(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Transients need no grid, so a grid that stops early may not shrink their n by a cut."""
+    attach(studio(timeline=a_cut()))
+
+    result = _measured(tmp_path, beats=_short_grid(tmp_path))
+
+    assert result["transient_offsets"]["measured"] == 2
+
+
+def test_a_cut_in_a_hole_inside_the_grid_is_refused_by_the_beat_gate_rather_than_the_reach_rule(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Why #160 needed no "a refused beat lies between" rule: an interior hole gates itself.
+
+    ``nearest`` looks over every beat, so no beat can sit between a cut and the beat it was
+    scored against — a nearer one would be the one it was scored against. And the steadiness
+    check refuses *both* beats of an interval that does not belong, so the beat on the near
+    side of a hole is refused already. The reach rule is therefore about the ends of the grid
+    and the two counts stay apart here, which is the claim this pins.
+    """
+    attach(studio(timeline=a_cut()))
+
+    # Half-second beats with the third cut's second missing from the middle of them.
+    holed = (0.0, 0.5, 1.0, 1.5, 4.0, 4.5, 5.0, 5.5, 6.0)
+    result = _measured(
+        tmp_path, beats=str(beats_file(tmp_path, seconds=holed, name="holed-beats.json"))
+    )
+
+    cuts = _rows(result)
+    assert cuts[2]["in_grid"] is False
+    assert cuts[2]["stranded"] is False
+    assert result["gated"] == 1
+    assert result["stranded"] == 0
+
+
+def test_a_grid_that_calls_the_whole_span_one_beat_reaches_the_cuts_inside_it(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The rule is a beat wide, not a number of seconds: a slow grid reaches further.
+
+    Two beats six seconds apart is a grid saying the music runs at 10bpm. That is a bad grid,
+    but it is bad in the way #112 judges — nothing about a cut three seconds in contradicts
+    it, and refusing that cut for distance would be this rule inventing a tempo of its own.
+    """
+    attach(studio(timeline=a_cut()))
+
+    result = _measured(
+        tmp_path,
+        beats=str(beats_file(tmp_path, seconds=(0.0, 6.0), name="coarse-beats.json")),
+    )
+
+    assert [one["stranded"] for one in _rows(result)] == [False, False, False]
+    assert result["stranded"] == 0
+
+
+def test_a_cut_that_misses_the_last_beat_by_less_than_a_beat_is_still_measured(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The refusal is about reach, not about the ends: a near miss at the edge is a real cut.
+
+    Refusing everything past the last beat would throw away the cut that lands 20 ms before
+    the grid starts or after it stops — an honest measurement — so the line is drawn at the
+    width of a beat rather than at the edge of the grid.
+    """
+    attach(studio(timeline=a_cut()))
+
+    result = _measured(tmp_path, beats=_short_grid(tmp_path, last=2.0))
+
+    cuts = _rows(result)
+    assert cuts[2]["beat_offset"] == 0.483  # inside the half-second beat it is measured against
+    assert cuts[2]["stranded"] is False
+    assert cuts[2]["in_grid"] is True
+    assert result["stranded"] == 0
