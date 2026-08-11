@@ -135,7 +135,9 @@ you pass `refresh`.
 - Resolve running, with a project open, before the first Resolve-touching tool call
 - **ffmpeg on PATH** for per-clip audio extraction, frame grabs and scene-cut detection
   (`RESOLVE_MCP_FFMPEG` points at it elsewhere). Timeline-scope audio goes through Resolve's
-  own render queue and needs none.
+  own render queue and needs none. The analysis extra's torchcodec decodes through the
+  FFmpeg **shared** DLLs (the `avcodec-*.dll` family), which the static executable does not
+  carry — a separate install; `winget install Gyan.FFmpeg.Shared` puts them on PATH.
 - **[python-audio-separator](https://github.com/nomadkaraoke/python-audio-separator) on
   PATH** for `separate_stems` (`pip install "audio-separator[gpu]"`, or
   `RESOLVE_MCP_AUDIO_SEPARATOR` points at the executable). It is run as a subprocess, not
@@ -151,8 +153,11 @@ you pass `refresh`.
   CPU wheel), torchcodec, soundfile and `panns_inference`.
 - **PANNs weights hand-placed in `~/panns_data/`** — `class_labels_indices.csv` and
   `Cnn14_DecisionLevelMax.pth` (327 MB), the two files `panns_inference` would fetch on
-  first use via `os.system('wget …')`, which Windows does not have (its README names the
-  sources). No test tier can see this stack break —
+  first use via `os.system('wget …')`, which Windows does not have. The two fetches it
+  would run: the weights from
+  <https://zenodo.org/record/3987831/files/Cnn14_DecisionLevelMax_mAP%3D0.385.pth?download=1>
+  (saved as `Cnn14_DecisionLevelMax.pth`) and the labels from
+  <http://storage.googleapis.com/us_audioset/youtube_corpus/v1/csv/class_labels_indices.csv>. No test tier can see this stack break —
   [ADR 0002](docs/adr/0002-analysis-models-are-injected-not-depended-on.md) injects the models,
   so the fakes stay green while real inference dies at import. The receipt that the
   installed stack works is `uv run pytest tests/test_live_analysis.py -m live`.

@@ -1749,6 +1749,7 @@ analysis = [
     { name = "panns-inference" },
     { name = "soundfile" },
     { name = "torch" },
+    { name = "torchaudio" },
     { name = "torchcodec" },
 ]
 
@@ -1771,6 +1772,7 @@ requires-dist = [
     { name = "scipy", specifier = ">=1.14,<2" },
     { name = "soundfile", marker = "extra == 'analysis'", specifier = ">=0.14" },
     { name = "torch", marker = "extra == 'analysis'", specifier = ">=2.13,<2.14" },
+    { name = "torchaudio", marker = "extra == 'analysis'", specifier = ">=2.11,<2.12" },
     { name = "torchcodec", marker = "extra == 'analysis'", specifier = ">=0.15,<0.16" },
 ]
 provides-extras = ["analysis"]

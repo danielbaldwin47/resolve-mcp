@@ -37,6 +37,10 @@ analysis = [
     # corpus was measured on; CUDA torch is #128's business, not this extra's.
     "torch>=2.13,<2.14",
     "torchcodec>=0.15,<0.16",
+    # beat_this pulls torchaudio unpinned, and it pairs with torch minors the same way
+    # (2.11 <-> 2.13 is the measured combination) — pinned here beside torch for the same
+    # reason torchcodec is.
+    "torchaudio>=2.11,<2.12",
     "soundfile>=0.14",
     # panns_inference fetches its weights via os.system('wget ...'), absent on Windows:
     # hand-place class_labels_indices.csv + Cnn14_DecisionLevelMax.pth (327 MB) in
