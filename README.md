@@ -141,12 +141,21 @@ you pass `refresh`.
   `RESOLVE_MCP_AUDIO_SEPARATOR` points at the executable). It is run as a subprocess, not
   imported, so it can live in its own environment and its torch/CUDA stack never loads
   into the server. The two model files download on first use.
-- **`uv sync --extra analysis`** for transcription. The extra carries faster-whisper *and*
-  the CUDA 12 runtime it needs (~1.3 GiB): the transcriber takes the GPU by default, and a
-  runtime nobody installed is the one thing that breaks it. No hand-installed wheels, no
-  `PATH` set before launch — the server puts the venv's own copy within reach. A box
-  without an NVIDIA card still transcribes; set `RESOLVE_MCP_WHISPER_DEVICE=cpu` and expect
-  it to be slow.
+- **`uv sync --extra analysis`** for transcription and music analysis. The extra carries
+  faster-whisper *and* the CUDA 12 runtime it needs (~1.3 GiB): the transcriber takes the
+  GPU by default, and a runtime nobody installed is the one thing that breaks it. No
+  hand-installed wheels, no `PATH` set before launch — the server puts the venv's own copy
+  within reach. A box without an NVIDIA card still transcribes; set
+  `RESOLVE_MCP_WHISPER_DEVICE=cpu` and expect it to be slow. The extra also carries the
+  music stack (#37): `beat_this` (a git dependency — it has no PyPI release), torch (the
+  CPU wheel), torchcodec, soundfile and `panns_inference`.
+- **PANNs weights hand-placed in `~/panns_data/`** — `class_labels_indices.csv` and
+  `Cnn14_DecisionLevelMax.pth` (327 MB), the two files `panns_inference` would fetch on
+  first use via `os.system('wget …')`, which Windows does not have (its README names the
+  sources). No test tier can see this stack break —
+  [ADR 0002](docs/adr/0002-analysis-models-are-injected-not-depended-on.md) injects the models,
+  so the fakes stay green while real inference dies at import. The receipt that the
+  installed stack works is `uv run pytest tests/test_live_analysis.py -m live`.
 
 ## Install
 

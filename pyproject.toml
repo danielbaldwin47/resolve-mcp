@@ -25,6 +25,23 @@ analysis = [
     # No wheels exist for macOS, and nothing there would use them.
     "nvidia-cublas-cu12>=12,<13; platform_system != 'Darwin'",
     "nvidia-cudnn-cu12>=9,<10; platform_system != 'Darwin'",
+    # The music stack (#37): beat_this for the beat grid, PANNs for the applause curve,
+    # torchcodec + soundfile for decode. ADR 0002 injects these at seams, so no test tier
+    # can see this stack break — the fakes stay green while real inference is dead at
+    # import. The receipt that the installed stack works is
+    # `uv run pytest tests/test_live_analysis.py -m live`.
+    # beat_this has no PyPI release; pinned to the commit the corpus was measured with.
+    "beat-this @ git+https://github.com/CPJKU/beat_this@b95c8ab0c58c2d9fcfd40508ae8dffbc05ac4f5c",
+    # torchcodec minors pair with torch minors (0.15 <-> 2.13); move them together or decode
+    # dies at import. On Windows the PyPI torch wheel is the CPU build, which is what the
+    # corpus was measured on; CUDA torch is #128's business, not this extra's.
+    "torch>=2.13,<2.14",
+    "torchcodec>=0.15,<0.16",
+    "soundfile>=0.14",
+    # panns_inference fetches its weights via os.system('wget ...'), absent on Windows:
+    # hand-place class_labels_indices.csv + Cnn14_DecisionLevelMax.pth (327 MB) in
+    # ~/panns_data/ — see README "Requirements".
+    "panns-inference>=0.1",
 ]
 
 [project.scripts]
@@ -39,6 +56,11 @@ path = "src/resolve_mcp/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/resolve_mcp"]
+
+[tool.hatch.metadata]
+# The analysis extra carries beat_this as a git direct reference (no PyPI release exists);
+# hatchling refuses to build metadata containing direct references without this.
+allow-direct-references = true
 
 [dependency-groups]
 dev = [
