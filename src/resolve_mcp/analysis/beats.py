@@ -295,6 +295,25 @@ def _steady_flags(times: Sequence[float]) -> tuple[bool, ...]:
     )
 
 
+def spacing(times: Sequence[float]) -> tuple[float | None, ...]:
+    """How wide a beat is at each beat, in seconds — the local tempo, parallel to ``times``.
+
+    Public for the reason ``nearest`` is: more than one reading has to ask how far a beat is
+    around here, and two answers to that would be two grids. The steadiness check above judges
+    an interval against it; the cut side asks whether a cut sits further from its beat than a
+    beat is wide, which is how a cut the grid does not reach is told from one it does (#160).
+
+    Local rather than set-wide for the same reason the steadiness window is: a two-hour set
+    has tunes at different tempos, and a beat in the fast one is not half a beat of the slow
+    one. ``None`` where the grid cannot say — a lone beat has no interval, and inventing a
+    width for it would be a verdict rather than a reading.
+    """
+    intervals = [later - earlier for earlier, later in zip(times, times[1:], strict=False)]
+    if not intervals:
+        return tuple(None for _ in times)
+    return tuple(_local(intervals, min(index, len(intervals) - 1)) for index in range(len(times)))
+
+
 def _local(intervals: Sequence[float], index: int) -> float:
     """The tempo around one interval, as the median of the window it sits in."""
     start = max(0, index - STEADINESS_WINDOW // 2)

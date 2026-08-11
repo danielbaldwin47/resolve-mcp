@@ -62,7 +62,7 @@ from ..resolve.timeline import (
 )
 from ..timing import SECONDS_PRECISION, dual_time, to_frames
 from . import decode, energy, records
-from .beats import GridTrust, nearest, trust
+from .beats import GridTrust, nearest, spacing, trust
 
 log = get_logger("analysis")
 
@@ -73,6 +73,19 @@ INLINE_CUTS = 12
 
 UNLABELLED = "unlabelled"
 """Where shots from a clip the angle sidecar does not name are counted."""
+
+BEAT_REACH = 1.0
+"""How far from a beat a cut may sit and still be described by it, in local beat intervals.
+
+Inside a grid that reaches the cut, the nearest beat is at most *half* a beat away by
+construction, so a whole beat is slack rather than a threshold to tune. What it catches is
+the cut the grid does not reach at all — past its ends, or in a hole it left — where the
+nearest *surviving* beat can be seconds away and the offset against it describes nothing
+(#160: one cut 6.08 s from its beat in a grid of 0.39 s beats, because the detector stopped
+six seconds before the cut). Drawing the line at the width of a beat rather than at the edge
+of the grid keeps the honest near miss: a cut 20 ms before the first beat is a real
+measurement, and refusing it would be trading one wrong answer for another.
+"""
 
 BLACK = "black"
 """Where the stretches nothing covers are counted — a known absence, not a missing label."""
@@ -736,12 +749,14 @@ def measure(
     solo_times = [float(row["t"]) for row in (music.solos or ())]
     roles = music.roles or {}
     trusted = (grid if grid is not None else trust(music.beats)).trusted
+    widths = spacing(times)
 
     rows: list[dict[str, Any]] = []
     for index, shot in enumerate(shots, start=1):
         seconds = clock.seconds(shot.record_in)
         found = nearest(times, seconds)
         beat = None if found is None else music.beats[found]
+        stranded = _stranded(seconds, times, widths, found, trusted)
         rows.append(
             {
                 "cut": index,
@@ -760,16 +775,46 @@ def measure(
                 "beat": None if beat is None else beat.get("beat"),
                 "bar": None if beat is None else beat.get("bar"),
                 "in_bar": None if beat is None else beat.get("in_bar"),
-                # Whether the grid describes the music here at all (#112). The measurement
-                # itself is kept either way — a marked cut is a fact about the detector, and
-                # dropping the row would hide the very thing the gate exists to report.
-                "in_grid": found is not None and trusted[found],
+                # Whether the grid describes the music here at all (#112, #160). The
+                # measurement itself is kept either way — a marked cut is a fact about the
+                # detector, and dropping the row would hide the very thing the gate exists to
+                # report.
+                "in_grid": found is not None and trusted[found] and not stranded,
+                "stranded": stranded,
                 "transient_offset": _offset(transients, seconds),
                 "tune": _tune_at(music.tunes, tune_times, seconds),
                 "front": _front_at(music.solos, solo_times, seconds),
             }
         )
     return rows
+
+
+def _stranded(
+    seconds: float,
+    times: Sequence[float],
+    widths: Sequence[float | None],
+    found: int | None,
+    trusted: Sequence[bool],
+) -> bool:
+    """Whether the grid reaches this cut, or only has a beat somewhere in the distance (#160).
+
+    The #112 gate refuses *beats*, so it catches a cut whose nearest beat is one it refused.
+    It cannot catch the other shape: where the grid stops — or leaves a hole — the nearest
+    *surviving* beat is trusted and far away, and the row goes into the trusted columns
+    carrying an offset measured across the silence. One such cut in 504 moved no histogram
+    and dragged a mean to 3.6× its own median, which is the reading a style profile is
+    written from.
+
+    Only rows the beat gate let through are claimed here, so ``gated`` keeps meaning exactly
+    what it meant: beats the grid describes badly, counted the same way across passes. A grid
+    that cannot say how wide a beat is — one lone beat, or two beats at the same time — is not
+    a grid this can judge against, and inventing a verdict there would be the same mistake in
+    the other direction.
+    """
+    if found is None or not trusted[found]:
+        return False
+    width = widths[found]
+    return width is not None and width > 0 and abs(seconds - times[found]) > BEAT_REACH * width
 
 
 def _opens(index: int, shot: Shot, shots: Sequence[Shot]) -> bool:
@@ -851,6 +896,7 @@ def _summary(
     # measured over every cut; the beat and bar statistics are taken over the cuts the grid
     # can actually describe, and the count of the rest is reported rather than swallowed.
     in_grid = [row for row in cut_to_music if row["in_grid"]]
+    stranded = sum(1 for row in cut_to_music if row["stranded"])
     transient_offsets = (
         None if transients is None else _offsets([row["transient_offset"] for row in cut_to_music])
     )
@@ -860,12 +906,15 @@ def _summary(
         "visible": visible,
         "cuts": len(rows),
         "openings": sum(1 for row in rows if row["opening"]),
-        # ``outside_grid`` and ``gated`` are different refusals and neither implies the other:
-        # the first is a cut beyond the ends of the analysed span, which means the times and
-        # the audio are not the same recording; the second is a cut inside the span that the
-        # grid describes badly. A misaligned clock shows in the first, rubato in the second.
+        # Three refusals, and none of them implies the others. ``outside_grid`` is a cut
+        # beyond the ends of the analysed span, which means the times and the audio are not
+        # the same recording; ``gated`` is a cut whose nearest beat the grid describes badly;
+        # ``stranded`` is a cut with no beat near it at all, scored against a trusted one too
+        # far away to be describing the music there (#160). A misaligned clock shows in the
+        # first, rubato in the second, a detector that stopped early in the third.
         "outside_grid": _outside(rows, grid),
-        "gated": len(cut_to_music) - len(in_grid),
+        "gated": len(cut_to_music) - len(in_grid) - stranded,
+        "stranded": stranded,
         "grid_meter": trusted.meter,
         "grid_refused": trusted.reasons,
         "beat_offsets": _offsets([row["beat_offset"] for row in in_grid]),
