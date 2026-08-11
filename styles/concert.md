@@ -44,8 +44,13 @@ that the grid is a live band's grid, so it moves.
   doing and not an artefact of the broken grids — ungated, over the same three
   timelines, beat 1 held 53.1%, so refusing a third of the beats moved it four
   points. Read it as a tendency and not a rule: half the cuts still land
-  somewhere other than beat 1.
-  `[measured — 3 projects, n=455 cuts, concert]` (`corpus.md`, the gated pass)
+  somewhere other than beat 1. Re-measured 2026-08-10 under the visible-edit
+  reader (#142), which counts overlays and gap-returns the one-track reading
+  folded away: 49.4% on beat 1 and 71.8% on beats 1–2 over 504 cuts — no share
+  moved by more than half a point, so the skew describes the film the viewer
+  sees and not an artefact of reading V1 alone.
+  `[measured — 3 projects, n=504 cuts, concert]` (`corpus.md`, the gated pass
+  and the visible-edit re-measure)
 
   **Three of the six corpus timelines can say nothing here at all**, including
   the anchor. Their grids report `meter: 1` and the gate refuses them whole
@@ -68,7 +73,7 @@ that the grid is a live band's grid, so it moves.
 - Beat-grid position patterns **conditioned on context** — by tune section, by
   energy, in beat-fraction rather than whole positions. *Open. The unconditioned
   histogram above is what the gated pass could support; conditioning it splits
-  455 cuts across three timelines into samples too small to defend.*
+  504 cuts across three timelines into samples too small to defend.*
 - **The phrase is the placement unit; transient distance is its residue.** The
   #46 review round said why the near-not-on number exists: the director's notes
   move cuts to "after the sax's phrase", "between phrases", "now that the

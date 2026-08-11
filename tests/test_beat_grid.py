@@ -237,3 +237,31 @@ def test_an_empty_grid_has_nothing_to_trust_and_no_meter() -> None:
 
     assert found.trusted == ()
     assert found.meter is None
+
+
+# --- how wide a beat is here (#160) -----------------------------------------------------------
+
+
+def test_the_width_of_a_beat_is_the_local_interval_and_is_given_for_every_beat() -> None:
+    """One reading per beat, so a caller can ask about the beat it already found."""
+    widths = beats.spacing(_steady(13).beats)
+
+    assert len(widths) == 13
+    assert widths == (0.5,) * 13
+
+
+def test_a_beat_is_as_wide_as_the_tempo_around_it_rather_than_the_tempo_of_the_set() -> None:
+    """A set has tunes at different tempos, and a beat in the fast one is not half a slow one."""
+    slow = [round(index * 0.5, 6) for index in range(12)]
+    fast = [round(slow[-1] + (index + 1) * 0.2, 6) for index in range(12)]
+
+    widths = beats.spacing(tuple(slow + fast))
+
+    assert widths[2] == pytest.approx(0.5)
+    assert widths[-2] == pytest.approx(0.2)
+
+
+def test_one_lone_beat_has_no_width_the_grid_can_vouch_for() -> None:
+    """No interval means no answer: inventing a width would be a verdict rather than a reading."""
+    assert beats.spacing((4.0,)) == (None,)
+    assert beats.spacing(()) == ()

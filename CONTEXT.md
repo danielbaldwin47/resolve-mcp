@@ -46,7 +46,9 @@ timelines. The server measures; Claude decides.
 - **wind / comp** — the two halves of the opt-in third pass over `other`
   (#153). `wind` is horns and reeds; `comp` is accompaniment — piano,
   guitar, vibes, percussion, and the bass line itself on a capture whose
-  `bass` stem came back near-silent (#126).
+  `bass` stem came back near-silent (#126). Where both are on disk they
+  replace `other` as voices in `solos` — `other` *is* their sum, and
+  measuring all three counts the residual twice (#157).
   _Avoid_: "piano stem" as a name for `comp` — it is accompaniment, and
   nothing may name it otherwise (#126).
 - **phrase** — the cut-placement unit (#46, `styles/concert.md` §1): a
@@ -93,10 +95,13 @@ Top level:
 `applause` (bursts → tune boundaries, then a beat-density floor drops the calls
 with no pulse under them, #133), `beats` (grid + downbeats, model
 injected per ADR 0002; `trust` says which beats the grid describes well enough
-to count, #112), `correlate` (measure a cut against its music — by default the *visible* edit,
+to count, #112; `spacing` says how wide a beat is at each beat), `correlate`
+(measure a cut against its music — by default the *visible* edit,
 every frame resolved to the topmost enabled video item with uncovered stretches
 as black shots, #142; `track=` measures one video track alone. Gates the beat
-statistics on `trust` and leaves the transient ones ungated), `cuda` (preloads
+statistics on `trust`, refuses as `stranded` a cut further from its beat than a
+beat is wide — the grid does not reach it, #160 — and leaves the transient ones
+ungated), `cuda` (preloads
 the CUDA runtime the `analysis` extra ships, so CTranslate2 finds it on Windows;
 pure decisions, #128),
 `decode` (WAV → numpy, no third-party decoder), `drums` (hits per stem), `energy`
@@ -107,8 +112,11 @@ is a rule layer over, as `drums` is to `fills`), `music` (beats + energy + gist
 job), `phrases` (phrase boundaries: where the soloist stops, which is the
 cut-placement unit #46 named, #143),
 `records` (sliceable record files), `silence` (RMS spans), `solos` (front
-of band changes), `structure` (tunes + solo changes job; both halves read the
-shared beats half), `transcribe`
+of band changes: lead off the stem energy, timbre off one stem's brightness —
+with the third pass on disk the voices are `wind`/`comp` rather than `other`
+and timbre reads `wind`, #157), `structure` (tunes + solo changes job; both
+halves read the shared beats half; its stem loader is what reaches the third
+pass), `transcribe`
 (job), `transcript` (document + Word/Transcription/Transcriber vocabulary),
 `virtual` (a cut file read back as the words it will contain — the P4
 self-review, warnings only, touches no Resolve handle), `whisper`

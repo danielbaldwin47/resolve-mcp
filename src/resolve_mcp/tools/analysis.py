@@ -95,12 +95,19 @@ def analyze_structure(
 
     solos=true adds the second half and needs stems: pass the directory a separate_stems
     job returned. It measures which stem is out front over its own quiet baseline, and
-    where the residual stem's brightness steps — one horn out, piano in, both inside
-    `other` — and writes one record per change point: where it is called, where it was
+    where one stem's brightness steps — a handover inside that stem, which energy cannot
+    see — and writes one record per change point: where it is called, where it was
     measured, whether it landed on a downbeat, and what handed over to what. Change points
     are snapped to the nearest downbeat within a couple of seconds, so this half reads the
     beat grid — analyze_music's if it exists, or it detects one and leaves it for that tool
     to reuse.
+
+    Which stems those are depends on what separate_stems wrote. With split_wind=true its
+    third pass is on disk, and then the voices are `wind` and `comp` rather than the
+    `other` they add up to, and the brightness is read off `wind`: one horn giving way to
+    another. Without it the voices include `other` and the brightness comes off `other`,
+    where a step is a horn giving way to a piano. The gist says which, in `voices` and
+    `timbre_stem`, so a record can be read back without guessing which run it was.
 
     Nothing here names the soloist: no separator ships a horn stem or a piano stem, so what
     is measured is that the front changed and when. threshold moves how sure the tagger has

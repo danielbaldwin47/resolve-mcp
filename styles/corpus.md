@@ -434,6 +434,25 @@ to this corpus, and one instance across 455 cuts is thin justification for
 making it. Recorded here so the next mean that looks wrong has an explanation
 waiting.
 
+**Fixed in #160**, and the diagnosis above was half right. The cut is not in a
+hole *inside* the grid: Freefall's grid ends at 670.72 s and the cut is at
+676.80 s, so the nearest surviving beat is the last one the detector emitted,
+6.08 s earlier, in a stretch whose beats are 0.39 s apart. (An interior hole
+mostly gates itself — the steadiness check refuses both beats of an aberrant
+interval, so the nearest beat to a cut in the hole is usually a refused one.)
+The gate now refuses a cut further from its beat than a beat is wide and counts
+it as `stranded`, apart from `gated`. Every beat figure in this document
+predates that refusal, and no pass has been re-run against it, so what follows
+is a prediction and not a measurement. This cut at least leaves `beat_offsets`
+and `bars` — Freefall 35 measured → 34 in the gated pass and 50 → 49 in the
+visible-edit one, one off the beat-1 column in each, and the `max_abs` of 6.08 s
+with it — while the medians (69 ms, 80 ms) are untouched, a median never having
+noticed the cut. The refusal is corpus-wide, though, so any other cut sitting
+more than a beat from a trusted beat — at a grid's *start* as well as its end —
+would go too, and only a re-run settles how many that is. Note also that this
+cut is past the end of its grid and so was already counted in `outside_grid`;
+the two counts overlap on it, as they may on any stranded cut beyond the ends.
+
 ### Two bookkeeping consequences of re-running
 
 - **The anchor's clock moved one frame, and the gate did not do it.** Zinc's
@@ -545,3 +564,68 @@ Two limits worth keeping attached to that:
   labels would have been. What remains unmeasurable is per-shot subject: no
   analysis in this corpus can see who is on screen, so no claim should ever
   rest on attributing a *particular* shot.
+
+## The visible-edit re-measure (#142), measured 2026-08-10
+
+PR #149 changed what `correlate_timeline` reads by default: every record frame
+now resolves to the topmost enabled video item, overlays are shots, and
+uncovered stretches are black shots — where every number above came from a
+one-track reading of V1. The gated pass predates that change, so all six
+timelines were re-measured under the visible-edit reader: each of the three
+projects opened in Resolve in turn, every parameter — beats file, audio,
+`angles`, `audio_at` — copied verbatim out of the gated artifacts, `track`
+left out so the reader is the only thing that differs. Live Windows 11 box,
+Resolve Studio 21.0.3.7, CPython 3.12.10 (python.org). The reading version has
+travelled in the cache key since #149, so these are new artifacts and the
+gated pass's files are still on disk beside them.
+
+| # | Timeline | Tracks read | Meter | Cuts in span | Gated out | Measured | Bar position, gated | Beat offset: median / mean / max | Black |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | Zinc - Set 2 Main | 3 | **1** | 399 | 399 | **0** | — refused whole | — | 6 cuts, 23.6 s, 0.6% |
+| 2 | Freefall Timeline | 3 | 4 | 60 | 10 | 50 | 1:23, 2:21, 3:2, 4:4 | 80 ms / 204 ms / 6.08 s | 1 cut, one frame |
+| 2 | Sunshine Timeline | 2 | **1** | 53 | 53 | **0** | — refused whole | — | 1 cut, one frame |
+| 2 | Mercies Timeline | 2 | **1** | 41 | 41 | **0** | — refused whole | — | 1 cut, one frame |
+| 3 | Concert Full Cut | 1 | 4 | 370 | 125 | 245 | 1:143, 2:44, 3:32, 4:26 | 82 ms / 105 ms / 423 ms | 22 cuts, 32.7 s, 0.6% |
+| 5 | Monkfish Main | 3 | 4 | 244 | 35 | 209 | 1:83, 2:48, 3:36, 4:42 | 80 ms / 93 ms / 390 ms | 4 cuts, 6.8 s, 0.1% |
+
+Result files: `Zinc---Set-2-Main-982f0c672a67`, `Freefall-Timeline-77f6d8407c1e`,
+`Sunshine-Timeline-8367ec690d9c`, `Mercies-Timeline-30377dd012c7`,
+`Concert-Full-Cut-bcc57f381e58`, `Monkfish-Main-3d0c9950e2b8` (all
+`.correlate.json` under the analysis cache).
+
+**The reader is not a confound for the beat-1 claim.** Summing the three
+surviving rows — 504 measured cuts now that overlays and gap-returns are
+counted, against 455 under the one-track reading:
+
+| Beat of the bar | 1 | 2 | 3 | 4 |
+| --- | --- | --- | --- | --- |
+| Cuts | 249 | 113 | 70 | 72 |
+| Share | **49.4%** | 22.4% | 13.9% | 14.3% |
+
+Beat 1 moves 49.0% → 49.4% and beats 1–2 move 71.6% → 71.8%. Forty-nine more
+measured cuts and no share moves by more than half a point: the skew the gated
+pass found describes the film the viewer sees, not an artefact of reading V1
+alone. The three `meter: 1` refusals are the same three timelines — the reader
+cannot rescue a grid whose meter came out unusable — and Freefall's 6.08 s
+residual cut (the known cut-beside-a-refused-stretch defect) survives
+unchanged.
+
+What the visible reading adds, and what it is worth:
+
+- **Overlays are real but small.** Zinc reads three video tracks and its span
+  grows 360 → 399; Freefall 43 → 60 and Monkfish 228 → 244. Scullers is
+  single-track, and its 326 → 370 is entirely gaps: 22 black shots and the
+  returns from them — cuts the viewer sees that the one-track reading folded
+  into their neighbours.
+- **Black is a rounding error in these edits.** No timeline puts more than
+  0.6% of its span on black, and on the three gene-edit timelines it is
+  literally one frame each. The `[measured]` claims above lose nothing to it.
+- **Track enable-state was readable only where the timeline was its project's
+  current one** (Zinc, Concert Full Cut). On the other four `enabled_known` is
+  false and every track was measured as designed (#84) — right here, since
+  none of these timelines hides a disabled track.
+- **Alignment held.** Every mode and `zero_frame` matches the gated pass,
+  including Zinc's post-#121 `83824`.
+- **Transient medians are computed over the new cut set** — more cuts, so
+  small moves: Zinc 33 ms (unchanged), Monkfish 41, Freefall 25, Sunshine 17,
+  Mercies 19, Scullers 30. Still spanning 17–41 ms, all inside a frame.
