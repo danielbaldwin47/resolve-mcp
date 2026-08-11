@@ -17,6 +17,9 @@ Measured motivation (2026-08-05 transcript audit): read-after-edit ran ~46% of
 sessions pre-rules and ~39% after prose alone — the one axis prose never moved;
 and one session full-read a 656-line module three times under the grep-first
 prose rule.
+
+starter-version: 2026-08-10 (claude-principles; matches the starter — only
+this docstring's framing is local)
 """
 import json
 import os

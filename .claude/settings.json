@@ -1,6 +1,8 @@
 {
   "permissions": {
     "allow": [
+      "Bash(git worktree add:*)",
+      "Bash(git worktree list:*)",
       "Bash(git worktree remove:*)",
       "Bash(git worktree prune:*)",
       "Bash(gh api --method PUT repos/danielbaldwin47/resolve-mcp/pulls/:*)"

@@ -1,5 +1,10 @@
 # resolve-mcp
 
+An MCP server that lets an agent edit concert footage in DaVinci Resolve
+Studio: analyse audio, author cut and titles files as validated JSON, and
+materialise them as Resolve timelines. The server measures; Claude decides.
+Map and vocabulary: `CONTEXT.md`.
+
 ## Test seams
 
 Before building a ticket, decide **which seam verifies it** and say so in the
@@ -84,12 +89,22 @@ produced no work; relaunch rather than assume.)
    lines stay above it as the record.
 5. **Merge through the PR** — everything reaches `main` through a PR, never
    a direct commit.
-6. **After a stacked PR merges, verify its head is an ancestor of
-   `origin/main`** — one plain `git merge-base --is-ancestor <head-sha>
-   origin/main` per branch (no loops or `$(...)`; the worktree guard
-   refuses compound commands). A PR that merges into a just-consumed parent
-   branch reads MERGED while its commits never reach main.
-7. **Close the ticket with the PR link**; name any unrun live ACs in the
+6. **After a stacked PR merges, verify its commits reached main by
+   content.** PRs here land both ways — merge commits and squashes — so
+   check `git log origin/main` for either the `Merge pull request #<n>`
+   commit or a squashed subject ending `(#<n>)`, and confirm the files
+   landed. `git merge-base --is-ancestor <head-sha> origin/main` proves a
+   merge-commit PR, but exits 1 for every squashed one — a failing check
+   alone proves nothing (#45: squashed PR #109 read as unlanded). The risk
+   the check exists for is real either way: a PR that merges into a
+   just-consumed parent branch reads MERGED while its commits never reach
+   main (#109's work needed re-landing as #111).
+7. **If the PR was squashed, continue its ticket on a fresh branch.** The
+   old branch then sits on history main no longer shares; a second PR from
+   it drags the already-merged commits back in. Branch from `origin/main`
+   and cherry-pick only the new commits — never force-push. (After a
+   merge-commit PR, continuing on the same branch is safe.)
+8. **Close the ticket with the PR link**; name any unrun live ACs in the
    close comment.
 
 When resolving merge conflicts, grep every conflicted file for `<<<<<<<`
@@ -141,6 +156,29 @@ adds, moves, or deletes a module updates the map in the same PR.
 Long multi-PR sweeps (merge trains, cross-PR audits) shard per-PR into
 subagents; the orchestrating session keeps receipts, not diffs — past
 sweeps that inlined everything ended at 2× the usable context budget.
+
+## Gotchas
+
+Facts rediscovered across sessions, promoted from session memory. Each one
+cost a session real time at least twice before landing here.
+
+- **Worktree sessions: pin every review and diff to `origin/main`.** The
+  local `main` checkout lags while other worktrees merge; a diff against
+  local `main` sweeps in commits that are not yours.
+- **Worktree pytest runs the main checkout's source.** The editable install
+  points at the main working copy, so a new test in a worktree fails
+  against old code with no import error to warn you. Reinstall in the
+  worktree (`uv sync`) before trusting a red run.
+- **`ruff format` is not a gate.** CI runs `ruff check` only;
+  `ruff format --check` fails repo-wide by design. Don't "fix" formatting
+  the repo never enforced.
+
+## Doc maintenance
+
+A dated `/writing-for-agents` pass over CLAUDE.md, CONTEXT.md and `docs/`
+runs periodically (last: 2026-08-10); session-memory facts that prove
+repo-general over multiple sessions graduate into this file and the memory
+note becomes history. Verified against mattpocock-skills 1.2.3.
 
 ## Agent skills
 
