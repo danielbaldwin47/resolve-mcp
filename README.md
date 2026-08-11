@@ -135,18 +135,32 @@ you pass `refresh`.
 - Resolve running, with a project open, before the first Resolve-touching tool call
 - **ffmpeg on PATH** for per-clip audio extraction, frame grabs and scene-cut detection
   (`RESOLVE_MCP_FFMPEG` points at it elsewhere). Timeline-scope audio goes through Resolve's
-  own render queue and needs none.
+  own render queue and needs none. The analysis extra's torchcodec decodes through the
+  FFmpeg **shared** DLLs (the `avcodec-*.dll` family), which the static executable does not
+  carry — a separate install; `winget install Gyan.FFmpeg.Shared` puts them on PATH.
 - **[python-audio-separator](https://github.com/nomadkaraoke/python-audio-separator) on
   PATH** for `separate_stems` (`pip install "audio-separator[gpu]"`, or
   `RESOLVE_MCP_AUDIO_SEPARATOR` points at the executable). It is run as a subprocess, not
   imported, so it can live in its own environment and its torch/CUDA stack never loads
   into the server. The two model files download on first use.
-- **`uv sync --extra analysis`** for transcription. The extra carries faster-whisper *and*
-  the CUDA 12 runtime it needs (~1.3 GiB): the transcriber takes the GPU by default, and a
-  runtime nobody installed is the one thing that breaks it. No hand-installed wheels, no
-  `PATH` set before launch — the server puts the venv's own copy within reach. A box
-  without an NVIDIA card still transcribes; set `RESOLVE_MCP_WHISPER_DEVICE=cpu` and expect
-  it to be slow.
+- **`uv sync --extra analysis`** for transcription and music analysis. The extra carries
+  faster-whisper *and* the CUDA 12 runtime it needs (~1.3 GiB): the transcriber takes the
+  GPU by default, and a runtime nobody installed is the one thing that breaks it. No
+  hand-installed wheels, no `PATH` set before launch — the server puts the venv's own copy
+  within reach. A box without an NVIDIA card still transcribes; set
+  `RESOLVE_MCP_WHISPER_DEVICE=cpu` and expect it to be slow. The extra also carries the
+  music stack (#37): `beat_this` (a git dependency — it has no PyPI release), torch (the
+  CPU wheel), torchcodec, soundfile and `panns_inference`.
+- **PANNs weights hand-placed in `~/panns_data/`** — `class_labels_indices.csv` and
+  `Cnn14_DecisionLevelMax.pth` (327 MB), the two files `panns_inference` would fetch on
+  first use via `os.system('wget …')`, which Windows does not have. The two fetches it
+  would run: the weights from
+  <https://zenodo.org/record/3987831/files/Cnn14_DecisionLevelMax_mAP%3D0.385.pth?download=1>
+  (saved as `Cnn14_DecisionLevelMax.pth`) and the labels from
+  <http://storage.googleapis.com/us_audioset/youtube_corpus/v1/csv/class_labels_indices.csv>. No test tier can see this stack break —
+  [ADR 0002](docs/adr/0002-analysis-models-are-injected-not-depended-on.md) injects the models,
+  so the fakes stay green while real inference dies at import. The receipt that the
+  installed stack works is `uv run pytest tests/test_live_analysis.py -m live`.
 
 ## Install
 
