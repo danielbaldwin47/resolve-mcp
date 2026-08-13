@@ -20,9 +20,13 @@ Four decisions:
   and two jobs pushing the render queue at once corrupt it. Jobs that touch Resolve
   serialise on one lock; pure compute (analysis on already-acquired audio) does not wait.
 
-* **Threads, not processes.** The heavy libraries are not loaded yet — they get imported
-  inside the workers that need them, so server startup stays fast either way — and a
-  worker driving the Resolve API has to live in the process holding the handle.
+* **Threads, not processes — until the work stops needing this process.** The heavy
+  libraries are not loaded yet — they get imported inside the workers that need them, so
+  server startup stays fast either way — and a worker driving the Resolve API has to live in
+  the process holding the handle. But a thread dies with its process, and stem separation is
+  half an hour of GPU work that needs no handle at all once the audio is on disk. So a
+  worker may return ``Detached`` instead of a result: the rest of that job moves into a
+  process of its own (``detached``), and the record on disk is how the two stay in touch.
 """
 
 from __future__ import annotations
@@ -36,7 +40,7 @@ from typing import Any, NamedTuple
 from ..config import Config, get_config
 from ..errors import ChainedJobError, InternalError, ResolveMcpError
 from ..logging_config import get_logger
-from . import cache, store
+from . import cache, detached, store
 from .store import JobRecord
 
 log = get_logger("jobs")
@@ -63,8 +67,20 @@ class JobOutput(NamedTuple):
     artifacts: tuple[Path, ...] = ()
 
 
+class Detached(NamedTuple):
+    """What a worker returns instead of a result when the rest of the job leaves this process.
+
+    ``plan`` is everything the standalone worker will need that the job's params do not
+    already carry — for stems, the acquired audio, which only exists once the part of the job
+    that *did* need the Resolve handle has run. It goes onto the record, because the record
+    is all the two processes share.
+    """
+
+    plan: dict[str, Any]
+
+
 Progress = Callable[[float, str], None]
-Work = Callable[[Progress], JobOutput]
+Work = Callable[[Progress], JobOutput | Detached]
 Watch = Callable[[JobRecord], None]
 
 
@@ -136,13 +152,18 @@ def _run(record: JobRecord, work: Work, touches_resolve: bool, config: Config) -
             if record.step == WAITING:
                 record.step = ""
                 store.save(record, config)
-            _work(record, work, config)
+            execute(record, work, config)
         return
-    _work(record, work, config)
+    execute(record, work, config)
 
 
-def _work(record: JobRecord, work: Work, config: Config) -> None:
-    """Run the worker, and turn whatever comes out of it into a closed job record."""
+def execute(record: JobRecord, work: Work, config: Config) -> None:
+    """Run the worker, and turn whatever comes out of it into a closed job record.
+
+    Public because the detached worker process runs a job through exactly this: the caching,
+    the error shaping and the guarantee that nothing escapes are the same guarantees whether
+    the work is on a thread here or alone in a process of its own.
+    """
 
     def progress(fraction: float, step: str) -> None:
         record.progress = min(max(fraction, 0.0), 1.0)
@@ -151,6 +172,12 @@ def _work(record: JobRecord, work: Work, config: Config) -> None:
 
     try:
         output = work(progress)
+        if isinstance(output, Detached):
+            # Not an ending: the record stays running, and the worker process closes it. The
+            # cache entry is written there too, for the same reason the result is — a job is
+            # only cacheable once it has a result, and this one does not have one yet.
+            detached.launch(record, output.plan, config)
+            return
         if record.cache_key is not None:
             cache.remember(record.cache_key, record.kind, output.result, output.artifacts, config)
     except ResolveMcpError as exc:
@@ -174,6 +201,9 @@ def alive(job_id: str) -> bool:
     A job that a chained job is following can only be finished by that thread. If the
     thread is gone while the record still says running, nothing will ever close it, and a
     follower that kept polling would wait forever.
+
+    Says nothing about a detached job: its thread ends at the hand-off, on purpose, and what
+    is still running is a process this registry never held. ``store`` answers for those.
     """
     with _threads_lock:
         thread = _threads.get(job_id)
@@ -201,7 +231,7 @@ def follow(
             watch(record)
         sleep(poll)
         record = store.load(job_id, config)
-        if record.state == store.RUNNING and not alive(job_id):
+        if record.state == store.RUNNING and not record.detached and not alive(job_id):
             # The thread may have closed the record between that read and this check, so
             # the answer is the record read *after* the thread is known to be gone.
             record = store.load(job_id, config)
@@ -220,7 +250,9 @@ def wait_for(job_id: str, timeout: float = WAIT_TIMEOUT, config: Config | None =
     """Block until the job is off the thread pool — for chained work, and for tests.
 
     A job started by an earlier server process has no thread here; its record already says
-    what happened to it, so the answer comes straight off disk.
+    what happened to it, so the answer comes straight off disk. A detached job comes back
+    still running for the same reason: its thread ended at the hand-off and the process that
+    will finish it is not one this can join.
     """
     with _threads_lock:
         thread = _threads.get(job_id)

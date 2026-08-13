@@ -139,7 +139,13 @@ dry run and build pre-flight). A `segments` entry is a shot or a **gap**
 `overlay_track` are the accessors every walker of that array shares.
 
 `jobs/` — `cache` (hash-keyed results), `runner` (start heavy work without
-stalling stdio), `store` (one JSON record per job on disk).
+stalling stdio), `store` (one JSON record per job on disk), `detached` (hand
+a job to a process that outlives this one — flags, command, environment),
+`worker` (that process's entry point: `python -m resolve_mcp.jobs.worker
+<job-id>`). A worker returning `runner.Detached` instead of a result moves
+the rest of its job into that process; `separate_stems` does, once the audio
+is acquired, so a half-hour separation survives the server exiting. A
+detached record is judged by its pid rather than by its session.
 
 `resolve/` — connection management + thin scripting-API wrappers: `apply`
 (titles file → owned track), `build` (materialise cut file), `connection`

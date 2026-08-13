@@ -49,11 +49,11 @@ from pathlib import Path
 from typing import Any
 
 from ..config import Config, get_config
-from ..errors import InternalError
+from ..errors import InternalError, InvalidRequestError
 from ..ffmpeg import Runner
 from ..jobs import cache
 from ..jobs import runner as job_runner
-from ..jobs.runner import JobOutput, Progress, start_job
+from ..jobs.runner import Detached, JobOutput, Progress, start_job
 from ..jobs.store import JobRecord
 from ..logging_config import get_logger
 from ..naming import slug
@@ -135,6 +135,7 @@ def separate_stems(
     bin: str | None = None,  # noqa: A002 - "bin" is the Resolve term the agent uses
     refresh: bool = False,
     split_wind: bool = False,
+    detach: bool = False,
     runner: separator.Runner | None = None,
     ffmpeg_runner: Runner | None = None,
     config: Config | None = None,
@@ -146,11 +147,26 @@ def separate_stems(
     but a directory missing the pass this run wants is partial, and partial is redone whole,
     so turning it on for audio already separated re-runs the earlier passes too.
 
+    ``detach`` moves the separation into a process of its own once the audio exists, so a
+    half-hour pass survives this process exiting (G4). The acquisition stays here: it drives
+    Resolve, and a Resolve handle cannot be handed to another process — so a detached job is
+    only safe from the hand-off on, and a server that dies mid-export still loses the job.
+    It is off by default here and on at the tool: a caller passing its own ``runner`` is
+    testing the passes, and those belong in the process doing the asserting.
+
     ``runner`` and ``ffmpeg_runner`` are the two subprocess seams: the default shells out
     for real, and a caller can hand in its own to exercise the route without the models or
-    ffmpeg installed.
+    ffmpeg installed. ``runner`` cannot cross the hand-off — a function is not something the
+    record can carry — so ``detach`` with a substituted separator is refused rather than
+    silently running the real one.
     """
     config = config or get_config()
+    if detach and runner is not None:
+        raise InvalidRequestError(
+            cause="A detached separation runs in another process, which cannot be given a runner.",
+            fix="Drop detach to exercise the substituted separator, or drop the runner.",
+            detail={"kind": KIND},
+        )
     source = acquire.audio_source(
         connection,
         scope,
@@ -164,8 +180,13 @@ def separate_stems(
     params = {**source.params, **separation_params(config), "split_wind": split_wind}
     key = cache.cache_key(KIND, [source.fingerprint], params)
 
-    def work(progress: Progress) -> JobOutput:
+    def work(progress: Progress) -> JobOutput | Detached:
         audio = acquired(source, progress, config)
+        if detach:
+            # Everything the other process cannot recompute: the audio this acquisition
+            # produced, and whether it may trust what is already on disk. The rest — models,
+            # the wind flag, the cache key — is on the record already.
+            return Detached({"audio": audio, "reuse": not refresh})
         return multi_pass(
             audio,
             params,
@@ -177,6 +198,37 @@ def separate_stems(
         )
 
     return start_job(KIND, params, work, cache_key=key, refresh=refresh, config=config)
+
+
+def detached_pass(
+    record: JobRecord,
+    progress: Progress,
+    config: Config | None = None,
+    runner: separator.Runner | None = None,
+) -> JobOutput:
+    """The passes, run in a process of its own from the record alone.
+
+    The counterpart of the ``Detached`` above: what the starter knew is on the record, so
+    this reads the acquired audio off ``plan`` and the models off ``params`` and runs exactly
+    the ``multi_pass`` the thread would have run. Nothing here touches Resolve, which is the
+    property that makes detaching this job safe at all.
+    """
+    plan = record.plan or {}
+    audio = plan.get("audio")
+    if not isinstance(audio, dict):
+        raise InternalError(
+            cause=f"The separation job {record.job_id} carries no acquired audio to work on.",
+            detail={"job_id": record.job_id, "plan": sorted(plan)},
+        )
+    return multi_pass(
+        audio,
+        record.params,
+        progress,
+        split_wind=bool(record.params.get("split_wind")),
+        runner=runner,
+        reuse=bool(plan.get("reuse", True)),
+        config=config,
+    )
 
 
 def acquired(

@@ -16,13 +16,24 @@
 * **A corrupt record loses itself, not the listing.** A record half-written when the
   process died is skipped with a warning; one unreadable file must not hide every other
   job from the agent.
+
+* **A detached job is judged by its pid instead, because the session rule is backwards for
+  it.** A record marked ``detached`` names a worker process of its own, and outliving the
+  server that started it is the whole point (G4: a 30-minute separation died with every
+  session that launched it). So the session check is skipped for those and the pid answers
+  instead: alive means running, gone means interrupted, and no pid yet means a launch still
+  in flight. pids do get recycled — a recycled one can only make a dead job read as running
+  a while longer, never the reverse, and the worker writes its own ending in every path it
+  can still reach.
 """
 
 from __future__ import annotations
 
+import ctypes
 import itertools
 import json
 import os
+import sys
 import time
 import uuid
 from collections.abc import Callable
@@ -77,6 +88,17 @@ class JobRecord:
     error: dict[str, Any] | None = None
     cache_key: str | None = None
     cached: bool = False
+    detached: bool = False
+    """This job is being run by a process of its own, not by a thread of the server's."""
+    pid: int | None = None
+    """The detached worker's process id — what says whether it is still there."""
+    plan: dict[str, Any] | None = None
+    """Everything the detached worker needs that the params do not already carry.
+
+    A thread closes over its work; a process cannot, so whatever the starter had already
+    computed — for stems, the acquired audio — travels on the record instead. It is the
+    hand-off, and it is on disk because disk is the only thing the two processes share.
+    """
 
     def payload(self) -> dict[str, Any]:
         return asdict(self)
@@ -110,6 +132,27 @@ def new_job(
     )
     save(record, config)
     log.info("Job %s started (%s)", record.job_id, kind)
+    return record
+
+
+def adopt(job_id: str, config: Config | None = None) -> JobRecord:
+    """Take a record over in this process — the detached worker's first act.
+
+    Deliberately reads the file raw, without the restart check ``load`` runs: the record was
+    written by the server process, and a worker that ran that check on the way in would fail
+    the job at the instant it picked it up. Writing this process's session and pid is what
+    makes the record honest afterwards — from here the worker is the only writer, and any
+    reader asking whether the job is still alive is asking about this process.
+    """
+    config = config or get_config()
+    record = _read(_path(job_id, config))
+    if record is None:
+        raise JobNotFoundError(job_id)
+    record.session = SESSION
+    record.pid = os.getpid()
+    record.detached = True
+    save(record, config)
+    log.info("Job %s adopted by detached worker pid %s", job_id, record.pid)
     return record
 
 
@@ -202,14 +245,92 @@ def _read(path: Path) -> JobRecord | None:
 
 
 
+STILL_ACTIVE = 259
+"""What Windows reports as a process's exit code while it has not got one yet."""
+
+_QUERY_LIMITED_INFORMATION = 0x1000
+
+
+if sys.platform == "win32":
+
+    def pid_alive(pid: int) -> bool:
+        """Whether that process is still running, asked without touching it.
+
+        ``os.kill(pid, 0)`` is the POSIX way to ask and is *not* an option here: on Windows
+        Python implements ``os.kill`` as ``TerminateProcess``, so the innocent-looking probe
+        would kill the separation it was asking about. ``OpenProcess`` with the
+        query-only right and ``GetExitCodeProcess`` is the question actually being asked —
+        and it has to be the exit code rather than whether the handle opened, because the
+        launcher still holds a handle on a worker that has already exited, which keeps the
+        process object openable long after the process is gone.
+        """
+        if pid <= 0:
+            return False
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        handle = kernel32.OpenProcess(_QUERY_LIMITED_INFORMATION, False, pid)
+        if not handle:
+            return False
+        try:
+            code = ctypes.c_ulong()
+            if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+                return False
+            return code.value == STILL_ACTIVE
+        finally:
+            kernel32.CloseHandle(handle)
+
+else:
+
+    def pid_alive(pid: int) -> bool:
+        """Whether that process is still running. Signal 0 asks without delivering anything."""
+        if pid <= 0:
+            return False
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+        return True
+
+
 def _recovered(record: JobRecord, config: Config) -> JobRecord:
     """A job still running under a dead session cannot finish. Say so, once."""
-    if record.state != RUNNING or record.session == SESSION:
+    if record.state != RUNNING:
+        return record
+    if record.detached:
+        return _recovered_detached(record, config)
+    if record.session == SESSION:
         return record
     log.info("Job %s was interrupted by a server restart", record.job_id)
     interrupted = JobInterruptedError(
         cause=f"The server restarted while {record.kind} was running, so the job died with it.",
         detail={"job_id": record.job_id, "progress": record.progress, "step": record.step},
+    )
+    record.session = SESSION
+    return finish(record, error=interrupted.payload(), config=config)
+
+
+def _recovered_detached(record: JobRecord, config: Config) -> JobRecord:
+    """A detached job outlives its session on purpose, so its pid is what gets asked.
+
+    ``None`` is a launch still in flight — the starter marks the record detached before it
+    spawns, so that a reader in the microseconds between never mistakes it for a thread job
+    whose thread has ended.
+    """
+    if record.pid is None or pid_alive(record.pid):
+        return record
+    log.info("Job %s lost its detached worker (pid %s)", record.job_id, record.pid)
+    interrupted = JobInterruptedError(
+        cause=(
+            f"The detached worker running {record.kind} exited before the job finished "
+            f"(pid {record.pid})."
+        ),
+        detail={
+            "job_id": record.job_id,
+            "pid": record.pid,
+            "progress": record.progress,
+            "step": record.step,
+        },
     )
     record.session = SESSION
     return finish(record, error=interrupted.payload(), config=config)
