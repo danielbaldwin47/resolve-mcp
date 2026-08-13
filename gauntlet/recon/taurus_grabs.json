@@ -1,0 +1,917 @@
+{
+ "raw_inspect": {
+  "ok": true,
+  "timeline": {
+   "name": "Zinc SYNC",
+   "base_name": "Zinc SYNC",
+   "version": null,
+   "current": true,
+   "fps": 23.976,
+   "start": {
+    "frames": 86400,
+    "seconds": 3603.604,
+    "timecode": "01:00:00:00",
+    "fps": 23.976
+   },
+   "end": {
+    "frames": 193106,
+    "seconds": 8054.137,
+    "timecode": "02:14:06:02",
+    "fps": 23.976
+   },
+   "duration": {
+    "frames": 106706,
+    "seconds": 4450.534,
+    "timecode": "01:14:06:02",
+    "fps": 23.976
+   },
+   "tracks": {
+    "video": 2,
+    "audio": 8,
+    "subtitle": 0
+   },
+   "markers": 0
+  },
+  "detail": "clips",
+  "range": {
+   "in": {
+    "frames": 171959,
+    "seconds": 7172.13,
+    "timecode": "01:59:24:23",
+    "fps": 23.976
+   },
+   "out": {
+    "frames": 174117,
+    "seconds": 7262.137,
+    "timecode": "02:00:54:21",
+    "fps": 23.976
+   }
+  },
+  "tracks": [
+   {
+    "type": "video",
+    "index": 1,
+    "name": "Video 1",
+    "enabled": true,
+    "locked": false,
+    "item_count": 1,
+    "items": [
+     {
+      "name": "A015C001_2606170J.MXF",
+      "track": {
+       "type": "video",
+       "index": 1
+      },
+      "record": {
+       "in": {
+        "frames": 117576,
+        "seconds": 4903.904,
+        "timecode": "01:21:39:00",
+        "fps": 23.976
+       },
+       "out": {
+        "frames": 188452,
+        "seconds": 7860.027,
+        "timecode": "02:10:52:04",
+        "fps": 23.976
+       },
+       "duration": {
+        "frames": 70876,
+        "seconds": 2956.123,
+        "timecode": "00:49:13:04",
+        "fps": 23.976
+       }
+      },
+      "source": {
+       "in": {
+        "frames": 0,
+        "seconds": 0.0,
+        "timecode": "00:00:00:00",
+        "fps": 23.976
+       },
+       "out": {
+        "frames": 70876,
+        "seconds": 2956.123,
+        "timecode": "00:49:13:04",
+        "fps": 23.976
+       }
+      },
+      "sync_offset": {
+       "frames": 117576,
+       "seconds": 4903.904,
+       "timecode": "01:21:39:00",
+       "fps": 23.976
+      },
+      "clip": "A015C001_2606170J.MXF",
+      "enabled": true,
+      "takes": 0
+     }
+    ]
+   },
+   {
+    "type": "video",
+    "index": 2,
+    "name": "Video 2",
+    "enabled": true,
+    "locked": false,
+    "item_count": 1,
+    "items": [
+     {
+      "name": "20260617_D_A7IV_0006.MP4",
+      "track": {
+       "type": "video",
+       "index": 2
+      },
+      "record": {
+       "in": {
+        "frames": 117576,
+        "seconds": 4903.904,
+        "timecode": "01:21:39:00",
+        "fps": 23.976
+       },
+       "out": {
+        "frames": 184982,
+        "seconds": 7715.299,
+        "timecode": "02:08:27:14",
+        "fps": 23.976
+       },
+       "duration": {
+        "frames": 67406,
+        "seconds": 2811.395,
+        "timecode": "00:46:48:14",
+        "fps": 23.976
+       }
+      },
+      "source": {
+       "in": {
+        "frames": 31270,
+        "seconds": 1304.221,
+        "timecode": "00:21:42:22",
+        "fps": 23.976
+       },
+       "out": {
+        "frames": 98676,
+        "seconds": 4115.616,
+        "timecode": "01:08:31:12",
+        "fps": 23.976
+       }
+      },
+      "sync_offset": {
+       "frames": 86306,
+       "seconds": 3599.683,
+       "timecode": "00:59:56:02",
+       "fps": 23.976
+      },
+      "clip": "20260617_D_A7IV_0006.MP4",
+      "enabled": true,
+      "takes": 0
+     }
+    ]
+   },
+   {
+    "type": "audio",
+    "index": 1,
+    "name": "Audio 1",
+    "enabled": true,
+    "locked": false,
+    "item_count": 1,
+    "items": [
+     {
+      "name": "A015C001_2606170J.MXF",
+      "track": {
+       "type": "audio",
+       "index": 1
+      },
+      "record": {
+       "in": {
+        "frames": 117576,
+        "seconds": 4903.904,
+        "timecode": "01:21:39:00",
+        "fps": 23.976
+       },
+       "out": {
+        "frames": 188452,
+        "seconds": 7860.027,
+        "timecode": "02:10:52:04",
+        "fps": 23.976
+       },
+       "duration": {
+        "frames": 70876,
+        "seconds": 2956.123,
+        "timecode": "00:49:13:04",
+        "fps": 23.976
+       }
+      },
+      "source": {
+       "in": {
+        "frames": 0,
+        "seconds": 0.0,
+        "timecode": "00:00:00:00",
+        "fps": 23.976
+       },
+       "out": {
+        "frames": 70876,
+        "seconds": 2956.123,
+        "timecode": "00:49:13:04",
+        "fps": 23.976
+       }
+      },
+      "sync_offset": {
+       "frames": 117576,
+       "seconds": 4903.904,
+       "timecode": "01:21:39:00",
+       "fps": 23.976
+      },
+      "clip": "A015C001_2606170J.MXF",
+      "enabled": true,
+      "takes": 0
+     }
+    ]
+   },
+   {
+    "type": "audio",
+    "index": 2,
+    "name": "Audio 2",
+    "enabled": true,
+    "locked": false,
+    "item_count": 1,
+    "items": [
+     {
+      "name": "20260617_D_A7IV_0006.MP4",
+      "track": {
+       "type": "audio",
+       "index": 2
+      },
+      "record": {
+       "in": {
+        "frames": 117576,
+        "seconds": 4903.904,
+        "timecode": "01:21:39:00",
+        "fps": 23.976
+       },
+       "out": {
+        "frames": 184982,
+        "seconds": 7715.299,
+        "timecode": "02:08:27:14",
+        "fps": 23.976
+       },
+       "duration": {
+        "frames": 67406,
+        "seconds": 2811.395,
+        "timecode": "00:46:48:14",
+        "fps": 23.976
+       }
+      },
+      "source": {
+       "in": {
+        "frames": 31270,
+        "seconds": 1304.221,
+        "timecode": "00:21:42:22",
+        "fps": 23.976
+       },
+       "out": {
+        "frames": 98676,
+        "seconds": 4115.616,
+        "timecode": "01:08:31:12",
+        "fps": 23.976
+       }
+      },
+      "sync_offset": {
+       "frames": 86306,
+       "seconds": 3599.683,
+       "timecode": "00:59:56:02",
+       "fps": 23.976
+      },
+      "clip": "20260617_D_A7IV_0006.MP4",
+      "enabled": true,
+      "takes": 0
+     }
+    ]
+   },
+   {
+    "type": "audio",
+    "index": 3,
+    "name": "Audio 3",
+    "enabled": true,
+    "locked": false,
+    "item_count": 1,
+    "items": [
+     {
+      "name": "140110-073551.WAV",
+      "track": {
+       "type": "audio",
+       "index": 3
+      },
+      "record": {
+       "in": {
+        "frames": 117576,
+        "seconds": 4903.904,
+        "timecode": "01:21:39:00",
+        "fps": 23.976
+       },
+       "out": {
+        "frames": 192684,
+        "seconds": 8036.537,
+        "timecode": "02:13:48:12",
+        "fps": 23.976
+       },
+       "duration": {
+        "frames": 75108,
+        "seconds": 3132.633,
+        "timecode": "00:52:09:12",
+        "fps": 23.976
+       }
+      },
+      "source": {
+       "in": {
+        "frames": 31175,
+        "seconds": 1300.259,
+        "timecode": "00:21:38:23",
+        "fps": 23.976
+       },
+       "out": {
+        "frames": 106283,
+        "seconds": 4432.891,
+        "timecode": "01:13:48:11",
+        "fps": 23.976
+       }
+      },
+      "sync_offset": {
+       "frames": 86401,
+       "seconds": 3603.645,
+       "timecode": "01:00:00:01",
+       "fps": 23.976
+      },
+      "clip": "140110-073551.WAV",
+      "enabled": true,
+      "takes": 0
+     }
+    ]
+   },
+   {
+    "type": "audio",
+    "index": 4,
+    "name": "Audio 4",
+    "enabled": true,
+    "locked": false,
+    "item_count": 1,
+    "items": [
+     {
+      "name": "Zinc Set 2 Reaper v4.wav",
+      "track": {
+       "type": "audio",
+       "index": 4
+      },
+      "record": {
+       "in": {
+        "frames": 86401,
+        "seconds": 3603.645,
+        "timecode": "01:00:00:01",
+        "fps": 23.976
+       },
+       "out": {
+        "frames": 193106,
+        "seconds": 8054.137,
+        "timecode": "02:14:06:02",
+        "fps": 23.976
+       },
+       "duration": {
+        "frames": 106705,
+        "seconds": 4450.492,
+        "timecode": "01:14:06:01",
+        "fps": 23.976
+       }
+      },
+      "source": {
+       "in": {
+        "frames": 0,
+        "seconds": 0.0,
+        "timecode": "00:00:00:00",
+        "fps": 23.976
+       },
+       "out": {
+        "frames": 106705,
+        "seconds": 4450.492,
+        "timecode": "01:14:06:01",
+        "fps": 23.976
+       }
+      },
+      "sync_offset": {
+       "frames": 86401,
+       "seconds": 3603.645,
+       "timecode": "01:00:00:01",
+       "fps": 23.976
+      },
+      "clip": "Zinc Set 2 Reaper v4.wav",
+      "enabled": true,
+      "takes": 0
+     }
+    ]
+   },
+   {
+    "type": "audio",
+    "index": 5,
+    "name": "Audio 5",
+    "enabled": true,
+    "locked": false,
+    "item_count": 0,
+    "items": []
+   },
+   {
+    "type": "audio",
+    "index": 6,
+    "name": "Audio 6",
+    "enabled": true,
+    "locked": false,
+    "item_count": 0,
+    "items": []
+   },
+   {
+    "type": "audio",
+    "index": 7,
+    "name": "Audio 7",
+    "enabled": true,
+    "locked": false,
+    "item_count": 0,
+    "items": []
+   },
+   {
+    "type": "audio",
+    "index": 8,
+    "name": "Audio 8",
+    "enabled": true,
+    "locked": false,
+    "item_count": 0,
+    "items": []
+   }
+  ],
+  "item_count": 6,
+  "currency": {
+   "read_as_current": true,
+   "made_current": false,
+   "unknown_fields": [],
+   "fix": null
+  },
+  "truncated": false,
+  "spilled_to": null,
+  "context": {
+   "connected": true,
+   "resolve_version": "21.0.3.7",
+   "project": "mcp-tests-zinc",
+   "timeline": "Zinc SYNC",
+   "fps": 23.976
+  }
+ },
+ "items": [
+  {
+   "track": "Video 1",
+   "name": "A015C001_2606170J.MXF",
+   "record_in": 117576,
+   "record_out": 188452,
+   "source_in": 0,
+   "source_out": 70876,
+   "sync_offset": 117576
+  },
+  {
+   "track": "Video 2",
+   "name": "20260617_D_A7IV_0006.MP4",
+   "record_in": 117576,
+   "record_out": 184982,
+   "source_in": 31270,
+   "source_out": 98676,
+   "sync_offset": 86306
+  },
+  {
+   "track": "Audio 1",
+   "name": "A015C001_2606170J.MXF",
+   "record_in": 117576,
+   "record_out": 188452,
+   "source_in": 0,
+   "source_out": 70876,
+   "sync_offset": 117576
+  },
+  {
+   "track": "Audio 2",
+   "name": "20260617_D_A7IV_0006.MP4",
+   "record_in": 117576,
+   "record_out": 184982,
+   "source_in": 31270,
+   "source_out": 98676,
+   "sync_offset": 86306
+  },
+  {
+   "track": "Audio 3",
+   "name": "140110-073551.WAV",
+   "record_in": 117576,
+   "record_out": 192684,
+   "source_in": 31175,
+   "source_out": 106283,
+   "sync_offset": 86401
+  },
+  {
+   "track": "Audio 4",
+   "name": "Zinc Set 2 Reaper v4.wav",
+   "record_in": 86401,
+   "record_out": 193106,
+   "source_in": 0,
+   "source_out": 106705,
+   "sync_offset": 86401
+  }
+ ],
+ "inspect_keys": [
+  "ok",
+  "timeline",
+  "detail",
+  "range",
+  "tracks",
+  "item_count",
+  "currency",
+  "truncated",
+  "spilled_to",
+  "context"
+ ],
+ "mapping": {
+  "Video 1": {
+   "clip": "A015C001_2606170J.MXF",
+   "zero_frame": 117576
+  },
+  "Video 2": {
+   "clip": "20260617_D_A7IV_0006.MP4",
+   "zero_frame": 86306
+  },
+  "Audio 1": {
+   "clip": "A015C001_2606170J.MXF",
+   "zero_frame": 117576
+  },
+  "Audio 2": {
+   "clip": "20260617_D_A7IV_0006.MP4",
+   "zero_frame": 86306
+  },
+  "Audio 3": {
+   "clip": "140110-073551.WAV",
+   "zero_frame": 86401
+  },
+  "Audio 4": {
+   "clip": "Zinc Set 2 Reaper v4.wav",
+   "zero_frame": 86401
+  }
+ },
+ "grabs": {
+  "A015C001_2606170J.MXF": {
+   "zero_frame": 117576,
+   "times": [
+    54407,
+    54445,
+    54527,
+    54671,
+    54863,
+    55054,
+    55246,
+    55342,
+    55534,
+    55774,
+    56061,
+    56397
+   ],
+   "result": {
+    "ok": true,
+    "clip": "A015C001_2606170J.MXF",
+    "bin": "Zinc Bar/Footage/FX6/Set 2",
+    "source": "P:\\Client Work\\Ryan Devlin\\2026-06-17_Zinc Bar\\Footage\\FX6\\Card 2\\XDROOT\\Clip\\A015C001_2606170J.MXF",
+    "max_edge": 1568,
+    "frames": [
+     {
+      "time": {
+       "frames": 54407,
+       "seconds": 2269.228,
+       "timecode": "00:37:46:23",
+       "fps": 23.976
+      },
+      "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\frames\\A015C001_2606170J.MXF-b6fb903aea9c.jpg",
+      "width": 1568,
+      "height": 882,
+      "bytes": 138795
+     },
+     {
+      "time": {
+       "frames": 54445,
+       "seconds": 2270.812,
+       "timecode": "00:37:48:13",
+       "fps": 23.976
+      },
+      "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\frames\\A015C001_2606170J.MXF-92916cc29168.jpg",
+      "width": 1568,
+      "height": 882,
+      "bytes": 141622
+     },
+     {
+      "time": {
+       "frames": 54527,
+       "seconds": 2274.233,
+       "timecode": "00:37:51:23",
+       "fps": 23.976
+      },
+      "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\frames\\A015C001_2606170J.MXF-523135363199.jpg",
+      "width": 1568,
+      "height": 882,
+      "bytes": 141524
+     },
+     {
+      "time": {
+       "frames": 54671,
+       "seconds": 2280.239,
+       "timecode": "00:37:57:23",
+       "fps": 23.976
+      },
+      "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\frames\\A015C001_2606170J.MXF-108c4d5f2674.jpg",
+      "width": 1568,
+      "height": 882,
+      "bytes": 140068
+     },
+     {
+      "time": {
+       "frames": 54863,
+       "seconds": 2288.247,
+       "timecode": "00:38:05:23",
+       "fps": 23.976
+      },
+      "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\frames\\A015C001_2606170J.MXF-fa0b695a93ef.jpg",
+      "width": 1568,
+      "height": 882,
+      "bytes": 140048
+     },
+     {
+      "time": {
+       "frames": 55054,
+       "seconds": 2296.213,
+       "timecode": "00:38:13:22",
+       "fps": 23.976
+      },
+      "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\frames\\A015C001_2606170J.MXF-010c44591c6c.jpg",
+      "width": 1568,
+      "height": 882,
+      "bytes": 138908
+     },
+     {
+      "time": {
+       "frames": 55246,
+       "seconds": 2304.221,
+       "timecode": "00:38:21:22",
+       "fps": 23.976
+      },
+      "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\frames\\A015C001_2606170J.MXF-5f7bd1ee66e9.jpg",
+      "width": 1568,
+      "height": 882,
+      "bytes": 139826
+     },
+     {
+      "time": {
+       "frames": 55342,
+       "seconds": 2308.225,
+       "timecode": "00:38:25:22",
+       "fps": 23.976
+      },
+      "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\frames\\A015C001_2606170J.MXF-4e39987bb310.jpg",
+      "width": 1568,
+      "height": 882,
+      "bytes": 124412
+     },
+     {
+      "time": {
+       "frames": 55534,
+       "seconds": 2316.233,
+       "timecode": "00:38:33:22",
+       "fps": 23.976
+      },
+      "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\frames\\A015C001_2606170J.MXF-c53278b8a7ba.jpg",
+      "width": 1568,
+      "height": 882,
+      "bytes": 111237
+     },
+     {
+      "time": {
+       "frames": 55774,
+       "seconds": 2326.243,
+       "timecode": "00:38:43:22",
+       "fps": 23.976
+      },
+      "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\frames\\A015C001_2606170J.MXF-78b48546cc33.jpg",
+      "width": 1568,
+      "height": 882,
+      "bytes": 111501
+     },
+     {
+      "time": {
+       "frames": 56061,
+       "seconds": 2338.213,
+       "timecode": "00:38:55:21",
+       "fps": 23.976
+      },
+      "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\frames\\A015C001_2606170J.MXF-68daeff8833a.jpg",
+      "width": 1568,
+      "height": 882,
+      "bytes": 112691
+     },
+     {
+      "time": {
+       "frames": 56397,
+       "seconds": 2352.227,
+       "timecode": "00:39:09:21",
+       "fps": 23.976
+      },
+      "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\frames\\A015C001_2606170J.MXF-a2e33f7ef7aa.jpg",
+      "width": 1568,
+      "height": 882,
+      "bytes": 115540
+     }
+    ],
+    "cached": false,
+    "context": {
+     "connected": true,
+     "resolve_version": "21.0.3.7",
+     "project": "mcp-tests-zinc",
+     "timeline": "Zinc SYNC",
+     "fps": 23.976
+    }
+   }
+  },
+  "20260617_D_A7IV_0006.MP4": {
+   "zero_frame": 86306,
+   "times": [
+    85677,
+    85715,
+    85797,
+    85941,
+    86133,
+    86324,
+    86516,
+    86612,
+    86804,
+    87044,
+    87331,
+    87667
+   ],
+   "result": {
+    "ok": true,
+    "clip": "20260617_D_A7IV_0006.MP4",
+    "bin": "Zinc Bar/Footage/A7IV/Set 2",
+    "source": "P:\\Client Work\\Ryan Devlin\\2026-06-17_Zinc Bar\\Footage\\A7IV\\M4ROOT\\CLIP\\20260617_D_A7IV_0006.MP4",
+    "max_edge": 1568,
+    "frames": [
+     {
+      "time": {
+       "frames": 85677,
+       "seconds": 3573.448,
+       "timecode": "00:59:29:21",
+       "fps": 23.976
+      },
+      "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\frames\\20260617_D_A7IV_0006.MP4-f06cf255398e.jpg",
+      "width": 1568,
+      "height": 882,
+      "bytes": 102251
+     },
+     {
+      "time": {
+       "frames": 85715,
+       "seconds": 3575.033,
+       "timecode": "00:59:31:11",
+       "fps": 23.976
+      },
+      "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\frames\\20260617_D_A7IV_0006.MP4-8281df32ec63.jpg",
+      "width": 1568,
+      "height": 882,
+      "bytes": 101870
+     },
+     {
+      "time": {
+       "frames": 85797,
+       "seconds": 3578.453,
+       "timecode": "00:59:34:21",
+       "fps": 23.976
+      },
+      "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\frames\\20260617_D_A7IV_0006.MP4-b6af949484cd.jpg",
+      "width": 1568,
+      "height": 882,
+      "bytes": 103494
+     },
+     {
+      "time": {
+       "frames": 85941,
+       "seconds": 3584.459,
+       "timecode": "00:59:40:21",
+       "fps": 23.976
+      },
+      "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\frames\\20260617_D_A7IV_0006.MP4-dd345654af59.jpg",
+      "width": 1568,
+      "height": 882,
+      "bytes": 107127
+     },
+     {
+      "time": {
+       "frames": 86133,
+       "seconds": 3592.467,
+       "timecode": "00:59:48:21",
+       "fps": 23.976
+      },
+      "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\frames\\20260617_D_A7IV_0006.MP4-33d7d0d2d0de.jpg",
+      "width": 1568,
+      "height": 882,
+      "bytes": 105499
+     },
+     {
+      "time": {
+       "frames": 86324,
+       "seconds": 3600.434,
+       "timecode": "00:59:56:20",
+       "fps": 23.976
+      },
+      "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\frames\\20260617_D_A7IV_0006.MP4-a66747e1a59a.jpg",
+      "width": 1568,
+      "height": 882,
+      "bytes": 101047
+     },
+     {
+      "time": {
+       "frames": 86516,
+       "seconds": 3608.442,
+       "timecode": "01:00:04:20",
+       "fps": 23.976
+      },
+      "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\frames\\20260617_D_A7IV_0006.MP4-3b0b336e61f7.jpg",
+      "width": 1568,
+      "height": 882,
+      "bytes": 102496
+     },
+     {
+      "time": {
+       "frames": 86612,
+       "seconds": 3612.446,
+       "timecode": "01:00:08:20",
+       "fps": 23.976
+      },
+      "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\frames\\20260617_D_A7IV_0006.MP4-cfd9d1bfa6c5.jpg",
+      "width": 1568,
+      "height": 882,
+      "bytes": 88512
+     },
+     {
+      "time": {
+       "frames": 86804,
+       "seconds": 3620.454,
+       "timecode": "01:00:16:20",
+       "fps": 23.976
+      },
+      "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\frames\\20260617_D_A7IV_0006.MP4-b12dc6689ba9.jpg",
+      "width": 1568,
+      "height": 882,
+      "bytes": 102344
+     },
+     {
+      "time": {
+       "frames": 87044,
+       "seconds": 3630.464,
+       "timecode": "01:00:26:20",
+       "fps": 23.976
+      },
+      "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\frames\\20260617_D_A7IV_0006.MP4-8ea34c848b06.jpg",
+      "width": 1568,
+      "height": 882,
+      "bytes": 100324
+     },
+     {
+      "time": {
+       "frames": 87331,
+       "seconds": 3642.434,
+       "timecode": "01:00:38:19",
+       "fps": 23.976
+      },
+      "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\frames\\20260617_D_A7IV_0006.MP4-96c527806c3c.jpg",
+      "width": 1568,
+      "height": 882,
+      "bytes": 101882
+     },
+     {
+      "time": {
+       "frames": 87667,
+       "seconds": 3656.448,
+       "timecode": "01:00:52:19",
+       "fps": 23.976
+      },
+      "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\frames\\20260617_D_A7IV_0006.MP4-b446ef2b8ae6.jpg",
+      "width": 1568,
+      "height": 882,
+      "bytes": 97758
+     }
+    ],
+    "cached": false,
+    "context": {
+     "connected": true,
+     "resolve_version": "21.0.3.7",
+     "project": "mcp-tests-zinc",
+     "timeline": "Zinc SYNC",
+     "fps": 23.976
+    }
+   }
+  }
+ }
+}
