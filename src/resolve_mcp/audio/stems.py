@@ -45,6 +45,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -302,6 +303,26 @@ def stem_key(audio: dict[str, Any], params: dict[str, Any]) -> str:
 CLAIM = ".separating.json"
 """The file that says a process is writing this stems directory right now. See ``claimed``."""
 
+CLAIM_CEILING = 6 * 60 * 60
+"""How old a claim may get before it is read as abandoned, in seconds.
+
+Deliberately far longer than any separation: the longest measured pass over a full set is
+under an hour, so six of them can only be a claim whose process is gone in a way the pid
+check could not see — the pid recycled onto a live, unrelated process. Without a ceiling
+that directory is locked out for the life of the machine.
+"""
+
+_claims: dict[str, threading.Lock] = {}
+_claims_lock = threading.Lock()
+"""One lock per stems directory, for the threads of *this* process. See ``claimed``."""
+
+
+def _local_lock(directory: Path) -> threading.Lock:
+    """The lock this process uses for that directory, made once and kept."""
+    key = os.path.normcase(str(directory.resolve()))
+    with _claims_lock:
+        return _claims.setdefault(key, threading.Lock())
+
 
 @contextmanager
 def claimed(directory: Path) -> Iterator[None]:
@@ -312,33 +333,81 @@ def claimed(directory: Path) -> Iterator[None]:
     writing the same files interleave into stems that are neither run's: half the tracks from
     each, all of them looking complete to the reuse check that reads them next.
 
-    A file rather than a lock object, because the two are not threads of one process. Since G4
-    a separation runs in a detached worker, and disk is the only thing those share — the same
-    reason the job record itself is a file. It names the process holding it, so a claim whose
-    process is gone is a crashed run rather than an owner, and is taken over instead of waited
-    on: nobody is left locked out by a worker that died at the 50% mark.
+    Two locks, because there are two kinds of rival. A file for the other *processes*: since
+    G4 a separation runs in a detached worker, and disk is the only thing those share — the
+    same reason the job record itself is a file. It is created with an exclusive create, so
+    the claim is won by the one whose create the filesystem accepted rather than by whoever
+    read an empty directory last. And a plain in-process lock for the other *threads*, which
+    the file cannot separate at all: they share a pid, so each would read the other's claim
+    as its own and both would walk straight in.
+
+    A claim whose process is gone is a crashed run rather than an owner, and is taken over
+    instead of waited on: nobody is left locked out by a worker that died at the 50% mark.
     """
     directory.mkdir(parents=True, exist_ok=True)
     marker = directory / CLAIM
-    holder = _holder(marker)
-    if holder is not None:
+    lock = _local_lock(directory)
+    if not lock.acquire(blocking=False):
         raise SeparationInProgressError(
-            cause=f"Another process (pid {holder}) is already separating into {directory}.",
-            detail={"directory": str(directory), "pid": holder},
+            cause=(
+                f"Another thread of this process (pid {os.getpid()}) is already separating "
+                f"into {directory}."
+            ),
+            detail={"directory": str(directory), "pid": os.getpid()},
         )
-    marker.write_text(
-        json.dumps({"pid": os.getpid(), "session": SESSION, "claimed_at": time.time()}),
-        encoding="utf-8",
-    )
-    log.info("Claimed the stems directory %s for pid %s", directory, os.getpid())
     try:
-        yield
+        _take(marker)
+        try:
+            yield
+        finally:
+            _release(marker)
     finally:
-        _release(marker)
+        lock.release()
 
 
-def _holder(marker: Path) -> int | None:
-    """The live process holding this claim, or ``None`` — no claim, ours, or a dead one."""
+def _take(marker: Path) -> None:
+    """Win the claim, or say who holds it — never read-then-write.
+
+    Reading first and writing after is two separations both finding an empty directory and
+    both proceeding; the exclusive create is what makes the answer the filesystem's. A create
+    that is refused is not yet a refusal to run: the claim on disk may be one nothing is
+    holding, and then it is cleared and the create tried once more. Only once more — a second
+    loser is a live rival, not a stale file.
+    """
+    if _create(marker):
+        return
+    holder = _holder(marker)
+    if holder is None:
+        _discard(marker)
+        if _create(marker):
+            return
+        holder = _holder(marker)
+    directory = marker.parent
+    cause = (
+        f"Another process (pid {holder}) is already separating into {directory}."
+        if holder is not None
+        else f"Another process claimed {directory} at the same moment this one tried to."
+    )
+    raise SeparationInProgressError(
+        cause=cause,
+        detail={"directory": str(directory), "pid": holder},
+    )
+
+
+def _create(marker: Path) -> bool:
+    """Write the claim only if nobody else has one; ``False`` means somebody does."""
+    try:
+        handle = os.open(marker, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        return False
+    with os.fdopen(handle, "w", encoding="utf-8") as sink:
+        sink.write(json.dumps({"pid": os.getpid(), "session": SESSION, "claimed_at": time.time()}))
+    log.info("Claimed the stems directory %s for pid %s", marker.parent, os.getpid())
+    return True
+
+
+def _read_claim(marker: Path) -> dict[str, Any] | None:
+    """What the claim file says, or ``None`` if there is nothing legible there."""
     try:
         raw = json.loads(marker.read_text(encoding="utf-8"))
     except FileNotFoundError:
@@ -346,18 +415,66 @@ def _holder(marker: Path) -> int | None:
     except (OSError, ValueError):
         log.warning("Ignoring an unreadable stems claim at %s", marker)
         return None
-    pid = raw.get("pid") if isinstance(raw, dict) else None
-    if not isinstance(pid, int) or pid == os.getpid():
+    if not isinstance(raw, dict):
+        log.warning("Ignoring a stems claim that is not a record at %s", marker)
+        return None
+    return raw
+
+
+def _holder(marker: Path) -> int | None:
+    """The process still holding this claim, or ``None`` if it is there for the taking.
+
+    Three ways a claim is there for the taking, and all three read fields the claim has always
+    written and nothing has ever asked about. The pid is not enough on its own: it is a number
+    the OS re-issues, so a claim outlives the process that wrote it and can end up naming a
+    live stranger — or this very process, which is how a stale claim used to lock a directory
+    out permanently while reporting that *we* were separating into it.
+    """
+    raw = _read_claim(marker)
+    if raw is None:
+        return None
+    pid = raw.get("pid")
+    session = raw.get("session")
+    if not isinstance(pid, int):
+        log.warning("Ignoring a stems claim that names no process at %s", marker)
+        return None
+    if session == SESSION:
+        # This process wrote it, and no thread of ours holds the directory's lock — the caller
+        # took that before asking. So it is our own leftover, from a run that died mid-write.
+        log.info("Taking back the stems claim at %s: this process left it behind", marker)
+        return None
+    if pid == os.getpid():
+        log.info(
+            "Taking over the stems claim at %s: pid %s is now this process, not the one that "
+            "wrote the claim",
+            marker,
+            pid,
+        )
         return None
     if not pid_alive(pid):
         log.info("Taking over the stems claim at %s from pid %s, which is gone", marker, pid)
+        return None
+    claimed_at = raw.get("claimed_at")
+    age = time.time() - claimed_at if isinstance(claimed_at, int | float) else 0.0
+    if age > CLAIM_CEILING:
+        log.warning(
+            "Taking over the stems claim at %s from pid %s: it is %.1f hours old, so that pid "
+            "is a recycled number rather than the separation that wrote it",
+            marker,
+            pid,
+            age / 3600,
+        )
         return None
     return pid
 
 
 def _release(marker: Path) -> None:
-    """Drop the claim, but only if it is still ours to drop."""
-    if _holder(marker) is not None:
+    """Drop the claim, but only if it is still the one this process wrote."""
+    raw = _read_claim(marker)
+    if raw is None:
+        return
+    if raw.get("session") != SESSION or raw.get("pid") != os.getpid():
+        log.info("Leaving the claim at %s alone: it is not the one this process wrote", marker)
         return
     try:
         marker.unlink(missing_ok=True)
@@ -365,6 +482,14 @@ def _release(marker: Path) -> None:
         log.warning("Could not clear the stems claim at %s", marker)
         return
     log.info("Released the stems claim at %s", marker)
+
+
+def _discard(marker: Path) -> None:
+    """Clear a claim nothing is holding, so the next create can win it."""
+    try:
+        marker.unlink(missing_ok=True)
+    except OSError:
+        log.warning("Could not clear the abandoned stems claim at %s", marker)
 
 
 def multi_pass(

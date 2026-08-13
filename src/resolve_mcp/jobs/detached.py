@@ -129,8 +129,9 @@ def launch(
 ) -> int:
     """Write the hand-off onto the record, start the worker, and return its pid.
 
-    The record is marked detached *before* the spawn: between the two saves it names no pid
-    yet, and ``store`` reads that as a launch in flight. The other order would leave a window
+    The record is marked detached *before* the spawn, and names this process as the launcher:
+    between the two saves it has no worker pid yet, and ``store`` reads that — plus a
+    launcher that is still alive — as a launch in flight. The other order would leave a window
     in which the record looks like an ordinary job whose thread has ended, which is a
     failure any poller would report.
     """
@@ -138,6 +139,7 @@ def launch(
     record.detached = True
     record.plan = plan
     record.step = HANDING_OFF
+    record.launcher_pid = os.getpid()
     store.save(record, config)
 
     argv = command(record.job_id)
@@ -152,26 +154,17 @@ def launch(
     # always the same process. The trampoline outlives its child, so this stays a truthful
     # "still running" for the second or so before the worker overwrites it.
     #
-    # Read back first, because by now the record may not be ours to write: the worker adopts
-    # it as its first act, and a cold start that loses a race with nothing is still a race
-    # this one loses often enough — the child's pid, session and step written, then the
-    # parent's stale copy saved straight over them, leaving the record naming a launcher's
-    # pid the worker will never write again. If a pid is already there, it is the worker's
-    # and it is better than this one.
-    latest = store.peek(record.job_id, config) or record
-    if latest.pid is None:
-        latest.pid = pid
-        latest.step = step_for(record.kind, pid)
-        store.save(latest, config)
+    # Merged onto the disk copy rather than saved from this one, because by now the record may
+    # not be ours to write: the worker adopts it as its first act and can even have finished a
+    # short job, and this process's copy is stale in both cases. Saving it blindly would put a
+    # launcher's pid and ``running`` back over a record the worker had already closed — and the
+    # worker never writes again, so that job would poll as running for good. ``note_worker_pid``
+    # writes only while disk still shows nobody has adopted or ended it, and reports what
+    # actually landed.
+    latest = store.note_worker_pid(record.job_id, pid, step_for(record.kind, pid), config) or record
+    if latest.pid == pid:
         log.info(
             "Job %s handed off to detached worker pid %s: %s", record.job_id, pid, " ".join(argv)
-        )
-    else:
-        log.info(
-            "Job %s was adopted by pid %s before its launcher could record pid %s",
-            record.job_id,
-            latest.pid,
-            pid,
         )
     record.pid = latest.pid
     record.step = latest.step

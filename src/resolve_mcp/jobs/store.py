@@ -22,11 +22,12 @@
   server that started it is the whole point (G4: a 30-minute separation died with every
   session that launched it). So the session check is skipped for those and the pid answers
   instead: alive means running, gone means interrupted, and no pid yet means a launch still
-  in flight — but only in this session, because nobody else will ever write that pid, so a
-  pid-less record from a dead session falls back to the session rule rather than living
-  forever. pids do get recycled — a recycled one can only make a dead job read as running
-  a while longer, never the reverse, and the worker writes its own ending in every path it
-  can still reach.
+  in flight — in this session, or in whichever server is named by ``launcher_pid`` while
+  that process is still alive, because those are the only two processes that will ever write
+  the worker's pid. A pid-less record whose launcher is gone too falls back to the session
+  rule rather than living forever. pids do get recycled — a recycled one can only make a
+  dead job read as running a while longer, never the reverse, and the worker writes its own
+  ending in every path it can still reach.
 """
 
 from __future__ import annotations
@@ -95,6 +96,14 @@ class JobRecord:
     """This job is being run by a process of its own, not by a thread of the server's."""
     pid: int | None = None
     """The detached worker's process id — what says whether it is still there."""
+    launcher_pid: int | None = None
+    """The process that is starting the detached worker, written before the spawn.
+
+    It answers the one question ``pid`` cannot: a record with no worker pid yet is either a
+    launch in flight or a launch that never happened, and after the launching server exits
+    those look identical. Written before the spawn so it is on disk for the whole window,
+    and never rewritten — the worker's own pid is what matters from the adopt onwards.
+    """
     plan: dict[str, Any] | None = None
     """Everything the detached worker needs that the params do not already carry.
 
@@ -176,19 +185,102 @@ def adopt(job_id: str, config: Config | None = None) -> JobRecord:
     record.pid = os.getpid()
     record.detached = True
     save(record, config)
+    release_child(record.pid)
     log.info("Job %s adopted by detached worker pid %s", job_id, record.pid)
     return record
 
 
 def save(record: JobRecord, config: Config | None = None) -> None:
     """Write the record atomically — a poll must never read a half-written file."""
-    config = config or get_config()
+    _write(record, config or get_config())
+
+
+def _write(
+    record: JobRecord,
+    config: Config,
+    guard: Callable[[JobRecord | None], bool] | None = None,
+) -> bool:
+    """Write the record into place, optionally only while disk still says what it must.
+
+    The guard is read as late as it can be — after the scratch file is written, immediately
+    before the replace — so that the window in which another writer can slip past it is the
+    replace itself rather than the whole serialise-and-write. It is not a lock and cannot be:
+    two processes write this record and neither can hold the other off. It is enough for the
+    one caller that needs it (``note_worker_pid``), whose write is worth skipping entirely
+    rather than landing on top of a worker's.
+    """
     record.updated_at = _now()
     target = _path(record.job_id, config)
     target.parent.mkdir(parents=True, exist_ok=True)
     scratch = _scratch(target)
     scratch.write_text(json.dumps(record.payload(), indent=2), encoding="utf-8")
+    if guard is not None and not guard(_read(target)):
+        scratch.unlink(missing_ok=True)
+        return False
     _sharing(lambda: os.replace(scratch, target))
+    return True
+
+
+def _unclaimed(record: JobRecord) -> bool:
+    """Nobody has adopted this record and nothing has ended it — still the launcher's to write."""
+    return record.pid is None and record.state == RUNNING
+
+
+def note_worker_pid(
+    job_id: str,
+    pid: int,
+    step: str,
+    config: Config | None = None,
+) -> JobRecord | None:
+    """Merge a launcher's reading of the worker's pid onto whatever is on disk *now*.
+
+    The launcher's copy of the record is stale the moment the child starts: the worker adopts
+    as its first act and may have finished a cache-hit job by the time the launcher gets back
+    from ``Popen``. Saving that copy would put ``running`` and a launcher's pid over a record
+    the worker had already closed as failed — and the worker never writes again, so the job
+    would poll as running forever. So this reads the record back, writes only onto the disk
+    copy, and only while that copy is still unadopted and unfinished; the guard is re-read
+    immediately before the replace, and the result is re-read after it. Losing the race is
+    not retried: the worker's record is the better one, and a second attempt would be the
+    same stale write with a longer window.
+    """
+    config = config or get_config()
+    current = peek(job_id, config)
+    if current is None:
+        log.warning("Job %s vanished before its launcher could record worker pid %s", job_id, pid)
+        return None
+    if current.pid is not None:
+        log.info(
+            "Job %s was adopted by pid %s before its launcher could record pid %s",
+            job_id,
+            current.pid,
+            pid,
+        )
+        return current
+    if current.state != RUNNING:
+        log.info(
+            "Job %s already ended (%s) before its launcher could record pid %s",
+            job_id,
+            current.state,
+            pid,
+        )
+        return current
+    current.pid = pid
+    current.step = step
+    if not _write(current, config, guard=lambda disk: disk is not None and _unclaimed(disk)):
+        log.info(
+            "Job %s: its worker reached the record first, so pid %s was not written", job_id, pid
+        )
+        return peek(job_id, config)
+    landed = peek(job_id, config)
+    if landed is not None and landed.pid != pid:
+        log.info(
+            "Job %s: the detached worker (pid %s) overwrote the launcher's pid %s; leaving it",
+            job_id,
+            landed.pid,
+            pid,
+        )
+    return landed or current
 
 
 def _scratch(target: Path) -> Path:
@@ -218,6 +310,7 @@ def finish(
     record.finished_at = _now()
     record.progress = 1.0 if error is None else record.progress
     save(record, config)
+    release_child(record.pid)
     if error is None:
         log.info("Job %s completed", record.job_id)
     else:
@@ -316,9 +409,53 @@ def remember_child(pid: int, child: Child) -> None:
     lived, which is the one verdict the detached path exists to get right. ``poll`` both
     reaps it and gives the honest answer. On Windows the open handle also keeps the pid from
     being handed to anybody else while we are still asking about it.
+
+    Every remembered handle is a promise to poll it, and only a *running* record is ever
+    polled — so a job that ends leaves its handle behind, and on POSIX that is a zombie the
+    process carries for as long as it lives. A server that separates all day would collect
+    one per job. The sweep here is the cheap place to pay that back: a launch is rare, the
+    poll is a syscall, and it costs nothing to reap everything that has already exited on
+    the way past.
     """
+    _prune_children()
     with _children_lock:
         _children[pid] = child
+
+
+def _prune_children() -> None:
+    """Reap and forget every remembered worker that has already exited."""
+    with _children_lock:
+        remembered = list(_children.items())
+    gone = [pid for pid, child in remembered if child.poll() is not None]
+    if not gone:
+        return
+    with _children_lock:
+        for pid, child in remembered:
+            if pid in gone and _children.get(pid) is child:
+                del _children[pid]
+    log.info("Reaped %s detached worker(s) that had exited: %s", len(gone), gone)
+
+
+def release_child(pid: int | None) -> None:
+    """Let go of the handle on a worker whose job has ended.
+
+    ``finish`` and ``adopt`` both call this because both are the moment a record stops being
+    something anybody will poll a pid for: after them, nothing asks ``pid_alive`` about this
+    job again, so the handle would sit in the dict — and its process in the process table —
+    until the server exited. A worker that is somehow still running keeps its handle: it is
+    still this process's child, and dropping it early is how a zombie is made rather than
+    reaped.
+    """
+    if pid is None:
+        return
+    with _children_lock:
+        child = _children.get(pid)
+    if child is None or child.poll() is None:
+        return
+    with _children_lock:
+        if _children.get(pid) is child:
+            del _children[pid]
+    log.info("Released the handle on detached worker pid %s: its job has ended", pid)
 
 
 def _child_state(pid: int) -> bool | None:
@@ -331,7 +468,16 @@ def _child_state(pid: int) -> bool | None:
         return True
     with _children_lock:
         # Reaped and gone: forget it, or a recycled pid would be answered for by a dead handle.
-        _children.pop(pid, None)
+        if _children.get(pid) is child:
+            del _children[pid]
+    if _os_pid_alive(pid):
+        # The handle is spent but the number is not. Once a child is reaped the OS is free to
+        # hand its pid to somebody else, and a *live* process wearing it is not our dead child
+        # — answering "gone" from the stale handle would close somebody's running separation
+        # as interrupted, which is the one verdict this rule exists to get right. The entry is
+        # dropped and the question re-asked of the OS.
+        log.info("pid %s is a live process, not our exited worker; dropping the handle", pid)
+        return None
     return False
 
 
@@ -457,14 +603,23 @@ def _recovered_detached(record: JobRecord, config: Config) -> JobRecord:
 
     ``None`` is a launch still in flight — the starter marks the record detached before it
     spawns, so that a reader in the microseconds between never mistakes it for a thread job
-    whose thread has ended. In flight *in this session*, though: the only process that will
-    ever write that pid is the one between its own two saves, so a pid-less record left by a
-    server that has since exited names a worker that was never started, and the session rule
-    the detached path otherwise skips is exactly the right question for it. Without this it
-    is the one record nothing can ever close — no pid to judge, no session check to fail.
+    whose thread has ended. In flight in *some live process*, though: the only process that
+    will ever write that pid is the launcher, between its own two saves. That is this session
+    for a job we started, and another server's for a job read out of a shared cache directory
+    — a second server mid-spawn is a launch in flight exactly as ours is, and judging it by
+    session alone would fail a job whose worker was about to start. So the launcher's own pid
+    is asked when the session is not ours, and only a launcher that is gone too makes this
+    the record nothing will ever write again.
     """
     if record.pid is None:
         if record.session == SESSION:
+            return record
+        if record.launcher_pid is not None and pid_alive(record.launcher_pid):
+            log.debug(
+                "Job %s has no worker pid yet, but its launcher (pid %s) is still running",
+                record.job_id,
+                record.launcher_pid,
+            )
             return record
         log.info("Job %s never got a detached worker: its launcher is gone", record.job_id)
         return _interrupted(

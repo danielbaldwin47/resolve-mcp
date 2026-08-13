@@ -25,8 +25,9 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import fields, replace
 from pathlib import Path
 from typing import Any
@@ -35,6 +36,7 @@ import pytest
 
 from resolve_mcp.audio.stems import (
     CLAIM,
+    CLAIM_CEILING,
     KIND,
     claimed,
     detached_pass,
@@ -93,15 +95,37 @@ class FakeSpawn:
 
 
 class _FakeProcess:
-    """What ``Popen`` gives back, as far as this module is concerned: a pid."""
+    """What ``Popen`` gives back, as far as this module is concerned: a pid and a poll.
 
-    def __init__(self, pid: int) -> None:
+    ``poll`` is not optional garnish: ``store`` keeps the handle on every worker it starts and
+    asks it whether that pid is still running, so a fake without one turns any later liveness
+    question about its pid into an ``AttributeError`` in the middle of an unrelated test.
+    """
+
+    def __init__(self, pid: int, returncode: int | None = None) -> None:
         self.pid = pid
+        self.returncode = returncode
+
+    def poll(self) -> int | None:
+        return self.returncode
 
 
 @pytest.fixture
 def separating() -> FakeSeparator:
     return FakeSeparator(FOUR_STEMS, SIX_DRUM_STEMS)
+
+
+@pytest.fixture(autouse=True)
+def _forget_remembered_children() -> Iterator[None]:
+    """``store._children`` is process-global, and pytest runs every test in one process.
+
+    A test that hands the store a fake handle leaves it there for the rest of the session,
+    where the next test to ask about that pid gets the previous test's answer. Cleared on
+    both sides so the order tests run in cannot change what they read.
+    """
+    store._children.clear()
+    yield
+    store._children.clear()
 
 
 # --- what the child is told ---------------------------------------------------------------
@@ -333,6 +357,42 @@ def test_a_launcher_does_not_write_over_a_worker_that_adopted_first() -> None:
     assert landed.step == "separating four stems (2%)"
 
 
+def test_a_launcher_does_not_reopen_a_job_its_worker_had_already_finished(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The worst version of that race: the worker ends the job *between* the read and the write.
+
+    A short job — a cache hit, an import that fails in the first second — can be over before
+    the launcher gets back from ``Popen``. A pid written from the launcher's copy then puts
+    ``running`` and a launcher's pid back over a record the worker has already closed, and the
+    worker never writes again: that job polls as running for the rest of the server's life.
+    The check is therefore re-read immediately before the record is moved into place, and this
+    ends the job inside exactly that window.
+    """
+    record = store.new_job(KIND, {})
+    original = store._scratch
+    ended: list[bool] = []
+
+    def ends_the_job_first(target: Path) -> Path:
+        if not ended:
+            ended.append(True)
+            taken = store.peek(record.job_id)
+            assert taken is not None
+            taken.pid = os.getpid()
+            store.finish(taken, error={"code": "job_failed", "cause": "the worker gave up"})
+        return original(target)
+
+    def arm() -> None:
+        monkeypatch.setattr(store, "_scratch", ends_the_job_first)
+
+    detached.launch(record, {}, spawn=FakeSpawn(pid=424242, watching=arm))
+
+    landed = store.load(record.job_id)
+    assert landed.state == store.FAILED
+    assert landed.error is not None
+    assert landed.error["cause"] == "the worker gave up"
+
+
 def test_a_detached_job_outlives_the_session_that_started_it() -> None:
     """The session rule is backwards for these: surviving the server is the whole point."""
     record = _running_under_a_dead_server(os.getpid())
@@ -397,6 +457,54 @@ def test_a_launch_in_flight_in_this_session_is_still_a_running_job() -> None:
     assert store.load(record.job_id).state == store.RUNNING
 
 
+def test_a_launch_in_flight_in_another_live_server_is_not_closed_as_one_that_never_happened() -> (
+    None
+):
+    """A foreign session is not by itself a dead one — a cache directory can have two servers.
+
+    The record is written before the spawn and the worker's pid after it, so any server
+    reading the cache in between sees a detached job with no pid. Judging that by session
+    alone fails a job whose worker is about to start, and the failure is written back: the
+    worker then adopts a record that has already been closed. The launcher's own pid is the
+    question that separates the two, and here it is a process that is plainly running.
+    """
+    record = store.new_job(KIND, {})
+    record.detached = True
+    record.session = "another-server-that-is-mid-spawn"
+    record.launcher_pid = os.getpid()
+    record.step = detached.HANDING_OFF
+    store.save(record)
+
+    assert store.load(record.job_id).state == store.RUNNING
+
+
+def test_a_launch_whose_launcher_died_before_the_spawn_is_still_closed() -> None:
+    """The other side of it: a launcher that is gone leaves a record nothing will ever write."""
+    record = store.new_job(KIND, {})
+    record.detached = True
+    record.session = "a-server-that-died-mid-launch"
+    record.launcher_pid = _a_pid_that_has_exited()
+    record.step = detached.HANDING_OFF
+    store.save(record)
+
+    failed = store.load(record.job_id)
+
+    assert failed.state == store.FAILED
+    assert failed.error is not None
+    assert "before the worker was started" in failed.error["cause"]
+
+
+def test_a_launcher_writes_the_pid_of_the_process_doing_the_launching() -> None:
+    """It is on the record before the spawn or it is not there for the window it exists for."""
+    record = store.new_job(KIND, {})
+    seen: list[JobRecord] = []
+    spawn = FakeSpawn(watching=lambda: seen.append(store.load(record.job_id)))
+
+    detached.launch(record, {}, spawn=spawn)
+
+    assert seen[0].launcher_pid == os.getpid()
+
+
 def test_a_process_that_has_exited_does_not_read_as_a_live_one() -> None:
     """The one question the whole recovery rule hangs on, asked of a real process."""
     pid = _a_pid_that_has_exited()
@@ -405,13 +513,19 @@ def test_a_process_that_has_exited_does_not_read_as_a_live_one() -> None:
     assert store.pid_alive(os.getpid()) is True
 
 
+@pytest.mark.skipif(
+    sys.platform != "win32",
+    reason="POSIX truncates an exit status to its low byte, so 259 leaves as 3 and collides "
+    "with nothing — the ambiguity being tested exists only on Windows",
+)
 def test_a_process_that_exited_with_259_is_not_mistaken_for_a_running_one() -> None:
     """259 is ``STILL_ACTIVE``, and also a perfectly legal exit code.
 
     On Windows a process that exited with it reports it forever, so an exit code read on its
     own says "running" about a worker that has been gone for an hour, and the job it was doing
     never gets closed. The wait is what separates the two, and this is the process that tells
-    them apart.
+    them apart. Run anywhere else the test still passed, but not for its own reason: the exit
+    status came back as 3 and no ``STILL_ACTIVE`` was ever collided with.
     """
     process = subprocess.Popen([sys.executable, "-c", "import sys; sys.exit(259)"])
     _EXITED.append(process)
@@ -453,6 +567,43 @@ def test_a_worker_this_process_started_is_judged_by_the_handle_it_left_behind() 
         if process.poll() is None:  # pragma: no cover - only if the assertions above failed
             process.kill()
             process.wait(timeout=WORKER_BUDGET)
+
+
+def test_a_recycled_pid_is_not_answered_for_by_the_dead_handle_that_used_to_wear_it() -> None:
+    """The handle outlives the process, and the number is handed to somebody else.
+
+    Only a *running* record is ever asked about, so a handle can sit in the dict long after
+    its worker exited — and once that child is reaped the OS may reissue its pid. Answering
+    "gone" from the stale handle would close a live separation as interrupted. This fake has
+    exited and wears the pid of a process that is unarguably running: this one.
+    """
+    store.remember_child(os.getpid(), _FakeProcess(os.getpid(), returncode=0))
+
+    assert store.pid_alive(os.getpid()) is True
+    assert os.getpid() not in store._children, "the stale handle was kept to answer again"
+
+
+def test_a_worker_that_has_exited_is_reaped_rather_than_carried_for_the_life_of_the_server() -> (
+    None
+):
+    """One leaked handle per job is a zombie per job on POSIX, for as long as the server runs."""
+    store.remember_child(4242, _FakeProcess(4242, returncode=0))
+
+    store.remember_child(4243, _FakeProcess(4243))
+
+    assert 4242 not in store._children, "the exited worker was never reaped"
+    assert 4243 in store._children, "the running worker was reaped with it"
+
+
+def test_a_job_that_ends_lets_go_of_the_handle_on_the_worker_that_ran_it() -> None:
+    """After the record is closed nothing asks about that pid again, so nothing would poll it."""
+    record = store.new_job(KIND, {})
+    record.pid = 4242
+    store.remember_child(4242, _FakeProcess(4242, returncode=0))
+
+    store.finish(record, result={})
+
+    assert 4242 not in store._children
 
 
 # --- the worker process --------------------------------------------------------------------
@@ -672,15 +823,96 @@ def test_a_stems_claim_whose_process_is_gone_is_taken_over_not_waited_on(tmp_pat
     assert not (directory / CLAIM).exists()
 
 
-def test_a_finished_separation_leaves_no_claim_behind(
+def test_a_second_thread_of_this_process_is_refused_a_directory_this_one_is_separating(
+    tmp_path: Path,
+) -> None:
+    """The file names a pid, and two threads of one server share it.
+
+    Both would read the claim as their own and walk in, which is the interleaving the claim
+    exists to stop — and it is not a hypothetical: the server runs jobs on threads, and two
+    jobs over the same mix land in the same directory by design.
+    """
+    directory = tmp_path / "stems-abc123"
+    refused: list[BaseException] = []
+
+    def second_thread() -> None:
+        try:
+            with claimed(directory):
+                pass  # pragma: no cover - the claim is refused on the way in
+        except BaseException as exc:  # noqa: BLE001 - whatever it raised is the finding
+            refused.append(exc)
+
+    with claimed(directory):
+        thread = threading.Thread(target=second_thread)
+        thread.start()
+        thread.join(timeout=WORKER_BUDGET)
+
+    assert len(refused) == 1, "a second thread walked into a directory already being separated"
+    assert isinstance(refused[0], SeparationInProgressError)
+    assert refused[0].detail["pid"] == os.getpid()
+
+
+def test_a_stems_claim_left_by_a_run_that_is_gone_is_taken_over_even_wearing_this_pid(
+    tmp_path: Path,
+) -> None:
+    """pids are reissued, and the one it names can end up being ours.
+
+    Then the claim is read as our own, which used to mean the directory was locked out for
+    good behind an error saying this process was already separating into it. The session the
+    claim carries is what tells the two apart, and it has been written since the claim
+    existed without anything ever reading it.
+    """
+    directory = tmp_path / "stems-abc123"
+    _claim_held_by(directory, os.getpid())
+
+    with claimed(directory):
+        held = json.loads((directory / CLAIM).read_text(encoding="utf-8"))
+
+    assert held["session"] == store.SESSION
+    assert not (directory / CLAIM).exists()
+
+
+def test_a_stems_claim_older_than_any_separation_is_taken_over_however_alive_its_pid_looks(
+    tmp_path: Path,
+) -> None:
+    """The last way a claim outlives its run: a recycled pid that belongs to a live stranger.
+
+    Nothing about that pid says it is not the separator, so the age is the only evidence left.
+    The ceiling is far longer than the longest measured pass, so crossing it cannot be a
+    separation that is merely slow.
+    """
+    directory = tmp_path / "stems-abc123"
+
+    with _a_live_process() as other:
+        marker = _claim_held_by(directory, other.pid, claimed_at=time.time() - CLAIM_CEILING - 60)
+
+        with claimed(directory):
+            held = json.loads(marker.read_text(encoding="utf-8"))
+
+    assert held["pid"] == os.getpid()
+
+
+def test_a_finished_separation_holds_the_claim_for_the_passes_and_leaves_none_behind(
     tmp_path: Path,
     separating: FakeSeparator,
 ) -> None:
-    """The claim is held for the passes and dropped at the end, however they end."""
+    """Held for the passes and dropped at the end, however they end.
+
+    The absence at the end proves nothing on its own — a separation that never claimed the
+    directory at all leaves exactly the same empty directory behind. So the separator itself
+    is asked, mid-pass, whether the claim is on disk while it is writing.
+    """
     record = _handed_off(tmp_path)
+    held: list[bool] = []
 
-    output = detached_pass(record, _ignored, None, separating)
+    def watching(argv: Sequence[str], on_line: Callable[[str], None]) -> int:
+        out_dir = Path(argv[list(argv).index("--output_dir") + 1])
+        held.append((out_dir.parent / CLAIM).exists())
+        return separating(argv, on_line)
 
+    output = detached_pass(record, _ignored, None, watching)
+
+    assert held and all(held), "the separator ran without the directory being claimed"
     assert not (Path(str(output.result["directory"])) / CLAIM).exists()
 
 
@@ -769,11 +1001,14 @@ def _a_live_process() -> Iterator[subprocess.Popen[bytes]]:
         process.wait(timeout=WORKER_BUDGET)
 
 
-def _claim_held_by(directory: Path, pid: int) -> Path:
+def _claim_held_by(directory: Path, pid: int, claimed_at: float | None = None) -> Path:
     """A stems directory another process says it is separating into."""
     directory.mkdir(parents=True, exist_ok=True)
     marker = directory / CLAIM
-    marker.write_text(json.dumps({"pid": pid, "session": "another-server"}), encoding="utf-8")
+    held: dict[str, Any] = {"pid": pid, "session": "another-server"}
+    if claimed_at is not None:
+        held["claimed_at"] = claimed_at
+    marker.write_text(json.dumps(held), encoding="utf-8")
     return marker
 
 
