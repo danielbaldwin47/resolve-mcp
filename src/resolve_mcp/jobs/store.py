@@ -258,8 +258,23 @@ def note_worker_pid(
     the real interpreter as a child, so what was started here and what does the work are not
     always the same process, and until the worker says otherwise the trampoline's pid is a
     truthful "still running".
+
+    The note is written first and the record read back afterwards, because in the race that
+    matters the clearing has already happened: a worker that ends the job while the launcher is
+    still in ``Popen`` clears a note that is not there yet, and the note landing a moment later
+    is one nothing will ever come back for — a file beside a finished record for the life of
+    the cache. So the record is re-read *raw*, without the note folded in (that would answer
+    with this process's own reading), and the note is taken straight back as soon as the record
+    says it is no longer the launcher's to answer for.
+
+    A note that cannot be written at all is not fatal and must not escape: the launcher is
+    inside the job runner's ``try`` here, and an exception would have it close a record that a
+    running worker owns — the one thing the whole note exists to stop. The cost of the miss is
+    a second or so in which readers judge the job by the record alone, which says a launch is
+    in flight and is exactly what the launcher's own pid is on the record for.
     """
     config = config or get_config()
+    target = _path(job_id, config)
     current = peek(job_id, config)
     if current is None:
         log.warning("Job %s vanished before its launcher could record worker pid %s", job_id, pid)
@@ -280,17 +295,37 @@ def note_worker_pid(
             pid,
         )
         return current
-    _write_note(_path(job_id, config), pid, step)
-    landed = peek(job_id, config)
-    if landed is not None and landed.pid != pid:
+    try:
+        _write_note(target, pid, step)
+    except OSError as exc:
+        log.warning(
+            "Job %s: could not note detached worker pid %s beside the record (%s); until the "
+            "worker adopts it, the record answers as a launch in flight",
+            job_id,
+            pid,
+            exc,
+        )
+        return current
+    landed = _read_raw(target)
+    if landed is None:
+        log.info(
+            "Job %s vanished while its launcher was noting pid %s; taking the note back",
+            job_id,
+            pid,
+        )
+        _clear_note(target)
+        return current
+    if not _unclaimed(landed):
         log.info(
             "Job %s: the detached worker (pid %s) reached the record first, so the launcher's "
-            "note of pid %s is ignored",
+            "note of pid %s is taken back",
             job_id,
             landed.pid,
             pid,
         )
-    return landed or current
+        _clear_note(target)
+        return landed
+    return _noted(landed, target)
 
 
 def _note_path(target: Path) -> Path:
@@ -415,6 +450,16 @@ def _sharing[T](attempt: Callable[[], T]) -> T:
 
 
 def _read(path: Path) -> JobRecord | None:
+    record = _read_raw(path)
+    return None if record is None else _noted(record, path)
+
+
+def _read_raw(path: Path) -> JobRecord | None:
+    """The record as the file says it, with no launcher note folded in.
+
+    What a writer deciding about its *own* note has to ask: folding the note in would answer
+    that question with the note itself (see ``note_worker_pid``).
+    """
     try:
         raw = json.loads(_sharing(lambda: path.read_text(encoding="utf-8")))
     except FileNotFoundError:
@@ -426,7 +471,7 @@ def _read(path: Path) -> JobRecord | None:
         log.warning("Skipping a job record with no id: %s", path)
         return None
     known = {name: raw[name] for name in JobRecord.__dataclass_fields__ if name in raw}
-    return _noted(JobRecord(**known), path)
+    return JobRecord(**known)
 
 
 def _noted(record: JobRecord, path: Path) -> JobRecord:
@@ -671,6 +716,14 @@ def _recovered(record: JobRecord, config: Config) -> JobRecord:
     if record.state != RUNNING:
         if record.detached:
             release_child(record.pid)
+            # And the sweep, because the record's pid is not always the pid the handle is
+            # filed under: the worker writes its *own* when it adopts, and on a venv
+            # interpreter that is the real interpreter — the child of the trampoline this
+            # process actually started and remembered. Releasing by the record's pid then
+            # matches nothing and the handle stays for the life of the server, which is the
+            # zombie this release exists to prevent. The sweep lets go of every remembered
+            # worker that has already exited, whatever number it was started under.
+            _prune_children()
         return record
     if record.detached:
         return _recovered_detached(record, config)

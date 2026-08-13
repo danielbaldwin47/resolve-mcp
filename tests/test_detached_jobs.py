@@ -435,6 +435,65 @@ def test_a_worker_that_finished_inside_the_launchers_window_keeps_its_result(
     assert landed.pid == os.getpid(), "the launcher's note answered for a record that had ended"
 
 
+def test_a_note_that_lands_after_the_worker_finished_is_taken_back(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The note is cleared by the worker's ``finish`` — which can run before the note exists.
+
+    A cache-hit job is over inside the second the launcher spends in ``Popen``: the worker
+    finishes, clears a note nobody has written yet, and the launcher's note lands a moment
+    later beside a record that will never be written again. Nothing ever comes back for it,
+    and a cache directory keeps every job it has run. So the launcher reads the record back
+    after writing, and takes its own note straight back the moment the record says the worker
+    got there first.
+    """
+    record = store.new_job(KIND, {})
+    original = store._write_note
+    wrote: list[bool] = []
+
+    def finishes_the_job_first(target: Path, pid: int, step: str) -> None:
+        taken = store.peek(record.job_id)
+        assert taken is not None
+        taken.pid = os.getpid()
+        store.finish(taken, result={"directory": "/stems/sunset-set-abc123"})
+        original(target, pid, step)
+        wrote.append(True)
+
+    monkeypatch.setattr(store, "_write_note", finishes_the_job_first)
+
+    detached.launch(record, {}, spawn=FakeSpawn())
+
+    assert wrote, "the note was never written, so the window was never exercised"
+    note = store._note_path(store._path(record.job_id, get_config()))
+    assert not note.exists(), "the launcher's note outlived the record it answered for"
+    landed = store.load(record.job_id)
+    assert landed.state == store.COMPLETED
+    assert landed.result == {"directory": "/stems/sunset-set-abc123"}
+
+
+def test_a_note_that_cannot_be_written_does_not_fail_the_launch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The launch runs inside the job runner's ``try``, and the worker is already running.
+
+    An exception out of the note has the *launcher* close a record a live worker owns — the
+    one thing the note exists to prevent, arrived at through the note itself. What the miss
+    actually costs is a second or so in which readers judge the job by the record alone, and
+    the record says a launch is in flight, which is what the launcher's own pid is on it for.
+    """
+    record = store.new_job(KIND, {})
+
+    def refuses(target: Path, pid: int, step: str) -> None:
+        raise PermissionError("the note is open in another process")
+
+    monkeypatch.setattr(store, "_write_note", refuses)
+
+    pid = detached.launch(record, {}, spawn=FakeSpawn())
+
+    assert pid == os.getpid()
+    assert store.load(record.job_id).state == store.RUNNING, "the launcher closed a live job"
+
+
 def test_a_detached_job_outlives_the_session_that_started_it() -> None:
     """The session rule is backwards for these: surviving the server is the whole point."""
     record = _running_under_a_dead_server(os.getpid())
@@ -596,6 +655,27 @@ def test_the_launcher_lets_go_of_a_worker_that_finished_the_job_itself() -> None
 
     assert 4242 not in store._children, "the launcher is still holding a worker that has exited"
     assert landed.result == {"directory": "/stems/sunset-set-abc123"}
+
+
+def test_the_launcher_lets_go_of_a_trampoline_whose_worker_ran_under_another_pid() -> None:
+    """The handle is filed under the pid ``Popen`` returned; the record names the worker's own.
+
+    A uv-managed venv's ``python.exe`` on Windows is a trampoline that runs the real
+    interpreter as a child, so the pid the worker writes when it adopts is one the launcher
+    never saw. Releasing by the record's pid then matches nothing at all, and the handle — a
+    zombie on POSIX, a pid nobody else may be given on Windows — stays for the life of the
+    server, which is the leak this release exists to close.
+    """
+    record = store.new_job(KIND, {})
+    record.detached = True
+    record.session = "the-worker-that-ran-it"
+    record.pid = 4243  # the real interpreter: what the worker wrote when it adopted the record
+    record.state = store.COMPLETED
+    store.save(record)
+    store.remember_child(4242, _FakeProcess(4242, returncode=0))  # the trampoline Popen returned
+
+    assert store.load(record.job_id).state == store.COMPLETED
+    assert 4242 not in store._children, "the launcher is still holding the trampoline it started"
 
 
 def test_a_launcher_writes_the_pid_of_the_process_doing_the_launching() -> None:
@@ -1081,8 +1161,15 @@ def test_a_claim_is_refreshed_by_the_run_that_is_holding_it(tmp_path: Path) -> N
     assert refreshed["session"] == store.SESSION
 
 
-def test_a_claim_this_process_no_longer_holds_is_not_refreshed(tmp_path: Path) -> None:
-    """A refresh is a write, and a write onto somebody else's claim is the theft it prevents."""
+def test_a_claim_this_process_no_longer_holds_stops_the_separation(tmp_path: Path) -> None:
+    """A refresh is a write, and a write onto somebody else's claim is the theft it prevents.
+
+    Not refreshing is only half of it: the claim says who may write the directory, so a run
+    that reads somebody else's is a run whose stem files are landing in a directory another
+    separator owns — the interleaving the claim exists to stop, reached from the inside. It
+    stops rather than carrying on quietly, because what carrying on produces is a set of
+    stems from two runs that looks complete to the reuse check reading it next.
+    """
     directory = tmp_path / "stems-abc123"
 
     with claimed(directory) as refresh:
@@ -1090,9 +1177,54 @@ def test_a_claim_this_process_no_longer_holds_is_not_refreshed(tmp_path: Path) -
         theirs = json.dumps({"pid": 4242, "session": "another-server", "claimed_at": time.time()})
         marker.write_text(theirs, encoding="utf-8")
 
-        refresh()
+        with pytest.raises(SeparationInProgressError) as raised:
+            refresh()
 
+        assert raised.value.detail["pid"] == 4242
+        assert raised.value.detail["directory"] == str(directory)
         assert marker.read_text(encoding="utf-8") == theirs
+
+
+def test_a_claim_that_vanished_under_a_running_separation_also_stops_it(tmp_path: Path) -> None:
+    """No claim is no better than a rival's: nothing is holding the directory for this run."""
+    directory = tmp_path / "stems-abc123"
+
+    with claimed(directory) as refresh:
+        (directory / CLAIM).unlink()
+
+        with pytest.raises(SeparationInProgressError) as raised:
+            refresh()
+
+        assert raised.value.detail["pid"] is None
+
+
+def test_a_refresh_that_cannot_be_written_leaves_the_separation_running(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The other half: a claim that could not be rewritten is ours still, only older.
+
+    Both the write and the cleanup of what it left behind are refused here — Windows refuses
+    to unlink a file another handle holds, and that unlink runs inside the handler for the
+    write that already failed. Unguarded it escapes ``_touch`` and takes half an hour of GPU
+    work with it, over a scratch file named for this process that nothing else ever reads.
+    """
+    directory = tmp_path / "stems-abc123"
+
+    with claimed(directory) as refresh:
+        marker = directory / CLAIM
+        held = marker.read_text(encoding="utf-8")
+
+        def refuses(*args: Any, **kwargs: Any) -> None:
+            raise PermissionError("the file is open in another process")
+
+        monkeypatch.setattr(os, "replace", refuses)
+        monkeypatch.setattr(Path, "unlink", refuses)
+
+        refresh()  # the separation carries on
+
+        monkeypatch.undo()
+        assert marker.read_text(encoding="utf-8") == held
 
 
 def test_the_bar_a_separation_reports_through_keeps_the_claim_young(

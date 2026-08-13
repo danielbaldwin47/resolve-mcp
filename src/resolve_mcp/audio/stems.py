@@ -481,18 +481,53 @@ def _touch(marker: Path) -> None:
     for — has its own claim read as abandoned and a second separator walks into the directory
     it is still writing. Rewritten rather than ``utime``d because the age is read out of the
     claim's content, and only while the claim is still this process's to rewrite.
+
+    Finding the claim is somebody else's stops the separation rather than skipping the
+    refresh. The claim is what says who may write these files, so a run that has lost it is a
+    run writing stems into a directory another separator now owns — the interleaving the claim
+    exists to prevent, arrived at from the inside. Carrying on quietly would produce exactly
+    the half-and-half set that looks complete to the reuse check reading it next, so the run
+    is failed here instead, naming whoever holds the directory now.
+
+    A refresh that cannot be *written* is only a claim left to age, so that stays a warning:
+    the directory is still ours and the pass still running, and the next reading of the bar
+    tries again.
     """
     raw = _read_claim(marker)
     if raw is None or raw.get("session") != SESSION or raw.get("pid") != os.getpid():
-        log.warning("Not refreshing the claim at %s: it is not the one this process wrote", marker)
-        return
+        raise _lost_the_claim(marker, raw)
     scratch = marker.with_name(f"{marker.name}.{os.getpid()}")
     try:
         scratch.write_bytes(_content())
         os.replace(scratch, marker)
     except OSError:
         log.warning("Could not refresh the stems claim at %s", marker)
-        scratch.unlink(missing_ok=True)
+        # Guarded in its own right: this runs on the path where writing that very file already
+        # failed, and on Windows a scratch file another handle still holds refuses the unlink
+        # too. Letting that out would end a running separation over a leftover file nothing
+        # reads — the scratch name carries this process's pid, so no other run reads it as a
+        # claim.
+        try:
+            scratch.unlink(missing_ok=True)
+        except OSError:  # pragma: no cover - a scratch claim left behind is read by nothing
+            log.debug("Could not clear the scratch claim at %s", scratch)
+
+
+def _lost_the_claim(marker: Path, raw: dict[str, Any] | None) -> SeparationInProgressError:
+    """Why a separation stops mid-pass: the directory it is writing is not its own any more."""
+    holder = raw.get("pid") if raw is not None else None
+    pid = holder if isinstance(holder, int) else None
+    log.warning("The claim at %s is no longer this process's; stopping the separation", marker)
+    cause = (
+        f"Another process (pid {pid}) has taken the claim on {marker.parent} while this "
+        "separation was writing into it."
+        if pid is not None
+        else f"The claim this separation was holding on {marker.parent} is gone."
+    )
+    return SeparationInProgressError(
+        cause=cause,
+        detail={"directory": str(marker.parent), "pid": pid},
+    )
 
 
 def _read_claim(marker: Path) -> dict[str, Any] | None:
