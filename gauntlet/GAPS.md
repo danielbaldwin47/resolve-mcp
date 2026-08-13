@@ -97,6 +97,56 @@ with acceleration and release. Server work: the events that motivate cuts
 G4 — plus a framing-distinctness measure so "new picture" vs "same two
 pictures" is a number (2 pictures ours vs 3 with a scale change, human's).
 
+## G10 — separator resolution silently picked a CPU-only install (open)
+
+Prep, round 1b. `config.audio_separator` defaults to the bare name
+`audio-separator`, so the worker ran whichever one PATH happened to name —
+here the system Python 3.12 install, whose torch is `2.13.0+cpu`. Nothing in
+the record, the worker log, or the envelope said "CPU": the job simply ran,
+and the only symptom was that it took forty minutes to get partway through
+one model pass. htdemucs_ft is four bagged passes plus a drum stage, so the
+whole separation was hours away while a 16 GB RTX 4080 SUPER sat at 2%.
+
+Measured, same 71-minute board mix, same model:
+
+| | separator torch | one htdemucs_ft pass | GPU util |
+|---|---|---|---|
+| before | 2.13.0+cpu | 94% in 36.6 min (~2.6 %/min) | 0-4% |
+| after | 2.13.0+cu130 | 100% in ~50 s (~120 %/min) | 78-91%, 185 W |
+
+≈45× on the pass rate. (The before figure had a second CPU separation
+competing for cores, so the honest headline is "tens of times", not a
+precise multiple.)
+
+Fastest fix, and the one taken: a dedicated GPU env plus the config
+override, leaving the repo venv and the system Python untouched —
+`uv venv C:\Users\Daniel\.venvs\audio-separator-gpu --python 3.12`, then
+`audio-separator[gpu]` and torch/torchvision from
+`https://download.pytorch.org/whl/cu130` (cu130 because the driver reports
+CUDA UMD 13.3; the cu128 index has no torch 2.13.0), then
+`RESOLVE_MCP_AUDIO_SEPARATOR` pointed at that env's `audio-separator.exe`.
+Two dependency traps in that env, both worth knowing: `audio-separator[gpu]`
+does not pull `audioread`, and librosa 1.0.0 — which uv picks — dropped it,
+so the CLI died on import with the separator's traceback buried in
+`error.detail.output`; pinning `librosa==0.11.0` to match the known-good env
+fixed it.
+
+Server work: log the separator's device at separation start. audio-separator
+already prints it on its first lines —
+
+```
+INFO - separator - PyTorch Version: 2.13.0+cu130
+INFO - separator - CUDA is available in Torch, setting Torch device to CUDA
+INFO - separator - ONNXruntime has CUDAExecutionProvider available, enabling acceleration
+```
+
+— and `separator._run` already reads every line, but `on_line` only keeps a
+tail for the failure path and pulls percentages out. Parse the device line
+there, log it, and put it on the job record beside `step`, so a CPU fallback
+is visible in one glance instead of being inferred from a rate. The same
+seam would have made this gap a five-second read rather than a process-tree
+excavation.
+
 ## Round record
 
 - **R1 · Taurus opening · VOID** (ours = A). Critic judged a corrupt pack
