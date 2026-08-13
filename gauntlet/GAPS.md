@@ -112,11 +112,19 @@ Measured, same 71-minute board mix, same model:
 | | separator torch | one htdemucs_ft pass | GPU util |
 |---|---|---|---|
 | before | 2.13.0+cpu | 94% in 36.6 min (~2.6 %/min) | 0-4% |
-| after | 2.13.0+cu130 | 100% in ~50 s (~120 %/min) | 78-91%, 185 W |
+| after | 2.13.0+cu130 | 100% in ~55 s (~110 %/min) | 78-91%, 185 W |
 
-≈45× on the pass rate. (The before figure had a second CPU separation
+≈40× on the pass rate. (The before figure had a second CPU separation
 competing for cores, so the honest headline is "tens of times", not a
 precise multiple.)
+
+End to end on GPU the whole job — eight bagged htdemucs_ft passes, then the
+MDX23C drum decomposition at 60-80% util and ~215 W — took **17 min 15 s**
+(19:58:45→20:16:00Z, `separate_stems-87ae86e85665`, `cached: false`,
+progress 1.0): 7.5 min of four-stem separation, ~7 min of drum split, the
+rest acquisition and collection. At the measured CPU pass rate the
+four-stem stage alone would have been on the order of five hours, which is
+why this read as a hung job rather than a slow one.
 
 Fastest fix, and the one taken: a dedicated GPU env plus the config
 override, leaving the repo venv and the system Python untouched —
