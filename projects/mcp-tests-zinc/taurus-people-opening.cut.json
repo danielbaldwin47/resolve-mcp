@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "timeline": {
-    "name": "Taurus People Opening",
+    "name": "Taurus People Opening R2",
     "fps": 23.976
   },
   "sources": {
@@ -29,120 +29,92 @@
   "segments": [
     {
       "id": "g001",
-      "gap": 13,
-      "note": "a breath of black over the room's silence before the tune"
+      "gap": 56,
+      "note": "full-frame title card over black through the room's dead air, clearing one frame before the entrance - the measured convention for this tune (styles/concert.md sec 5b). Text+ supplied by the titles pass"
     },
     {
       "id": "s01",
       "source": "fx6_wide",
-      "in": 54396,
-      "out": 54502,
-      "note": "black lifts on the settled wide 1.9 s before the band hits - the room, then the band"
+      "in": 54439,
+      "out": 54581,
+      "note": "the card clears one frame before the first note (2.371 s) and the widest picture of the room lands on the entrance; the shot then waits out the operator's 5.25-7.92 reframe instead of being cut into it (sec 5b, sec 4)"
     },
     {
       "id": "s02",
       "source": "a7iv_kit",
-      "in": 85772,
-      "out": 85931,
-      "note": "off the wide a beat before it starts reframing; sax phrase ends"
+      "in": 85851,
+      "out": 86016,
+      "note": "phrase boundary 8.24, the first one after the operator's 5.25-7.92 reframe lands - the wide waited the pan out rather than being cut into (sec 4)"
     },
     {
       "id": "s03",
       "source": "fx6_wide",
-      "in": 54661,
-      "out": 54834,
-      "note": "phrase entrance after the 11.3-11.6 s rest; wide has landed and settled"
+      "in": 54746,
+      "out": 54928,
+      "note": "shortlisted downbeat phrase boundary (bar 3951) with the 14.42 drum fill resolving into it; the wide has been settled 7.1 s"
     },
     {
       "id": "s04",
       "source": "a7iv_kit",
-      "in": 86104,
-      "out": 86203,
-      "note": "on the sax's answering phrase - the drums are the other half of it",
-      "alternates": [
-        {
-          "source": "fx6_wide",
-          "in": 54834,
-          "out": 54933
-        }
-      ]
+      "in": 86198,
+      "out": 86411,
+      "note": "the top-scored event in the window (1.348, downbeat, bar 3958) - the head's strongest phrase turn, taken to the kit"
     },
     {
       "id": "s05",
       "source": "fx6_wide",
-      "in": 54933,
-      "out": 55165,
-      "note": "phrase entrance after the 22.6-22.9 s rest"
+      "in": 55141,
+      "out": 55190,
+      "note": "phrase boundary 31.66; the drum cam has just carried the FX6's 26.9-30.4 reframe and the window's biggest energy peak (30.02 s, +5.46 dB), so the wide comes back on a picture that changed while it was away - a scale change, not a framing return (sec 4)"
     },
     {
       "id": "s06",
       "source": "a7iv_kit",
-      "in": 86435,
-      "out": 86532,
-      "note": "wide has held through its own reframe; leave it 2.3 s after it landed",
-      "alternates": [
-        {
-          "source": "fx6_wide",
-          "in": 55165,
-          "out": 55262
-        }
-      ]
+      "in": 86460,
+      "out": 86518,
+      "note": "phrase boundary 33.84 - ACCELERATION into the section change (sec 3)"
     },
     {
       "id": "s07",
       "source": "fx6_wide",
-      "in": 55262,
-      "out": 55559,
-      "note": "back to the wide for the sax's last phrase of the head - it is about to move"
+      "in": 55248,
+      "out": 55299,
+      "note": "THE CHANGE: solo change on a downbeat (timbre, -7.14 dB) with a drum fill on the same frame - the sax head ends and the room drops 13 dB"
     },
     {
       "id": "s08",
       "source": "a7iv_kit",
-      "in": 86829,
-      "out": 86926,
-      "note": "the bass solo has settled; the drummer's brushes are the other voice"
+      "in": 86569,
+      "out": 86803,
+      "note": "phrase boundary 38.24, one beat before the FX6 leaves to follow the sax off; the locked cam takes the RELEASE and holds the walk-off and the bass's entrance unbroken (sec 3: accelerate in, release into stillness after)"
     },
     {
       "id": "s09",
       "source": "fx6_wide",
-      "in": 55656,
-      "out": 55852,
-      "note": "phrase entrance; back to the bass"
+      "in": 55533,
+      "out": 55858,
+      "note": "first energy swell of the quiet passage (+2.2 dB); the FX6 settled 3.8 s ago on a picture the sax has left - piano and bass alone. The reveal of the new passage's own frame"
     },
     {
       "id": "s10",
       "source": "a7iv_kit",
-      "in": 87122,
-      "out": 87182,
-      "note": "phrase entrance - a glance at the interaction",
-      "alternates": [
-        {
-          "source": "fx6_wide",
-          "in": 55852,
-          "out": 55912
-        }
-      ]
+      "in": 87128,
+      "out": 87373,
+      "note": "the biggest energy swell in the whole quiet passage (+3.3 dB) with its drum fill at 61.62 - the swell is made of brushwork, so go and look at it"
     },
     {
       "id": "s11",
       "source": "fx6_wide",
-      "in": 55912,
-      "out": 56091,
-      "note": "short glance over, straight back to the soloist"
+      "in": 56103,
+      "out": 56305,
+      "note": "shortlisted drum fill (0.633, the only back-half event to survive cluster suppression) plus the 72.02 swell (+2.84 dB); back to the two players carrying the passage"
     },
     {
       "id": "s12",
       "source": "a7iv_kit",
-      "in": 87361,
-      "out": 87477,
-      "note": "phrase entrance"
-    },
-    {
-      "id": "s13",
-      "source": "fx6_wide",
-      "in": 56207,
-      "out": 56541,
-      "note": "phrase entrance; the closing hold of the opening"
+      "in": 87575,
+      "out": 87811,
+      "note": "the fill cluster at 79.54 / 80.16 / 80.58 - the strongest drum event of the last fifteen seconds; the closing hold"
     }
   ]
 }

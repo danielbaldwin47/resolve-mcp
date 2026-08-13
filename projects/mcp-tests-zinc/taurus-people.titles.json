@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "timeline": "Taurus People Opening R2 v3",
+  "songs": [
+    {
+      "key": "taurus-people",
+      "events": [
+        {
+          "id": "t01",
+          "kind": "title",
+          "route": "png",
+          "asset": "cards/taurus-people/title/title_%04d.png",
+          "bin": "04_Assets/Text/taurus-people",
+          "in": 0,
+          "out": 56,
+          "fade": { "in": 1, "out": 0 },
+          "note": "Full-frame card over black through the room's dead air. Taurus People is the one tune in the set with real dead air at its head (room tone -34 to -46 dB, first note at 2.371 s) and the one tune the deliverable opens on a card - styles/concert.md 5b: the title takes whatever room the music leaves it, and a card is what a silent head is spent on. 56 frames = 2.3357 s, clearing one frame before the entrance, which is the deliverable's own 2.336 s to the frame. Hard cut off: the reveal IS the downbeat, so nothing ramps out."
+        },
+        {
+          "id": "t02",
+          "kind": "personnel",
+          "route": "png",
+          "asset": "cards/taurus-people/personnel2/personnel2_%04d.png",
+          "bin": "04_Assets/Text/taurus-people",
+          "in": 495,
+          "out": 642,
+          "fade": { "in": 7, "out": 7 },
+          "note": "Personnel super, placed on the deliverable's own measured span for this tune: in at 20.646 s, held to 26.777 s = 6.131 s, inside the 6.1-7.9 s the five deliverables hold theirs, with ~0.3 s ramps each way. It sits over the head's build where the sax is playing long phrases - the music has room there - and spans the 22.731 s cut, which is what the deliverable does too. Names read off the deliverable's own super at t=23.0 s (gauntlet/recon/super_frames/pers_full.jpg) and recorded in songs.json."
+        }
+      ]
+    }
+  ]
+}

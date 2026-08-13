@@ -5,7 +5,7 @@
   "interpreter": "passed",
   "job_id": "separate_stems-670f1ceb22a4",
   "cached": false,
-  "step": "separating four stems (69%)",
-  "progress": 0.49149999999999994,
-  "elapsed_s": 5913.8
+  "step": "separating four stems (32%)",
+  "progress": 0.362,
+  "elapsed_s": 7354.8
 }

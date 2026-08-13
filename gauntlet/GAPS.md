@@ -172,3 +172,20 @@ excavation.
   (hard cut vs dissolve), jump-cut risk on framing returns → ab_pack v2.
   G3 fix verified in the round: guard refused a deliberately wrong
   expected count; clean pack sealed 13/13.
+- **R2 · Taurus opening · WIN (blind), confirmation round running**
+  (ours = B). Fresh critic picked ours: the hard cut landing exactly on
+  the t=38 drop and the motivated, held back half beat the human's
+  metronomic quiet-passage cuts — the exact G8/G9 work. Ours: card
+  frame-identical to the deliverable convention, 13 cuts each with a
+  named measured motivation, 5 distinct framings vs the human's 3,
+  camera moves treated as hard constraints. Critic's remaining ding on
+  ours: the 9.8 s release shot contains a stretch half-blocked by an
+  audience head — subject/blocking measurement is still-open G5 work.
+  Second independent critic running before the piece closes.
+  New gaps from the round: phrase detection over-calls on polyphonic
+  `other` (36 boundaries in 90 s — candidates, not verdicts); split_wind
+  can't run as a single pass through the tool path without redoing the
+  whole stems key (and the lone-pass fallback died writing its second
+  half, output tail uncaptured); the beats cache misses on the acquired
+  copy because identity is keyed to the director's master (bit-identical
+  audio, different fingerprint).

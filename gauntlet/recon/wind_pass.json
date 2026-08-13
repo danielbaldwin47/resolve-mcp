@@ -1,0 +1,13 @@
+{
+  "state": "failed",
+  "pid": 26936,
+  "separator": "C:\\Users\\Daniel\\.venvs\\audio-separator-gpu\\Scripts\\audio-separator.exe",
+  "wind_model": "17_HP-Wind_Inst-UVR.pth",
+  "config_separator": "C:\\Users\\Daniel\\.venvs\\audio-separator-gpu\\Scripts\\audio-separator.exe",
+  "source": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\stems\\Zinc-Set-2-Reaper-v4.wav-8833f33949fe-d73a1e4c156e\\mix\\Zinc-Set-2-Reaper-v4.wav-8833f33949fe_(Other)_htdemucs_ft.wav",
+  "out_dir": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\stems\\Zinc-Set-2-Reaper-v4.wav-8833f33949fe-d73a1e4c156e\\other",
+  "progress": 1.0,
+  "elapsed_seconds": 78.2,
+  "error": "StemSeparationError: audio-separator refused Zinc-Set-2-Reaper-v4.wav-8833f33949fe_(Other)_htdemucs_ft.wav with 17_HP-Wind_Inst-UVR.pth (exit 1).",
+  "trace": "Traceback (most recent call last):\n  File \"C:\\Users\\Daniel\\repos\\resolve-mcp\\.claude\\worktrees\\gauntlet-loop-1\\gauntlet\\recon\\wind_pass.py\", line 86, in <module>\n    main()\n  File \"C:\\Users\\Daniel\\repos\\resolve-mcp\\.claude\\worktrees\\gauntlet-loop-1\\gauntlet\\recon\\wind_pass.py\", line 66, in main\n    found = separator.separate(\n            ^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Daniel\\repos\\resolve-mcp\\.claude\\worktrees\\gauntlet-loop-1\\src\\resolve_mcp\\audio\\separator.py\", line 131, in separate\n    raise StemSeparationError(\nresolve_mcp.errors.StemSeparationError: audio-separator refused Zinc-Set-2-Reaper-v4.wav-8833f33949fe_(Other)_htdemucs_ft.wav with 17_HP-Wind_Inst-UVR.pth (exit 1).\n"
+}

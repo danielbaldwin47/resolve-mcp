@@ -1,0 +1,27 @@
+{
+  "result_dir": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\results",
+  "candidates": [
+    {
+      "path": "P:\\Client Work\\Ryan Devlin\\2026-06-17_Zinc Bar\\Audio\\Reaper\\Zinc Set 2 Reaper v4.wav",
+      "exists": true,
+      "identity": {
+        "path": "P:\\Client Work\\Ryan Devlin\\2026-06-17_Zinc Bar\\Audio\\Reaper\\Zinc Set 2 Reaper v4.wav",
+        "size": 1281744690,
+        "mtime_ns": 1782365970754626400
+      },
+      "beats_key": "62537c590a14844c45d8e0cc720f58ca9bae3f716eb4e2ec593d3e53c1812e6f",
+      "beats_cached": true,
+      "beats_path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\analysis\\Zinc-Set-2-Reaper-v4-62537c590a14-beats.json"
+    },
+    {
+      "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\audio\\Zinc-Set-2-Reaper-v4.wav-8833f33949fe.wav",
+      "exists": true,
+      "identity": {
+        "sha256": "572a15c490fd5f708d8ea787a9d22ab8e7e42b6f8fba1a542fc293ee8d06008f"
+      },
+      "beats_key": "df268281a4f30bfbdfe6a1214782219a6c2982c3c125d0ba76943413fbb2a636",
+      "beats_cached": false,
+      "beats_path": null
+    }
+  ]
+}

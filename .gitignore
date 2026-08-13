@@ -13,4 +13,6 @@ gauntlet/renders/
 gauntlet/packs/
 gauntlet/abtest_smoke*/
 gauntlet/recon/r1_frames/
+gauntlet/recon/r2_frames/
+gauntlet/recon/super_frames/
 gauntlet/recon/openings_frames/
