@@ -30,6 +30,9 @@ energy arc, ending. Per piece, per round:
 4. Repeat until critics pick ours blind. Close rule (since R2's 1–1
    split): a piece closes only when a MAJORITY OF THREE fresh,
    independent critics picks ours on the same sealed pack.
+5. Director's rulings (binding on every critic brief):
+   - 2026-08-13: color/grade differences are OUT OF SCOPE — grading is
+     not part of this gauntlet; critics must be told to ignore them.
 
 ## Status
 

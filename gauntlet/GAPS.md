@@ -176,7 +176,10 @@ excavation.
   confirmation critic picked the human on objective grounds: three
   obstructed shots on ours (audience head/hat/back — G11), ours renders
   ungraded ("flat and milky", boundary min_luma 39–44 vs the human's
-  22–26 — G12), and our back half read as metronomic to this judge
+  22–26 — **G12, WITHDRAWN: director ruled 2026-08-13 that grading is
+  out of scope; the grade half of this critic's case is void, and every
+  future critic brief must say "ignore color/grade differences"**), and
+  our back half read as metronomic to this judge
   (9.8/13.6/10.2/8.4/9.9 s) while the human's tightens across 52–76 s
   tracking secondary loudness bumps. Both judges agree ours wins the
   t=38 gesture. Piece stays open; close rule is now majority of three
