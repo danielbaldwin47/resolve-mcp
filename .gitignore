@@ -12,3 +12,4 @@ build/
 gauntlet/renders/
 gauntlet/packs/
 gauntlet/abtest_smoke/
+gauntlet/recon/r1_frames/

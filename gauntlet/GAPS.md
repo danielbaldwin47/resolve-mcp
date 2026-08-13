@@ -19,17 +19,29 @@ Prep, iter 1. `meter: 1`, median gap 0.28 s (~214 "bpm"), 71.7% trust,
 27 gaps >2 s. Onset-scale placement only; beat-1/bar-position style rules
 cannot fire. Known confound from docs survey (same on the corpus anchor).
 
-## G3 — a built timeline can render as no edit at all, and nothing notices (open, root-cause in progress)
+## G3 — the gauntlet's own measuring tool lied, and the pack sealed anyway (in-work)
 
-Round 1 (Taurus opening). Builder authored 13 shots; `correlate_timeline`
-verified 13 cuts with clean offsets; the render contains ONE visible cut
-(the deliberate black lift) then 89.5 s of a single locked camera. Blind
-critic: "a security camera pointed at a jazz quartet." The self-review
-measures cut *times* against music but never that the frame actually
-*changes* at a cut. Fix direction (pending diagnosis): per-cut visual-change
-verification (frame delta across each boundary) in correlate or a new
-verify-render step; plus whatever root cause the diagnosis names (builder
-record→source arithmetic vs resolve/build placement vs render target).
+Round 1 (Taurus opening) — REVISED after diagnosis
+(`gauntlet/recon/r1_diagnosis.md`). The render WAS the 13-shot edit:
+frames verified against both cameras, placed source ranges equal the
+authored ones frame-for-frame, correlate was right. The false symptom came
+from `ab_pack.py`'s scene threshold 0.27 — matched-grade cuts between two
+cameras in one dim room score 0.18–0.27, so ours read as 1 cut and the
+human's 13 read as 9. Every threshold 0.04–0.18 finds exactly 13/13 with
+zero false positives. Both arms of the blind pack were corrupt; R1 verdict
+void. Fixes: threshold → 0.10; pack refuses to seal when detected cuts fall
+under ~80% of an expected count; concert.md gains "scene-detect count ≈
+timeline item count" beside the correlate self-review (correlate proves the
+timeline, scene detection proves the pixels; disagreement is the alarm).
+correlate's boundary-vs-visual blind spot did NOT fire but stays on the
+risk list.
+
+## G7 — four dormant build-path risks from the audit (open → tickets)
+
+Found while auditing `resolve/build` for R1 (none fired — both clips report
+`Start = 0`): raw `startFrame` used with no `Start` rebase; no clamping plus
+fail-open E5 on bounds-less clips; `_append` not comparing the returned
+list length; `_verify` never reading source frames back.
 
 ## G4 — long jobs die with the launching process (open)
 
@@ -65,7 +77,8 @@ Correct the sidecar datum.
 
 ## Round record
 
-- **R1 · Taurus opening · LOSS** (ours = A). Critic on ours: not an edit —
-  one locked 89.5 s wide (G3 artifact). Critic on human's: last 30 s is
-  mechanical ping-pong between three near-duplicate framings — cuts because
-  the timer said so. (Keep: that is the bar's weak flank.)
+- **R1 · Taurus opening · VOID** (ours = A). Critic judged a corrupt pack
+  (G3): ours shown as 1 cut, human's as 9 — both actually 13. Verdict
+  discarded; re-judge with fixed tool = R1b. Still standing from R1: the
+  critic's 10 judgeability gaps (G5) — stills-based limits are real
+  regardless of the threshold bug.
