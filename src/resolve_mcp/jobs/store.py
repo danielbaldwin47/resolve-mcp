@@ -22,7 +22,9 @@
   server that started it is the whole point (G4: a 30-minute separation died with every
   session that launched it). So the session check is skipped for those and the pid answers
   instead: alive means running, gone means interrupted, and no pid yet means a launch still
-  in flight. pids do get recycled — a recycled one can only make a dead job read as running
+  in flight — but only in this session, because nobody else will ever write that pid, so a
+  pid-less record from a dead session falls back to the session rule rather than living
+  forever. pids do get recycled — a recycled one can only make a dead job read as running
   a while longer, never the reverse, and the worker writes its own ending in every path it
   can still reach.
 """
@@ -34,13 +36,14 @@ import itertools
 import json
 import os
 import sys
+import threading
 import time
 import uuid
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from ..config import Config, get_config
 from ..errors import JobInterruptedError, JobNotFoundError
@@ -135,6 +138,19 @@ def new_job(
     return record
 
 
+def peek(job_id: str, config: Config | None = None) -> JobRecord | None:
+    """The record exactly as it is on disk, with no restart check and no verdict written.
+
+    ``load`` answers "what happened to this job", which for an orphan means writing a failure.
+    This answers the narrower question a writer asks before it writes — has anyone else
+    touched this record since I last saved it — and a reader that judged the job on the way
+    past would turn a launch still in flight into a failure. ``None`` for no such record,
+    because the callers here are choosing what to write, not reporting to the agent.
+    """
+    config = config or get_config()
+    return _read(_path(job_id, config))
+
+
 def adopt(job_id: str, config: Config | None = None) -> JobRecord:
     """Take a record over in this process — the detached worker's first act.
 
@@ -143,11 +159,19 @@ def adopt(job_id: str, config: Config | None = None) -> JobRecord:
     the job at the instant it picked it up. Writing this process's session and pid is what
     makes the record honest afterwards — from here the worker is the only writer, and any
     reader asking whether the job is still alive is asking about this process.
+
+    A record that has already ended is read back and *not* claimed: taking ownership of a
+    finished job would rewrite a completed record's session and pid for a worker that is
+    about to discover it has nothing to do, and the next reader would see this process named
+    on a job it never ran.
     """
     config = config or get_config()
     record = _read(_path(job_id, config))
     if record is None:
         raise JobNotFoundError(job_id)
+    if record.state != RUNNING:
+        log.info("Job %s already %s; the detached worker is not claiming it", job_id, record.state)
+        return record
     record.session = SESSION
     record.pid = os.getpid()
     record.detached = True
@@ -162,9 +186,23 @@ def save(record: JobRecord, config: Config | None = None) -> None:
     record.updated_at = _now()
     target = _path(record.job_id, config)
     target.parent.mkdir(parents=True, exist_ok=True)
-    scratch = target.with_suffix(".writing")
+    scratch = _scratch(target)
     scratch.write_text(json.dumps(record.payload(), indent=2), encoding="utf-8")
     _sharing(lambda: os.replace(scratch, target))
+
+
+def _scratch(target: Path) -> Path:
+    """Where a record is written before it is moved into place — one name per process.
+
+    Per-pid, because two processes write this one record: the server up to the hand-off and
+    the detached worker after it, overlapping for the second or so it takes the worker to
+    adopt. One shared scratch name has them writing the same file and each replacing the
+    target with whatever bytes happened to be in it — the atomic write's own guarantee, lost
+    in exactly the case it was added for, and the record that lands is a splice of the two.
+    The suffix is deliberately not ``.json``: a scratch file must never be read back as a
+    record by ``load_all``.
+    """
+    return target.with_name(f"{target.stem}.writing.{os.getpid()}")
 
 
 def finish(
@@ -249,11 +287,110 @@ STILL_ACTIVE = 259
 """What Windows reports as a process's exit code while it has not got one yet."""
 
 _QUERY_LIMITED_INFORMATION = 0x1000
+_SYNCHRONIZE = 0x00100000
+_ACCESS_RIGHTS = (_QUERY_LIMITED_INFORMATION | _SYNCHRONIZE, _QUERY_LIMITED_INFORMATION)
+"""Both rights first — the wait needs ``SYNCHRONIZE`` — then query alone if that is refused."""
+
+_ERROR_ACCESS_DENIED = 5
+_WAIT_TIMEOUT = 0x102
+_WAIT_FAILED = 0xFFFFFFFF
+
+
+class Child(Protocol):
+    """The part of ``subprocess.Popen`` this module needs: has it exited yet?"""
+
+    def poll(self) -> int | None: ...
+
+
+_children: dict[int, Child] = {}
+_children_lock = threading.Lock()
+
+
+def remember_child(pid: int, child: Child) -> None:
+    """Keep the handle on a detached worker *this* process started.
+
+    ``start_new_session`` takes the worker out of the process group, not out of the family:
+    on POSIX it is still this process's child, so when it exits it stays a zombie until
+    somebody reaps it — and a zombie answers ``kill(pid, 0)`` exactly as a live process does.
+    Without this, a worker that crashed would read ``running`` for as long as the server
+    lived, which is the one verdict the detached path exists to get right. ``poll`` both
+    reaps it and gives the honest answer. On Windows the open handle also keeps the pid from
+    being handed to anybody else while we are still asking about it.
+    """
+    with _children_lock:
+        _children[pid] = child
+
+
+def _child_state(pid: int) -> bool | None:
+    """Whether a worker this process started is still running; ``None`` if it is not ours."""
+    with _children_lock:
+        child = _children.get(pid)
+    if child is None:
+        return None
+    if child.poll() is None:
+        return True
+    with _children_lock:
+        # Reaped and gone: forget it, or a recycled pid would be answered for by a dead handle.
+        _children.pop(pid, None)
+    return False
+
+
+def pid_alive(pid: int) -> bool:
+    """Whether that process is still running.
+
+    A worker we started ourselves is judged by its own handle (see ``remember_child``); one
+    adopted off disk after a restart is nobody's child here, and only the OS can answer for
+    it.
+    """
+    if pid <= 0:
+        return False
+    ours = _child_state(pid)
+    if ours is not None:
+        return ours
+    return _os_pid_alive(pid)
 
 
 if sys.platform == "win32":
+    _kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    # Declared, not left to ctypes' default ``c_int``: a HANDLE is 64-bit in a 64-bit process
+    # and the default return type truncates it, so an untruncated handle would be closed by
+    # the wrong number — or read as NULL and reported as a dead process.
+    _kernel32.OpenProcess.argtypes = [ctypes.c_uint32, ctypes.c_int, ctypes.c_uint32]
+    _kernel32.OpenProcess.restype = ctypes.c_void_p
+    _kernel32.GetExitCodeProcess.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulong)]
+    _kernel32.GetExitCodeProcess.restype = ctypes.c_int
+    _kernel32.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+    _kernel32.WaitForSingleObject.restype = ctypes.c_uint32
+    _kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+    _kernel32.CloseHandle.restype = ctypes.c_int
 
-    def pid_alive(pid: int) -> bool:
+    def _open_process(pid: int) -> tuple[int | None, int]:
+        """A query handle on that process, or ``None`` and the Windows error saying why."""
+        error = 0
+        for rights in _ACCESS_RIGHTS:
+            ctypes.set_last_error(0)
+            handle = _kernel32.OpenProcess(rights, 0, pid)
+            if handle:
+                return int(handle), 0
+            error = ctypes.get_last_error()
+        return None, error
+
+    def _still_running(handle: int) -> bool:
+        """``STILL_ACTIVE`` is also a legal exit code, so ask the wait which of the two it is.
+
+        A process that exited with 259 reports 259 forever, and reading that as "running"
+        would leave a finished job saying ``running`` until the server restarted. The wait
+        does not have that ambiguity: a process object is signalled once and only once the
+        process has exited. If the handle was opened without ``SYNCHRONIZE`` the wait cannot
+        be asked at all, and then the exit code is all there is — read as alive, which is the
+        direction that only ever delays a verdict rather than inventing one.
+        """
+        state = int(_kernel32.WaitForSingleObject(handle, 0))
+        if state == _WAIT_FAILED:
+            return True
+        return state == _WAIT_TIMEOUT
+
+    def _os_pid_alive(pid: int) -> bool:
         """Whether that process is still running, asked without touching it.
 
         ``os.kill(pid, 0)`` is the POSIX way to ask and is *not* an option here: on Windows
@@ -263,27 +400,32 @@ if sys.platform == "win32":
         and it has to be the exit code rather than whether the handle opened, because the
         launcher still holds a handle on a worker that has already exited, which keeps the
         process object openable long after the process is gone.
+
+        A refused open is not an answer: ``ACCESS_DENIED`` means a process is there and this
+        token may not ask about it — a worker started by another user, or by an elevated
+        server — and reading that as "gone" would close a running separation as interrupted.
+        It reads as alive, exactly as the POSIX side reads ``PermissionError``.
         """
-        if pid <= 0:
-            return False
-        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-        handle = kernel32.OpenProcess(_QUERY_LIMITED_INFORMATION, False, pid)
-        if not handle:
+        handle, error = _open_process(pid)
+        if handle is None:
+            if error == _ERROR_ACCESS_DENIED:
+                log.debug("Windows refused a query handle on pid %s; reading it as alive", pid)
+                return True
             return False
         try:
             code = ctypes.c_ulong()
-            if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+            if not _kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
                 return False
-            return code.value == STILL_ACTIVE
+            if code.value != STILL_ACTIVE:
+                return False
+            return _still_running(handle)
         finally:
-            kernel32.CloseHandle(handle)
+            _kernel32.CloseHandle(handle)
 
 else:
 
-    def pid_alive(pid: int) -> bool:
+    def _os_pid_alive(pid: int) -> bool:
         """Whether that process is still running. Signal 0 asks without delivering anything."""
-        if pid <= 0:
-            return False
         try:
             os.kill(pid, 0)
         except ProcessLookupError:
@@ -315,16 +457,37 @@ def _recovered_detached(record: JobRecord, config: Config) -> JobRecord:
 
     ``None`` is a launch still in flight — the starter marks the record detached before it
     spawns, so that a reader in the microseconds between never mistakes it for a thread job
-    whose thread has ended.
+    whose thread has ended. In flight *in this session*, though: the only process that will
+    ever write that pid is the one between its own two saves, so a pid-less record left by a
+    server that has since exited names a worker that was never started, and the session rule
+    the detached path otherwise skips is exactly the right question for it. Without this it
+    is the one record nothing can ever close — no pid to judge, no session check to fail.
     """
-    if record.pid is None or pid_alive(record.pid):
+    if record.pid is None:
+        if record.session == SESSION:
+            return record
+        log.info("Job %s never got a detached worker: its launcher is gone", record.job_id)
+        return _interrupted(
+            record,
+            f"The server handing {record.kind} to a detached worker exited before the worker "
+            "was started, so nothing is running it.",
+            config,
+        )
+    if pid_alive(record.pid):
         return record
     log.info("Job %s lost its detached worker (pid %s)", record.job_id, record.pid)
+    return _interrupted(
+        record,
+        f"The detached worker running {record.kind} exited before the job finished "
+        f"(pid {record.pid}).",
+        config,
+    )
+
+
+def _interrupted(record: JobRecord, cause: str, config: Config) -> JobRecord:
+    """Close a job nothing is running any more, under this session, saying why."""
     interrupted = JobInterruptedError(
-        cause=(
-            f"The detached worker running {record.kind} exited before the job finished "
-            f"(pid {record.pid})."
-        ),
+        cause=cause,
         detail={
             "job_id": record.job_id,
             "pid": record.pid,

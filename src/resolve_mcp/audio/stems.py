@@ -43,18 +43,21 @@ Four decisions worth knowing:
 
 from __future__ import annotations
 
+import json
+import os
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
 from ..config import Config, get_config
-from ..errors import InternalError, InvalidRequestError
+from ..errors import InternalError, InvalidRequestError, SeparationInProgressError
 from ..ffmpeg import Runner
 from ..jobs import cache
 from ..jobs import runner as job_runner
 from ..jobs.runner import Detached, JobOutput, Progress, start_job
-from ..jobs.store import JobRecord
+from ..jobs.store import SESSION, JobRecord, pid_alive
 from ..logging_config import get_logger
 from ..naming import slug
 from ..resolve.connection import ResolveConnection
@@ -296,6 +299,74 @@ def stem_key(audio: dict[str, Any], params: dict[str, Any]) -> str:
     return cache.cache_key(KIND, [{"content_sha256": audio["content_sha256"]}], settings)
 
 
+CLAIM = ".separating.json"
+"""The file that says a process is writing this stems directory right now. See ``claimed``."""
+
+
+@contextmanager
+def claimed(directory: Path) -> Iterator[None]:
+    """Hold this stems directory for one separation at a time.
+
+    The directory is keyed by the audio's bytes and the models, so two runs over the same mix
+    — a retry, a second agent, a job started twice — land in the same one, and two separators
+    writing the same files interleave into stems that are neither run's: half the tracks from
+    each, all of them looking complete to the reuse check that reads them next.
+
+    A file rather than a lock object, because the two are not threads of one process. Since G4
+    a separation runs in a detached worker, and disk is the only thing those share — the same
+    reason the job record itself is a file. It names the process holding it, so a claim whose
+    process is gone is a crashed run rather than an owner, and is taken over instead of waited
+    on: nobody is left locked out by a worker that died at the 50% mark.
+    """
+    directory.mkdir(parents=True, exist_ok=True)
+    marker = directory / CLAIM
+    holder = _holder(marker)
+    if holder is not None:
+        raise SeparationInProgressError(
+            cause=f"Another process (pid {holder}) is already separating into {directory}.",
+            detail={"directory": str(directory), "pid": holder},
+        )
+    marker.write_text(
+        json.dumps({"pid": os.getpid(), "session": SESSION, "claimed_at": time.time()}),
+        encoding="utf-8",
+    )
+    log.info("Claimed the stems directory %s for pid %s", directory, os.getpid())
+    try:
+        yield
+    finally:
+        _release(marker)
+
+
+def _holder(marker: Path) -> int | None:
+    """The live process holding this claim, or ``None`` — no claim, ours, or a dead one."""
+    try:
+        raw = json.loads(marker.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError):
+        log.warning("Ignoring an unreadable stems claim at %s", marker)
+        return None
+    pid = raw.get("pid") if isinstance(raw, dict) else None
+    if not isinstance(pid, int) or pid == os.getpid():
+        return None
+    if not pid_alive(pid):
+        log.info("Taking over the stems claim at %s from pid %s, which is gone", marker, pid)
+        return None
+    return pid
+
+
+def _release(marker: Path) -> None:
+    """Drop the claim, but only if it is still ours to drop."""
+    if _holder(marker) is not None:
+        return
+    try:
+        marker.unlink(missing_ok=True)
+    except OSError:
+        log.warning("Could not clear the stems claim at %s", marker)
+        return
+    log.info("Released the stems claim at %s", marker)
+
+
 def multi_pass(
     audio: dict[str, Any],
     params: dict[str, Any],
@@ -321,37 +392,40 @@ def multi_pass(
         drums = separator.collect(drums_dir)
         other = separator.collect(other_dir) if split_wind else {}
     else:
-        stems = separator.separate(
-            audio["path"],
-            mix_dir,
-            config.stem_model,
-            FOUR_STEMS,
-            progress=_pass(progress, ACQUIRE_CEILING, PASS_ONE_CEILING, "separating four stems"),
-            runner=runner,
-            config=config,
-        )
-        progress(PASS_ONE_CEILING, "decomposing the drum stem")
-        drums = separator.separate(
-            stems[DRUM_SOURCE],
-            drums_dir,
-            config.drum_model,
-            DRUM_STEMS,
-            progress=_pass(progress, PASS_ONE_CEILING, drums_ceiling, "decomposing the drums"),
-            runner=runner,
-            config=config,
-        )
-        other = {}
-        if split_wind:
-            progress(WIND_FLOOR, "splitting the winds out of the other stem")
-            other = separator.separate(
-                stems[OTHER_SOURCE],
-                other_dir,
-                config.wind_model,
-                WIND_STEMS,
-                progress=_pass(progress, WIND_FLOOR, SEPARATED, "splitting the winds"),
+        with claimed(directory):
+            stems = separator.separate(
+                audio["path"],
+                mix_dir,
+                config.stem_model,
+                FOUR_STEMS,
+                progress=_pass(
+                    progress, ACQUIRE_CEILING, PASS_ONE_CEILING, "separating four stems"
+                ),
                 runner=runner,
                 config=config,
             )
+            progress(PASS_ONE_CEILING, "decomposing the drum stem")
+            drums = separator.separate(
+                stems[DRUM_SOURCE],
+                drums_dir,
+                config.drum_model,
+                DRUM_STEMS,
+                progress=_pass(progress, PASS_ONE_CEILING, drums_ceiling, "decomposing the drums"),
+                runner=runner,
+                config=config,
+            )
+            other = {}
+            if split_wind:
+                progress(WIND_FLOOR, "splitting the winds out of the other stem")
+                other = separator.separate(
+                    stems[OTHER_SOURCE],
+                    other_dir,
+                    config.wind_model,
+                    WIND_STEMS,
+                    progress=_pass(progress, WIND_FLOOR, SEPARATED, "splitting the winds"),
+                    runner=runner,
+                    config=config,
+                )
 
     progress(COLLECTING, "collecting the stems")
     result: dict[str, Any] = {

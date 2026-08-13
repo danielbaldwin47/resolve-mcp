@@ -37,7 +37,11 @@ from .store import JobRecord
 
 log = get_logger("jobs")
 
-Detachable = Callable[[JobRecord, Progress], JobOutput]
+Detachable = Callable[[JobRecord, Progress, Config], JobOutput]
+"""The work itself. The config is passed rather than looked up: this process built one from
+the environment its launcher handed it, and a worker that read the record through that config
+while running the separation through another ``get_config()`` would write its stems and its
+record into two different caches — the exact split the explicit hand-off exists to prevent."""
 
 USAGE = "usage: python -m resolve_mcp.jobs.worker <job-id>"
 
@@ -71,7 +75,7 @@ def run(job_id: str, config: Config | None = None) -> JobRecord:
     except ResolveMcpError as exc:
         return store.finish(record, error=exc.payload(), config=config)
 
-    runner.execute(record, lambda progress: work(record, progress), config)
+    runner.execute(record, lambda progress: work(record, progress, config), config)
     return store.load(job_id, config)
 
 

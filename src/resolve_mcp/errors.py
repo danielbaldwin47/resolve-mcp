@@ -503,6 +503,17 @@ class StemSeparationError(ResolveMcpError):
     )
 
 
+class SeparationInProgressError(ResolveMcpError):
+    """Another process is already separating into the stems directory this run wants."""
+
+    code = "stem_separation_in_progress"
+    default_fix = (
+        "Wait for that separation to finish and read the stems it writes — the directory is "
+        "keyed by the audio and the models, so the run already under way produces exactly "
+        "what this one would have. detail.pid names the process holding it."
+    )
+
+
 class ChainedJobError(ResolveMcpError):
     """A job this one had to run first failed. Its cause, fix and code travel back unchanged.
 

@@ -31,6 +31,7 @@ Four decisions:
 
 from __future__ import annotations
 
+import os
 import threading
 import time
 from collections.abc import Callable
@@ -176,8 +177,10 @@ def execute(record: JobRecord, work: Work, config: Config) -> None:
             # Not an ending: the record stays running, and the worker process closes it. The
             # cache entry is written there too, for the same reason the result is — a job is
             # only cacheable once it has a result, and this one does not have one yet.
-            detached.launch(record, output.plan, config)
-            return
+            resumed = _hand_off(record, output.plan, progress, config)
+            if resumed is None:
+                return
+            output = resumed
         if record.cache_key is not None:
             cache.remember(record.cache_key, record.kind, output.result, output.artifacts, config)
     except ResolveMcpError as exc:
@@ -193,6 +196,36 @@ def execute(record: JobRecord, work: Work, config: Config) -> None:
         return
 
     store.finish(record, result=output.result, config=config)
+
+
+def _hand_off(
+    record: JobRecord,
+    plan: dict[str, Any],
+    progress: Progress,
+    config: Config,
+) -> JobOutput | None:
+    """Move the rest of the job into a process of its own — unless this already *is* that one.
+
+    ``execute`` is shared on purpose: the detached worker closes its job through exactly this
+    path. That makes the hand-off branch reachable inside the worker too, and a worker that
+    launched a worker would launch another, and another — one process per generation, each
+    holding the same record. The record says which side of the hand-off we are on: it is
+    marked detached and names *this* pid only in the process that adopted it. There the plan
+    is run here instead, which is what a launch would have arranged anyway, minus the process.
+    """
+    if record.detached and record.pid == os.getpid():
+        log.warning(
+            "Job %s handed off inside its own detached worker (pid %s); running it here",
+            record.job_id,
+            record.pid,
+        )
+        record.plan = plan
+        store.save(record, config)
+        from .worker import worker_for  # local: worker imports this module at its own import
+
+        return worker_for(record.kind)(record, progress, config)
+    detached.launch(record, plan, config)
+    return None
 
 
 def alive(job_id: str) -> bool:

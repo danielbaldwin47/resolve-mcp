@@ -20,22 +20,45 @@ job and invented a number would be testing the recovery rule by accident.
 
 from __future__ import annotations
 
+import contextlib
+import json
 import os
 import subprocess
 import sys
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from dataclasses import fields, replace
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from resolve_mcp.audio.stems import KIND, detached_pass, separate_stems, separation_params
+from resolve_mcp.audio.stems import (
+    CLAIM,
+    KIND,
+    claimed,
+    detached_pass,
+    separate_stems,
+    separation_params,
+)
 from resolve_mcp.config import Config, get_config
-from resolve_mcp.errors import ChainedJobError, InternalError, InvalidRequestError
+from resolve_mcp.errors import (
+    ChainedJobError,
+    InternalError,
+    InvalidRequestError,
+    SeparationInProgressError,
+)
 from resolve_mcp.jobs import cache, detached, store
 from resolve_mcp.jobs import worker as job_worker
-from resolve_mcp.jobs.runner import Detached, JobOutput, Progress, follow, start_job, wait_for
+from resolve_mcp.jobs.runner import (
+    Detached,
+    JobOutput,
+    Progress,
+    execute,
+    follow,
+    start_job,
+    wait_for,
+)
 from resolve_mcp.jobs.store import JobRecord
 from resolve_mcp.resolve.connection import get_connection
 
@@ -49,6 +72,9 @@ WORKER_BUDGET = 90.0
 """Long enough for a cold interpreter start on a busy box; a hung worker still ends the test."""
 
 POLL = 0.05
+
+_WINDOWS_SYSTEM_PID = 4
+"""The Windows ``System`` process: always running, and no normal token may query it."""
 
 
 class FakeSpawn:
@@ -115,15 +141,36 @@ def test_the_workers_environment_carries_this_servers_config_not_the_machines() 
 
 
 def test_a_config_survives_the_trip_through_the_environment() -> None:
-    config = Config.from_env(
-        {
-            "RESOLVE_MCP_CACHE": "C:/cache",
-            "RESOLVE_MCP_AUDIO_SEPARATOR": "D:/tools/audio-separator.exe",
-            "RESOLVE_MCP_DRUM_MODEL": "some-drum-model.ckpt",
-            "RESOLVE_MCP_ALLOW_ANY_PYTHON": "1",
-        }
-    )
+    """Every field set to something no default would produce, which is the whole test.
 
+    A field ``to_env`` forgets comes back out of ``from_env`` as its default — so a config
+    built from defaults round-trips equal *whether or not* the field was written, and the one
+    bug this test exists to catch passes it. Only a value no default can produce can tell the
+    difference, and the assertion below fails first if some field ever stops being one.
+    """
+    config = Config(
+        script_api=Path("D:/resolve/api"),
+        script_lib=Path("D:/resolve/fusionscript.dll"),
+        cache_dir=Path("D:/cache"),
+        log_level="DEBUG",
+        allow_any_python=True,
+        ffmpeg="D:/tools/ffmpeg.exe",
+        audio_separator="D:/tools/audio-separator.exe",
+        stem_model="some-stem-model.ckpt",
+        drum_model="some-drum-model.ckpt",
+        wind_model="some-wind-model.ckpt",
+        default_render_preset="SomePreset",
+        whisper_device="some-device",
+        whisper_compute_type="some-compute-type",
+    )
+    default = Config.from_env({})
+    same_as_a_default = [
+        one.name
+        for one in fields(Config)
+        if getattr(config, one.name) == getattr(default, one.name)
+    ]
+
+    assert same_as_a_default == [], "a field at its default cannot prove to_env wrote it"
     assert Config.from_env(config.to_env()) == config
 
 
@@ -239,6 +286,53 @@ def test_a_launch_no_flags_can_start_says_what_to_do_instead(
 # --- who is still alive --------------------------------------------------------------------
 
 
+def test_the_scratch_file_a_save_writes_through_is_this_processs_alone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One record, two writers: the atomic write is only atomic if they do not share a name.
+
+    The server writes this record up to the hand-off and the detached worker from the adopt
+    on, and for a moment both do. With one scratch name they write the same file and each
+    moves it into place, so what lands is a splice of two records rather than either one.
+    """
+    target = get_config().job_dir / "separate_stems-abc123.json"
+    ours = store._scratch(target)
+    monkeypatch.setattr(os, "getpid", lambda: 424242)
+
+    theirs = store._scratch(target)
+
+    assert ours != theirs
+    assert str(os.getpid()) in theirs.name
+    assert ours.suffix != ".json", "a scratch file must never be read back as a record"
+
+
+def test_a_launcher_does_not_write_over_a_worker_that_adopted_first() -> None:
+    """Both processes write this record, and for one moment they both mean to write the pid.
+
+    The worker adopts as its first act; the launcher's second save lands after that on a slow
+    start. Saving the parent's copy blindly would put the launcher's pid, the launcher's
+    session and the hand-off step back over the worker's own — leaving a record that names a
+    process which will never write to it again, and a step frozen at the hand-off.
+    """
+    record = store.new_job(KIND, {})
+    worker_pid = os.getpid()
+
+    def adopts() -> None:
+        taken = store.peek(record.job_id)
+        assert taken is not None
+        taken.session = "the-worker-that-got-there-first"
+        taken.pid = worker_pid
+        taken.step = "separating four stems (2%)"
+        store.save(taken)
+
+    detached.launch(record, {}, spawn=FakeSpawn(pid=424242, watching=adopts))
+
+    landed = store.load(record.job_id)
+    assert landed.pid == worker_pid
+    assert landed.session == "the-worker-that-got-there-first"
+    assert landed.step == "separating four stems (2%)"
+
+
 def test_a_detached_job_outlives_the_session_that_started_it() -> None:
     """The session rule is backwards for these: surviving the server is the whole point."""
     record = _running_under_a_dead_server(os.getpid())
@@ -270,12 +364,95 @@ def test_a_follower_of_a_detached_job_hears_its_worker_died_not_that_a_thread_is
     assert raised.value.code == "job_interrupted"
 
 
+def test_a_launch_that_never_happened_is_closed_rather_than_left_running_forever() -> None:
+    """No pid to ask about and no session left to run it: the one record nothing could close.
+
+    ``pid: None`` means a launch in flight — true only while the process doing the launching
+    is still between its two saves. Killed there, it leaves a record that skips the session
+    rule for being detached and has no pid to judge, and every poll for the rest of time reads
+    it as running.
+    """
+    record = store.new_job(KIND, {})
+    record.detached = True
+    record.session = "the-server-that-died-mid-launch"
+    record.step = detached.HANDING_OFF
+    store.save(record)
+
+    failed = store.load(record.job_id)
+
+    assert failed.state == store.FAILED
+    assert failed.error is not None
+    assert failed.error["code"] == "job_interrupted"
+    assert "before the worker was started" in failed.error["cause"]
+    assert store.load(record.job_id).state == store.FAILED  # written back, judged once
+
+
+def test_a_launch_in_flight_in_this_session_is_still_a_running_job() -> None:
+    """The other half of that rule: our own hand-off must not close itself mid-flight."""
+    record = store.new_job(KIND, {})
+    record.detached = True
+    record.step = detached.HANDING_OFF
+    store.save(record)
+
+    assert store.load(record.job_id).state == store.RUNNING
+
+
 def test_a_process_that_has_exited_does_not_read_as_a_live_one() -> None:
     """The one question the whole recovery rule hangs on, asked of a real process."""
     pid = _a_pid_that_has_exited()
 
     assert store.pid_alive(pid) is False
     assert store.pid_alive(os.getpid()) is True
+
+
+def test_a_process_that_exited_with_259_is_not_mistaken_for_a_running_one() -> None:
+    """259 is ``STILL_ACTIVE``, and also a perfectly legal exit code.
+
+    On Windows a process that exited with it reports it forever, so an exit code read on its
+    own says "running" about a worker that has been gone for an hour, and the job it was doing
+    never gets closed. The wait is what separates the two, and this is the process that tells
+    them apart.
+    """
+    process = subprocess.Popen([sys.executable, "-c", "import sys; sys.exit(259)"])
+    _EXITED.append(process)
+    process.wait(timeout=WORKER_BUDGET)
+
+    assert store.pid_alive(process.pid) is False
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="the kernel32 path only exists on Windows")
+def test_a_windows_process_this_token_may_not_query_still_reads_as_alive() -> None:
+    """``ACCESS_DENIED`` is "there, and not yours to ask about" — never "gone".
+
+    A worker started by another user, or by a server running elevated, refuses the query
+    handle; reading that as a dead process would close a separation that is still running as
+    interrupted, which is the exact verdict the pid rule exists to get right. The POSIX side
+    has always read ``PermissionError`` as alive. pid 4 is the Windows ``System`` process:
+    always running, and not a process a normal token gets to interrogate.
+    """
+    assert store.pid_alive(_WINDOWS_SYSTEM_PID) is True
+
+
+def test_a_worker_this_process_started_is_judged_by_the_handle_it_left_behind() -> None:
+    """A child nobody reaped is a zombie, and a zombie answers ``kill(pid, 0)`` as if alive.
+
+    ``start_new_session`` takes the worker out of the process group, not out of the family, so
+    on POSIX every detached worker is still this process's child. Asking the OS about a
+    crashed one gets "running" back for as long as the server lives — the record would say
+    ``running`` forever, which is precisely the failure the detached path was built to end.
+    """
+    process = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(300)"])
+    store.remember_child(process.pid, process)
+    try:
+        assert store.pid_alive(process.pid) is True
+        process.terminate()
+
+        assert _until_gone(process.pid) is False
+        assert process.returncode is not None, "the handle was never polled, so nothing reaped it"
+    finally:
+        if process.poll() is None:  # pragma: no cover - only if the assertions above failed
+            process.kill()
+            process.wait(timeout=WORKER_BUDGET)
 
 
 # --- the worker process --------------------------------------------------------------------
@@ -292,7 +469,7 @@ def test_the_worker_takes_the_record_over_closes_it_and_caches_what_it_made(
     record.plan = {"audio": {"path": "mix.wav"}}
     store.save(record)
 
-    def work(taken: JobRecord, progress: Progress) -> JobOutput:
+    def work(taken: JobRecord, progress: Progress, config: Config) -> JobOutput:
         progress(0.5, "halfway")
         return JobOutput({"from": taken.plan}, (artifact,))
 
@@ -304,6 +481,31 @@ def test_the_worker_takes_the_record_over_closes_it_and_caches_what_it_made(
     assert finished.pid == os.getpid()
     assert finished.session == store.SESSION
     assert cache.lookup("the-key") == {"from": {"audio": {"path": "mix.wav"}}}
+
+
+def test_the_worker_hands_the_work_the_config_it_was_started_with(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One config, or the record and the stems land in two different caches.
+
+    The worker builds its config from the environment its launcher handed it and does its
+    record IO through that. Work that called ``get_config()`` for itself would be reading the
+    process default — the same object in this test only by accident, and a different cache
+    directory in the one case detaching exists for.
+    """
+    config = replace(get_config(), stem_model="the-model-this-worker-was-told-to-use")
+    record = store.new_job(KIND, {}, config=config)
+    seen: list[Config] = []
+
+    def work(taken: JobRecord, progress: Progress, given: Config) -> JobOutput:
+        seen.append(given)
+        return JobOutput({"model": given.stem_model})
+
+    monkeypatch.setattr(job_worker, "worker_for", lambda kind: work)
+    finished = job_worker.run(record.job_id, config)
+
+    assert seen == [config]
+    assert finished.result == {"model": "the-model-this-worker-was-told-to-use"}
 
 
 def test_the_worker_refuses_a_kind_it_cannot_run_by_failing_the_job() -> None:
@@ -321,6 +523,37 @@ def test_the_worker_leaves_a_job_that_already_ended_alone() -> None:
     record = store.finish(store.new_job(KIND, {}), result={"done": True})
 
     assert job_worker.run(record.job_id).result == {"done": True}
+
+
+def test_a_worker_that_hands_off_again_runs_the_work_itself_instead_of_spawning(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``execute`` is shared, so the hand-off branch is reachable inside the worker too.
+
+    One worker per generation is what the unguarded version does: the detached process runs
+    the same ``execute``, sees the same ``Detached``, and launches another process holding the
+    same record. The record says which side of the hand-off we are on, and on the far side the
+    plan is run in this process.
+    """
+    record = store.new_job("beat_grid", {})
+    record.detached = True
+    record.pid = os.getpid()
+    store.save(record)
+    spawn = FakeSpawn()
+    monkeypatch.setattr(detached, "_spawn", spawn)
+    plans: list[dict[str, Any]] = []
+
+    def inline(taken: JobRecord, progress: Progress, config: Config) -> JobOutput:
+        plans.append(taken.plan or {})
+        return JobOutput({"ran": "in the worker"})
+
+    monkeypatch.setattr(job_worker, "worker_for", lambda kind: inline)
+
+    execute(record, lambda progress: Detached({"audio": "already on disk"}), get_config())
+
+    assert spawn.calls == []
+    assert plans == [{"audio": "already on disk"}]
+    assert store.load(record.job_id).result == {"ran": "in the worker"}
 
 
 def test_the_stems_job_is_the_kind_the_worker_knows_how_to_run() -> None:
@@ -348,7 +581,7 @@ def test_a_real_detached_worker_finds_the_record_and_closes_it() -> None:
     detached.launch(record, {})
 
     finished = _until_finished(record.job_id)
-    assert finished.state == store.FAILED, finished.step
+    assert finished.state == store.FAILED, _why_the_worker_did_not_finish(finished)
     assert finished.error is not None
     assert "No detached worker" in finished.error["cause"]
     assert finished.pid is not None
@@ -409,6 +642,48 @@ def test_the_detached_pass_runs_both_passes_from_the_record_alone(
     assert len(separating.calls) == 2
 
 
+def test_a_second_worker_refuses_a_stems_directory_another_one_is_writing(tmp_path: Path) -> None:
+    """Two separators in one directory interleave into stems that are neither run's.
+
+    The directory is keyed by the audio and the models, so a retry, a second agent or a job
+    started twice all land in the same one — and since G4 they are separate processes, which
+    is why the claim is a file and why it names the pid holding it.
+    """
+    directory = tmp_path / "stems-abc123"
+
+    with _a_live_process() as other:
+        _claim_held_by(directory, other.pid)
+
+        with pytest.raises(SeparationInProgressError) as raised, claimed(directory):
+            pass  # pragma: no cover - the claim is refused on the way in
+
+        assert raised.value.detail["pid"] == other.pid
+
+
+def test_a_stems_claim_whose_process_is_gone_is_taken_over_not_waited_on(tmp_path: Path) -> None:
+    """A worker killed at the 50% mark must not lock every later run out of its directory."""
+    directory = tmp_path / "stems-abc123"
+    _claim_held_by(directory, _a_pid_that_has_exited())
+
+    with claimed(directory):
+        held = json.loads((directory / CLAIM).read_text(encoding="utf-8"))
+
+    assert held["pid"] == os.getpid()
+    assert not (directory / CLAIM).exists()
+
+
+def test_a_finished_separation_leaves_no_claim_behind(
+    tmp_path: Path,
+    separating: FakeSeparator,
+) -> None:
+    """The claim is held for the passes and dropped at the end, however they end."""
+    record = _handed_off(tmp_path)
+
+    output = detached_pass(record, _ignored, None, separating)
+
+    assert not (Path(str(output.result["directory"])) / CLAIM).exists()
+
+
 def test_a_hand_off_that_lost_its_audio_is_a_named_failure_not_a_crash(tmp_path: Path) -> None:
     record = _handed_off(tmp_path)
     record.plan = {"reuse": True}
@@ -457,10 +732,70 @@ def _handed_off(tmp_path: Path) -> JobRecord:
     return record
 
 
+_EXITED: list[subprocess.Popen[bytes]] = []
+"""Every child ``_a_pid_that_has_exited`` made, kept open. See there for why."""
+
+
 def _a_pid_that_has_exited() -> int:
-    with subprocess.Popen([sys.executable, "-c", "import sys; sys.exit(0)"]) as process:
+    """A pid this process owned and watched exit — the only kind we can be sure has gone.
+
+    Reaped rather than left a zombie: a zombie still answers ``kill(pid, 0)``, so a test
+    written on one would be asserting the opposite of what it reads as. The handle is then
+    kept for the rest of the session, which on Windows is a guarantee — a pid is not handed to
+    anybody else while a handle on it is open — and on POSIX is the receipt that makes a
+    failure here readable: ``returncode`` says this pid was our child and that it exited, so a
+    red test means the number was recycled underneath us, not that ``pid_alive`` is broken.
+    """
+    process = subprocess.Popen([sys.executable, "-c", ""])
+    _EXITED.append(process)
+    process.wait(timeout=WORKER_BUDGET)
+    assert process.returncode is not None, "the helper's own child never exited"
+    return process.pid
+
+
+@contextlib.contextmanager
+def _a_live_process() -> Iterator[subprocess.Popen[bytes]]:
+    """A process that is certainly running, and is certainly not this one.
+
+    A sleep rather than a read on stdin: under pytest the child would inherit a stdin that is
+    already at end of file, and a "live" process that exited immediately would make every
+    assertion resting on it pass for the wrong reason.
+    """
+    process = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(300)"])
+    try:
+        yield process
+    finally:
+        process.terminate()
         process.wait(timeout=WORKER_BUDGET)
-        return process.pid
+
+
+def _claim_held_by(directory: Path, pid: int) -> Path:
+    """A stems directory another process says it is separating into."""
+    directory.mkdir(parents=True, exist_ok=True)
+    marker = directory / CLAIM
+    marker.write_text(json.dumps({"pid": pid, "session": "another-server"}), encoding="utf-8")
+    return marker
+
+
+def _until_gone(pid: int, budget: float = WORKER_BUDGET) -> bool:
+    """Whether that pid still reads as alive once it has had time to stop."""
+    deadline = time.monotonic() + budget
+    while store.pid_alive(pid) and time.monotonic() < deadline:
+        time.sleep(POLL)
+    return store.pid_alive(pid)
+
+
+def _why_the_worker_did_not_finish(record: JobRecord) -> str:
+    """The child's own output, which is the only place its failure was ever written.
+
+    A bare assertion here reads "expected FAILED, got RUNNING" after a minute and a half of
+    polling, and says nothing about the worker that did not start — a missing interpreter, an
+    import error, a cache directory it could not write. That is all in the log file the
+    launcher opened for it.
+    """
+    log_file = detached.worker_log(record.job_id, get_config())
+    output = log_file.read_text(encoding="utf-8") if log_file.exists() else "(no worker log)"
+    return f"job {record.job_id} is {record.state} at step {record.step!r}; worker log:\n{output}"
 
 
 def _until_finished(job_id: str, budget: float = WORKER_BUDGET) -> JobRecord:

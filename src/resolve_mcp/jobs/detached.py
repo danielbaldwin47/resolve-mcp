@@ -65,6 +65,20 @@ WINDOWS_FLAGS = (
 
 HANDING_OFF = "handing the rest of the job to a detached worker"
 
+DOING = {"separate_stems": "separating"}
+"""What a kind is called while it runs, for the step a poller reads. See ``step_for``."""
+
+
+def step_for(kind: str, pid: int) -> str:
+    """The step a handed-off job shows, in the words of the job's own kind.
+
+    This module knows nothing about stems — it hands off whatever ``runner`` gives it — so a
+    hardcoded "separating" here would mislabel the first other kind that detaches, and the
+    step is the one line an agent reads to know what is happening. Unknown kinds get their
+    own name rather than a guess.
+    """
+    return f"{DOING.get(kind, kind.replace('_', ' '))} in a detached worker (pid {pid})"
+
 Spawn = Callable[[list[str], Path, Config], int]
 """Start that argv detached, with its output going to that file, and return its pid.
 
@@ -137,10 +151,30 @@ def launch(
     # interpreter as a child, so what was started here and what is doing the work are not
     # always the same process. The trampoline outlives its child, so this stays a truthful
     # "still running" for the second or so before the worker overwrites it.
-    record.pid = pid
-    record.step = f"separating in a detached worker (pid {pid})"
-    store.save(record, config)
-    log.info("Job %s handed off to detached worker pid %s: %s", record.job_id, pid, " ".join(argv))
+    #
+    # Read back first, because by now the record may not be ours to write: the worker adopts
+    # it as its first act, and a cold start that loses a race with nothing is still a race
+    # this one loses often enough — the child's pid, session and step written, then the
+    # parent's stale copy saved straight over them, leaving the record naming a launcher's
+    # pid the worker will never write again. If a pid is already there, it is the worker's
+    # and it is better than this one.
+    latest = store.peek(record.job_id, config) or record
+    if latest.pid is None:
+        latest.pid = pid
+        latest.step = step_for(record.kind, pid)
+        store.save(latest, config)
+        log.info(
+            "Job %s handed off to detached worker pid %s: %s", record.job_id, pid, " ".join(argv)
+        )
+    else:
+        log.info(
+            "Job %s was adopted by pid %s before its launcher could record pid %s",
+            record.job_id,
+            latest.pid,
+            pid,
+        )
+    record.pid = latest.pid
+    record.step = latest.step
     return pid
 
 
@@ -182,5 +216,9 @@ def _spawn(
                     ),
                     detail={"argv": argv, "options": chosen},
                 ) from exc
+            # The handle is kept, not dropped: a worker started here is still this process's
+            # child, and an unreaped child that has exited is a zombie whose pid still answers
+            # every liveness question as if it were running. ``store`` polls it instead.
+            store.remember_child(process.pid, process)
             return process.pid
     raise AssertionError("unreachable")  # pragma: no cover
