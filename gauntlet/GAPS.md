@@ -157,6 +157,21 @@ excavation.
 
 ## Round record
 
+- **R3 · Taurus opening · WIN 2–1 — PIECE CLOSED** (ours = A; sealed pack
+  `taurus_opening_r3`, three fresh critics, grade excluded per ruling).
+  The occlusion-aware rebuild removed both confirmed blocked shots
+  structurally, kept the t=38 gesture, tightened the back half, and the
+  pixel check matched the plan frame-for-frame (15/15 cuts). Panel
+  consensus even among our voters: our back-half tightening ladder reads
+  as a mechanical metronome (strict two-framing alternation, monotonic
+  9.9→2.9 s) — next-piece style work; and the human's 30 s of parked
+  statics drew all three judges' fire, confirming the bar's weak flank.
+  Builder's tuning ledger for `analyze_occlusion`: precision 2/6 on FX6
+  windows (dark piano lid + tiny parked corner head read as blocking);
+  suggested fixes recorded in `gauntlet/recon/occlusion_verdict_r3.json`.
+  Recurring nit → G13: built timelines inherit the project's 4K default
+  and every round manually sets 1920×1080 before render.
+
 - **R1 · Taurus opening · VOID** (ours = A). Critic judged a corrupt pack
   (G3): ours shown as 1 cut, human's as 9 — both actually 13. Verdict
   discarded; re-judge with fixed tool = R1b. Still standing from R1: the

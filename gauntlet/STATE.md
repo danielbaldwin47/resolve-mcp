@@ -36,6 +36,12 @@ energy arc, ending. Per piece, per round:
 
 ## Status
 
+- **Piece 1 · Song opening (Taurus People, first 90 s): CLOSED — WON 2–1**
+  (R3, 2026-08-13, sealed pack `taurus_opening_r3`). Render:
+  `gauntlet/renders/taurus_opening_r3.mp4`, timeline
+  'Taurus People Opening R3 v3'.
+- Piece 2 · Ending: next up (tail conventions already measured in
+  `gauntlet/recon/openings_survey.json`).
 - Iteration 0 (2026-08-13): setup done. Recon workflow launched
   (live probe, docs survey, human cut stats, Emmet refs) → results land in
   `gauntlet/recon/`.
