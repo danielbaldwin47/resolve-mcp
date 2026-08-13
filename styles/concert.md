@@ -140,6 +140,26 @@ that the grid is a live band's grid, so it moves.
   cam shots tend to all be the same length, and feel monotonous", another ran
   11.3 s because the interaction on screen earned it. Frequent-and-short is the
   angle's shape, not a fixed duration. `[review feedback, 2026-08]`
+- **Sparse passages hold longer.** Where the music thins, the answer is fewer
+  cuts — not the same rate carried over onto quieter material. A thin passage
+  is the one place a locked frame stops being a compromise, because there is
+  nothing arriving for a cut to be about. In the blind round behind this note
+  the agent cut carried its usual rate straight through a quiet section and
+  lost partly there, while the human released into a 15.8 s locked hold — the
+  longest, stillest stretch in either version. **The same hold was the only
+  thing the critic held against the human's version**, and both halves of that
+  are worth keeping: holding through a thin passage is the move, and it is the
+  move with a ceiling nobody has found the top of yet.
+  `[review feedback, 2026-08]`
+- **Approach a section change with acceleration; release into stillness after
+  it.** Shots shorten into the turn (1.7 s, then 2.2 s, through the decay), the
+  change itself lands on the section's loudest peak, and what follows is a long
+  hold. The gesture is the pair, and neither half survives alone: acceleration
+  with nothing after it is agitation, and a hold that nothing was accelerating
+  toward is just a long shot. An unmarked step from one section to the next —
+  the same rate before and after — spends the transition without showing it.
+  `[review feedback, 2026-08]` — this is the response half of the "section
+  boundary" item left open in §5; its timing signature is still unmeasured.
 - The variation instinct and "spectacle earns a hold" are base claims, and a
   concert changes nothing about them — they carry their tags in `base.md` and
   are named here only so this section is not read as silent on them.
@@ -240,6 +260,16 @@ that the grid is a live band's grid, so it moves.
   is technically in frame. Sidecars should record what a framing actually
   contains, because that is what decides which cuts it can carry.
   `[review feedback, 2026-08]`
+- **A scale change is a picture worth more than a framing return.** When a cut
+  needs a new picture, a different distance on the same subject beats returning
+  to a framing already used. Two framings alternating are two pictures however
+  many cuts join them; a wide-to-tight step on one of them is a third, and it
+  is the cheapest third picture a two-camera rig can produce. The blind round
+  behind this note counted 2 distinct pictures in the agent cut against 3 in
+  the human's, and the whole difference was one scale change. The corollary is
+  a smell rather than a rule: a passage that keeps arriving back at a framing
+  it just left is usually a passage with no third picture in it.
+  `[review feedback, 2026-08]`
 - **The moving camera is a second editor.** Its reframings substitute for
   cuts: the recut deletes agent cuts because "the moving camera quickly
   focuses on the drums, so it has the same effect", rides a single shot from
@@ -273,6 +303,16 @@ that the grid is a live band's grid, so it moves.
 Per event type: the response, and its **timing signature** — the lead/lag
 distribution measured by correlating detected events against actual cut points.
 
+- **Every cut carries a nameable motivation, and "time elapsed" is not one.**
+  Before a cut goes in, say what it is *for*: an event, an entrance, a peak, a
+  phrase ending, a look between two players. A cut whose only justification is
+  how long the previous shot has run is the residue of a coverage pass, and it
+  reads as one — the blind round behind this note turned partly on a quiet
+  section where the agent cut ping-ponged two framings on a timer while the
+  passage's own 13 dB character change went unmarked. It does not have to be
+  loud; it has to be nameable. This is the general form of the fill claim
+  below: the detector finds a subset of the motivations, and the rest are still
+  named, just not by a tool. `[review feedback, 2026-08]`
 - **Drum fill** — arrive on the drummer around the start of the fill, ride
   through the transition, and leave after the new section has settled.
   `[believed, unverified]` — seed pattern recorded as such in #13; the lead/lag
@@ -295,14 +335,84 @@ distribution measured by correlating detected events against actual cut points.
   the front changed, never who it is; the sidecar's `role` closes that gap.
   `[believed, unverified]` — follows from how #38 and the sidecar are built;
   the corpus has not been read yet for how strictly past edits follow the front.
-- **Section boundary**, **build** — response and timing signature. *Open.*
+- **Section boundary** — the response is measured out in §3 (accelerate in,
+  cut on the peak, release into a hold). Its **timing signature** is still
+  open, and so is **build**.
 
 ## 5b. Openings and endings
 
-Both ends of a tune are staged, not covered. All of this landed in one review
-round on one tune, which the tags say — but every device below was the
-director's own move, unprompted, on top of an agent cut that had simply
-covered both ends.
+Both ends of a tune are staged, not covered. Two different kinds of evidence
+sit here and the tags keep them apart. The `[review feedback]` bullets landed
+in one round on one tune, where every device was the director's own move,
+unprompted, on an agent cut that had simply covered both ends. The
+`[measured]` bullets come from the other direction: five finished deliverables
+from one night, read frame by frame, where the staging is whatever survived to
+the client.
+
+### What the deliverables do
+
+Five songs, one night — `6-17-26 Zinc Bar` set 2, the whole *Full Videos*
+folder. Every number below is in `gauntlet/recon/openings_survey.json`, with
+the method that produced it.
+
+- **A tune opens on black, and the black is never a flash.** All five start on
+  one frame of true black and then take their time: four dissolve up out of it
+  over **1.00 / 1.21 / 1.46 / 2.34 s**, and the fifth holds a full-frame title
+  card for 2.29 s. Nothing in the set clears black in under a second. Half a
+  second of black is not a shorter version of this device; it is a different
+  one, and a bad one — see "Sub-second black at a song head" below.
+  `[measured — 1 project, n=5 songs, Zinc 6-17 set 2]`
+- **The title card is what pre-entrance dead air is for, and it clears on the
+  entrance.** Taurus People is the one tune in the set with real dead air at
+  its head — room tone at −34 to −46 dB, first note at **2.38 s** — and it is
+  the one tune that opens on a full-frame card over black. The card cuts to
+  picture at **2.336 s: 44 ms, one frame, ahead of the entrance.** The reveal
+  *is* the downbeat, and it is placed the way §1 says this corpus places
+  everything else — near, not on, at the edge of the 17–41 ms band the six
+  timelines report. The other four are already sounding by
+  0.25 / 0.45 / 0.65 / 1.15 s, have no
+  dead air to spend, and carry the same title as a lower-third super over live
+  picture instead: in at **4.67 / 5.30 / 5.38 / 7.97 s**, held **2.84–5.21 s**,
+  fading in and out over about 0.3 s each way. So the convention is not "always
+  open on a card" — it is **the title takes whatever room the music leaves it,
+  and a card is what a silent head is spent on.** A tune that starts in the
+  middle of a phrase gets its title later, over picture, and loses nothing.
+  `[measured — 1 project, n=5 songs, Zinc 6-17 set 2]`
+- **A personnel super follows the title in every one of the five**, in at
+  16.2 / 17.0 / 19.3 / 20.6 s — and, on Soultrane, **69.9 s** — and held
+  6.1–7.9 s, longer than any of the title supers. The gap from the title's exit
+  to its entry runs 6.5 s on one tune and 57 s on another, so its placement is
+  a musical choice and not an offset from anything. Treat it as a second, later
+  beat of the same staging rather than part of the opening.
+  `[measured — 1 project, n=5 songs, Zinc 6-17 set 2]`
+- **The picture leaves before the file does, and the band is still playing when
+  it goes.** Two deliverables hard-cut to black — Hardest Part 6.5 s from the
+  end, Sambra 7.9 s — and sit on black for the whole remainder. The other three
+  dissolve out across roughly the last 6–10 s, reaching black with 0.17 s
+  (Taurus, essentially landing on the final frame), 0.55 s and 1.90 s to spare.
+  Nobody ends on a picture frame; the last frame of picture has the band still
+  playing in all five; not one of the five carries an applause tail. Cuts keep
+  happening under the dissolve — the departure is a fade, not a freeze. The
+  audio outlives the picture every time and fades under it, four of the five
+  reaching digital silence in the last 0.2–0.5 s. Read together with "End
+  inside the performance" below: the review round said *why*, and these five
+  say the finished work does it.
+  `[measured — 1 project, n=5 songs, Zinc 6-17 set 2]`
+
+**How much this is worth.** One project, one night, five songs, and by the
+thin-support rule in `docs/agents/style-layer.md` a single-project claim
+normally downgrades to `[believed, unverified]`. These are tagged `[measured]`
+anyway, for two reasons worth being explicit about: every number comes off a
+finished deliverable rather than an inference about one, and 5 of 5 agree on
+the shape — black first, a title always, the picture gone before the file ends
+— while agreeing on almost none of the durations. That is what a convention
+looks like; a template would have matched to the frame. What it still cannot
+say is whether the convention is this director's or this client's house style,
+since all five are one night of one series — and it says nothing at all about
+the *hundreds* of seconds between each opening and its ending. The evidence row
+is in `corpus.md`, "The deliverable head/tail survey".
+
+### What the review round said
 
 - **Do not open on the camera finding its shot.** The tune opened on the
   moving camera mid-pan; the director restaged it — a breath of black, a
@@ -321,6 +431,15 @@ covered both ends.
   black *on* the hit, before any release. The agent schema builds butt-joined
   V1 segments only; the recut uses gaps and a second video track as
   first-class material. `[review feedback, 2026-08]`
+- **Sub-second black at a song head is a glitch, not a device.** A half-second
+  of black at a tune's opening is too short to read as a fade and too long to
+  be invisible; it reads as a dropout, and a blind round was decided against an
+  agent cut in its first three seconds for exactly that. Black at a head is
+  either staged — a card held to the entrance, or a dissolve of a second or
+  more, which is the whole range the deliverables use — or not used at all.
+  The same test applies to what the black is *for*: a reveal spent on silence
+  is dead air, and dead air is the thing a card exists to fill.
+  `[review feedback, 2026-08]`
 
 ## 6. Observations
 
@@ -398,6 +517,17 @@ Free prose, first-class.
   the V1 skeleton of a cut whose character is partly in what the measurement
   cannot see; a number-only reading of the round would have missed the black
   entirely.
+- **The deliverables answered a question no timeline in the corpus can.** Six
+  timelines have been correlated and not one of them says what a tune's first
+  three seconds look like: `correlate_timeline` reads shots, and a title is not
+  a shot — the staging that decides a viewer's first impression sits in exactly
+  the blind spot §5b's review round already named. Reading five finished
+  renders frame by frame cost an afternoon of ffmpeg and settled the device the
+  round had only gestured at: the card is not decoration on the front of a cut,
+  it is what makes silence watchable, which is why the one tune with silence at
+  its head is the one tune with a card. The route generalises — the deliverable
+  is a second instrument pointed at the same work, and it sees what the
+  timeline reader cannot.
 - **The best result of this pass came from testing what the director said
   rather than recording it.** His account predicts that an operated camera can
   sustain a shot and a locked one cannot — so the shots were split by role, and
