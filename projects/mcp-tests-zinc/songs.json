@@ -1,0 +1,37 @@
+{
+  "maitland-boulevard": {
+    "title": "Maitland Boulevard",
+    "personnel": [
+      { "name": "Ryan Devlin", "instrument": "unknown", "role": "leader" },
+      { "name": "unknown", "instrument": "unknown" }
+    ]
+  },
+  "hardest-part": {
+    "title": "Hardest Part",
+    "personnel": [
+      { "name": "Ryan Devlin", "instrument": "unknown", "role": "leader" },
+      { "name": "unknown", "instrument": "unknown" }
+    ]
+  },
+  "soultrane": {
+    "title": "Soultrane",
+    "personnel": [
+      { "name": "Ryan Devlin", "instrument": "unknown", "role": "leader" },
+      { "name": "unknown", "instrument": "unknown" }
+    ]
+  },
+  "sambra": {
+    "title": "Sambra",
+    "personnel": [
+      { "name": "Ryan Devlin", "instrument": "unknown", "role": "leader" },
+      { "name": "unknown", "instrument": "unknown" }
+    ]
+  },
+  "taurus-people": {
+    "title": "Taurus People",
+    "personnel": [
+      { "name": "Ryan Devlin", "instrument": "unknown", "role": "leader" },
+      { "name": "unknown", "instrument": "unknown" }
+    ]
+  }
+}

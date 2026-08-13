@@ -1,0 +1,76 @@
+{
+  "ok": true,
+  "bin": "",
+  "count": 6,
+  "clips": [
+    {
+      "name": "Zinc Set 2 Reaper v4.wav",
+      "bin": "",
+      "file_path": "P:\\Client Work\\Ryan Devlin\\2026-06-17_Zinc Bar\\Audio\\Reaper\\Zinc Set 2 Reaper v4.wav",
+      "type": "Audio",
+      "frames": null,
+      "fps": 23.976,
+      "resolution": "",
+      "offline": false
+    },
+    {
+      "name": "Zinc Set 2 Reaper v4.wav",
+      "bin": "Zinc Bar/Timelines",
+      "file_path": "P:\\Client Work\\Ryan Devlin\\2026-06-17_Zinc Bar\\Audio\\Reaper\\Zinc Set 2 Reaper v4.wav",
+      "type": "Audio",
+      "frames": null,
+      "fps": 23.976,
+      "resolution": "",
+      "offline": false
+    },
+    {
+      "name": "Zinc Set 2 Reaper.wav",
+      "bin": "Zinc Bar/Audio",
+      "file_path": "P:\\Client Work\\Ryan Devlin\\2026-06-17_Zinc Bar\\Audio\\Reaper\\Zinc Set 2 Reaper.wav",
+      "type": "Audio",
+      "frames": null,
+      "fps": 23.976,
+      "resolution": "",
+      "offline": false
+    },
+    {
+      "name": "Zinc Set 2 Reaper v4.wav",
+      "bin": "Zinc Bar/Audio",
+      "file_path": "P:\\Client Work\\Ryan Devlin\\2026-06-17_Zinc Bar\\Audio\\Reaper\\Zinc Set 2 Reaper v4.wav",
+      "type": "Audio",
+      "frames": null,
+      "fps": 23.976,
+      "resolution": "",
+      "offline": false
+    },
+    {
+      "name": "Zinc Set 2 Reaper v4.wav",
+      "bin": "Monkfish/FX6",
+      "file_path": "P:\\Client Work\\Ryan Devlin\\2026-06-17_Zinc Bar\\Audio\\Reaper\\Zinc Set 2 Reaper v4.wav",
+      "type": "Audio",
+      "frames": null,
+      "fps": 23.976,
+      "resolution": "",
+      "offline": false
+    },
+    {
+      "name": "Zinc Set 2 Reaper v4.wav",
+      "bin": "04_Assets/Text",
+      "file_path": "P:\\Client Work\\Ryan Devlin\\2026-06-17_Zinc Bar\\Audio\\Reaper\\Zinc Set 2 Reaper v4.wav",
+      "type": "Audio",
+      "frames": null,
+      "fps": 23.976,
+      "resolution": "",
+      "offline": false
+    }
+  ],
+  "truncated": false,
+  "spilled_to": null,
+  "context": {
+    "connected": true,
+    "resolve_version": "21.0.3.7",
+    "project": "mcp-tests-zinc",
+    "timeline": "Zinc SYNC",
+    "fps": 23.976
+  }
+}

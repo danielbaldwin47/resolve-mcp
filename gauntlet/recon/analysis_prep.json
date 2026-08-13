@@ -1,0 +1,95 @@
+{
+  "mix": "P:\\Client Work\\Ryan Devlin\\2026-06-17_Zinc Bar\\Audio\\Reaper\\Zinc Set 2 Reaper v4.wav",
+  "jobs": {
+    "analyze_music": {
+      "job_id": "analyze_music-47ea0ba42371",
+      "state": "completed",
+      "cached": true,
+      "elapsed_s": 0.0,
+      "result": {
+        "audio": {
+          "path": "P:\\Client Work\\Ryan Devlin\\2026-06-17_Zinc Bar\\Audio\\Reaper\\Zinc Set 2 Reaper v4.wav",
+          "duration_seconds": 4450.5,
+          "sample_rate": 48000,
+          "channels": 2
+        },
+        "beats": {
+          "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\analysis\\Zinc-Set-2-Reaper-v4-62537c590a14-beats.json",
+          "count": 11130,
+          "downbeat_count": 4831,
+          "tempo_bpm": 214.29,
+          "tempo_min_bpm": 0.6,
+          "tempo_max_bpm": 750.0,
+          "meter": 1,
+          "first_seconds": 0.2,
+          "last_seconds": 4432.22
+        },
+        "energy": {
+          "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\analysis\\Zinc-Set-2-Reaper-v4-0b66b71707de-energy.json",
+          "count": 8896,
+          "window_seconds": 3.0,
+          "hop_seconds": 0.5,
+          "integrated_lufs": -13.84,
+          "loudest": {
+            "t": 3802.0,
+            "lufs": -6.9
+          },
+          "quietest": {
+            "t": 4433.5,
+            "lufs": -120.0
+          },
+          "onsets_per_second_mean": 7.853
+        }
+      },
+      "error": null
+    },
+    "analyze_structure_tunes": {
+      "job_id": "analyze_structure-7af0c50ea92a",
+      "state": "completed",
+      "cached": false,
+      "elapsed_s": 123.4,
+      "result": {
+        "audio": {
+          "path": "P:\\Client Work\\Ryan Devlin\\2026-06-17_Zinc Bar\\Audio\\Reaper\\Zinc Set 2 Reaper v4.wav",
+          "duration_seconds": 4450.5,
+          "sample_rate": 48000,
+          "channels": 2
+        },
+        "tunes": {
+          "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\analysis\\Zinc-Set-2-Reaper-v4-08f33521bdda-tunes.json",
+          "count": 1,
+          "applause_count": 0,
+          "applause_seconds": 0,
+          "peak_probability": 0.2977,
+          "median_probability": 0.0,
+          "longest": {
+            "t": 0.0,
+            "seconds": 4450.5,
+            "beats_per_second": 2.501
+          },
+          "shortest": {
+            "t": 0.0,
+            "seconds": 4450.5,
+            "beats_per_second": 2.501
+          },
+          "dropped": 0,
+          "dropped_seconds": 0,
+          "densest_dropped": null,
+          "sparsest_kept": {
+            "t": 0.0,
+            "seconds": 4450.5,
+            "beats_per_second": 2.501
+          },
+          "threshold": 0.3,
+          "burst_seconds": 3.0,
+          "gap_seconds": 1.5,
+          "tune_seconds": 60.0,
+          "density_per_second": 0.5
+        }
+      },
+      "error": null
+    }
+  },
+  "errors": [],
+  "done": true
+}

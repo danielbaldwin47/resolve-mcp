@@ -1,0 +1,136 @@
+{
+  "mix": "P:\\Client Work\\Ryan Devlin\\2026-06-17_Zinc Bar\\Audio\\Reaper\\Zinc Set 2 Reaper v4.wav",
+  "human_cut_starts_s": [
+    107.4405,
+    1373.8725,
+    1920.1265,
+    2725.014,
+    3568.4815
+  ],
+  "runs": {
+    "0.2": {
+      "job_id": "analyze_structure-a86e5057f3ec",
+      "state": "completed",
+      "elapsed_s": 98.1,
+      "error": null,
+      "gist": {
+        "count": 1,
+        "applause_count": 0,
+        "applause_seconds": 0,
+        "peak_probability": 0.2977,
+        "median_probability": 0.0,
+        "longest": {
+          "t": 0.0,
+          "seconds": 4450.5,
+          "beats_per_second": null
+        },
+        "shortest": {
+          "t": 0.0,
+          "seconds": 4450.5,
+          "beats_per_second": null
+        },
+        "dropped": 0,
+        "dropped_seconds": 0,
+        "densest_dropped": null,
+        "sparsest_kept": {
+          "t": 0.0,
+          "seconds": 4450.5,
+          "beats_per_second": null
+        },
+        "threshold": 0.2,
+        "burst_seconds": 3.0,
+        "gap_seconds": 1.5,
+        "tune_seconds": 60.0,
+        "density_per_second": 0.0
+      },
+      "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\analysis\\Zinc-Set-2-Reaper-v4-3f95484c2689-tunes.json",
+      "boundaries_s": [
+        0.0
+      ]
+    },
+    "0.12": {
+      "job_id": "analyze_structure-80cbd7a8ebf8",
+      "state": "completed",
+      "elapsed_s": 87.8,
+      "error": null,
+      "gist": {
+        "count": 2,
+        "applause_count": 1,
+        "applause_seconds": 3.839,
+        "peak_probability": 0.2977,
+        "median_probability": 0.0,
+        "longest": {
+          "t": 1289.115,
+          "seconds": 3161.385,
+          "beats_per_second": null
+        },
+        "shortest": {
+          "t": 0.0,
+          "seconds": 1285.276,
+          "beats_per_second": null
+        },
+        "dropped": 0,
+        "dropped_seconds": 0,
+        "densest_dropped": null,
+        "sparsest_kept": {
+          "t": 0.0,
+          "seconds": 1285.276,
+          "beats_per_second": null
+        },
+        "threshold": 0.12,
+        "burst_seconds": 3.0,
+        "gap_seconds": 1.5,
+        "tune_seconds": 60.0,
+        "density_per_second": 0.0
+      },
+      "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\analysis\\Zinc-Set-2-Reaper-v4-48fa9517984c-tunes.json",
+      "boundaries_s": [
+        0.0,
+        1289.12
+      ]
+    },
+    "0.06": {
+      "job_id": "analyze_structure-ffa9630bfe41",
+      "state": "completed",
+      "elapsed_s": 80.7,
+      "error": null,
+      "gist": {
+        "count": 4,
+        "applause_count": 6,
+        "applause_seconds": 22.395,
+        "peak_probability": 0.2977,
+        "median_probability": 0.0,
+        "longest": {
+          "t": 1308.312,
+          "seconds": 2196.004,
+          "beats_per_second": null
+        },
+        "shortest": {
+          "t": 0.0,
+          "seconds": 103.193,
+          "beats_per_second": null
+        },
+        "dropped": 0,
+        "dropped_seconds": 0,
+        "densest_dropped": null,
+        "sparsest_kept": {
+          "t": 0.0,
+          "seconds": 103.193,
+          "beats_per_second": null
+        },
+        "threshold": 0.06,
+        "burst_seconds": 3.0,
+        "gap_seconds": 1.5,
+        "tune_seconds": 60.0,
+        "density_per_second": 0.0
+      },
+      "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\analysis\\Zinc-Set-2-Reaper-v4-796e1c69c7d7-tunes.json",
+      "boundaries_s": [
+        0.0,
+        106.39,
+        1308.31,
+        3514.87
+      ]
+    }
+  }
+}

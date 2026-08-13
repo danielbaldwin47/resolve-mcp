@@ -1,0 +1,135 @@
+{
+  "project": "mcp-tests-zinc",
+  "context": "concert",
+  "labelled": "2026-08-13",
+  "method": "Frame grabs off the source clips themselves, read by the agent. 'Zinc SYNC' is a stacked sync reference of plain tracks - not a multicam - so each timeline item IS a source clip and the clip name correlate_timeline groups on names the camera directly. Nothing is inferred and no angle->source mapping had to be guessed, which is why this file needs no director's eye (style-layer: a label read off a frame that is unambiguously that angle stands on its own).",
+  "confirmed_by_director": false,
+  "confirmation_not_required": "No multicam on this timeline. The gap that made the 2026-06_Zinc_and_Monkfish anchor need confirming - Resolve exposing no angle->source mapping - does not exist here: V1 and V2 carry the source clips themselves, and every label below was read off a frame of the clip it labels.",
+  "note": "The same night as corpus entry 1 (Zinc Bar, 2026-06-17, set 2), in a different Resolve project. 'mcp-tests-zinc' is the MCP test copy; its media points at the same P:\\Client Work\\Ryan Devlin\\2026-06-17_Zinc Bar cards, and the three source files here are the same three the 2026-06_Zinc_and_Monkfish sidecar names under 'sources'. The labels below were re-derived from frames rather than copied across, and they agree with that sidecar's Zinc entries. Two cameras, three clips: the FX6 rolled two cards butt-joined at record 117576, the A7IV rolled one continuous take split into two timeline items at the same frame. Keyed by clip name, since correlate_timeline falls back to the item name where there is no multicam angle. A multicam clip 'Zinc - Set 2 Multicam' does exist in this project's pool (Zinc Bar/Timelines) - it is NOT on 'Zinc SYNC', so angle-name keys ('… Multicam - Video 1') do not apply to this timeline and are deliberately absent here.",
+  "timeline": {
+    "name": "Zinc SYNC",
+    "fps": 23.976,
+    "start_frame": 86400,
+    "end_frame": 193106,
+    "video_tracks": 2,
+    "items": [
+      {
+        "track": "Video 1",
+        "clip": "A014C002_2606170Z.MXF",
+        "record": [87304, 117576],
+        "source": [0, 30271]
+      },
+      {
+        "track": "Video 1",
+        "clip": "A015C001_2606170J.MXF",
+        "record": [117576, 188452],
+        "source": [0, 70875]
+      },
+      {
+        "track": "Video 2",
+        "clip": "20260617_D_A7IV_0006.MP4",
+        "record": [87304, 117576],
+        "source": [998, 31269]
+      },
+      {
+        "track": "Video 2",
+        "clip": "20260617_D_A7IV_0006.MP4",
+        "record": [117576, 184982],
+        "source": [31269, 98675]
+      }
+    ]
+  },
+  "angles": {
+    "A014C002_2606170Z.MXF": {
+      "role": "ensemble-wide",
+      "subject": "ensemble",
+      "character": "wide",
+      "subjects_in_frame": ["piano", "bass", "sax", "drums"],
+      "subject_is_primary_not_exclusive": true,
+      "note": "FX6, card 1 - Video 1 of the sync reference for the first 30272 frames. Front-of-house wide across the stage against the red curtain: piano at house left (player's back to camera), upright bass centre with the gold dancer statue behind it, tenor sax centre-right, kit at house right. Operated, not locked off - the framing moves between grabs: full quartet at source 3000 and 8000, reframed left to a piano-and-bass two-shot with the kit half out of frame at 15000 and 21000, panned right to sax/bass/drums with the piano at the edge at 27000. That is reframing between takes rather than a moving shot, so the character stays 'wide' rather than 'moving'.",
+      "camera": "FX6",
+      "confidence": "high",
+      "evidence": [
+        "frames/A014C002_2606170Z.MXF-d21902a7d32b.jpg",
+        "frames/A014C002_2606170Z.MXF-6981c9ed0053.jpg",
+        "frames/A014C002_2606170Z.MXF-cc4f3175c4ee.jpg",
+        "frames/A014C002_2606170Z.MXF-5d85a922713b.jpg",
+        "frames/A014C002_2606170Z.MXF-3dbf837f18dc.jpg"
+      ],
+      "evidence_times_source_frames": [3000, 8000, 15000, 21000, 27000]
+    },
+    "A015C001_2606170J.MXF": {
+      "role": "ensemble-wide",
+      "subject": "ensemble",
+      "character": "wide",
+      "subjects_in_frame": ["piano", "bass", "sax", "drums"],
+      "subject_is_primary_not_exclusive": true,
+      "note": "FX6, card 2 - the same camera and the same position as A014C002, continuing Video 1 from record 117576 to the end. Same wide: piano house left, bass centre, sax centre-right, kit house right. Same operated reframing - full quartet at source 5000, 20000 and 65000, piano-and-bass two-shot at 35000, sax stepping into the centre at 50000. Labelled separately from card 1 because correlate_timeline groups on the clip name and these are two clips, not because the camera changed.",
+      "camera": "FX6",
+      "confidence": "high",
+      "evidence": [
+        "frames/A015C001_2606170J.MXF-d656318cf9be.jpg",
+        "frames/A015C001_2606170J.MXF-72f17d2f3a33.jpg",
+        "frames/A015C001_2606170J.MXF-8a4118bf47ea.jpg",
+        "frames/A015C001_2606170J.MXF-28d28cebbc92.jpg",
+        "frames/A015C001_2606170J.MXF-2222bba5a104.jpg"
+      ],
+      "evidence_times_source_frames": [5000, 20000, 35000, 50000, 65000]
+    },
+    "20260617_D_A7IV_0006.MP4": {
+      "role": "drums-tight",
+      "subject": "drums",
+      "character": "tight",
+      "subjects_in_frame": ["drums", "bass", "piano", "sax"],
+      "subject_is_primary_not_exclusive": true,
+      "note": "A7IV, one continuous 98676-frame recording carrying the whole of Video 2 (split into two timeline items at record 117576 to match the FX6 card change; the source runs straight through). Locked off inside the band at stage right, level with and slightly behind the kit, looking across it toward house left: the drummer is foreground right in three-quarter profile and holds roughly the right third of frame, the ride and hi-hat cross the middle, the bassist stands beyond the kit, the pianist is deep at frame left, and the tenor player stands centre-left when he is up. Identical framing at every grab (source 6000, 20000, 33000, 45000, 70000, 82000, 95000) - genuinely locked, no reframes. 'tight' is the closest of the three character values and is how the corpus's other fixed drum cameras are labelled, but the honest description is a medium over-the-kit two-and-more-shot rather than a tight on the kit alone: the whole quartet is readable in it, which is the same drummer-and-bassist-in-one-frame property the #46 review round found on the Monkfish A7IV. Grabbed at source 2000 the shot is the MC's introduction before the set, with the drummer leaning back close to the lens and out of focus - same camera position, not a second framing.",
+      "camera": "A7IV",
+      "confidence": "high",
+      "evidence": [
+        "frames/20260617_D_A7IV_0006.MP4-73f6f0e5268f.jpg",
+        "frames/20260617_D_A7IV_0006.MP4-1445863a985a.jpg",
+        "frames/20260617_D_A7IV_0006.MP4-2d4cb16520d1.jpg",
+        "frames/20260617_D_A7IV_0006.MP4-d2d1bd3d0ce4.jpg",
+        "frames/20260617_D_A7IV_0006.MP4-d96671219f9e.jpg",
+        "frames/20260617_D_A7IV_0006.MP4-d9e3eb527ae2.jpg",
+        "frames/20260617_D_A7IV_0006.MP4-7fc237e7370b.jpg"
+      ],
+      "evidence_times_source_frames": [6000, 20000, 33000, 45000, 70000, 82000, 95000]
+    }
+  },
+  "sources": {
+    "FX6": {
+      "clips": ["A014C002_2606170Z.MXF", "A015C001_2606170J.MXF"],
+      "file_paths": [
+        "P:\\Client Work\\Ryan Devlin\\2026-06-17_Zinc Bar\\Footage\\FX6\\Card 1\\XDROOT\\Clip\\A014C002_2606170Z.MXF",
+        "P:\\Client Work\\Ryan Devlin\\2026-06-17_Zinc Bar\\Footage\\FX6\\Card 2\\XDROOT\\Clip\\A015C001_2606170J.MXF"
+      ],
+      "bin": "Zinc Bar/Footage/FX6/Set 2",
+      "resolution": "3840x2160",
+      "fps": 23.976,
+      "subject": "ensemble",
+      "character": "wide",
+      "confidence": "high"
+    },
+    "A7IV": {
+      "clips": ["20260617_D_A7IV_0006.MP4"],
+      "file_paths": [
+        "P:\\Client Work\\Ryan Devlin\\2026-06-17_Zinc Bar\\Footage\\A7IV\\M4ROOT\\CLIP\\20260617_D_A7IV_0006.MP4"
+      ],
+      "bin": "Zinc Bar/Footage/A7IV/Set 2",
+      "resolution": "3840x2160",
+      "fps": 23.976,
+      "subject": "drums",
+      "character": "tight",
+      "confidence": "high"
+    }
+  },
+  "mapping_basis": {
+    "what_is_known": "Which camera each timeline item is, and what that camera frames, both read directly: the item names the source clip, and the frames named under each entry's 'evidence' are grabs of that clip.",
+    "why_nothing_needed_inferring": "'Zinc SYNC' is a sync reference of plain video tracks, one camera per track. GetMediaPoolItem on each item returns the source clip and its File Path; there is no multicam layer between the item and the camera, so the failure mode the 2026-06_Zinc_and_Monkfish sidecar documents - GetClipProperty('Angle') coming back empty, the item carrying only an angle name - never arises.",
+    "relation_to_the_corpus_anchor": "Corpus entry 1 (2026-06_Zinc_and_Monkfish, Zinc - Set 2) is the same night, the same two cameras and the same three files. That sidecar's Zinc labels - FX6 ensemble-wide on Video 1, A7IV drums-tight on Video 2 - were the hypothesis coming in; they were verified against fresh grabs here rather than copied, and both hold. Where this file is more specific: the A7IV's whole quartet is readable in frame (subjects_in_frame), and the FX6's reframing is between-take repositioning, not continuous movement.",
+    "not_a_second_corpus_entry": "This is a test-project copy of a night already in the corpus, so any cut measured here is the same footage counted twice. Use the labels; do not let a measurement on this project stand as an independent project in a [measured - N projects, ...] tag.",
+    "multicam_in_this_project": "The pool also holds a multicam clip 'Zinc - Set 2 Multicam' and a cut timeline 'Zinc - Set 2 Main' (Zinc Bar/Timelines). Neither was inspected here. If a cut on 'Zinc - Set 2 Main' is measured later it will group on multicam angle names, not on the clip names above, and those angle numbers need their own look - per the style layer, angle numbers do not carry across timelines even inside one project.",
+    "scope": "'Zinc SYNC' only. The Monkfish bins in this project's pool are unlabelled here."
+  }
+}

@@ -9,3 +9,6 @@ build/
 *.egg-info/
 .claude/worktrees/
 *.scratch.log
+gauntlet/renders/
+gauntlet/packs/
+gauntlet/abtest_smoke/
