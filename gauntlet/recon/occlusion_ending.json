@@ -1,0 +1,141 @@
+{
+  "kind": "occlusion_adjudication",
+  "piece": "Taurus People ENDING (mix 3976.15-4066.15 s, deliverable 407.66-497.66 s, Zinc SYNC 181733-183891)",
+  "scan": "gauntlet/recon/occl_ending_scan.py -> occl_ending_scan.json (analyze_occlusion, sample_fps 1.0, threshold 0.35, 90 samples per angle)",
+  "grabs": "gauntlet/recon/occl_ending_grabs.py -> occl_ending_grabs.json",
+  "method": "Every window the scan flagged was judged by eye on 2 frames inside it plus a control frame ~1 s outside it, because the round-3 ledger's own test for a true blocking is that it MOVES: a frame either side is what separates a body crossing the near field from furniture that is in every frame of the take. A window is a VETO only when an audience head/hat/back sits in the foreground third over a subject (styles/concert.md sec 4). Frame numbering: A7IV clip = 95427 + round(t * 23.976), FX6 clip = 64157 + round(t * 23.976), SYNC = A7IV clip + 86306 = FX6 clip + 117576, mix seconds = 3976.15 + t.",
+  "headline": "No veto anywhere in the ending window, on either angle. The A7IV's four flags are all the drummer — the shot's own subject — and the FX6, which cost round 3 five false windows in the opening, flagged nothing here at all.",
+  "angles": {
+    "A7IV": {
+      "clip": "20260617_D_A7IV_0006.MP4",
+      "source_range": [95427, 97585],
+      "baseline": 0.0,
+      "samples": 90,
+      "samples_over_threshold": 4,
+      "highest_unflagged_sample": {"t": 16.98, "score": 0.285},
+      "shot": "Tight four-shot from stage right: sax centre, piano behind left, bass behind right, drummer in the near field at the right edge. The drummer, his cymbals and his sticks occupy the right third of every frame in the window.",
+      "verdict": "clear for the whole window - all four flags OVERRIDDEN"
+    },
+    "FX6": {
+      "clip": "A015C001_2606170J.MXF",
+      "source_range": [64157, 66315],
+      "baseline": 0.0888,
+      "samples": 90,
+      "samples_over_threshold": 0,
+      "highest_sample": {"t": 12.97, "score": 0.23},
+      "shot": "Wide from the back of the room over the crowd: piano left, bass and sax centre, kit right, two audience heads low at the bottom edge.",
+      "verdict": "clear for the whole window - nothing flagged, and the two known corner heads scored 0.23 at worst, well under the 0.35 threshold"
+    }
+  },
+  "windows": [
+    {
+      "angle": "A7IV",
+      "window_t": [4.96, 5.92],
+      "mix_seconds": [3981.11, 3982.07],
+      "sync_frames": [181852, 181875],
+      "clip_frames": [95546, 95569],
+      "tool_peak": 0.445,
+      "tool_coverage": 0.0885,
+      "verdict": "OVERRIDDEN - false positive",
+      "evidence": [
+        "t=4.96 s (clip 95546): clean four-shot. Sax, piano, bass and kit all visible; the only mass in the near field is the drummer himself, playing, at the right edge.",
+        "t=5.46 s (clip 95558): identical frame, drummer's stick hand moved. Nothing has entered or left the foreground.",
+        "control t=3.96 s (clip 95522, scan score 0.0): visually indistinguishable from both flagged frames."
+      ],
+      "reading": "The blob the scan scored is the drummer's arm and shoulder sweeping the right edge - large, dark-ish, anchored to the frame edge, and moving, which is three of the detector's four cues. It fails the fourth: it is a subject the shot is about, not something between the lens and the subject.",
+      "action": "no constraint."
+    },
+    {
+      "angle": "A7IV",
+      "window_t": [7.97, 8.93],
+      "mix_seconds": [3984.12, 3985.08],
+      "sync_frames": [181924, 181947],
+      "clip_frames": [95618, 95641],
+      "tool_peak": 0.462,
+      "tool_coverage": 0.0935,
+      "verdict": "OVERRIDDEN - false positive",
+      "evidence": [
+        "t=7.97 s (clip 95618): clean four-shot, drummer mid-stroke at the right edge, stage clear to the lens.",
+        "t=8.47 s (clip 95630): same, sticks lowered onto the snare. Nothing in the foreground third but the kit and its player."
+      ],
+      "reading": "Same signature as 4.96-5.92: the drummer's near arm, not an obstruction.",
+      "action": "no constraint."
+    },
+    {
+      "angle": "A7IV",
+      "window_t": [15.97, 16.93],
+      "mix_seconds": [3992.12, 3993.08],
+      "sync_frames": [182116, 182139],
+      "clip_frames": [95810, 95833],
+      "tool_peak": 0.477,
+      "tool_coverage": 0.0982,
+      "verdict": "OVERRIDDEN - false positive",
+      "evidence": [
+        "t=15.97 s (clip 95810): clean four-shot, drummer's stick raised across the right third.",
+        "t=16.47 s (clip 95822): same shot, stick down; the bassist and pianist stay unobstructed throughout."
+      ],
+      "reading": "The window's peak is the highest score anywhere in the ending on either angle (0.477) and it is still the drummer. Worth carrying into the tuning ledger: on this angle the detector's near-field cue fires on the shot's own foreground subject, which is a different failure from the FX6's static piano lid.",
+      "action": "no constraint."
+    },
+    {
+      "angle": "A7IV",
+      "window_t": [40.0, 40.96],
+      "mix_seconds": [4016.15, 4017.11],
+      "sync_frames": [182692, 182715],
+      "clip_frames": [96386, 96409],
+      "tool_peak": 0.445,
+      "tool_coverage": 0.0885,
+      "verdict": "OVERRIDDEN - false positive",
+      "evidence": [
+        "t=40.0 s (clip 96386): clean four-shot, slightly reframed since 16 s (the operator has widened a little); drummer at the right edge, everyone visible.",
+        "t=40.5 s (clip 96398): same.",
+        "control t=39.0 s (clip 96362, scan score 0.0): the same frame with the drummer's arm in a different position."
+      ],
+      "reading": "Isolated single-sample flag between 85 samples that scored exactly 0.0. Nothing enters the near field at any of the three frames.",
+      "action": "no constraint."
+    }
+  ],
+  "fx6_controls": [
+    {
+      "window_t": 16.0,
+      "clip_frame": 64541,
+      "sync_frame": 182117,
+      "scan_score_nearby": 0.229,
+      "reading": "The FX6's worst second in the window. Two audience heads sit at the very bottom edge - one bottom-centre, one bottom-right - small, low, and in front of empty floor rather than in front of a player. This is the pattern that scored 0.58-0.68 and produced five false windows in the opening; here it scored 0.23 and was not flagged."
+    },
+    {
+      "window_t": 45.0,
+      "clip_frame": 65236,
+      "sync_frame": 182812,
+      "reading": "Clean wide: pianist, bassist, sax all unobstructed, one head low at bottom right."
+    },
+    {
+      "window_t": 84.0,
+      "clip_frame": 66170,
+      "sync_frame": 183747,
+      "reading": "Inside the deliverable's dissolve (starts window t 83.9). The band has finished - sax lowered, bassist off the strings, drummer's hands still. Clean wide, one head low at bottom centre. This is the frame family the tail treatment dissolves out of."
+    }
+  ],
+  "frame_receipts": {
+    "A7IV": [
+      {"window_t": 3.96, "clip_frame": 95522, "role": "control for 4.96-5.92", "read": true, "path": "C:/Users/Daniel/AppData/Local/resolve-mcp/frames/20260617_D_A7IV_0006.MP4-587df56fa631.jpg"},
+      {"window_t": 4.96, "clip_frame": 95546, "role": "inside 4.96-5.92", "read": true, "path": "C:/Users/Daniel/AppData/Local/resolve-mcp/frames/20260617_D_A7IV_0006.MP4-cbb83d01a416.jpg"},
+      {"window_t": 5.46, "clip_frame": 95558, "role": "inside 4.96-5.92", "read": true, "path": "C:/Users/Daniel/AppData/Local/resolve-mcp/frames/20260617_D_A7IV_0006.MP4-e6b5d27e3ce5.jpg"},
+      {"window_t": 6.97, "clip_frame": 95594, "role": "control for 7.97-8.93", "read": false, "path": "C:/Users/Daniel/AppData/Local/resolve-mcp/frames/20260617_D_A7IV_0006.MP4-8df8ff29caf1.jpg"},
+      {"window_t": 7.97, "clip_frame": 95618, "role": "inside 7.97-8.93", "read": true, "path": "C:/Users/Daniel/AppData/Local/resolve-mcp/frames/20260617_D_A7IV_0006.MP4-478f400ffa81.jpg"},
+      {"window_t": 8.47, "clip_frame": 95630, "role": "inside 7.97-8.93", "read": true, "path": "C:/Users/Daniel/AppData/Local/resolve-mcp/frames/20260617_D_A7IV_0006.MP4-af0326d56e85.jpg"},
+      {"window_t": 14.97, "clip_frame": 95786, "role": "control for 15.97-16.93", "read": false, "path": "C:/Users/Daniel/AppData/Local/resolve-mcp/frames/20260617_D_A7IV_0006.MP4-09c07406c8c7.jpg"},
+      {"window_t": 15.97, "clip_frame": 95810, "role": "inside 15.97-16.93", "read": true, "path": "C:/Users/Daniel/AppData/Local/resolve-mcp/frames/20260617_D_A7IV_0006.MP4-c687bf6696ca.jpg"},
+      {"window_t": 16.47, "clip_frame": 95822, "role": "inside 15.97-16.93", "read": true, "path": "C:/Users/Daniel/AppData/Local/resolve-mcp/frames/20260617_D_A7IV_0006.MP4-e5ee41d62d51.jpg"},
+      {"window_t": 39.0, "clip_frame": 96362, "role": "control for 40.00-40.96", "read": true, "path": "C:/Users/Daniel/AppData/Local/resolve-mcp/frames/20260617_D_A7IV_0006.MP4-5516154630a2.jpg"},
+      {"window_t": 40.0, "clip_frame": 96386, "role": "inside 40.00-40.96", "read": true, "path": "C:/Users/Daniel/AppData/Local/resolve-mcp/frames/20260617_D_A7IV_0006.MP4-393666427170.jpg"},
+      {"window_t": 40.5, "clip_frame": 96398, "role": "inside 40.00-40.96", "read": true, "path": "C:/Users/Daniel/AppData/Local/resolve-mcp/frames/20260617_D_A7IV_0006.MP4-e409a6316121.jpg"}
+    ],
+    "FX6": [
+      {"window_t": 16.0, "clip_frame": 64541, "role": "control at the angle's worst score", "read": true, "path": "C:/Users/Daniel/AppData/Local/resolve-mcp/frames/A015C001_2606170J.MXF-8065bc08fc87.jpg"},
+      {"window_t": 45.0, "clip_frame": 65236, "role": "control mid-window", "read": true, "path": "C:/Users/Daniel/AppData/Local/resolve-mcp/frames/A015C001_2606170J.MXF-b7d347ad5349.jpg"},
+      {"window_t": 84.0, "clip_frame": 66171, "role": "control inside the dissolve", "read": true, "path": "C:/Users/Daniel/AppData/Local/resolve-mcp/frames/A015C001_2606170J.MXF-b73a3fb470c5.jpg"}
+    ]
+  },
+  "tuning_ledger_note": "Round 3's ledger said a true blocking scores near 1.0 and MOVES, while the FX6's false positives sat at 0.58-0.68 and never moved. The ending adds a second false-positive family with the opposite signature: on the A7IV the four flags (0.445-0.477) DO move - they are the drummer's arm and stick sweeping the right edge - and they still are not obstructions, because the mass is the shot's own foreground subject. So motion alone cannot be the discriminator the ledger hoped for. What separates all six false positives from the two true ones is that the true blockings covered a player the shot was framed on; a rule that asks 'is a detected subject behind this blob' would have caught every case seen so far. Also worth recording: the FX6's static bed (piano lid plus corner heads) reads 0.0888 as this run's baseline here, and with it subtracted the angle never got within 0.12 of the threshold - the same furniture that produced five false windows in the opening produced none in the ending, which suggests the opening's problem was the baseline being computed over a stretch where the lid filled more of the frame."
+}
