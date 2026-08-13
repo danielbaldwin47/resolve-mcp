@@ -1,0 +1,816 @@
+{
+  "attach": {
+    "ok": true,
+    "raw": {
+      "ok": true,
+      "product": "DaVinci Resolve Studio",
+      "context": {
+        "connected": true,
+        "resolve_version": "21.0.3.7",
+        "project": "mcp-tests-zinc",
+        "timeline": "Zinc SYNC",
+        "fps": 23.976
+      }
+    }
+  },
+  "interpreter": {
+    "executable": "C:\\Users\\Daniel\\repos\\resolve-mcp\\.claude\\worktrees\\gauntlet-loop-1\\.venv\\Scripts\\python.exe",
+    "base_prefix": "C:\\Users\\Daniel\\AppData\\Local\\Programs\\Python\\Python312",
+    "version": "3.12.10",
+    "registered_installs": [
+      "C:\\Users\\Daniel\\AppData\\Local\\Programs\\Python\\Python312"
+    ],
+    "is_supported": true,
+    "guard": "passed"
+  },
+  "project": {
+    "context": {
+      "connected": true,
+      "resolve_version": "21.0.3.7",
+      "project": "mcp-tests-zinc",
+      "timeline": "Zinc SYNC",
+      "fps": 23.976
+    },
+    "product": "DaVinci Resolve Studio",
+    "projects_in_db": {
+      "ok": true,
+      "projects": [
+        "mcp-tests-zinc",
+        "2026-06-27_Dave_Ads",
+        "2026-06_Zinc_and_Monkfish",
+        "6-17-18 Zinc Bar and Monkfish",
+        "calibration",
+        "Grad School for Color",
+        "Jaded Symphony - The Sinclair",
+        "June Ryan Promos",
+        "mcp-tests-1",
+        "mcp-tests-1 (Copy)",
+        "Mike Tucker Scullers",
+        "Monique recording with Angel 4-23-26",
+        "New Project 1",
+        "New Project 2",
+        "New Project 3",
+        "New Project 4",
+        "Overcooked Clip",
+        "Photo Page Test",
+        "project",
+        "Ryan Selmer Review",
+        "Test Grade Monique Masters",
+        "wayfinder-spike-scratch"
+      ],
+      "context": {
+        "connected": true,
+        "resolve_version": "21.0.3.7",
+        "project": "mcp-tests-zinc",
+        "timeline": "Zinc SYNC",
+        "fps": 23.976
+      }
+    }
+  },
+  "timelines": {
+    "ok": true,
+    "count": 4,
+    "current": "Zinc SYNC",
+    "timelines": [
+      {
+        "name": "Zinc - Set 2 Main",
+        "base_name": "Zinc - Set 2 Main",
+        "version": null,
+        "current": false,
+        "fps": 23.976,
+        "start": {
+          "frames": 86400,
+          "seconds": 3603.604,
+          "timecode": "01:00:00:00",
+          "fps": 23.976
+        },
+        "end": {
+          "frames": 177781,
+          "seconds": 7414.957,
+          "timecode": "02:03:27:13",
+          "fps": 23.976
+        },
+        "duration": {
+          "frames": 91381,
+          "seconds": 3811.353,
+          "timecode": "01:03:27:13",
+          "fps": 23.976
+        },
+        "tracks": {
+          "video": 3,
+          "audio": 7,
+          "subtitle": 0
+        }
+      },
+      {
+        "name": "Mailand clip",
+        "base_name": "Mailand clip",
+        "version": null,
+        "current": false,
+        "fps": 23.976,
+        "start": {
+          "frames": 86400,
+          "seconds": 3603.604,
+          "timecode": "01:00:00:00",
+          "fps": 23.976
+        },
+        "end": {
+          "frames": 87838,
+          "seconds": 3663.58,
+          "timecode": "01:00:59:22",
+          "fps": 23.976
+        },
+        "duration": {
+          "frames": 1438,
+          "seconds": 59.977,
+          "timecode": "00:00:59:22",
+          "fps": 23.976
+        },
+        "tracks": {
+          "video": 1,
+          "audio": 3,
+          "subtitle": 0
+        }
+      },
+      {
+        "name": "Monkfish Main",
+        "base_name": "Monkfish Main",
+        "version": null,
+        "current": false,
+        "fps": 23.976,
+        "start": {
+          "frames": 86400,
+          "seconds": 3603.604,
+          "timecode": "01:00:00:00",
+          "fps": 23.976
+        },
+        "end": {
+          "frames": 212220,
+          "seconds": 8851.351,
+          "timecode": "02:27:22:12",
+          "fps": 23.976
+        },
+        "duration": {
+          "frames": 125820,
+          "seconds": 5247.748,
+          "timecode": "01:27:22:12",
+          "fps": 23.976
+        },
+        "tracks": {
+          "video": 3,
+          "audio": 1,
+          "subtitle": 0
+        }
+      },
+      {
+        "name": "Zinc SYNC",
+        "base_name": "Zinc SYNC",
+        "version": null,
+        "current": true,
+        "fps": 23.976,
+        "start": {
+          "frames": 86400,
+          "seconds": 3603.604,
+          "timecode": "01:00:00:00",
+          "fps": 23.976
+        },
+        "end": {
+          "frames": 193106,
+          "seconds": 8054.137,
+          "timecode": "02:14:06:02",
+          "fps": 23.976
+        },
+        "duration": {
+          "frames": 106706,
+          "seconds": 4450.534,
+          "timecode": "01:14:06:02",
+          "fps": 23.976
+        },
+        "tracks": {
+          "video": 2,
+          "audio": 8,
+          "subtitle": 0
+        }
+      }
+    ],
+    "latest_versions": {},
+    "truncated": false,
+    "spilled_to": null,
+    "context": {
+      "connected": true,
+      "resolve_version": "21.0.3.7",
+      "project": "mcp-tests-zinc",
+      "timeline": "Zinc SYNC",
+      "fps": 23.976
+    }
+  },
+  "target_timelines": {
+    "Zinc SYNC": {
+      "inspect": {
+        "ok": true,
+        "timeline": {
+          "name": "Zinc SYNC",
+          "base_name": "Zinc SYNC",
+          "version": null,
+          "current": true,
+          "fps": 23.976,
+          "start": {
+            "frames": 86400,
+            "seconds": 3603.604,
+            "timecode": "01:00:00:00",
+            "fps": 23.976
+          },
+          "end": {
+            "frames": 193106,
+            "seconds": 8054.137,
+            "timecode": "02:14:06:02",
+            "fps": 23.976
+          },
+          "duration": {
+            "frames": 106706,
+            "seconds": 4450.534,
+            "timecode": "01:14:06:02",
+            "fps": 23.976
+          },
+          "tracks": {
+            "video": 2,
+            "audio": 8,
+            "subtitle": 0
+          },
+          "markers": 0
+        },
+        "detail": "tracks",
+        "range": {
+          "in": {
+            "frames": 86400,
+            "seconds": 3603.604,
+            "timecode": "01:00:00:00",
+            "fps": 23.976
+          },
+          "out": {
+            "frames": 193106,
+            "seconds": 8054.137,
+            "timecode": "02:14:06:02",
+            "fps": 23.976
+          }
+        },
+        "tracks": [
+          {
+            "type": "video",
+            "index": 1,
+            "name": "Video 1",
+            "enabled": true,
+            "locked": false,
+            "item_count": 2
+          },
+          {
+            "type": "video",
+            "index": 2,
+            "name": "Video 2",
+            "enabled": true,
+            "locked": false,
+            "item_count": 2
+          },
+          {
+            "type": "audio",
+            "index": 1,
+            "name": "Audio 1",
+            "enabled": true,
+            "locked": false,
+            "item_count": 2
+          },
+          {
+            "type": "audio",
+            "index": 2,
+            "name": "Audio 2",
+            "enabled": true,
+            "locked": false,
+            "item_count": 2
+          },
+          {
+            "type": "audio",
+            "index": 3,
+            "name": "Audio 3",
+            "enabled": true,
+            "locked": false,
+            "item_count": 2
+          },
+          {
+            "type": "audio",
+            "index": 4,
+            "name": "Audio 4",
+            "enabled": true,
+            "locked": false,
+            "item_count": 1
+          },
+          {
+            "type": "audio",
+            "index": 5,
+            "name": "Audio 5",
+            "enabled": true,
+            "locked": false,
+            "item_count": 0
+          },
+          {
+            "type": "audio",
+            "index": 6,
+            "name": "Audio 6",
+            "enabled": true,
+            "locked": false,
+            "item_count": 0
+          },
+          {
+            "type": "audio",
+            "index": 7,
+            "name": "Audio 7",
+            "enabled": true,
+            "locked": false,
+            "item_count": 0
+          },
+          {
+            "type": "audio",
+            "index": 8,
+            "name": "Audio 8",
+            "enabled": true,
+            "locked": false,
+            "item_count": 0
+          }
+        ],
+        "item_count": 11,
+        "currency": {
+          "read_as_current": true,
+          "made_current": false,
+          "unknown_fields": [],
+          "fix": null
+        },
+        "truncated": false,
+        "spilled_to": null,
+        "context": {
+          "connected": true,
+          "resolve_version": "21.0.3.7",
+          "project": "mcp-tests-zinc",
+          "timeline": "Zinc SYNC",
+          "fps": 23.976
+        }
+      },
+      "summary": {
+        "name": "Zinc SYNC",
+        "fps": 23.976,
+        "start": {
+          "frames": 86400,
+          "seconds": 3603.604,
+          "timecode": "01:00:00:00",
+          "fps": 23.976
+        },
+        "end": {
+          "frames": 193106,
+          "seconds": 8054.137,
+          "timecode": "02:14:06:02",
+          "fps": 23.976
+        },
+        "duration": {
+          "frames": 106706,
+          "seconds": 4450.534,
+          "timecode": "01:14:06:02",
+          "fps": 23.976
+        },
+        "track_counts": {
+          "video": 2,
+          "audio": 8,
+          "subtitle": 0
+        },
+        "marker_count": 0,
+        "item_count": 11,
+        "items_per_video_track": [
+          {
+            "index": 1,
+            "name": "Video 1",
+            "item_count": 2
+          },
+          {
+            "index": 2,
+            "name": "Video 2",
+            "item_count": 2
+          }
+        ],
+        "items_per_audio_track": [
+          {
+            "index": 1,
+            "name": "Audio 1",
+            "item_count": 2
+          },
+          {
+            "index": 2,
+            "name": "Audio 2",
+            "item_count": 2
+          },
+          {
+            "index": 3,
+            "name": "Audio 3",
+            "item_count": 2
+          },
+          {
+            "index": 4,
+            "name": "Audio 4",
+            "item_count": 1
+          },
+          {
+            "index": 5,
+            "name": "Audio 5",
+            "item_count": 0
+          },
+          {
+            "index": 6,
+            "name": "Audio 6",
+            "item_count": 0
+          },
+          {
+            "index": 7,
+            "name": "Audio 7",
+            "item_count": 0
+          },
+          {
+            "index": 8,
+            "name": "Audio 8",
+            "item_count": 0
+          }
+        ],
+        "currency": {
+          "read_as_current": true,
+          "made_current": false,
+          "unknown_fields": [],
+          "fix": null
+        }
+      },
+      "markers": {
+        "ok": true,
+        "count": 0,
+        "colors": {},
+        "truncated": false,
+        "spilled_to": null,
+        "error": null
+      }
+    },
+    "Zinc - Set 2 Main": {
+      "inspect": {
+        "ok": true,
+        "timeline": {
+          "name": "Zinc - Set 2 Main",
+          "base_name": "Zinc - Set 2 Main",
+          "version": null,
+          "current": false,
+          "fps": 23.976,
+          "start": {
+            "frames": 86400,
+            "seconds": 3603.604,
+            "timecode": "01:00:00:00",
+            "fps": 23.976
+          },
+          "end": {
+            "frames": 177781,
+            "seconds": 7414.957,
+            "timecode": "02:03:27:13",
+            "fps": 23.976
+          },
+          "duration": {
+            "frames": 91381,
+            "seconds": 3811.353,
+            "timecode": "01:03:27:13",
+            "fps": 23.976
+          },
+          "tracks": {
+            "video": 3,
+            "audio": 7,
+            "subtitle": 0
+          },
+          "markers": 0
+        },
+        "detail": "tracks",
+        "range": {
+          "in": {
+            "frames": 86400,
+            "seconds": 3603.604,
+            "timecode": "01:00:00:00",
+            "fps": 23.976
+          },
+          "out": {
+            "frames": 177781,
+            "seconds": 7414.957,
+            "timecode": "02:03:27:13",
+            "fps": 23.976
+          }
+        },
+        "tracks": [
+          {
+            "type": "video",
+            "index": 1,
+            "name": "Video 1",
+            "enabled": null,
+            "locked": null,
+            "item_count": 525
+          },
+          {
+            "type": "video",
+            "index": 2,
+            "name": "Video 2",
+            "enabled": null,
+            "locked": null,
+            "item_count": 28
+          },
+          {
+            "type": "video",
+            "index": 3,
+            "name": "Video 3",
+            "enabled": null,
+            "locked": null,
+            "item_count": 0
+          },
+          {
+            "type": "audio",
+            "index": 1,
+            "name": "Audio 1",
+            "enabled": null,
+            "locked": null,
+            "item_count": 525
+          },
+          {
+            "type": "audio",
+            "index": 2,
+            "name": "Audio 2",
+            "enabled": null,
+            "locked": null,
+            "item_count": 7
+          },
+          {
+            "type": "audio",
+            "index": 3,
+            "name": "Master",
+            "enabled": null,
+            "locked": null,
+            "item_count": 12
+          },
+          {
+            "type": "audio",
+            "index": 4,
+            "name": "Audio 4",
+            "enabled": null,
+            "locked": null,
+            "item_count": 0
+          },
+          {
+            "type": "audio",
+            "index": 5,
+            "name": "Audio 5",
+            "enabled": null,
+            "locked": null,
+            "item_count": 0
+          },
+          {
+            "type": "audio",
+            "index": 6,
+            "name": "Audio 6",
+            "enabled": null,
+            "locked": null,
+            "item_count": 0
+          },
+          {
+            "type": "audio",
+            "index": 7,
+            "name": "Audio 7",
+            "enabled": null,
+            "locked": null,
+            "item_count": 0
+          }
+        ],
+        "item_count": 1097,
+        "currency": {
+          "read_as_current": false,
+          "made_current": false,
+          "unknown_fields": [
+            "enabled",
+            "locked",
+            "takes"
+          ],
+          "fix": "Resolve answers these only for the project's current timeline, and answers falsely rather than failing for any other \u2014 so they are reported as null instead of a plausible zero. Pass make_current=true to switch to this timeline for the read and switch back, or open it in Resolve."
+        },
+        "truncated": false,
+        "spilled_to": null,
+        "context": {
+          "connected": true,
+          "resolve_version": "21.0.3.7",
+          "project": "mcp-tests-zinc",
+          "timeline": "Zinc SYNC",
+          "fps": 23.976
+        }
+      },
+      "summary": {
+        "name": "Zinc - Set 2 Main",
+        "fps": 23.976,
+        "start": {
+          "frames": 86400,
+          "seconds": 3603.604,
+          "timecode": "01:00:00:00",
+          "fps": 23.976
+        },
+        "end": {
+          "frames": 177781,
+          "seconds": 7414.957,
+          "timecode": "02:03:27:13",
+          "fps": 23.976
+        },
+        "duration": {
+          "frames": 91381,
+          "seconds": 3811.353,
+          "timecode": "01:03:27:13",
+          "fps": 23.976
+        },
+        "track_counts": {
+          "video": 3,
+          "audio": 7,
+          "subtitle": 0
+        },
+        "marker_count": 0,
+        "item_count": 1097,
+        "items_per_video_track": [
+          {
+            "index": 1,
+            "name": "Video 1",
+            "item_count": 525
+          },
+          {
+            "index": 2,
+            "name": "Video 2",
+            "item_count": 28
+          },
+          {
+            "index": 3,
+            "name": "Video 3",
+            "item_count": 0
+          }
+        ],
+        "items_per_audio_track": [
+          {
+            "index": 1,
+            "name": "Audio 1",
+            "item_count": 525
+          },
+          {
+            "index": 2,
+            "name": "Audio 2",
+            "item_count": 7
+          },
+          {
+            "index": 3,
+            "name": "Master",
+            "item_count": 12
+          },
+          {
+            "index": 4,
+            "name": "Audio 4",
+            "item_count": 0
+          },
+          {
+            "index": 5,
+            "name": "Audio 5",
+            "item_count": 0
+          },
+          {
+            "index": 6,
+            "name": "Audio 6",
+            "item_count": 0
+          },
+          {
+            "index": 7,
+            "name": "Audio 7",
+            "item_count": 0
+          }
+        ],
+        "currency": {
+          "read_as_current": false,
+          "made_current": false,
+          "unknown_fields": [
+            "enabled",
+            "locked",
+            "takes"
+          ],
+          "fix": "Resolve answers these only for the project's current timeline, and answers falsely rather than failing for any other \u2014 so they are reported as null instead of a plausible zero. Pass make_current=true to switch to this timeline for the read and switch back, or open it in Resolve."
+        }
+      },
+      "markers": {
+        "ok": true,
+        "count": 0,
+        "colors": {},
+        "truncated": false,
+        "spilled_to": null,
+        "error": null
+      }
+    }
+  },
+  "media_pool": {
+    "root_name": "Master",
+    "clips_at_root": 19,
+    "top_level_bins": [
+      {
+        "name": "Zinc Bar",
+        "clips_direct": 0,
+        "clips_recursive": 39,
+        "subfolders": [
+          "Footage",
+          "Timelines",
+          "Audio",
+          "Text"
+        ]
+      },
+      {
+        "name": "Monkfish",
+        "clips_direct": 0,
+        "clips_recursive": 45,
+        "subfolders": [
+          "FX6",
+          "A7IV",
+          "Audio",
+          "Timelines",
+          "Text"
+        ]
+      },
+      {
+        "name": "04_Assets",
+        "clips_direct": 0,
+        "clips_recursive": 18,
+        "subfolders": [
+          "Text"
+        ]
+      },
+      {
+        "name": "02_Footage",
+        "clips_direct": 1,
+        "clips_recursive": 6,
+        "subfolders": [
+          "ILCE-7M4",
+          "ILME-FX6V"
+        ]
+      }
+    ],
+    "total_clips": 127,
+    "all_bin_paths": [
+      "Zinc Bar",
+      "Zinc Bar/Footage",
+      "Zinc Bar/Footage/FX6",
+      "Zinc Bar/Footage/FX6/Set 1",
+      "Zinc Bar/Footage/FX6/Set 2",
+      "Zinc Bar/Footage/B Roll",
+      "Zinc Bar/Footage/A7IV",
+      "Zinc Bar/Footage/A7IV/Set 1",
+      "Zinc Bar/Footage/A7IV/Set 2",
+      "Zinc Bar/Timelines",
+      "Zinc Bar/Audio",
+      "Zinc Bar/Text",
+      "Zinc Bar/Text/Maitland",
+      "Zinc Bar/Text/Band",
+      "Zinc Bar/Text/Hardest Part",
+      "Zinc Bar/Text/Soultrane",
+      "Zinc Bar/Text/Sambra",
+      "Zinc Bar/Text/Taurus People",
+      "Monkfish",
+      "Monkfish/FX6",
+      "Monkfish/A7IV",
+      "Monkfish/Audio",
+      "Monkfish/Timelines",
+      "Monkfish/Text",
+      "Monkfish/Text/Oleo",
+      "Monkfish/Text/MaitlandBlvd",
+      "Monkfish/Text/TeeBag",
+      "Monkfish/Text/Band",
+      "04_Assets",
+      "04_Assets/Text",
+      "02_Footage",
+      "02_Footage/ILCE-7M4",
+      "02_Footage/ILME-FX6V"
+    ]
+  },
+  "repo_assets": {
+    "repo_root": "C:\\Users\\Daniel\\repos\\resolve-mcp\\.claude\\worktrees\\gauntlet-loop-1",
+    "styles_angles_dir": "C:\\Users\\Daniel\\repos\\resolve-mcp\\.claude\\worktrees\\gauntlet-loop-1\\styles\\angles",
+    "styles_angles_exists": true,
+    "sidecar_files": [
+      "2026-06_Zinc_and_Monkfish.json",
+      "Mike-Tucker-Scullers.json",
+      "Ryan-and-Hang-Main-9-23-24-gene-edit.json"
+    ],
+    "sidecar_declared_project": {
+      "2026-06_Zinc_and_Monkfish.json": "2026-06_Zinc_and_Monkfish",
+      "Mike-Tucker-Scullers.json": "Mike Tucker Scullers",
+      "Ryan-and-Hang-Main-9-23-24-gene-edit.json": "Archive/Client/Ryan and Hang Main - 9-23-24 gene edit"
+    },
+    "sidecar_for_open_project": {
+      "expected_filename": "mcp-tests-zinc.json",
+      "exists": false,
+      "matched_by_declared_project": []
+    },
+    "projects_dir": "C:\\Users\\Daniel\\repos\\resolve-mcp\\.claude\\worktrees\\gauntlet-loop-1\\projects",
+    "projects_dir_exists": false,
+    "projects_dir_entries": [],
+    "project_folder_for_open_project": false
+  },
+  "errors": []
+}
