@@ -1,0 +1,22 @@
+{
+  "sealed": true,
+  "note": "Do not open until the blind comparison is recorded.",
+  "labels": {
+    "A": {
+      "source_path": "\\\\TRUENAS\\Public\\Deliverables\\Ryan Devlin\\6-17-26 Zinc Bar\\Full Videos\\6-17 - Zinc Set 2 - Taurus People.mp4",
+      "span_sec": [
+        0.0,
+        90.0
+      ],
+      "input_flag": "--a"
+    },
+    "B": {
+      "source_path": "\\\\TRUENAS\\Public\\Deliverables\\Ryan Devlin\\6-17-26 Zinc Bar\\Full Videos\\6-17 - Zinc Set 2 - Taurus People.mp4",
+      "span_sec": [
+        300.0,
+        390.0
+      ],
+      "input_flag": "--b"
+    }
+  }
+}

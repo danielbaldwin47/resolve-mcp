@@ -75,6 +75,28 @@ Round 1 critic, verbatim needs; each is server measurement work:
 Builder measured A7IV record zero 86306 live; sidecar says 86307.
 Correct the sidecar datum.
 
+## G8 — song-opening title card convention absent from our workflow (open)
+
+R1b critic. Human deliverable spends the pre-entrance dead air on a title
+card and clears it at the entrance so reveal = downbeat; our builder had no
+titling pass in the gauntlet protocol and spent the reveal on silence after
+a 0.5 s black flash ("too short to read as a fade, too long to be
+invisible"). Work: measure the card convention across all 5 deliverables
+(in/out times vs first note), write it into styles/concert.md openings with
+measured provenance, and make the titling pass part of the opening piece.
+
+## G9 — unmotivated cuts in sparse passages; no "tighten then go still" gesture (open)
+
+R1b critic. Ours ping-pongs two framings on a timer through the quiet
+section and lets the 13 dB character change pass unmarked; human cuts on
+the section's loudest peak, accelerates (1.7 s, 2.2 s shots) through the
+decay, then releases into a long hold. Style work: every cut needs a
+nameable motivation; sparse passages hold longer; approach transitions
+with acceleration and release. Server work: the events that motivate cuts
+(fills, entrances, solo changes, phrase ends) come from stems — blocked by
+G4 — plus a framing-distinctness measure so "new picture" vs "same two
+pictures" is a number (2 pictures ours vs 3 with a scale change, human's).
+
 ## Round record
 
 - **R1 · Taurus opening · VOID** (ours = A). Critic judged a corrupt pack
@@ -82,3 +104,13 @@ Correct the sidecar datum.
   discarded; re-judge with fixed tool = R1b. Still standing from R1: the
   critic's 10 judgeability gaps (G5) — stills-based limits are real
   regardless of the threshold bug.
+- **R1b · Taurus opening · LOSS, legit** (ours = A, human = B; clean pack,
+  13 cuts each, identical audio — pure staging test). Decided in the first
+  3 seconds (title card vs black flash, G8) and at the t=38 transition
+  (human's accelerate-and-release vs our unmarked step, G9). Human's
+  recorded weakness: 15.8 s locked hold where the music thins — the
+  longest stillest stretch in either version. Critic judgeability adds:
+  cut-boundary frames (not midpoints), in-shot motion, transition type
+  (hard cut vs dissolve), jump-cut risk on framing returns → ab_pack v2.
+  G3 fix verified in the round: guard refused a deliberately wrong
+  expected count; clean pack sealed 13/13.

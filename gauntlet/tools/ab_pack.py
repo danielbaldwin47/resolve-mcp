@@ -42,7 +42,7 @@ from typing import Any
 # --------------------------------------------------------------------------
 # constants
 
-SCENE_THRESHOLD = 0.27
+SCENE_THRESHOLD = 0.10
 SCENE_SCALE_W = 320
 MAX_SHEET_SHOTS = 60
 TILE_COLS = 6
@@ -490,6 +490,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--b-span", default=None, help="START,END seconds of --b")
     parser.add_argument("--out", required=True, help="output pack directory")
     parser.add_argument("--keep-work", action="store_true", help="keep intermediate frames")
+    parser.add_argument(
+        "--expect-a",
+        type=int,
+        default=None,
+        help="expected cut count for --a; abort before sealing if detected < 80%% of this",
+    )
+    parser.add_argument(
+        "--expect-b",
+        type=int,
+        default=None,
+        help="expected cut count for --b; abort before sealing if detected < 80%% of this",
+    )
     args = parser.parse_args(argv)
 
     require_tool("ffmpeg")
@@ -520,6 +532,31 @@ def main(argv: list[str] | None = None) -> int:
                 unclaimed.pop(i)
                 break
 
+    label_entries = []
+    for label in ("A", "B"):
+        src, span = labels[label]
+        print(f"[{label}] building...", file=sys.stderr)
+        label_entries.append(build_label(label, src, span, out, args.keep_work))
+
+    # Refuse to seal a pack whose detector couldn't see the cuts it was told
+    # to expect -- a confident manifest built on a blind detector is worse
+    # than no manifest at all. Checked before any sealed/summary file is
+    # written.
+    expect_by_flag = {"--a": args.expect_a, "--b": args.expect_b}
+    for entry in label_entries:
+        flag = flag_of.get(entry["label"])
+        expected = expect_by_flag.get(flag)
+        if expected is None:
+            continue
+        detected = entry["total_cuts"]
+        threshold = 0.8 * expected
+        if detected < threshold:
+            sys.exit(
+                f"error: {flag} ({entry['label']}) detected {detected} cuts, "
+                f"expected {expected} -- below 80% ({threshold:.1f}) of expected. "
+                "Refusing to write manifest.json; the detector cannot see this cut."
+            )
+
     # SEALED ENVELOPE -- the only file in the pack that names a source.
     assignment = {
         "sealed": True,
@@ -534,12 +571,6 @@ def main(argv: list[str] | None = None) -> int:
         },
     }
     (out / "assignment.json").write_text(json.dumps(assignment, indent=2), encoding="utf-8")
-
-    label_entries = []
-    for label in ("A", "B"):
-        src, span = labels[label]
-        print(f"[{label}] building...", file=sys.stderr)
-        label_entries.append(build_label(label, src, span, out, args.keep_work))
 
     manifest = {
         "pack_version": 1,
