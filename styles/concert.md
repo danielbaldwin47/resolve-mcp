@@ -181,6 +181,36 @@ that the grid is a live band's grid, so it moves.
   quiet section. One judge's corpus shape is the other judge's metronome; what
   decides between them is §5's test — whether each of those shorter shots has a
   nameable cause, which for this passage is the secondary swells in §5.
+  **Three constraints on the run, and these are not a split verdict.** The next
+  round's panel read our own tightening ladder — 9.9 / 7.3 / 5.3 / 5.0 / 4.0 /
+  3.8 / 2.9 s, strict alternation between drums-close and piano/bass, over flat
+  −29 dB audio — as "an editor's metronome", "accelerating while the music
+  decays, so you feel the editor counting instead of listening". All three
+  judges said it, including the two who picked our cut, which is as close as
+  this profile gets to a settled reading:
+  - **The run must not be a strict two-framing alternation.** A ping-pong
+    between the same two pictures is one picture-pair getting shorter, so the
+    shortening becomes the only thing happening and the schedule is audible.
+    Break the ladder with a third picture, a scale change on one of the two
+    (the cheapest third picture — §4), or a hold that declines to descend.
+  - **The acceleration answers the music, not a schedule.** Something has to be
+    rising — swell density climbing, a resolve approaching — for shortening to
+    read as listening rather than counting. Over flat or decaying audio there
+    is nothing to accelerate toward, and **holding is better than shrinking**:
+    tightening is not the default shape of a quiet passage's second half, it is
+    what a quiet passage does when its second half builds.
+  - **Never return to a framing for under ~3 s.** A blink-length return to a
+    picture just left reads as a tic, and returning to the *exact frame* it was
+    left on reads as an error; our 2.9 s round trip did both at once. Once a
+    run has tightened past ~3 s, the next shot is a new picture or the run is
+    over.
+  `[review feedback, 2026-08, unanimous 3/3 panel]` — this narrows the bullet
+  rather than retiring it, and it partly settles the split above: on this
+  evidence the "timer-cutting" judge was describing a real failure mode, though
+  only for a run built as a ladder. Note that the human run the bullet was
+  drawn from is not one — 7.8 / **3.8 / 2.5 / 6.1** / 3.3 steps back up in the
+  middle. The non-monotonicity is the shape being asked for here, and reading
+  that run as a smooth shortening is what produced the metronome.
 - **Approach a section change with acceleration; release into stillness after
   it.** Shots shorten into the turn (1.7 s, then 2.2 s, through the decay), the
   change itself lands on the section's loudest peak, and what follows is a long
