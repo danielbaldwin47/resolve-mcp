@@ -22,12 +22,20 @@
   server that started it is the whole point (G4: a 30-minute separation died with every
   session that launched it). So the session check is skipped for those and the pid answers
   instead: alive means running, gone means interrupted, and no pid yet means a launch still
-  in flight — in this session, or in whichever server is named by ``launcher_pid`` while
-  that process is still alive, because those are the only two processes that will ever write
-  the worker's pid. A pid-less record whose launcher is gone too falls back to the session
-  rule rather than living forever. pids do get recycled — a recycled one can only make a
-  dead job read as running a while longer, never the reverse, and the worker writes its own
-  ending in every path it can still reach.
+  in flight — in this session, or in whichever server is named by ``launcher_pid`` while that
+  process is still alive *and* the record is younger than ``LAUNCH_WINDOW``, because those are
+  the only two processes that will ever write the worker's pid and neither takes two minutes
+  to do it. A pid-less record whose launcher is gone, or one that has sat pid-less far longer
+  than any launch takes, is closed rather than left running forever. pids do get recycled —
+  a recycled one can only make a dead job read as running a while longer, never the reverse,
+  and the worker writes its own ending in every path it can still reach.
+
+* **Only the worker writes the record of a detached job.** The launching process has one
+  thing to add — its reading of the worker's pid, for the second before the worker adopts —
+  and it leaves that beside the record rather than in it (``note_worker_pid``), because a
+  launcher writing its stale copy over a worker that had already finished would lose the
+  result and leave the job polling as running for good. No guard can close that window; not
+  writing can.
 """
 
 from __future__ import annotations
@@ -64,6 +72,16 @@ SESSION = uuid.uuid4().hex
 SHARING_ATTEMPTS = 20
 SHARING_PAUSE = 0.01
 """How long either side of a poll waits out the other's handle. See ``_sharing``."""
+
+LAUNCH_WINDOW = 120.0
+"""How long a detached record may go with no worker pid before the launch is not in flight.
+
+Generous by an order of magnitude: what has to fit inside it is a ``Popen`` and the worker's
+own start-up as far as its adopt, which is a second or two even with a cold interpreter and a
+Windows trampoline in the way. Long enough that a slow box is never judged, short enough that
+a recycled launcher pid cannot hold a dead record open for the life of the machine. See
+``_stalled_launch``.
+"""
 
 _sequence = itertools.count()
 """Breaks ties in "newest first": the Windows clock is coarser than two starts in a row."""
@@ -185,7 +203,6 @@ def adopt(job_id: str, config: Config | None = None) -> JobRecord:
     record.pid = os.getpid()
     record.detached = True
     save(record, config)
-    release_child(record.pid)
     log.info("Job %s adopted by detached worker pid %s", job_id, record.pid)
     return record
 
@@ -195,35 +212,23 @@ def save(record: JobRecord, config: Config | None = None) -> None:
     _write(record, config or get_config())
 
 
-def _write(
-    record: JobRecord,
-    config: Config,
-    guard: Callable[[JobRecord | None], bool] | None = None,
-) -> bool:
-    """Write the record into place, optionally only while disk still says what it must.
-
-    The guard is read as late as it can be — after the scratch file is written, immediately
-    before the replace — so that the window in which another writer can slip past it is the
-    replace itself rather than the whole serialise-and-write. It is not a lock and cannot be:
-    two processes write this record and neither can hold the other off. It is enough for the
-    one caller that needs it (``note_worker_pid``), whose write is worth skipping entirely
-    rather than landing on top of a worker's.
-    """
+def _write(record: JobRecord, config: Config) -> None:
+    """Write the record into place through a scratch file of this process's own."""
     record.updated_at = _now()
     target = _path(record.job_id, config)
     target.parent.mkdir(parents=True, exist_ok=True)
     scratch = _scratch(target)
     scratch.write_text(json.dumps(record.payload(), indent=2), encoding="utf-8")
-    if guard is not None and not guard(_read(target)):
-        scratch.unlink(missing_ok=True)
-        return False
     _sharing(lambda: os.replace(scratch, target))
-    return True
 
 
 def _unclaimed(record: JobRecord) -> bool:
-    """Nobody has adopted this record and nothing has ended it — still the launcher's to write."""
-    return record.pid is None and record.state == RUNNING
+    """Nobody has adopted this record and nothing has ended it — the launcher's note still holds.
+
+    Also the one condition under which that note is read at all: a record with a worker's own
+    pid on it, or one that has ended, has been written by the worker and is the better answer.
+    """
+    return record.detached and record.pid is None and record.state == RUNNING
 
 
 def note_worker_pid(
@@ -232,17 +237,27 @@ def note_worker_pid(
     step: str,
     config: Config | None = None,
 ) -> JobRecord | None:
-    """Merge a launcher's reading of the worker's pid onto whatever is on disk *now*.
+    """Leave the launcher's reading of the worker's pid *beside* the record, never in it.
 
     The launcher's copy of the record is stale the moment the child starts: the worker adopts
     as its first act and may have finished a cache-hit job by the time the launcher gets back
-    from ``Popen``. Saving that copy would put ``running`` and a launcher's pid over a record
-    the worker had already closed as failed — and the worker never writes again, so the job
-    would poll as running forever. So this reads the record back, writes only onto the disk
-    copy, and only while that copy is still unadopted and unfinished; the guard is re-read
-    immediately before the replace, and the result is re-read after it. Losing the race is
-    not retried: the worker's record is the better one, and a second attempt would be the
-    same stale write with a longer window.
+    from ``Popen``. Writing that copy back would put ``running`` and a launcher's pid over a
+    record the worker had already closed — and the worker never writes again, so the job would
+    poll as running for the life of the server, its result lost with the record that carried
+    it. Re-reading the record and guarding the write on what disk said only narrows that: the
+    read and the replace are two calls, and a worker that finishes between them is still
+    overwritten, undetectably, because after the replace disk says exactly what this process
+    put there.
+
+    So the launcher does not write the record at all. Its pid reading goes to a file of its
+    own that nothing else writes, and ``_read`` folds it in for readers while — and only while
+    — the record is still unadopted and unfinished (``_unclaimed``). A note that loses the race
+    is not wrong, just ignored from the moment the worker's own pid lands, and the worker's
+    record can no longer be clobbered by anything the launcher does. What the note buys is the
+    second or so before the adopt: a venv interpreter on Windows can be a trampoline that runs
+    the real interpreter as a child, so what was started here and what does the work are not
+    always the same process, and until the worker says otherwise the trampoline's pid is a
+    truthful "still running".
     """
     config = config or get_config()
     current = peek(job_id, config)
@@ -265,22 +280,58 @@ def note_worker_pid(
             pid,
         )
         return current
-    current.pid = pid
-    current.step = step
-    if not _write(current, config, guard=lambda disk: disk is not None and _unclaimed(disk)):
-        log.info(
-            "Job %s: its worker reached the record first, so pid %s was not written", job_id, pid
-        )
-        return peek(job_id, config)
+    _write_note(_path(job_id, config), pid, step)
     landed = peek(job_id, config)
     if landed is not None and landed.pid != pid:
         log.info(
-            "Job %s: the detached worker (pid %s) overwrote the launcher's pid %s; leaving it",
+            "Job %s: the detached worker (pid %s) reached the record first, so the launcher's "
+            "note of pid %s is ignored",
             job_id,
             landed.pid,
             pid,
         )
     return landed or current
+
+
+def _note_path(target: Path) -> Path:
+    """Where the launcher's pid reading lives: beside the record, under a name of its own.
+
+    Deliberately not ``.json``: ``load_all`` globs that, and a half-record read back as a job
+    would list a job that does not exist.
+    """
+    return target.with_name(f"{target.stem}.launcher")
+
+
+def _write_note(target: Path, pid: int, step: str) -> None:
+    """Write the launcher's note atomically. Only the launching process ever writes this."""
+    note = _note_path(target)
+    scratch = _scratch(note)
+    scratch.write_text(json.dumps({"pid": pid, "step": step}), encoding="utf-8")
+    _sharing(lambda: os.replace(scratch, note))
+    log.info(
+        "Job %s: its launcher noted detached worker pid %s beside the record", target.stem, pid
+    )
+
+
+def _read_note(target: Path) -> dict[str, Any] | None:
+    """The launcher's note, or ``None`` if there is none or it is not legible."""
+    note = _note_path(target)
+    try:
+        raw = json.loads(_sharing(lambda: note.read_text(encoding="utf-8")))
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError):
+        log.warning("Ignoring an unreadable launcher note: %s", note)
+        return None
+    return raw if isinstance(raw, dict) and isinstance(raw.get("pid"), int) else None
+
+
+def _clear_note(target: Path) -> None:
+    """Drop the launcher's note once the record has an ending of its own to answer with."""
+    try:
+        _note_path(target).unlink(missing_ok=True)
+    except OSError:  # pragma: no cover - a note left behind is read by nothing that matters
+        log.debug("Could not clear the launcher note beside %s", target)
 
 
 def _scratch(target: Path) -> Path:
@@ -291,10 +342,12 @@ def _scratch(target: Path) -> Path:
     adopt. One shared scratch name has them writing the same file and each replacing the
     target with whatever bytes happened to be in it — the atomic write's own guarantee, lost
     in exactly the case it was added for, and the record that lands is a splice of the two.
-    The suffix is deliberately not ``.json``: a scratch file must never be read back as a
-    record by ``load_all``.
+    Built from the whole name rather than the stem, so the record and the launcher's note —
+    which sit beside each other and differ only in extension — do not write through one
+    scratch file. The suffix is deliberately not ``.json``: a scratch file must never be read
+    back as a record by ``load_all``.
     """
-    return target.with_name(f"{target.stem}.writing.{os.getpid()}")
+    return target.with_name(f"{target.name}.writing.{os.getpid()}")
 
 
 def finish(
@@ -304,12 +357,14 @@ def finish(
     config: Config | None = None,
 ) -> JobRecord:
     """Close the job out as completed or failed, and say so in the log."""
+    config = config or get_config()
     record.state = FAILED if error is not None else COMPLETED
     record.result = result
     record.error = error
     record.finished_at = _now()
     record.progress = 1.0 if error is None else record.progress
     save(record, config)
+    _clear_note(_path(record.job_id, config))
     release_child(record.pid)
     if error is None:
         log.info("Job %s completed", record.job_id)
@@ -371,7 +426,27 @@ def _read(path: Path) -> JobRecord | None:
         log.warning("Skipping a job record with no id: %s", path)
         return None
     known = {name: raw[name] for name in JobRecord.__dataclass_fields__ if name in raw}
-    return JobRecord(**known)
+    return _noted(JobRecord(**known), path)
+
+
+def _noted(record: JobRecord, path: Path) -> JobRecord:
+    """Fold the launcher's pid note into a record that has nothing better to say.
+
+    The note is what the launcher used to write onto the record itself, moved out of the way
+    of the worker (see ``note_worker_pid``). It answers for exactly one window — record
+    written, worker not yet adopted — and from the adopt onwards the record's own pid is the
+    answer and the note is not read again.
+    """
+    if not _unclaimed(record):
+        return record
+    note = _read_note(path)
+    if note is None:
+        return record
+    record.pid = note["pid"]
+    step = note.get("step")
+    if isinstance(step, str) and step:
+        record.step = step
+    return record
 
 
 
@@ -439,12 +514,16 @@ def _prune_children() -> None:
 def release_child(pid: int | None) -> None:
     """Let go of the handle on a worker whose job has ended.
 
-    ``finish`` and ``adopt`` both call this because both are the moment a record stops being
-    something anybody will poll a pid for: after them, nothing asks ``pid_alive`` about this
-    job again, so the handle would sit in the dict — and its process in the process table —
-    until the server exited. A worker that is somehow still running keeps its handle: it is
-    still this process's child, and dropping it early is how a zombie is made rather than
-    reaped.
+    Only the process that started the worker holds a handle on it, so only that process can
+    let one go — and it is never the one that ends a detached job. ``finish`` runs in the
+    worker, where the dict is empty, so the call there covers the launcher's own endings (an
+    in-process job, a record it closes as interrupted) and nothing else. The launcher's real
+    moment is the one after: ``_recovered`` sees a detached record that has stopped running,
+    which is the first time the launching process learns the job is over. Both call this
+    because after either, nothing asks ``pid_alive`` about this job again, so the handle would
+    sit in the dict — and its process in the process table — until the server exited. A worker
+    that is somehow still running keeps its handle: it is still this process's child, and
+    dropping it early is how a zombie is made rather than reaped.
     """
     if pid is None:
         return
@@ -582,8 +661,16 @@ else:
 
 
 def _recovered(record: JobRecord, config: Config) -> JobRecord:
-    """A job still running under a dead session cannot finish. Say so, once."""
+    """A job still running under a dead session cannot finish. Say so, once.
+
+    Also the launching process's only news of a detached job that ended well. ``finish`` runs
+    in the worker, where the handle dict is empty, so a normally-completed detached job would
+    leave the launcher holding its child handle — a zombie on POSIX — until the server exited.
+    This is where the launcher reads that the job is over, so this is where it lets go.
+    """
     if record.state != RUNNING:
+        if record.detached:
+            release_child(record.pid)
         return record
     if record.detached:
         return _recovered_detached(record, config)
@@ -614,20 +701,10 @@ def _recovered_detached(record: JobRecord, config: Config) -> JobRecord:
     if record.pid is None:
         if record.session == SESSION:
             return record
-        if record.launcher_pid is not None and pid_alive(record.launcher_pid):
-            log.debug(
-                "Job %s has no worker pid yet, but its launcher (pid %s) is still running",
-                record.job_id,
-                record.launcher_pid,
-            )
+        stalled = _stalled_launch(record)
+        if stalled is None:
             return record
-        log.info("Job %s never got a detached worker: its launcher is gone", record.job_id)
-        return _interrupted(
-            record,
-            f"The server handing {record.kind} to a detached worker exited before the worker "
-            "was started, so nothing is running it.",
-            config,
-        )
+        return _interrupted(record, stalled, config)
     if pid_alive(record.pid):
         return record
     log.info("Job %s lost its detached worker (pid %s)", record.job_id, record.pid)
@@ -637,6 +714,56 @@ def _recovered_detached(record: JobRecord, config: Config) -> JobRecord:
         f"(pid {record.pid}).",
         config,
     )
+
+
+def _stalled_launch(record: JobRecord) -> str | None:
+    """Why this pid-less record is not a launch in flight, or ``None`` while it still is.
+
+    The launcher's pid is asked first, and its own age second. A pid is a number the OS
+    re-issues: a record left by a server that died mid-launch names a launcher that may since
+    have been recycled onto some long-lived process, and liveness alone then reads that record
+    as launching forever. Nothing is a launch for long — the spawn and the note that follows it
+    are a second's work, and the worker writes the record from its adopt onwards — so a record
+    with no worker pid that has not been touched in ``LAUNCH_WINDOW`` is a launch that is not
+    happening, whatever its launcher's number now belongs to.
+    """
+    if record.launcher_pid is None or not pid_alive(record.launcher_pid):
+        log.info("Job %s never got a detached worker: its launcher is gone", record.job_id)
+        return (
+            f"The server handing {record.kind} to a detached worker exited before the worker "
+            "was started, so nothing is running it."
+        )
+    age = _age(record.updated_at)
+    if age is not None and age > LAUNCH_WINDOW:
+        log.warning(
+            "Job %s has had no detached worker for %.0f s; pid %s is a recycled number rather "
+            "than the launcher that wrote the record",
+            record.job_id,
+            age,
+            record.launcher_pid,
+        )
+        return (
+            f"The server handing {record.kind} to a detached worker never started one: nothing "
+            f"has written to the record in {age:.0f} seconds, so the launch is not in flight."
+        )
+    log.debug(
+        "Job %s has no worker pid yet, but its launcher (pid %s) is still running",
+        record.job_id,
+        record.launcher_pid,
+    )
+    return None
+
+
+def _age(stamp: str) -> float | None:
+    """How long ago that timestamp was, in seconds; ``None`` if it is not one."""
+    try:
+        written = datetime.fromisoformat(stamp)
+    except ValueError:
+        log.warning("Cannot read a job record's timestamp: %r", stamp)
+        return None
+    if written.tzinfo is None:
+        written = written.replace(tzinfo=UTC)
+    return (datetime.now(UTC) - written).total_seconds()
 
 
 def _interrupted(record: JobRecord, cause: str, config: Config) -> JobRecord:

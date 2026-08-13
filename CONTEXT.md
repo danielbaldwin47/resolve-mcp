@@ -145,7 +145,10 @@ a job to a process that outlives this one — flags, command, environment),
 <job-id>`). A worker returning `runner.Detached` instead of a result moves
 the rest of its job into that process; `separate_stems` does, once the audio
 is acquired, so a half-hour separation survives the server exiting. A
-detached record is judged by its pid rather than by its session.
+detached record is judged by its pid rather than by its session, and only the
+worker writes it — the launcher's reading of the worker pid goes to a
+`<job-id>.launcher` note beside the record, folded in by readers only while
+the record has no pid of its own, so a launcher can never overwrite a result.
 
 `resolve/` — connection management + thin scripting-API wrappers: `apply`
 (titles file → owned track), `build` (materialise cut file), `connection`

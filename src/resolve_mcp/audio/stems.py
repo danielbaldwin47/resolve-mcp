@@ -50,7 +50,7 @@ import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from ..config import Config, get_config
 from ..errors import InternalError, InvalidRequestError, SeparationInProgressError
@@ -310,7 +310,13 @@ Deliberately far longer than any separation: the longest measured pass over a fu
 under an hour, so six of them can only be a claim whose process is gone in a way the pid
 check could not see — the pid recycled onto a live, unrelated process. Without a ceiling
 that directory is locked out for the life of the machine.
+
+Only a claim nobody is working on ages: a running separation refreshes its own (see
+``_touch``), so what this measures is silence rather than runtime.
 """
+
+CLAIM_REFRESH = 60.0
+"""How often a running separation rewrites its claim, in seconds. See ``_keeping_the_claim``."""
 
 _claims: dict[str, threading.Lock] = {}
 _claims_lock = threading.Lock()
@@ -325,7 +331,7 @@ def _local_lock(directory: Path) -> threading.Lock:
 
 
 @contextmanager
-def claimed(directory: Path) -> Iterator[None]:
+def claimed(directory: Path) -> Iterator[Callable[[], None]]:
     """Hold this stems directory for one separation at a time.
 
     The directory is keyed by the audio's bytes and the models, so two runs over the same mix
@@ -335,14 +341,22 @@ def claimed(directory: Path) -> Iterator[None]:
 
     Two locks, because there are two kinds of rival. A file for the other *processes*: since
     G4 a separation runs in a detached worker, and disk is the only thing those share — the
-    same reason the job record itself is a file. It is created with an exclusive create, so
-    the claim is won by the one whose create the filesystem accepted rather than by whoever
-    read an empty directory last. And a plain in-process lock for the other *threads*, which
-    the file cannot separate at all: they share a pid, so each would read the other's claim
-    as its own and both would walk straight in.
+    same reason the job record itself is a file. The claim is written under a name of this
+    process's own and then *linked* into place, so the winner is the one whose link the
+    filesystem accepted rather than whoever read an empty directory last — and what appears
+    under the claim's name is a complete claim, never the empty file an exclusive create
+    publishes before its content lands. And a plain in-process lock for the other *threads*,
+    which the file cannot separate at all: they share a pid, so each would read the other's
+    claim as its own and both would walk straight in.
 
     A claim whose process is gone is a crashed run rather than an owner, and is taken over
-    instead of waited on: nobody is left locked out by a worker that died at the 50% mark.
+    instead of waited on: nobody is left locked out by a worker that died at the 50% mark. A
+    claim that is merely unreadable is not that — it is waited on, because the one thing that
+    reliably makes a claim unreadable is being read at the moment it is written.
+
+    Yields the callable that keeps the claim young: a separation runs for as long as an hour,
+    the ceiling that reads a claim as abandoned is measured from when it was written, and a
+    claim nobody touches is eventually stolen out from under a run that is still going.
     """
     directory.mkdir(parents=True, exist_ok=True)
     marker = directory / CLAIM
@@ -358,91 +372,191 @@ def claimed(directory: Path) -> Iterator[None]:
     try:
         _take(marker)
         try:
-            yield
+            yield lambda: _touch(marker)
         finally:
             _release(marker)
     finally:
         lock.release()
 
 
+class _Held(NamedTuple):
+    """What the claim on disk says, as ``_take`` needs to hear it."""
+
+    held: bool
+    """Somebody is separating into this directory right now — wait rather than take over."""
+    pid: int | None
+    """Which process, when the claim names one legibly."""
+    judged: bytes | None
+    """The exact bytes this verdict was reached on, so a stale claim is cleared by identity."""
+
+
 def _take(marker: Path) -> None:
     """Win the claim, or say who holds it — never read-then-write.
 
     Reading first and writing after is two separations both finding an empty directory and
-    both proceeding; the exclusive create is what makes the answer the filesystem's. A create
-    that is refused is not yet a refusal to run: the claim on disk may be one nothing is
-    holding, and then it is cleared and the create tried once more. Only once more — a second
-    loser is a live rival, not a stale file.
+    both proceeding; the link is what makes the answer the filesystem's. A link that is
+    refused is not yet a refusal to run: the claim on disk may be one nothing is holding, and
+    then it is cleared and the link tried once more. Only once more — a second loser is a live
+    rival, not a stale file.
     """
     if _create(marker):
         return
-    holder = _holder(marker)
-    if holder is None:
-        _discard(marker)
+    verdict = _holder(marker)
+    if not verdict.held:
+        _discard(marker, verdict.judged)
         if _create(marker):
             return
-        holder = _holder(marker)
+        verdict = _holder(marker)
     directory = marker.parent
     cause = (
-        f"Another process (pid {holder}) is already separating into {directory}."
-        if holder is not None
+        f"Another process (pid {verdict.pid}) is already separating into {directory}."
+        if verdict.pid is not None
         else f"Another process claimed {directory} at the same moment this one tried to."
     )
     raise SeparationInProgressError(
         cause=cause,
-        detail={"directory": str(directory), "pid": holder},
+        detail={"directory": str(directory), "pid": verdict.pid},
     )
 
 
+def _content() -> bytes:
+    """The claim this process would write, as the bytes that go on disk."""
+    return json.dumps({"pid": os.getpid(), "session": SESSION, "claimed_at": time.time()}).encode()
+
+
 def _create(marker: Path) -> bool:
-    """Write the claim only if nobody else has one; ``False`` means somebody does."""
+    """Publish this process's claim only if nobody else has one; ``False`` means somebody does.
+
+    Written under a name of this process's own and hard-linked into place, rather than created
+    exclusively and then filled in. Both refuse a second winner, but an exclusive create
+    publishes the claim's *name* before its content: a rival reading in that instant finds an
+    empty file, reads it as unreadable, and the recovery for an unreadable claim — whatever it
+    is — is being run against the winner's live claim rather than against a stale one. A link
+    makes the name and the content appear together, so there is no such instant to read.
+
+    A filesystem that refuses hard links altogether (a cache directory on exFAT) falls back to
+    the exclusive create, which is still correct about who won; the empty-file window is then
+    covered by ``_holder`` reading an unreadable claim as held rather than adoptable.
+    """
+    scratch = marker.with_name(f"{marker.name}.{os.getpid()}")
+    payload = _content()
     try:
-        handle = os.open(marker, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-    except FileExistsError:
-        return False
-    with os.fdopen(handle, "w", encoding="utf-8") as sink:
-        sink.write(json.dumps({"pid": os.getpid(), "session": SESSION, "claimed_at": time.time()}))
+        scratch.write_bytes(payload)
+        try:
+            os.link(scratch, marker)
+        except FileExistsError:
+            return False
+        except OSError as exc:
+            log.warning(
+                "This filesystem will not link a stems claim into place (%s); falling back to "
+                "an exclusive create at %s",
+                exc,
+                marker,
+            )
+            return _create_exclusively(marker, payload)
+    finally:
+        scratch.unlink(missing_ok=True)
     log.info("Claimed the stems directory %s for pid %s", marker.parent, os.getpid())
     return True
 
 
-def _read_claim(marker: Path) -> dict[str, Any] | None:
-    """What the claim file says, or ``None`` if there is nothing legible there."""
+def _create_exclusively(marker: Path, payload: bytes) -> bool:
+    """The fallback for a filesystem with no hard links: create, then fill in."""
     try:
-        raw = json.loads(marker.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return None
-    except (OSError, ValueError):
-        log.warning("Ignoring an unreadable stems claim at %s", marker)
-        return None
-    if not isinstance(raw, dict):
-        log.warning("Ignoring a stems claim that is not a record at %s", marker)
-        return None
-    return raw
+        handle = os.open(marker, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        return False
+    with os.fdopen(handle, "wb") as sink:
+        sink.write(payload)
+    log.info("Claimed the stems directory %s for pid %s", marker.parent, os.getpid())
+    return True
 
 
-def _holder(marker: Path) -> int | None:
-    """The process still holding this claim, or ``None`` if it is there for the taking.
+def _touch(marker: Path) -> None:
+    """Say the claim is still being worked on, so the ceiling measures staleness not runtime.
 
-    Three ways a claim is there for the taking, and all three read fields the claim has always
-    written and nothing has ever asked about. The pid is not enough on its own: it is a number
-    the OS re-issues, so a claim outlives the process that wrote it and can end up naming a
-    live stranger — or this very process, which is how a stale claim used to lock a directory
-    out permanently while reporting that *we* were separating into it.
+    ``CLAIM_CEILING`` exists for a claim whose process is gone in a way the pid check cannot
+    see, and it can only mean that if a claim that *is* being worked on stays young. Without
+    this a separation long enough to pass the ceiling — the whole case the ceiling is written
+    for — has its own claim read as abandoned and a second separator walks into the directory
+    it is still writing. Rewritten rather than ``utime``d because the age is read out of the
+    claim's content, and only while the claim is still this process's to rewrite.
     """
     raw = _read_claim(marker)
-    if raw is None:
+    if raw is None or raw.get("session") != SESSION or raw.get("pid") != os.getpid():
+        log.warning("Not refreshing the claim at %s: it is not the one this process wrote", marker)
+        return
+    scratch = marker.with_name(f"{marker.name}.{os.getpid()}")
+    try:
+        scratch.write_bytes(_content())
+        os.replace(scratch, marker)
+    except OSError:
+        log.warning("Could not refresh the stems claim at %s", marker)
+        scratch.unlink(missing_ok=True)
+
+
+def _read_claim(marker: Path) -> dict[str, Any] | None:
+    """What the claim file says, or ``None`` if there is nothing legible there."""
+    raw = _claim_bytes(marker)
+    return None if raw is None else _parse_claim(marker, raw)
+
+
+def _claim_bytes(marker: Path) -> bytes | None:
+    """The claim exactly as it is on disk, or ``None`` if there is no claim there."""
+    try:
+        return marker.read_bytes()
+    except FileNotFoundError:
         return None
-    pid = raw.get("pid")
-    session = raw.get("session")
+    except OSError:
+        log.warning("Could not read the stems claim at %s", marker)
+        return b""
+
+
+def _parse_claim(marker: Path, raw: bytes) -> dict[str, Any] | None:
+    """The claim as a record, or ``None`` if those bytes are not one."""
+    try:
+        parsed = json.loads(raw)
+    except ValueError:
+        log.warning("Ignoring an unreadable stems claim at %s", marker)
+        return None
+    if not isinstance(parsed, dict):
+        log.warning("Ignoring a stems claim that is not a record at %s", marker)
+        return None
+    return parsed
+
+
+def _holder(marker: Path) -> _Held:
+    """Whether this claim is still held, and by whom — or that it is there for the taking.
+
+    Four ways a claim is there for the taking, and all of them read fields the claim has
+    always written. The pid is not enough on its own: it is a number the OS re-issues, so a
+    claim outlives the process that wrote it and can end up naming a live stranger — or this
+    very process, which is how a stale claim used to lock a directory out permanently while
+    reporting that *we* were separating into it.
+
+    A claim that cannot be read at all is the one case that is *not* adoptable. Reading it is
+    a guess either way, and the two guesses are not symmetrical: read as adoptable, the likely
+    cause — a claim caught mid-write, or a rival's write this filesystem has not shown us yet
+    — costs a second separator in a directory somebody is writing, which is the whole failure
+    this file exists to prevent. Read as held, an actually-corrupt claim costs a refused job
+    until the ceiling ages it out, and the ceiling is what clears it.
+    """
+    raw = _claim_bytes(marker)
+    if raw is None:
+        return _Held(held=False, pid=None, judged=None)
+    parsed = _parse_claim(marker, raw)
+    if parsed is None:
+        return _unreadable(marker, raw)
+    pid = parsed.get("pid")
     if not isinstance(pid, int):
         log.warning("Ignoring a stems claim that names no process at %s", marker)
-        return None
+        return _unreadable(marker, raw)
+    session = parsed.get("session")
     if session == SESSION:
         # This process wrote it, and no thread of ours holds the directory's lock — the caller
         # took that before asking. So it is our own leftover, from a run that died mid-write.
         log.info("Taking back the stems claim at %s: this process left it behind", marker)
-        return None
+        return _Held(held=False, pid=pid, judged=raw)
     if pid == os.getpid():
         log.info(
             "Taking over the stems claim at %s: pid %s is now this process, not the one that "
@@ -450,11 +564,11 @@ def _holder(marker: Path) -> int | None:
             marker,
             pid,
         )
-        return None
+        return _Held(held=False, pid=pid, judged=raw)
     if not pid_alive(pid):
         log.info("Taking over the stems claim at %s from pid %s, which is gone", marker, pid)
-        return None
-    claimed_at = raw.get("claimed_at")
+        return _Held(held=False, pid=pid, judged=raw)
+    claimed_at = parsed.get("claimed_at")
     age = time.time() - claimed_at if isinstance(claimed_at, int | float) else 0.0
     if age > CLAIM_CEILING:
         log.warning(
@@ -464,8 +578,33 @@ def _holder(marker: Path) -> int | None:
             pid,
             age / 3600,
         )
-        return None
-    return pid
+        return _Held(held=False, pid=pid, judged=raw)
+    return _Held(held=True, pid=pid, judged=raw)
+
+
+def _unreadable(marker: Path, raw: bytes) -> _Held:
+    """A claim that names no process: held while it is young, adoptable once it is not.
+
+    Its age cannot come from its content — that is the part that could not be read — so it
+    comes from the file's own timestamp, which is the moment it was linked into place.
+    """
+    try:
+        age = time.time() - marker.stat().st_mtime
+    except OSError:
+        age = 0.0
+    if age > CLAIM_CEILING:
+        log.warning(
+            "Taking over the stems claim at %s: it names no process and is %.1f hours old",
+            marker,
+            age / 3600,
+        )
+        return _Held(held=False, pid=None, judged=raw)
+    log.info(
+        "Waiting out the claim at %s: it names no process, which is what a claim being written "
+        "right now looks like",
+        marker,
+    )
+    return _Held(held=True, pid=None, judged=raw)
 
 
 def _release(marker: Path) -> None:
@@ -484,12 +623,31 @@ def _release(marker: Path) -> None:
     log.info("Released the stems claim at %s", marker)
 
 
-def _discard(marker: Path) -> None:
-    """Clear a claim nothing is holding, so the next create can win it."""
+def _discard(marker: Path, judged: bytes | None) -> None:
+    """Clear the exact claim that was judged abandoned — never whatever is there now.
+
+    The gap between judging a claim and unlinking it is one in which the judged claim can be
+    released and a rival's live one can appear under the same name: unlinking by name alone
+    hands a second separator into a directory the first is writing, which is what the claim
+    exists to prevent. So the bytes are read back and matched first. That leaves a window of
+    its own, narrower by the whole liveness check and unreachable on the ordinary path — the
+    link in ``_create`` is what makes the ordinary path safe, and nothing but a claim already
+    judged stale ever reaches this.
+    """
+    if judged is None:
+        return
+    current = _claim_bytes(marker)
+    if current is None:
+        return
+    if current != judged:
+        log.info("Leaving the claim at %s alone: it changed after it was judged abandoned", marker)
+        return
     try:
         marker.unlink(missing_ok=True)
     except OSError:
         log.warning("Could not clear the abandoned stems claim at %s", marker)
+        return
+    log.info("Cleared the abandoned stems claim at %s", marker)
 
 
 def multi_pass(
@@ -517,37 +675,39 @@ def multi_pass(
         drums = separator.collect(drums_dir)
         other = separator.collect(other_dir) if split_wind else {}
     else:
-        with claimed(directory):
+        with claimed(directory) as refresh:
+            # Every reading of the bar refreshes the claim, so the ceiling that reads a claim
+            # as abandoned measures how long it has been since anybody was working — not how
+            # long this separation has run. A full set can take the better part of an hour.
+            beat = _keeping_the_claim(progress, refresh)
             stems = separator.separate(
                 audio["path"],
                 mix_dir,
                 config.stem_model,
                 FOUR_STEMS,
-                progress=_pass(
-                    progress, ACQUIRE_CEILING, PASS_ONE_CEILING, "separating four stems"
-                ),
+                progress=_pass(beat, ACQUIRE_CEILING, PASS_ONE_CEILING, "separating four stems"),
                 runner=runner,
                 config=config,
             )
-            progress(PASS_ONE_CEILING, "decomposing the drum stem")
+            beat(PASS_ONE_CEILING, "decomposing the drum stem")
             drums = separator.separate(
                 stems[DRUM_SOURCE],
                 drums_dir,
                 config.drum_model,
                 DRUM_STEMS,
-                progress=_pass(progress, PASS_ONE_CEILING, drums_ceiling, "decomposing the drums"),
+                progress=_pass(beat, PASS_ONE_CEILING, drums_ceiling, "decomposing the drums"),
                 runner=runner,
                 config=config,
             )
             other = {}
             if split_wind:
-                progress(WIND_FLOOR, "splitting the winds out of the other stem")
+                beat(WIND_FLOOR, "splitting the winds out of the other stem")
                 other = separator.separate(
                     stems[OTHER_SOURCE],
                     other_dir,
                     config.wind_model,
                     WIND_STEMS,
-                    progress=_pass(progress, WIND_FLOOR, SEPARATED, "splitting the winds"),
+                    progress=_pass(beat, WIND_FLOOR, SEPARATED, "splitting the winds"),
                     runner=runner,
                     config=config,
                 )
@@ -587,6 +747,28 @@ def _already_separated(mix_dir: Path, drums_dir: Path, other_dir: Path | None = 
     if separator.missing_from(mix_dir, FOUR_STEMS) or separator.missing_from(drums_dir, DRUM_STEMS):
         return False
     return other_dir is None or not separator.missing_from(other_dir, WIND_STEMS)
+
+
+def _keeping_the_claim(progress: Progress, refresh: Callable[[], None]) -> Progress:
+    """The progress bar with a claim refresh hung off it — at most one every minute.
+
+    The bar is the only thing that reports from inside a separation, so it is the only place
+    a claim can be kept young from. Throttled because it moves several times a second while
+    the claim only has to stay younger than a ceiling measured in hours: refreshing on every
+    reading would be thousands of writes to say what one a minute already says. The clock
+    starts now rather than at zero, because the claim was written a moment ago.
+    """
+    last = time.monotonic()
+
+    def report(fraction: float, step: str) -> None:
+        nonlocal last
+        now = time.monotonic()
+        if now - last >= CLAIM_REFRESH:
+            last = now
+            refresh()
+        progress(fraction, step)
+
+    return report
 
 
 def _pass(progress: Progress, floor: float, ceiling: float, step: str) -> separator.Fraction:

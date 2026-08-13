@@ -154,13 +154,14 @@ def launch(
     # always the same process. The trampoline outlives its child, so this stays a truthful
     # "still running" for the second or so before the worker overwrites it.
     #
-    # Merged onto the disk copy rather than saved from this one, because by now the record may
-    # not be ours to write: the worker adopts it as its first act and can even have finished a
-    # short job, and this process's copy is stale in both cases. Saving it blindly would put a
-    # launcher's pid and ``running`` back over a record the worker had already closed — and the
-    # worker never writes again, so that job would poll as running for good. ``note_worker_pid``
-    # writes only while disk still shows nobody has adopted or ended it, and reports what
-    # actually landed.
+    # Left beside the record rather than written into it, because by now the record is not
+    # ours to write: the worker adopts it as its first act and can even have finished a short
+    # job, and this process's copy is stale in both cases. Writing it back would put a
+    # launcher's pid and ``running`` over a record the worker had already closed — and the
+    # worker never writes again, so that job would poll as running for good, its result gone
+    # with the record that carried it. ``note_worker_pid`` writes a note only the launcher
+    # touches, which readers fold in until the worker's own pid lands, and reports what a
+    # reader would now see.
     latest = store.note_worker_pid(record.job_id, pid, step_for(record.kind, pid), config) or record
     if latest.pid == pid:
         log.info(

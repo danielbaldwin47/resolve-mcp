@@ -29,11 +29,13 @@ import threading
 import time
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import fields, replace
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from resolve_mcp.audio import stems
 from resolve_mcp.audio.stems import (
     CLAIM,
     CLAIM_CEILING,
@@ -393,6 +395,46 @@ def test_a_launcher_does_not_reopen_a_job_its_worker_had_already_finished(
     assert landed.error["cause"] == "the worker gave up"
 
 
+def test_a_worker_that_finished_inside_the_launchers_window_keeps_its_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The completed half of that race, and the expensive one: a result is not recoverable.
+
+    A guard cannot close this window — reading the record and replacing it are two calls, and
+    a worker that finishes between them is overwritten with no trace, because afterwards disk
+    says exactly what the launcher put there. So the launcher writes no record at all: its pid
+    reading goes to a note beside it, which is read only while the record has nothing better
+    to say. Here the worker completes with a result inside the window; the record it wrote is
+    what a poll must still find, half an hour of GPU work being what is on the other side of
+    it.
+    """
+    record = store.new_job(KIND, {})
+    replacing = os.replace
+    ended: list[bool] = []
+
+    def finishes_the_job_first(source: Any, target: Any) -> None:
+        # Inside the window itself: whatever the launcher checked, it checked before this, and
+        # this is the call that would put its copy of the record on top of the worker's.
+        if not ended:
+            ended.append(True)
+            taken = store.peek(record.job_id)
+            assert taken is not None
+            taken.pid = os.getpid()
+            store.finish(taken, result={"directory": "/stems/sunset-set-abc123"})
+        replacing(source, target)
+
+    def arm() -> None:
+        monkeypatch.setattr(os, "replace", finishes_the_job_first)
+
+    detached.launch(record, {}, spawn=FakeSpawn(pid=424242, watching=arm))
+
+    landed = store.load(record.job_id)
+    assert ended, "the finish was never injected, so the window was never exercised"
+    assert landed.state == store.COMPLETED
+    assert landed.result == {"directory": "/stems/sunset-set-abc123"}
+    assert landed.pid == os.getpid(), "the launcher's note answered for a record that had ended"
+
+
 def test_a_detached_job_outlives_the_session_that_started_it() -> None:
     """The session rule is backwards for these: surviving the server is the whole point."""
     record = _running_under_a_dead_server(os.getpid())
@@ -492,6 +534,68 @@ def test_a_launch_whose_launcher_died_before_the_spawn_is_still_closed() -> None
     assert failed.state == store.FAILED
     assert failed.error is not None
     assert "before the worker was started" in failed.error["cause"]
+
+
+def test_a_launch_that_has_had_no_worker_far_longer_than_a_launch_takes_is_closed() -> None:
+    """A live launcher pid is not an answer for ever: pids are reissued.
+
+    The record left by a server that died mid-launch names a launcher that the OS is free to
+    hand to somebody else, and a long-lived stranger wearing that number reads as a launch
+    still in flight — for the life of the machine. What separates the two is that nothing is a
+    launch for long: the spawn and the note that follows it are a second's work, so a record
+    that still has no worker pid two minutes on is a launch that is not happening, whatever
+    its launcher's number now belongs to.
+    """
+    record = store.new_job(KIND, {})
+    record.detached = True
+    record.session = "a-server-whose-pid-has-since-been-reissued"
+    record.launcher_pid = os.getpid()
+    record.step = detached.HANDING_OFF
+    store.save(record)
+    _last_written(record.job_id, store.LAUNCH_WINDOW + 60)
+
+    failed = store.load(record.job_id)
+
+    assert failed.state == store.FAILED
+    assert failed.error is not None
+    assert failed.error["code"] == "job_interrupted"
+    assert "never started one" in failed.error["cause"]
+
+
+def test_a_launch_in_flight_is_not_closed_for_being_a_few_seconds_old() -> None:
+    """The other side of that ceiling: a cold interpreter start is not a dead launcher."""
+    record = store.new_job(KIND, {})
+    record.detached = True
+    record.session = "another-server-that-is-mid-spawn"
+    record.launcher_pid = os.getpid()
+    record.step = detached.HANDING_OFF
+    store.save(record)
+    _last_written(record.job_id, store.LAUNCH_WINDOW / 2)
+
+    assert store.load(record.job_id).state == store.RUNNING
+
+
+def test_the_launcher_lets_go_of_a_worker_that_finished_the_job_itself() -> None:
+    """``finish`` runs in the worker, where the handle dict is empty — so it releases nothing.
+
+    Only the launching process holds a handle on the worker, and the job ending well is news
+    it gets by reading the record. Without that, every normally-completed detached job leaves
+    its handle behind: a zombie per job on POSIX, and a pid nobody else may reuse on Windows,
+    for as long as the server lives.
+    """
+    record = store.new_job(KIND, {})
+    record.detached = True
+    record.session = "the-worker-that-ran-it"
+    record.pid = 4242
+    record.state = store.COMPLETED
+    record.result = {"directory": "/stems/sunset-set-abc123"}
+    store.save(record)
+    store.remember_child(4242, _FakeProcess(4242, returncode=0))
+
+    landed = store.load(record.job_id)
+
+    assert 4242 not in store._children, "the launcher is still holding a worker that has exited"
+    assert landed.result == {"directory": "/stems/sunset-set-abc123"}
 
 
 def test_a_launcher_writes_the_pid_of_the_process_doing_the_launching() -> None:
@@ -892,6 +996,165 @@ def test_a_stems_claim_older_than_any_separation_is_taken_over_however_alive_its
     assert held["pid"] == os.getpid()
 
 
+def test_a_claim_that_changed_after_it_was_judged_abandoned_is_left_alone(tmp_path: Path) -> None:
+    """Two processes reading one abandoned claim is two processes deciding to clear it.
+
+    The first clears it, wins the create and starts separating; the second arrives a moment
+    later with the same verdict and unlinks — by name — the claim the first is now holding.
+    Nothing then refuses the second, and two separators write one directory, which is the
+    exact failure the claim exists to prevent. So the bytes that were judged are matched
+    against the bytes on disk before anything is unlinked.
+    """
+    directory = tmp_path / "stems-abc123"
+    marker = _claim_held_by(directory, _a_pid_that_has_exited())
+    judged = marker.read_bytes()
+    live = json.dumps({"pid": os.getpid(), "session": "the-winner", "claimed_at": time.time()})
+    marker.write_text(live, encoding="utf-8")
+
+    stems._discard(marker, judged)
+
+    assert marker.exists(), "a live claim was cleared by a process judging a stale one"
+    assert marker.read_text(encoding="utf-8") == live
+
+
+def test_a_claim_that_cannot_be_read_is_waited_out_rather_than_taken_over(tmp_path: Path) -> None:
+    """An empty claim is what a claim being written *right now* looks like.
+
+    An exclusive create publishes the name before the content lands, so a rival reading in
+    that instant sees zero bytes — and reading that as abandoned has it clear the winner's
+    fresh claim and walk in. The claim is linked into place rather than created empty, so the
+    window is gone on this filesystem; read as held, an unreadable claim also costs nothing on
+    one where the fallback create is what ran.
+    """
+    directory = tmp_path / "stems-abc123"
+    directory.mkdir(parents=True)
+    (directory / CLAIM).write_bytes(b"")
+
+    with pytest.raises(SeparationInProgressError) as raised, claimed(directory):
+        pass  # pragma: no cover - the claim is refused on the way in
+
+    assert raised.value.detail["pid"] is None
+    assert (directory / CLAIM).read_bytes() == b"", "the claim being written was cleared"
+
+
+def test_an_unreadable_claim_older_than_the_ceiling_is_still_taken_over(tmp_path: Path) -> None:
+    """Held is not held for ever: a genuinely corrupt claim ages out like any other.
+
+    Its age cannot come from its content — that is the part that could not be read — so it
+    comes from the file's own timestamp.
+    """
+    directory = tmp_path / "stems-abc123"
+    directory.mkdir(parents=True)
+    marker = directory / CLAIM
+    marker.write_bytes(b"{ half a claim")
+    aged = time.time() - CLAIM_CEILING - 60
+    os.utime(marker, (aged, aged))
+
+    with claimed(directory):
+        held = json.loads(marker.read_text(encoding="utf-8"))
+
+    assert held["pid"] == os.getpid()
+
+
+def test_a_claim_is_refreshed_by_the_run_that_is_holding_it(tmp_path: Path) -> None:
+    """The ceiling has to measure silence, not runtime, or it steals from a live separation.
+
+    Six hours is longer than any measured pass, but the claim is written once at the start and
+    never touched again — so a separation that is genuinely slow (a full set, a busy box, a
+    model downloading) has its own claim read as abandoned while it is still writing, and the
+    ceiling built to rescue a dead run hands a second separator into a live one instead.
+    """
+    directory = tmp_path / "stems-abc123"
+
+    with claimed(directory) as refresh:
+        marker = directory / CLAIM
+        held = json.loads(marker.read_text(encoding="utf-8"))
+        aged = time.time() - CLAIM_CEILING - 60
+        marker.write_text(json.dumps({**held, "claimed_at": aged}), encoding="utf-8")
+
+        refresh()
+
+        refreshed = json.loads(marker.read_text(encoding="utf-8"))
+
+    assert refreshed["claimed_at"] > aged + CLAIM_CEILING, "the claim was left at its old age"
+    assert refreshed["pid"] == os.getpid()
+    assert refreshed["session"] == store.SESSION
+
+
+def test_a_claim_this_process_no_longer_holds_is_not_refreshed(tmp_path: Path) -> None:
+    """A refresh is a write, and a write onto somebody else's claim is the theft it prevents."""
+    directory = tmp_path / "stems-abc123"
+
+    with claimed(directory) as refresh:
+        marker = directory / CLAIM
+        theirs = json.dumps({"pid": 4242, "session": "another-server", "claimed_at": time.time()})
+        marker.write_text(theirs, encoding="utf-8")
+
+        refresh()
+
+        assert marker.read_text(encoding="utf-8") == theirs
+
+
+def test_the_bar_a_separation_reports_through_keeps_the_claim_young(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Hung off the progress bar because that is the only thing reporting from inside a pass.
+
+    Throttled because the bar moves several times a second and the claim only has to stay
+    younger than a ceiling measured in hours.
+    """
+    refreshed: list[int] = []
+    reported: list[tuple[float, str]] = []
+    beat = stems._keeping_the_claim(
+        lambda fraction, step: reported.append((fraction, step)),
+        lambda: refreshed.append(1),
+    )
+
+    beat(0.1, "separating four stems (10%)")
+    beat(0.2, "separating four stems (20%)")
+    assert refreshed == [], "the claim was rewritten twice in a second"
+
+    monkeypatch.setattr(stems, "CLAIM_REFRESH", 0.0)
+    beat(0.3, "separating four stems (30%)")
+
+    assert refreshed == [1]
+    assert reported == [
+        (0.1, "separating four stems (10%)"),
+        (0.2, "separating four stems (20%)"),
+        (0.3, "separating four stems (30%)"),
+    ], "the bar stopped reporting once it had a claim to keep"
+
+
+def test_a_separation_long_enough_to_pass_the_ceiling_still_owns_its_directory(
+    tmp_path: Path,
+    separating: FakeSeparator,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The refresh, wired: the passes are what a real hour goes into, so they are what is asked.
+
+    The claim is aged past the ceiling from inside the first pass — a fast way to be a slow
+    separation — and the second pass is asked what the claim on disk says by then.
+    """
+    monkeypatch.setattr(stems, "CLAIM_REFRESH", 0.0)
+    record = _handed_off(tmp_path)
+    aged = time.time() - CLAIM_CEILING - 60
+    stamps: list[float] = []
+
+    def watching(argv: Sequence[str], on_line: Callable[[str], None]) -> int:
+        out_dir = Path(argv[list(argv).index("--output_dir") + 1])
+        marker = out_dir.parent / CLAIM
+        held = json.loads(marker.read_text(encoding="utf-8"))
+        stamps.append(float(held["claimed_at"]))
+        if len(stamps) == 1:
+            marker.write_text(json.dumps({**held, "claimed_at": aged}), encoding="utf-8")
+        return separating(argv, on_line)
+
+    detached_pass(record, _ignored, None, watching)
+
+    assert len(stamps) == 2, "the two passes did not both run"
+    assert stamps[1] > aged + CLAIM_CEILING, "the second pass inherited a claim past the ceiling"
+
+
 def test_a_finished_separation_holds_the_claim_for_the_passes_and_leaves_none_behind(
     tmp_path: Path,
     separating: FakeSeparator,
@@ -999,6 +1262,20 @@ def _a_live_process() -> Iterator[subprocess.Popen[bytes]]:
     finally:
         process.terminate()
         process.wait(timeout=WORKER_BUDGET)
+
+
+def _last_written(job_id: str, seconds_ago: float) -> None:
+    """Age a record on disk, the way a launch that never happened ages by sitting there.
+
+    Written straight into the file because every path through ``store`` stamps ``updated_at``
+    with now — which is the point of the field, and the reason a test cannot arrange this by
+    saving a record with an old one on it.
+    """
+    path = get_config().job_dir / f"{job_id}.json"
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    written = datetime.now(UTC) - timedelta(seconds=seconds_ago)
+    raw["updated_at"] = written.isoformat(timespec="microseconds")
+    path.write_text(json.dumps(raw), encoding="utf-8")
 
 
 def _claim_held_by(directory: Path, pid: int, claimed_at: float | None = None) -> Path:
