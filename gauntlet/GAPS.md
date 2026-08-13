@@ -172,7 +172,15 @@ excavation.
   (hard cut vs dissolve), jump-cut risk on framing returns → ab_pack v2.
   G3 fix verified in the round: guard refused a deliberately wrong
   expected count; clean pack sealed 13/13.
-- **R2 · Taurus opening · WIN (blind), confirmation round running**
+- **R2 · Taurus opening · SPLIT 1–1** — critic 1 picked ours; the
+  confirmation critic picked the human on objective grounds: three
+  obstructed shots on ours (audience head/hat/back — G11), ours renders
+  ungraded ("flat and milky", boundary min_luma 39–44 vs the human's
+  22–26 — G12), and our back half read as metronomic to this judge
+  (9.8/13.6/10.2/8.4/9.9 s) while the human's tightens across 52–76 s
+  tracking secondary loudness bumps. Both judges agree ours wins the
+  t=38 gesture. Piece stays open; close rule is now majority of three
+  fresh critics. Original R2 record follows for the receipts:
   (ours = B). Fresh critic picked ours: the hard cut landing exactly on
   the t=38 drop and the motivated, held back half beat the human's
   metronomic quiet-passage cuts — the exact G8/G9 work. Ours: card

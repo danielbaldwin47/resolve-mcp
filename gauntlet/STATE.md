@@ -27,7 +27,9 @@ energy arc, ending. Per piece, per round:
    biggest remaining gap. Praise discarded.
 3. Loss → gap lands in `gauntlet/GAPS.md` and becomes server/workflow work
    on this branch. Never hand-tune the edit.
-4. Repeat until critic picks ours blind.
+4. Repeat until critics pick ours blind. Close rule (since R2's 1–1
+   split): a piece closes only when a MAJORITY OF THREE fresh,
+   independent critics picks ours on the same sealed pack.
 
 ## Status
 
