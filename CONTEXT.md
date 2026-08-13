@@ -180,10 +180,13 @@ tool is callable in tests without the transport.
 There is no `styles/` module and there never will be: the style layer is data
 the agent owns, not code the server runs.
 
-`video/` — `ffmpeg` (the two commands video routes run), `frames` (frame
+`video/` — `ffmpeg` (the commands video routes run), `frames` (frame
 grabs — the one compute route that is not a job), `jpeg` (read back
-dimensions), `scenes` (scene-cut detection as cached job), `source` (clip
-name → file path + the clip's own frame numbering).
+dimensions), `scenes` (scene-cut detection as cached job), `blocking` (how
+blocked one frame is: the near-field obstruction arithmetic, numpy + scipy,
+no I/O), `occlusion` (that arithmetic as a cached job over a sampled range —
+per-sample scores and the unusable windows to keep a cut out of), `source`
+(clip name → file path + the clip's own frame numbering).
 
 ## Test map — `tests/`
 

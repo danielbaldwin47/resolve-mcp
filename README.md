@@ -49,6 +49,7 @@ pillar); the taste the concert cut is measured against lives in `styles/`.
 | `edit_title` | Fixes one placed title in place — its words or its exposed params, neighbours untouched |
 | `grab_frames` | Grabs chosen moments on a clip as JPEGs (≤1568px) the agent reads off disk |
 | `detect_scene_cuts` | Job: catalogs where a clip changes shot, gist inline and the full list on disk |
+| `analyze_occlusion` | Job: scores how much of an angle a near-field body blocks, and returns the windows to keep a cut out of |
 | `separate_stems` | GPU stem separation: mix → 4 stems, drums → kick/snare/toms/ride/crash, and on `split_wind` other → wind/comp |
 | `transcribe_audio` | Job: word-level transcript of a source clip or the timeline mix, with confidence and measured silence spans |
 | `analyze_music` | Job: beats, downbeats and energy of a mix WAV |
@@ -123,6 +124,10 @@ so it runs inline and hands back JPEG paths at or under the client's 1568px imag
 against the media all the same. `detect_scene_cuts` decodes the whole clip, so it is a job:
 the catalog of every cut and shot goes to the cache in dual-time JSON and only a gist (how
 many cuts, the shot lengths, the first few times, the path) comes back inline.
+`analyze_occlusion` answers the question that comes before either: is anyone's head, hat or
+back between this camera and the stage? It samples a range at about a frame a second, scores
+each sample on near-field blocking, and returns the *windows* — the stretches to keep a cut
+out of — with the whole per-sample curve on disk behind them.
 
 Deliverables come off one timeline the same way: `render_timeline` renders with a **preset**
 — what a preset renders was decided in the Deliver page and saved there, so the server

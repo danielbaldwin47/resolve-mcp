@@ -578,6 +578,16 @@ class SceneDetectionError(ResolveMcpError):
     )
 
 
+class OcclusionScanError(ResolveMcpError):
+    """ffmpeg would not decode this clip's frames for an obstruction scan."""
+
+    code = "occlusion_scan_failed"
+    default_fix = (
+        "Check the clip is online and holds video — inspect_clip reports both — and that the "
+        "range asked for is inside its bounds. ffmpeg's own message is in detail.stderr."
+    )
+
+
 class InternalError(ResolveMcpError):
     code = "internal_error"
     default_fix = (
