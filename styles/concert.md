@@ -149,8 +149,38 @@ that the grid is a live band's grid, so it moves.
   longest, stillest stretch in either version. **The same hold was the only
   thing the critic held against the human's version**, and both halves of that
   are worth keeping: holding through a thin passage is the move, and it is the
-  move with a ceiling nobody has found the top of yet.
+  move with a ceiling. The two bullets below are the first attempts to say
+  where that ceiling is and what fills the passage under it; neither replaces
+  this one, and both come from a round whose judges disagreed.
   `[review feedback, 2026-08]`
+- **A quiet-passage hold carries to about 10 s only if the picture develops.**
+  What buys a long hold in a thin passage is motion, not the thinness: where
+  the shot develops — a motion class of pan or drift with **real net travel**,
+  or a musician entering or moving inside the frame — a hold out to ~10 s is
+  motivated and reads as held. Where the picture is static, past roughly 10 s
+  is where a viewer leaves. In the blind round behind this note our cut ran
+  five holds through a quiet passage (9.8 / 13.6 / 10.2 / 8.4 / 9.9 s) and the
+  two fresh judges split on the same 42 seconds: one read them as "motivated
+  and held", the other as "a metronome — 13.6 s of unbroken piano wide from
+  48–61.5 s is where a viewer leaves". Both readings stay here because only one
+  of them can be right and nothing measured says which. So this is a **check,
+  not a limit**: past ~10 s, name what in the picture is developing, or cut.
+  `[review feedback, 2026-08, split verdict — one of two judges]` — it does not
+  overturn the measured holds in the bullets above, and may be the same fact
+  from the other side: in the corpus every hold past 30 s is on an operated
+  camera (§4), which is to say on a picture that was still developing.
+- **Across a quiet passage's second half, tighten toward the resolve.** The
+  human cut in the same round ran 7.8 / 3.8 / 2.5 / 6.1 / 3.3 s and then
+  released into a 14.3 s resolve — shots shortening through the passage, then
+  one long shot on the arrival. This is the accelerate-and-release gesture
+  below at passage scale rather than at a section change, and the shortening
+  run is what a quiet passage does with its second half.
+  `[review feedback, 2026-08]` — honest caveat, and it is the same disagreement
+  as the bullet above seen from the other arm: the judge who read our holds as
+  motivated read this shortening run as the human "timer-cutting" through the
+  quiet section. One judge's corpus shape is the other judge's metronome; what
+  decides between them is §5's test — whether each of those shorter shots has a
+  nameable cause, which for this passage is the secondary swells in §5.
 - **Approach a section change with acceleration; release into stillness after
   it.** Shots shorten into the turn (1.7 s, then 2.2 s, through the decay), the
   change itself lands on the section's loudest peak, and what follows is a long
@@ -260,6 +290,22 @@ that the grid is a live band's grid, so it moves.
   is technically in frame. Sidecars should record what a framing actually
   contains, because that is what decides which cuts it can carry.
   `[review feedback, 2026-08]`
+- **Obstruction veto: near-field blocking makes a shot unusable, full stop.**
+  An audience head, hat or back sitting in the **foreground third** of the
+  frame disqualifies the shot no matter what else is right about it — the
+  motivation, the role, the scale change, the placement against the transient.
+  This is a veto and not a penalty, because it is the one defect a viewer
+  cannot look past: the thing they came to see is behind something. In the
+  blind round behind this note **three obstructed shots decided a verdict**,
+  and the judge who called them named nothing else about our cut that a viewer
+  would have to forgive. The same shot is fine the moment the blocking is not
+  near-field — a head low in the frame between the camera and an empty part of
+  the room is background, not obstruction. `[review feedback, 2026-08]` — this
+  pairs with the incoming `analyze_occlusion` measurement, which is what turns
+  the veto from a thing to look for in a grab into a number a shot either
+  passes or fails; until it lands, check it by eye on the boundary frames and
+  treat a maybe as a fail, since a vetoed shot costs one alternative and a kept
+  one costs the verdict.
 - **A scale change is a picture worth more than a framing return.** When a cut
   needs a new picture, a different distance on the same subject beats returning
   to a framing already used. Two framings alternating are two pictures however
@@ -313,6 +359,20 @@ distribution measured by correlating detected events against actual cut points.
   loud; it has to be nameable. This is the general form of the fill claim
   below: the detector finds a subset of the motivations, and the rest are still
   named, just not by a tool. `[review feedback, 2026-08]`
+- **A secondary swell is cut-worthy; in a quiet passage it is the peak.** A
+  thin passage has no loud events in it, and that is not the same as having no
+  motivations: local loudness bumps of only **+2–3 dB prominence** are
+  legitimate cues. In the round behind this note the human's cuts through the
+  quiet section track secondary bumps at **64 / 67 / 73 s** — nothing that
+  would survive a peak threshold set for the tune as a whole, and the loudest
+  thing available where it sits. Read prominence against the passage, not
+  against the song. `[review feedback, 2026-08]` — the honest caveat is that
+  this is the contested half of a split verdict: the other judge read those
+  same cuts as timer-cutting and read our long holds over the same seconds as
+  the motivated version. Both judges are applying the bullet above; they
+  disagree about whether a +2–3 dB bump clears the bar for "nameable". Until
+  something measures it, cutting on a secondary swell is defensible and holding
+  through it is defensible, and cutting on nothing is not.
 - **Drum fill** — arrive on the drummer around the start of the fill, ride
   through the transition, and leave after the new section has settled.
   `[believed, unverified]` — seed pattern recorded as such in #13; the lead/lag
