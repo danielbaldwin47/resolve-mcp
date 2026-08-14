@@ -1,0 +1,30 @@
+{
+ "render": "C:\\Users\\Daniel\\repos\\resolve-mcp\\.claude\\worktrees\\gauntlet-loop-1\\gauntlet\\renders\\taurus_mid_p3r1.mp4",
+ "duration_s": 90.027,
+ "size_bytes": 409769914,
+ "video": {
+  "width": 1920,
+  "height": 1080,
+  "codec_name": "h264",
+  "r_frame_rate": "24000/1001",
+  "nb_frames": "2158"
+ },
+ "audio_streams": 1,
+ "planned_cuts": 11,
+ "detected_at_0.10": [
+  12.846,
+  19.394,
+  24.691,
+  37.579,
+  46.838,
+  51.927,
+  57.891,
+  62.354,
+  73.365,
+  79.037,
+  85.168
+ ],
+ "matched": 11,
+ "unmatched_planned": [],
+ "extra_detections": []
+}

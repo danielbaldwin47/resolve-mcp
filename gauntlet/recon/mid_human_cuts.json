@@ -1,0 +1,571 @@
+{
+  "kind": "mid_human_cuts",
+  "piece": "PIECE 3 \u2014 mid-song window of Taurus People",
+  "source": "S:\\Deliverables\\Ryan Devlin\\6-17-26 Zinc Bar\\Full Videos\\6-17 - Zinc Set 2 - Taurus People.mp4",
+  "method": "ffmpeg scale=320:-2, select gt(scene,0.1), metadata=print over deliverable 126.68-296.68 s (the window plus 40 s of pad either side); cuts then clipped to the window, shots kept at their real lengths.",
+  "threshold": 0.1,
+  "window": {
+    "deliverable_seconds": [
+      166.68,
+      256.68
+    ],
+    "mix_seconds": [
+      3735.16,
+      3825.16
+    ],
+    "frames": [
+      175955,
+      178113
+    ],
+    "seconds": 90.0
+  },
+  "counts": {
+    "cuts_in_window": 13,
+    "shots_touching_window": 14,
+    "shots_wholly_inside": 12,
+    "cuts_per_minute": 8.67
+  },
+  "shot_length": {
+    "mean": 7.725,
+    "median": 5.443,
+    "min": 2.253,
+    "max": 21.021,
+    "mean_wholly_inside": 7.073,
+    "median_wholly_inside": 5.443
+  },
+  "shot_length_histogram": {
+    "<2s": 0,
+    "2-4s": 6,
+    "4-8s": 3,
+    "8-15s": 3,
+    "15-30s": 2,
+    ">30s": 0
+  },
+  "gaps_between_cuts": [
+    13.054,
+    2.586,
+    17.017,
+    3.295,
+    5.839,
+    10.302,
+    3.587,
+    2.795,
+    11.219,
+    5.047,
+    7.591,
+    2.544
+  ],
+  "alignment_to_events": {
+    "events_source": "gauntlet/recon/taurus_mid_events.json",
+    "median_abs_offset_s": 0.268,
+    "within_0_25s": 5,
+    "within_0_5s": 10,
+    "within_1s": 12,
+    "cuts": [
+      {
+        "cut": {
+          "d": 167.501,
+          "t": 3735.981,
+          "frame": 175975
+        },
+        "nearest_event": {
+          "kind": "drum_fill",
+          "t": 3736.04,
+          "d": 167.56,
+          "frame": 175976,
+          "confidence": 0.361,
+          "offset_s": -0.059
+        },
+        "events_within_0_5s": 1
+      },
+      {
+        "cut": {
+          "d": 180.555,
+          "t": 3749.035,
+          "frame": 176288
+        },
+        "nearest_event": {
+          "kind": "solo_change",
+          "t": 3749.96,
+          "d": 181.48,
+          "frame": 176310,
+          "confidence": null,
+          "offset_s": -0.925
+        },
+        "events_within_0_5s": 0
+      },
+      {
+        "cut": {
+          "d": 183.141,
+          "t": 3751.621,
+          "frame": 176350
+        },
+        "nearest_event": {
+          "kind": "solo_change",
+          "t": 3749.96,
+          "d": 181.48,
+          "frame": 176310,
+          "confidence": null,
+          "offset_s": 1.661
+        },
+        "events_within_0_5s": 0
+      },
+      {
+        "cut": {
+          "d": 200.158,
+          "t": 3768.638,
+          "frame": 176758
+        },
+        "nearest_event": {
+          "kind": "drum_fill",
+          "t": 3768.9,
+          "d": 200.42,
+          "frame": 176764,
+          "confidence": 0.478,
+          "offset_s": -0.262
+        },
+        "events_within_0_5s": 1
+      },
+      {
+        "cut": {
+          "d": 203.453,
+          "t": 3771.933,
+          "frame": 176837
+        },
+        "nearest_event": {
+          "kind": "drum_fill",
+          "t": 3772.48,
+          "d": 204.0,
+          "frame": 176850,
+          "confidence": 0.421,
+          "offset_s": -0.547
+        },
+        "events_within_0_5s": 0
+      },
+      {
+        "cut": {
+          "d": 209.292,
+          "t": 3777.772,
+          "frame": 176977
+        },
+        "nearest_event": {
+          "kind": "drum_fill",
+          "t": 3778.04,
+          "d": 209.56,
+          "frame": 176983,
+          "confidence": 0.63,
+          "offset_s": -0.268
+        },
+        "events_within_0_5s": 1
+      },
+      {
+        "cut": {
+          "d": 219.594,
+          "t": 3788.074,
+          "frame": 177224
+        },
+        "nearest_event": {
+          "kind": "drum_fill",
+          "t": 3788.22,
+          "d": 219.74,
+          "frame": 177227,
+          "confidence": 0.42,
+          "offset_s": -0.146
+        },
+        "events_within_0_5s": 1
+      },
+      {
+        "cut": {
+          "d": 223.181,
+          "t": 3791.661,
+          "frame": 177310
+        },
+        "nearest_event": {
+          "kind": "drum_fill",
+          "t": 3791.48,
+          "d": 223.0,
+          "frame": 177306,
+          "confidence": 0.489,
+          "offset_s": 0.181
+        },
+        "events_within_0_5s": 1
+      },
+      {
+        "cut": {
+          "d": 225.976,
+          "t": 3794.456,
+          "frame": 177377
+        },
+        "nearest_event": {
+          "kind": "drum_fill",
+          "t": 3794.18,
+          "d": 225.7,
+          "frame": 177370,
+          "confidence": 0.425,
+          "offset_s": 0.276
+        },
+        "events_within_0_5s": 1
+      },
+      {
+        "cut": {
+          "d": 237.195,
+          "t": 3805.675,
+          "frame": 177646
+        },
+        "nearest_event": {
+          "kind": "drum_fill",
+          "t": 3806.02,
+          "d": 237.54,
+          "frame": 177654,
+          "confidence": 0.577,
+          "offset_s": -0.345
+        },
+        "events_within_0_5s": 3
+      },
+      {
+        "cut": {
+          "d": 242.242,
+          "t": 3810.722,
+          "frame": 177767
+        },
+        "nearest_event": {
+          "kind": "phrase_boundary",
+          "t": 3810.86,
+          "d": 242.38,
+          "frame": 177770,
+          "confidence": 0.689,
+          "offset_s": -0.138
+        },
+        "events_within_0_5s": 2
+      },
+      {
+        "cut": {
+          "d": 249.833,
+          "t": 3818.313,
+          "frame": 177949
+        },
+        "nearest_event": {
+          "kind": "energy_peak",
+          "t": 3818.5,
+          "d": 250.02,
+          "frame": 177953,
+          "confidence": null,
+          "offset_s": -0.187
+        },
+        "events_within_0_5s": 3
+      },
+      {
+        "cut": {
+          "d": 252.377,
+          "t": 3820.857,
+          "frame": 178010
+        },
+        "nearest_event": {
+          "kind": "phrase_boundary",
+          "t": 3821.26,
+          "d": 252.78,
+          "frame": 178020,
+          "confidence": 0.375,
+          "offset_s": -0.403
+        },
+        "events_within_0_5s": 3
+      }
+    ]
+  },
+  "cuts": [
+    {
+      "d": 167.501,
+      "t": 3735.981,
+      "frame": 175975
+    },
+    {
+      "d": 180.555,
+      "t": 3749.035,
+      "frame": 176288
+    },
+    {
+      "d": 183.141,
+      "t": 3751.621,
+      "frame": 176350
+    },
+    {
+      "d": 200.158,
+      "t": 3768.638,
+      "frame": 176758
+    },
+    {
+      "d": 203.453,
+      "t": 3771.933,
+      "frame": 176837
+    },
+    {
+      "d": 209.292,
+      "t": 3777.772,
+      "frame": 176977
+    },
+    {
+      "d": 219.594,
+      "t": 3788.074,
+      "frame": 177224
+    },
+    {
+      "d": 223.181,
+      "t": 3791.661,
+      "frame": 177310
+    },
+    {
+      "d": 225.976,
+      "t": 3794.456,
+      "frame": 177377
+    },
+    {
+      "d": 237.195,
+      "t": 3805.675,
+      "frame": 177646
+    },
+    {
+      "d": 242.242,
+      "t": 3810.722,
+      "frame": 177767
+    },
+    {
+      "d": 249.833,
+      "t": 3818.313,
+      "frame": 177949
+    },
+    {
+      "d": 252.377,
+      "t": 3820.857,
+      "frame": 178010
+    }
+  ],
+  "shots": [
+    {
+      "from": {
+        "d": 165.248,
+        "t": 3733.728,
+        "frame": 175921
+      },
+      "to": {
+        "d": 167.501,
+        "t": 3735.981,
+        "frame": 175975
+      },
+      "seconds": 2.253,
+      "straddles_window_open": true,
+      "straddles_window_close": false
+    },
+    {
+      "from": {
+        "d": 167.501,
+        "t": 3735.981,
+        "frame": 175975
+      },
+      "to": {
+        "d": 180.555,
+        "t": 3749.035,
+        "frame": 176288
+      },
+      "seconds": 13.054,
+      "straddles_window_open": false,
+      "straddles_window_close": false
+    },
+    {
+      "from": {
+        "d": 180.555,
+        "t": 3749.035,
+        "frame": 176288
+      },
+      "to": {
+        "d": 183.141,
+        "t": 3751.621,
+        "frame": 176350
+      },
+      "seconds": 2.586,
+      "straddles_window_open": false,
+      "straddles_window_close": false
+    },
+    {
+      "from": {
+        "d": 183.141,
+        "t": 3751.621,
+        "frame": 176350
+      },
+      "to": {
+        "d": 200.158,
+        "t": 3768.638,
+        "frame": 176758
+      },
+      "seconds": 17.017,
+      "straddles_window_open": false,
+      "straddles_window_close": false
+    },
+    {
+      "from": {
+        "d": 200.158,
+        "t": 3768.638,
+        "frame": 176758
+      },
+      "to": {
+        "d": 203.453,
+        "t": 3771.933,
+        "frame": 176837
+      },
+      "seconds": 3.295,
+      "straddles_window_open": false,
+      "straddles_window_close": false
+    },
+    {
+      "from": {
+        "d": 203.453,
+        "t": 3771.933,
+        "frame": 176837
+      },
+      "to": {
+        "d": 209.292,
+        "t": 3777.772,
+        "frame": 176977
+      },
+      "seconds": 5.839,
+      "straddles_window_open": false,
+      "straddles_window_close": false
+    },
+    {
+      "from": {
+        "d": 209.292,
+        "t": 3777.772,
+        "frame": 176977
+      },
+      "to": {
+        "d": 219.594,
+        "t": 3788.074,
+        "frame": 177224
+      },
+      "seconds": 10.302,
+      "straddles_window_open": false,
+      "straddles_window_close": false
+    },
+    {
+      "from": {
+        "d": 219.594,
+        "t": 3788.074,
+        "frame": 177224
+      },
+      "to": {
+        "d": 223.181,
+        "t": 3791.661,
+        "frame": 177310
+      },
+      "seconds": 3.587,
+      "straddles_window_open": false,
+      "straddles_window_close": false
+    },
+    {
+      "from": {
+        "d": 223.181,
+        "t": 3791.661,
+        "frame": 177310
+      },
+      "to": {
+        "d": 225.976,
+        "t": 3794.456,
+        "frame": 177377
+      },
+      "seconds": 2.795,
+      "straddles_window_open": false,
+      "straddles_window_close": false
+    },
+    {
+      "from": {
+        "d": 225.976,
+        "t": 3794.456,
+        "frame": 177377
+      },
+      "to": {
+        "d": 237.195,
+        "t": 3805.675,
+        "frame": 177646
+      },
+      "seconds": 11.219,
+      "straddles_window_open": false,
+      "straddles_window_close": false
+    },
+    {
+      "from": {
+        "d": 237.195,
+        "t": 3805.675,
+        "frame": 177646
+      },
+      "to": {
+        "d": 242.242,
+        "t": 3810.722,
+        "frame": 177767
+      },
+      "seconds": 5.047,
+      "straddles_window_open": false,
+      "straddles_window_close": false
+    },
+    {
+      "from": {
+        "d": 242.242,
+        "t": 3810.722,
+        "frame": 177767
+      },
+      "to": {
+        "d": 249.833,
+        "t": 3818.313,
+        "frame": 177949
+      },
+      "seconds": 7.591,
+      "straddles_window_open": false,
+      "straddles_window_close": false
+    },
+    {
+      "from": {
+        "d": 249.833,
+        "t": 3818.313,
+        "frame": 177949
+      },
+      "to": {
+        "d": 252.377,
+        "t": 3820.857,
+        "frame": 178010
+      },
+      "seconds": 2.544,
+      "straddles_window_open": false,
+      "straddles_window_close": false
+    },
+    {
+      "from": {
+        "d": 252.377,
+        "t": 3820.857,
+        "frame": 178010
+      },
+      "to": {
+        "d": 273.398,
+        "t": 3841.878,
+        "frame": 178514
+      },
+      "seconds": 21.021,
+      "straddles_window_open": false,
+      "straddles_window_close": true
+    }
+  ],
+  "context": {
+    "last_cut_before_window": {
+      "d": 165.248,
+      "t": 3733.728,
+      "frame": 175921
+    },
+    "first_cut_after_window": {
+      "d": 273.398,
+      "t": 3841.878,
+      "frame": 178514
+    },
+    "cuts_in_padded_scan": 22,
+    "padded_scan_deliverable_seconds": [
+      126.68,
+      296.68
+    ]
+  }
+}

@@ -1,0 +1,115 @@
+{
+  "schema": 1,
+  "timeline": {
+    "name": "Taurus People Mid P3 R1",
+    "fps": 23.976
+  },
+  "sources": {
+    "fx6_wide": {
+      "clip": "A015C001_2606170J.MXF",
+      "bin": "Zinc Bar/Footage/FX6/Set 2",
+      "sync_offset": 117576
+    },
+    "a7iv_kit": {
+      "clip": "20260617_D_A7IV_0006.MP4",
+      "bin": "Zinc Bar/Footage/A7IV/Set 2",
+      "sync_offset": 86306
+    },
+    "master_mix": {
+      "clip": "Zinc Set 2 Reaper v4.wav",
+      "bin": "Zinc Bar/Audio",
+      "sync_offset": 86401
+    }
+  },
+  "audio": {
+    "source": "master_mix",
+    "in": 89554,
+    "out": 91712
+  },
+  "segments": [
+    {
+      "id": "s01",
+      "source": "fx6_wide",
+      "in": 58379,
+      "out": 58687,
+      "note": "12.85 s. The window opens in the quietest passage of the whole song (-21.6 to -23.2 LUFS, the bass/drums trading) and the front changes drums->bass 2.02 s in, so the piece opens ALREADY on the picture that holds the new soloist: FX6 framing W1 - pianist at the keys left, bassist centre, kit at the right edge. sec 3: sparse passages hold longer, and the answer is fewer cuts, not the same rate over thinner material. sec 4: the front change is taken on the band picture, and the camera is settled on the new front before the change rather than chasing it"
+    },
+    {
+      "id": "s02",
+      "source": "a7iv_kit",
+      "in": 89957,
+      "out": 90114,
+      "note": "6.55 s. Cut on the energy peak at 12.84 (+5.31 dB prominence, the biggest event of the first third) with the highest-confidence fill of the first half on the same frame (12.86, conf 0.628). 37.8 ms early of the mix's own onset. Arrives on the near-field kit 1.95 s BEFORE the front changes bass->drums at 14.80, so the drums take the front on a picture already looking at them (sec 4: follow the audience's gaze at a structure change) - and the A7IV is a four-shot, not a kit close-up: drummer near field right, bassist beyond the kit, pianist deep left, so nothing of the band is given up"
+    },
+    {
+      "id": "s03",
+      "source": "fx6_wide",
+      "in": 58844,
+      "out": 58971,
+      "note": "5.30 s. Cut 17.6 ms early at 19.39, where the 19.34-30.84 build leg starts (+2.99 dB): the drum feature begins to climb and the cut goes to the two men carrying the groove under it - the bass walking and the piano comping, both in W1. sec 4: prioritise the soloist but keep moving, the band's interaction is part of what the solo is"
+    },
+    {
+      "id": "s04",
+      "source": "a7iv_kit",
+      "in": 90241,
+      "out": 90550,
+      "note": "12.89 s - the longest shot in the piece, and the deliberate one. Arrives 32.7 ms early at the START of fill 24.80 (1.72 s, 71 hits, the largest fill of the first half) per sec 5, and then does not move for the core of the drum feature: fills 27.36, 28.20, 30.68 and 33.74 all land inside this shot, along with the top of the build at the 30.84 peak. sec 3: the drum cam's frequent-and-short shape needs internal variety, and the #46 recut held one drum shot 11.3 s because the interaction on screen earned it - here the drummer IS the front for 51 s and this is the near-field picture of him. Under the corpus's 21.5 s locked-camera ceiling with room to spare"
+    },
+    {
+      "id": "s05",
+      "source": "fx6_wide",
+      "in": 59280,
+      "out": 59502,
+      "note": "9.26 s, and THE FIRST RIDE. Cut 29.8 ms early at 37.58 to arrive 0.04 s before the piano's phrase ENDS at 37.62 - it then rests 12.35 s, the longest rest in the window, leaving bass and drums alone. sec 5: an arrival placed to catch a resolution, because the resolution is the watchable part. The shot is settled 3.67 s before the FX6 begins its 41.25-46.75 reframe, and then rides it: the frame walks right off the piano and the DRUMMER comes into it, so W1 becomes W2 - a bass-and-drums two-shot - with no cut, exactly as bass and drums become the only thing playing. sec 4: the moving camera is a second editor, and a scale change is a picture worth more than a framing return"
+    },
+    {
+      "id": "s06",
+      "source": "a7iv_kit",
+      "in": 90772,
+      "out": 90894,
+      "note": "5.09 s. Cut 29.5 ms early on the 46.84 energy peak (+6.18 dB, the second-biggest prominence in the window) at the top of the 42.34-47.84 build - the duo's climax, taken to the near-field kit, 0.09 s after the FX6 finished its reframe so nothing is cut into a moving camera (sec 4: wait out a pan). Fills 48.34, 50.02 and 51.12 play inside it as the passage decays"
+    },
+    {
+      "id": "s07",
+      "source": "fx6_wide",
+      "in": 59624,
+      "out": 59767,
+      "note": "5.96 s, and THE SECOND RIDE. Cut 18.1 ms early at 51.93, where the decay ends and the sparse plateau 51.84-60.34 opens (-18.6 to -20.0 LUFS, the thinnest stretch of the second half). Holds through it, and inside the hold the FX6 reframes back left (53.92-55.92): the pianist returns to frame 1.3 s before he returns to the music at 57.19, so the picture develops under the hold rather than sitting still (sec 3: a quiet-passage hold carries when the picture develops)"
+    },
+    {
+      "id": "s08",
+      "source": "a7iv_kit",
+      "in": 91037,
+      "out": 91144,
+      "note": "4.46 s. Cut 27.8 ms early on the phrase boundary at 57.94, which carries a fill on the same frame - and the arrival is deliberately EARLY so the 59.02 fill (1.36 s, 62 hits, the drum solo's last big statement) lands inside the shot rather than being jabbed at. Leaves at 62.35 for a reason the picture supplies: from 62.90 the sax player walks through this camera's near field on his way back to his mic and covers first the drummer, then the bassist, then the pianist (occlusion_mid.json, the one true veto in the window). sec 4: near-field blocking is a veto, not a penalty - so the cut leaves 0.55 s before the block starts"
+    },
+    {
+      "id": "s09",
+      "source": "fx6_wide",
+      "in": 59874,
+      "out": 60138,
+      "note": "11.01 s - THE THIRD RIDE, and the piece's centre. Cut 20.0 ms early at 62.35 onto W2b (piano, bass, kit edge) and settled 2.9 s before the FX6 begins its 65.25-67.08 reframe. The camera then pans right and FINDS THE SAX PLAYER standing at his mic - the band's return is revealed by the camera's own move, with no cut on it: the front change drums->other at 66.24, the phrase boundary at 66.68 and the SONG'S STRUCTURAL PEAK at 66.84 (-6.9 LUFS, +12.91 dB prominence, the loudest 3 s anywhere in Taurus People) all land inside this one shot on the band picture. sec 3: release into stillness after the section change - the acceleration is the 5.96/4.46 s pair before it, and this is the release. sec 4: a structure change is taken on the angle that holds the band, and the A7IV cannot take it anyway - it is blocked from 62.90 to 66.60"
+    },
+    {
+      "id": "s10",
+      "source": "a7iv_kit",
+      "in": 91408,
+      "out": 91544,
+      "note": "5.67 s. Cut 20.0 ms early at the START of fill 73.36 (2.90 s, 109 hits - the biggest fill in the whole window) per sec 5, on the near-field kit, with fill 77.96 (2.24 s) following inside the shot. It also spends the FX6's 75.92-78.92 reframe OFF SCREEN, so the wide's next framing arrives as a new picture instead of as a move the viewer sat through"
+    },
+    {
+      "id": "s11",
+      "source": "fx6_wide",
+      "in": 60274,
+      "out": 60421,
+      "note": "6.13 s. Cut 22.7 ms early on the phrase boundary at 79.08 to W4 - the widest framing of the window and the only picture in the piece that holds all four players at once (piano, bass, sax at his mic, drummer). sec 4: a scale change is a picture worth more than a framing return; this is the fourth distinct FX6 framing and the cut arrives at it rather than returning to one it has used"
+    },
+    {
+      "id": "s12",
+      "source": "a7iv_kit",
+      "in": 91691,
+      "out": 91807,
+      "note": "4.84 s. Cut 35.6 ms early on fill 85.26 into the ride-out, where the drumming is the densest anywhere in the window - onset density climbs to 10.0/s and the last fills run 0.56, 0.28 and 2.76 s. The near-field kit takes the window's close; the window ends on the phrase boundary at 90.00 that the recon snapped the span to"
+    }
+  ]
+}

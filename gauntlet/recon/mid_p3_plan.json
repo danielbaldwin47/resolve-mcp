@@ -1,0 +1,303 @@
+{
+ "cuts": [
+  {
+   "target": 12.84,
+   "onset": 12.884,
+   "cut_frame_rel": 308,
+   "cut_t": 12.846,
+   "early_ms": 37.8,
+   "sync_frame": 176263,
+   "from": "fx6",
+   "to": "a7iv",
+   "shot_seconds": 12.85,
+   "why": "energy peak +5.31 dB with fill 12.86 (conf 0.628) on it"
+  },
+  {
+   "target": 19.34,
+   "onset": 19.412,
+   "cut_frame_rel": 465,
+   "cut_t": 19.394,
+   "early_ms": 17.6,
+   "sync_frame": 176420,
+   "from": "a7iv",
+   "to": "fx6",
+   "shot_seconds": 6.55,
+   "why": "leave the kit as the 19.34 build leg starts"
+  },
+  {
+   "target": 24.8,
+   "onset": 24.724,
+   "cut_frame_rel": 592,
+   "cut_t": 24.691,
+   "early_ms": 32.7,
+   "sync_frame": 176547,
+   "from": "fx6",
+   "to": "a7iv",
+   "shot_seconds": 5.3,
+   "why": "fill 24.80 (1.72 s, 71 hits) - arrive at its start"
+  },
+  {
+   "target": 37.62,
+   "onset": 37.609,
+   "cut_frame_rel": 901,
+   "cut_t": 37.579,
+   "early_ms": 29.8,
+   "sync_frame": 176856,
+   "from": "a7iv",
+   "to": "fx6",
+   "shot_seconds": 12.89,
+   "why": "the piano's phrase ENDS here and rests 12.35 s - arrive to catch it"
+  },
+  {
+   "target": 46.84,
+   "onset": 46.868,
+   "cut_frame_rel": 1123,
+   "cut_t": 46.838,
+   "early_ms": 29.5,
+   "sync_frame": 177078,
+   "from": "fx6",
+   "to": "a7iv",
+   "shot_seconds": 9.26,
+   "why": "energy peak +6.18 dB, top of the 42.34-47.84 build"
+  },
+  {
+   "target": 51.88,
+   "onset": 51.945,
+   "cut_frame_rel": 1245,
+   "cut_t": 51.927,
+   "early_ms": 18.1,
+   "sync_frame": 177200,
+   "from": "a7iv",
+   "to": "fx6",
+   "shot_seconds": 5.09,
+   "why": "the decay ends and the sparse plateau 51.84-60.34 opens"
+  },
+  {
+   "target": 57.94,
+   "onset": 57.919,
+   "cut_frame_rel": 1388,
+   "cut_t": 57.891,
+   "early_ms": 27.8,
+   "sync_frame": 177343,
+   "from": "fx6",
+   "to": "a7iv",
+   "shot_seconds": 5.96,
+   "why": "phrase boundary 57.94 with a fill on it - arrive EARLY so the 59.02 fill (1.36 s, 62 hits) lands inside the shot, no jab"
+  },
+  {
+   "target": 62.45,
+   "onset": 62.377,
+   "cut_frame_rel": 1495,
+   "cut_t": 62.354,
+   "early_ms": 23.0,
+   "sync_frame": 177450,
+   "from": "a7iv",
+   "to": "fx6",
+   "shot_seconds": 4.46,
+   "why": "leave the A7IV before the sax crosses its near field (veto 62.90)"
+  },
+  {
+   "target": 73.36,
+   "onset": 73.385,
+   "cut_frame_rel": 1759,
+   "cut_t": 73.365,
+   "early_ms": 20.0,
+   "sync_frame": 177714,
+   "from": "fx6",
+   "to": "a7iv",
+   "shot_seconds": 11.01,
+   "why": "fill 73.36 (2.90 s, 109 hits) - the biggest fill in the window"
+  },
+  {
+   "target": 79.08,
+   "onset": 79.06,
+   "cut_frame_rel": 1895,
+   "cut_t": 79.037,
+   "early_ms": 22.7,
+   "sync_frame": 177850,
+   "from": "a7iv",
+   "to": "fx6",
+   "shot_seconds": 5.67,
+   "why": "phrase boundary 79.08; the 75.92-78.92 reframe landed off screen"
+  },
+  {
+   "target": 85.26,
+   "onset": 85.204,
+   "cut_frame_rel": 2042,
+   "cut_t": 85.168,
+   "early_ms": 35.6,
+   "sync_frame": 177997,
+   "from": "fx6",
+   "to": "a7iv",
+   "shot_seconds": 6.13,
+   "why": "fill 85.26 into the ride-out's densest drumming (10.0 onsets/s)"
+  },
+  {
+   "target": 90.0,
+   "cut_frame_rel": 2158,
+   "cut_t": 90.007,
+   "sync_frame": 178113,
+   "from": "a7iv",
+   "to": "END",
+   "shot_seconds": 4.84,
+   "why": "window close"
+  }
+ ],
+ "segments": [
+  {
+   "angle": "fx6",
+   "in_rel": 0,
+   "out_rel": 308,
+   "seconds": 12.85,
+   "sync": [
+    175955,
+    176263
+   ]
+  },
+  {
+   "angle": "a7iv",
+   "in_rel": 308,
+   "out_rel": 465,
+   "seconds": 6.55,
+   "sync": [
+    176263,
+    176420
+   ]
+  },
+  {
+   "angle": "fx6",
+   "in_rel": 465,
+   "out_rel": 592,
+   "seconds": 5.3,
+   "sync": [
+    176420,
+    176547
+   ]
+  },
+  {
+   "angle": "a7iv",
+   "in_rel": 592,
+   "out_rel": 901,
+   "seconds": 12.89,
+   "sync": [
+    176547,
+    176856
+   ]
+  },
+  {
+   "angle": "fx6",
+   "in_rel": 901,
+   "out_rel": 1123,
+   "seconds": 9.26,
+   "sync": [
+    176856,
+    177078
+   ]
+  },
+  {
+   "angle": "a7iv",
+   "in_rel": 1123,
+   "out_rel": 1245,
+   "seconds": 5.09,
+   "sync": [
+    177078,
+    177200
+   ]
+  },
+  {
+   "angle": "fx6",
+   "in_rel": 1245,
+   "out_rel": 1388,
+   "seconds": 5.96,
+   "sync": [
+    177200,
+    177343
+   ]
+  },
+  {
+   "angle": "a7iv",
+   "in_rel": 1388,
+   "out_rel": 1495,
+   "seconds": 4.46,
+   "sync": [
+    177343,
+    177450
+   ]
+  },
+  {
+   "angle": "fx6",
+   "in_rel": 1495,
+   "out_rel": 1759,
+   "seconds": 11.01,
+   "sync": [
+    177450,
+    177714
+   ]
+  },
+  {
+   "angle": "a7iv",
+   "in_rel": 1759,
+   "out_rel": 1895,
+   "seconds": 5.67,
+   "sync": [
+    177714,
+    177850
+   ]
+  },
+  {
+   "angle": "fx6",
+   "in_rel": 1895,
+   "out_rel": 2042,
+   "seconds": 6.13,
+   "sync": [
+    177850,
+    177997
+   ]
+  },
+  {
+   "angle": "a7iv",
+   "in_rel": 2042,
+   "out_rel": 2158,
+   "seconds": 4.84,
+   "sync": [
+    177997,
+    178113
+   ]
+  }
+ ],
+ "durations": [
+  12.85,
+  6.55,
+  5.3,
+  12.89,
+  9.26,
+  5.09,
+  5.96,
+  4.46,
+  11.01,
+  5.67,
+  6.13,
+  4.84
+ ],
+ "n_shots": 12,
+ "n_cuts": 11,
+ "median": 6.13,
+ "mean": 7.5,
+ "min": 4.46,
+ "max": 12.89,
+ "share_seconds": {
+  "fx6": 50.51,
+  "a7iv": 39.5
+ },
+ "share_pct": {
+  "fx6": 56.1,
+  "a7iv": 43.9
+ },
+ "early_ms": {
+  "min": 17.6,
+  "max": 37.8,
+  "median": 27.8
+ },
+ "veto_violations": [],
+ "total_seconds": 90.01
+}

@@ -40,8 +40,13 @@ energy arc, ending. Per piece, per round:
   (R3, 2026-08-13, sealed pack `taurus_opening_r3`). Render:
   `gauntlet/renders/taurus_opening_r3.mp4`, timeline
   'Taurus People Opening R3 v3'.
-- Piece 2 · Ending: next up (tail conventions already measured in
-  `gauntlet/recon/openings_survey.json`).
+- **Piece 2 · Ending (Taurus, last 90 s): CLOSED — WON 2–1** (P2R3,
+  2026-08-13, pack `taurus_ending_p2r3`; render
+  `gauntlet/renders/taurus_ending_p2r3.mp4`). R3 = R2 minus the last
+  cut: final 13.7 s on the ensemble wide. Carry-forward critiques:
+  3.3 s climax jab reads as a cliff; long-short alternation predictable
+  by 40 s.
+- Piece 3 · Cut timing + angle choice, mid-song solo section: next.
 - Iteration 0 (2026-08-13): setup done. Recon workflow launched
   (live probe, docs survey, human cut stats, Emmet refs) → results land in
   `gauntlet/recon/`.

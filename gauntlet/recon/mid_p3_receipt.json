@@ -1,0 +1,175 @@
+{
+ "sync": [
+  {
+   "render_t": 8.0,
+   "lag_ms": -11.92,
+   "normalised_peak": 0.976
+  },
+  {
+   "render_t": 44.0,
+   "lag_ms": -11.92,
+   "normalised_peak": 0.917
+  },
+  {
+   "render_t": 82.0,
+   "lag_ms": -11.92,
+   "normalised_peak": 0.988
+  }
+ ],
+ "span_sync": [
+  175955,
+  178113
+ ],
+ "span_frames": 2158,
+ "span_seconds": 90.007,
+ "span_deliverable_seconds": [
+  166.68,
+  256.68
+ ],
+ "veto_violations": [],
+ "pictures": [
+  {
+   "t": [
+    0.0,
+    12.85
+   ],
+   "seconds": 12.85,
+   "angle": "fx6",
+   "picture_at_cut_in": "W1 piano+bass, kit edge"
+  },
+  {
+   "t": [
+    12.85,
+    19.39
+   ],
+   "seconds": 6.55,
+   "angle": "a7iv",
+   "picture_at_cut_in": "A7IV four-shot"
+  },
+  {
+   "t": [
+    19.39,
+    24.69
+   ],
+   "seconds": 5.3,
+   "angle": "fx6",
+   "picture_at_cut_in": "W1 piano+bass, kit edge"
+  },
+  {
+   "t": [
+    24.69,
+    37.58
+   ],
+   "seconds": 12.89,
+   "angle": "a7iv",
+   "picture_at_cut_in": "A7IV four-shot"
+  },
+  {
+   "t": [
+    37.58,
+    46.84
+   ],
+   "seconds": 9.26,
+   "angle": "fx6",
+   "picture_at_cut_in": "W1 piano+bass, kit edge"
+  },
+  {
+   "t": [
+    46.84,
+    51.93
+   ],
+   "seconds": 5.09,
+   "angle": "a7iv",
+   "picture_at_cut_in": "A7IV four-shot"
+  },
+  {
+   "t": [
+    51.93,
+    57.89
+   ],
+   "seconds": 5.96,
+   "angle": "fx6",
+   "picture_at_cut_in": "W2 bass+drummer, piano at edge"
+  },
+  {
+   "t": [
+    57.89,
+    62.35
+   ],
+   "seconds": 4.46,
+   "angle": "a7iv",
+   "picture_at_cut_in": "A7IV four-shot"
+  },
+  {
+   "t": [
+    62.35,
+    73.36
+   ],
+   "seconds": 11.01,
+   "angle": "fx6",
+   "picture_at_cut_in": "W2b piano+bass+kit edge"
+  },
+  {
+   "t": [
+    73.36,
+    79.04
+   ],
+   "seconds": 5.67,
+   "angle": "a7iv",
+   "picture_at_cut_in": "A7IV four-shot"
+  },
+  {
+   "t": [
+    79.04,
+    85.17
+   ],
+   "seconds": 6.13,
+   "angle": "fx6",
+   "picture_at_cut_in": "W4 full quartet"
+  },
+  {
+   "t": [
+    85.17,
+    90.01
+   ],
+   "seconds": 4.84,
+   "angle": "a7iv",
+   "picture_at_cut_in": "A7IV four-shot"
+  }
+ ],
+ "distinct_pictures": 5,
+ "framing_returns_under_3s": [],
+ "durations": [
+  12.85,
+  6.55,
+  5.3,
+  12.89,
+  9.26,
+  5.09,
+  5.96,
+  4.46,
+  11.01,
+  5.67,
+  6.13,
+  4.84
+ ],
+ "monotonic_duration_run": false,
+ "strict_long_short_alternation": false,
+ "shot_stats": {
+  "median": 6.13,
+  "mean": 7.5,
+  "min": 4.46,
+  "max": 12.89,
+  "n_shots": 12,
+  "n_cuts": 11
+ },
+ "share_pct": {
+  "fx6": 56.1,
+  "a7iv": 43.9
+ },
+ "early_ms": {
+  "min": 17.6,
+  "max": 37.8,
+  "median": 27.8
+ }
+}

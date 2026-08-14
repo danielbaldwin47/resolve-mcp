@@ -220,6 +220,19 @@ flatness/centroid method from the ending prep measures exactly this.
 hard — ±12-frame window cannot see a multi-second dissolve; must
 classify against the human Taurus tail as ground truth.
 
+## G17 — our builds read metronomic; shot-length spread is the gap (in-work)
+
+P3R1 LOSS 1–2, and the "metronome" word has now appeared in FOUR straight
+panels (P1R3, P2R2, P2R3, P3R1 — unanimous in the last). Ours: no shot
+under 4.4 s, strict A/B alternation, callable by 30 s; cuts averaged
+2.06 s from the nearest RMS accent per one judge. Human's same window:
+2.25|13.05|2.59|17.02|3.29|5.84|10.30|3.59|2.79|11.22|5.05|7.59|2.54|21.02
+— bimodal: 13–21 s holds through sparse trading + 2–4 s bursts at
+transitions. Fixes in flight: style (bimodal spread; break the
+alternation; accents matter at 0.5–1 s scale, not just onsets at 30 ms)
++ server (correlate report gains a shot_rhythm block with a
+reads_metronomic heuristic as a builder self-review gate).
+
 ## Round record
 
 - **R3 · Taurus opening · WIN 2–1 — PIECE CLOSED** (ours = A; sealed pack
