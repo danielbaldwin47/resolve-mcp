@@ -1,0 +1,163 @@
+"""Emit the round-2 piece-3 cut file from mid_p3r2_plan.json, so no frame is hand-typed.
+
+The plan owns the arithmetic (snap, segment boundaries, checks); this file owns the prose.
+Writes projects/mcp-tests-zinc/taurus-people-mid-p3r2.cut.json.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+PLAN = json.loads((HERE / "mid_p3r2_plan.json").read_text(encoding="utf-8"))
+OUT = HERE.parents[1] / "projects" / "mcp-tests-zinc" / "taurus-people-mid-p3r2.cut.json"
+
+SOURCES = {
+    "fx6_wide": {"clip": "A015C001_2606170J.MXF", "bin": "Zinc Bar/Footage/FX6/Set 2",
+                 "sync_offset": 117576},
+    "a7iv_kit": {"clip": "20260617_D_A7IV_0006.MP4", "bin": "Zinc Bar/Footage/A7IV/Set 2",
+                 "sync_offset": 86306},
+    "master_mix": {"clip": "Zinc Set 2 Reaper v4.wav", "bin": "Zinc Bar/Audio",
+                   "sync_offset": 86401},
+}
+SRC = {"fx6": "fx6_wide", "a7iv": "a7iv_kit"}
+
+NOTES = [
+    # s01
+    "2.04 s, SHORT. The window opens on the outgoing front: the drums have held it since "
+    "-13.16 and fill 0.88 plus fill 2.02 are the kit finishing its statement. The piece hands "
+    "over ON the change rather than after it - solo change drums->bass at 2.02, on a downbeat, "
+    "24.3 ms early of the mix's own onset. sec 3: a 2-4 s shot on a picture the cut has not "
+    "just been on is corpus-measured practice, and this is the first picture in the piece",
+    # s02
+    "10.80 s, LONG. The bass has the front and this is the quietest passage in the whole song "
+    "(-21.6 to -23.2 LUFS, the sparse bass/drums trading). FX6 framing W1 holds the pianist at "
+    "the keys left, the bassist centre and the kit at the right edge, so the new front is "
+    "already on screen when it arrives. sec 3: sparse passages hold longer, and the answer is "
+    "fewer cuts rather than the same rate carried onto thinner material. RECEIPT: the "
+    "director's own cut of this window holds 13.05 s here, on this same camera "
+    "(r2_human_angles.json matches his 0.82-13.88 shot to FX6 at +0.942 against A7IV -0.122)",
+    # s03
+    "2.42 s, SHORT - and the first of a three-cut BURST at the front change. Cut 37.8 ms early "
+    "on energy peak 12.84 (+5.31 dB, the biggest event of the first third), which carries the "
+    "window's highest-confidence fill (12.86, conf 0.628) and an RMS accent 0.10 s away "
+    "(12.95, +9.0 dB over its floor). The near-field kit arrives 1.94 s BEFORE the front "
+    "changes bass->drums at 14.80, so the drums take the front on a picture already looking at "
+    "them (sec 4: follow the audience's gaze at a structure change). The A7IV is a four-shot, "
+    "not a kit close-up - drummer near field right, bassist beyond the kit, pianist deep left",
+    # s04
+    "3.67 s, SHORT. Cut 18.8 ms early on the RMS accent at 15.15: the bass and piano answer "
+    "the drummer's entrance, and the cut shows the trade as an exchange instead of sitting "
+    "through it (sec 4: soloist doing something worth seeing, drummer lighting up at the same "
+    "time - the exchange is the content). sec 3: this burst is what breaks the callable "
+    "pattern - three cuts in 6 s inside a minute whose other shots run 10, 15 and 10 s",
+    # s05
+    "3.09 s, SHORT - the burst's third shot. Arrives 0.43 s AHEAD of fill 18.98 (31 hits) so "
+    "the fill lands inside the shot rather than being jabbed at (sec 5: arrive around the "
+    "start of the fill and ride it), and the 19.34-30.84 build leg (+2.99 dB) begins inside it "
+    "too: the drummer starts to climb and this is the picture that shows it",
+    # s06
+    "15.56 s, the LONGEST shot in the piece and the deliberate one. Cut 25.0 ms early on the "
+    "accent at 22.05, where the trade resolves, and then the cutting stops: fills 23.98, 24.80 "
+    "(1.72 s, 71 hits - the largest of the first half), 27.36, 28.20, 30.68, 33.74 and 37.32 "
+    "all play inside this one shot, along with the top of the build at the 30.84 peak. The "
+    "picture is W1, which holds all three players with the kit at the right edge, so nothing "
+    "of the drum feature is given up. sec 3: the spread is bimodal - hold long through the "
+    "sparse trading and cluster the short cuts at the transitions. RECEIPT: the director holds "
+    "17.02 s of this same picture across these same seconds (his 16.46-33.48 shot matches FX6 "
+    "at +0.943 against A7IV -0.107), which is what buys a 15.6 s hold on a picture that is not "
+    "itself moving",
+    # s07
+    "9.26 s, LONG. Cut 29.8 ms early on phrase boundary 37.62 (conf 0.764): the piano's phrase "
+    "ENDS here and it then rests 12.352 s, the longest rest in the window. With the piano out "
+    "the music is bass and drums, which is exactly what the A7IV four-shot holds - drummer in "
+    "the near field, bassist beyond the kit. The 42.34-47.84 build climbs inside this shot "
+    "with fills 39.52, 40.36, 42.88, 44.48, 45.34 and 46.16 in it, and the shot spends the "
+    "FX6's 41.25-46.75 walk OFF SCREEN so the wide's new framing arrives as a picture instead "
+    "of as a move the viewer sat through. Under the corpus's 21.5 s locked-camera ceiling, and "
+    "the director's own cut holds this camera 10.30 s over 42.61-52.91",
+    # s08
+    "10.14 s, LONG. Cut 29.5 ms early on energy peak 46.84 (+6.18 dB, the duo's climax) and "
+    "the cut REVEALS a new picture: while the piece was on the kit the FX6 walked left off the "
+    "piano onto W2, a bass-and-drums two-shot, which is what the music has been for nine "
+    "seconds. sec 4: a scale change is a picture worth more than a framing return. The camera "
+    "is settled at the arrival - the walk's fast phase ends at 45.4 and r2_settle.py measures "
+    "4 px per 0.5 s easing to 1 px by 48.8 at 384 px, under the 1 px/frame threshold the "
+    "recon's own detector uses. Inside the hold the FX6 reframes back left (53.92-55.92) and "
+    "the pianist returns to frame 1.3 s before he returns to the music at 57.19, so the "
+    "picture develops under the hold (sec 3) and the ride is a picture change with no cut on "
+    "it (sec 4: the moving camera is a second editor)",
+    # s09
+    "3.96 s, SHORT - the acceleration INTO the section change. Cut 38.4 ms early at 56.97, "
+    "0.28 s from the second-biggest RMS accent in the window (57.25, +13.9 dB) and on the "
+    "phrase boundaries at 57.38/57.94, with fill 57.94 on them. The drum solo's last big "
+    "statement, fill 59.02 (1.36 s, 62 hits), lands inside the shot. sec 3: shots shorten into "
+    "the turn - 10.14 s, then 3.96 s - and what follows is the release",
+    # s10
+    "10.34 s, LONG - the release, and the piece's centre. Cut 33.1 ms early on the accent at "
+    "61.05 (+9.1 dB) onto W2b (piano, bass, kit edge), which leaves the A7IV 1.96 s before the "
+    "sax player crosses its near field (veto 62.90-66.60, occlusion_mid.json - the one true "
+    "veto in this window) and settles 4.3 s before the FX6's 65.25-67.08 move. The camera then "
+    "pans right and FINDS THE SAX PLAYER at his mic: the band's return is revealed by the "
+    "camera's own move with no cut on it, and the front change drums->other at 66.24, the "
+    "phrase boundary at 66.68 and the SONG'S STRUCTURAL PEAK at 66.84 (-6.9 LUFS, +12.91 dB "
+    "prominence, the loudest 3 s anywhere in Taurus People) all land inside this one shot. "
+    "sec 3: release into stillness after the section change",
+    # s11
+    "3.29 s, SHORT. Cut 36.5 ms early on the accent at 71.35 (+13.2 dB, the biggest in the "
+    "back half), with fill 70.86 resolving into it. The window's biggest fill - 73.36, 2.90 s, "
+    "109 hits - plays inside the shot on the near-field kit (sec 5: arrive at the fill's start "
+    "and ride it)",
+    # s12
+    "6.17 s. Cut 26.5 ms early on the accent at 74.65 (+9.0 dB), back to the sax at his mic, "
+    "and the shot RIDES the 75.92-77.25 and 78.42-78.92 reframes out to W4 - the widest "
+    "framing in the window and the only picture in the piece that holds all four players at "
+    "once. The ensemble ride-out arrives as the picture opens, with no cut on it, and fill "
+    "77.96 (2.24 s, 88 hits) plays inside. sec 4: the moving camera's reframings substitute "
+    "for cuts",
+    # s13
+    "3.63 s, SHORT. Cut 29.7 ms early on phrase boundary 80.76 (conf 0.732) with fill 80.76 "
+    "(1.68 s, 67 hits) on it, into the densest drumming anywhere in the window - onset density "
+    "runs 9.06 to 9.33 per second across this plateau. Energy peak 83.34 (+2.75 dB) plays "
+    "inside the shot",
+    # s14
+    "5.63 s. Cut 39.0 ms early on phrase boundary 84.40 (conf 0.663), which returns the piece "
+    "to the four-player wide EARLY on purpose: fill 85.26 and the accents at 85.05 (+10.0 dB) "
+    "and 85.85 (+10.7 dB) land inside the shot rather than being jabbed at, and the window's "
+    "last peak (89.34, +4.17 dB, 10.0 onsets/s) and closing fill 89.44 (2.76 s, 96 hits) play "
+    "on the ensemble picture. The window closes on the phrase boundary at 90.00 the recon "
+    "snapped the span to",
+]
+
+
+def main() -> None:
+    segs = PLAN["segments"]
+    assert len(segs) == len(NOTES), (len(segs), len(NOTES))
+    out = {
+        "schema": 1,
+        "timeline": {"name": "Taurus People Mid P3 R2", "fps": 23.976},
+        "sources": SOURCES,
+        "audio": {"source": "master_mix", "in": 89554, "out": 91712},
+        "segments": [],
+    }
+    for i, (seg, note) in enumerate(zip(segs, NOTES, strict=True), start=1):
+        source = SRC[seg["angle"]]
+        offset = SOURCES[source]["sync_offset"]
+        out["segments"].append({
+            "id": f"s{i:02d}",
+            "source": source,
+            "in": seg["sync"][0] - offset,
+            "out": seg["sync"][1] - offset,
+            "note": note,
+        })
+        print(f"  s{i:02d} {source:<9} {seg['sync'][0] - offset}->{seg['sync'][1] - offset} "
+              f"({seg['seconds']:6.2f}s) sync {seg['sync']}", flush=True)
+    OUT.write_text(json.dumps(out, indent=2) + "\n", encoding="utf-8")
+    print("wrote", OUT, flush=True)
+    print("audio frames:", out["audio"]["out"] - out["audio"]["in"],
+          "video frames:", segs[-1]["sync"][1] - segs[0]["sync"][0], flush=True)
+
+
+if __name__ == "__main__":
+    main()
