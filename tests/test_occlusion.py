@@ -18,9 +18,11 @@ import json
 import shutil
 import subprocess
 from collections.abc import Sequence
+from functools import cache
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pytest
 
 from resolve_mcp.config import get_config
@@ -63,6 +65,72 @@ PARTIAL = 0.12
 
 CLEAN = gray_frame()
 BLOCKED = gray_frame(HEAD)
+
+EVIDENCE = Path(__file__).parent / "data" / "occlusion"
+"""The gauntlet's G11 evidence set, frozen as the 128x72 grey the detector actually reads.
+
+Six 90 s scans — the three adjudicated Taurus pieces on both angles, a sample a second — cut
+from the same media by ``gauntlet/recon/occl_fixture_grids.py``, which re-scores each one
+against the catalog the original run left on disk. Real frames rather than drawn ones because
+every false positive in the ledgers *is* a large dark bottom-anchored blob: a fixture built by
+drawing one could only agree with the detector it was drawn to satisfy.
+"""
+
+ADJUDICATED: dict[str, list[tuple[tuple[int, int], str]]] = {
+    # gauntlet/recon/occlusion_verdict_r3.json — an audience head over the pianist, then five
+    # windows of the same static bed: a black piano lid and a head parked in the far corner.
+    "opening-fx6": [
+        ((12, 19), blocking.OBSTRUCTION),
+        ((43, 50), blocking.SCENE),
+        ((53, 54), blocking.SCENE),
+        ((56, 61), blocking.SCENE),
+        ((67, 90), blocking.SCENE),
+    ],
+    "opening-a7iv": [((42, 43), blocking.OBSTRUCTION)],
+    # gauntlet/recon/occlusion_mid.json — the sax player crossing the near field, and the
+    # drummer's own arm twice. The crossing scored 0.416, the drummer 0.472 and 0.469.
+    "mid-a7iv": [
+        ((64, 65), blocking.OBSTRUCTION),
+        ((78, 79), blocking.SCENE),
+        ((87, 88), blocking.SCENE),
+    ],
+    # The mid-take reframe: 42 s of flags with nothing ever in the way.
+    "mid-fx6": [((0, 42), blocking.SCENE)],
+    # gauntlet/recon/occlusion_ending.json — four flags, all of them the drummer.
+    "ending-a7iv": [
+        ((5, 6), blocking.SCENE),
+        ((8, 9), blocking.SCENE),
+        ((16, 17), blocking.SCENE),
+        ((40, 41), blocking.SCENE),
+    ],
+    # Adjudicated clean end to end: nothing flagged, so nothing to class.
+    "ending-fx6": [],
+}
+"""Every window the scan flagged inside an adjudicated piece, as half-open sample indices, and
+what the eye said about it. Sample ``i`` is ``i`` seconds into the piece."""
+
+
+def _adjudicated(kind: str) -> list[tuple[str, tuple[int, int]]]:
+    """Every window the gauntlet judged ``kind``, as ``(scan, window)`` pairs to parametrise."""
+    return [
+        (scan, window)
+        for scan, windows in ADJUDICATED.items()
+        for window, verdict in windows
+        if verdict == kind
+    ]
+
+
+@cache
+def _measured(scan: str) -> blocking.Scan:
+    """One evidence scan, scored — cached, because a dozen tests read the same six."""
+    with np.load(EVIDENCE / f"{scan}.npz") as loaded:
+        return blocking.measure(loaded["frames"])
+
+
+def _peaks(scan: str, window: tuple[int, int]) -> tuple[float, float]:
+    """``(novel, hidden)`` at their worst across a window, which is how a window is classed."""
+    readings = _measured(scan).readings[window[0] : window[1]]
+    return max(one.novel for one in readings), max(one.hidden for one in readings)
 
 
 @pytest.fixture
@@ -651,7 +719,152 @@ def test_real_ffmpeg_samples_a_clip_whose_lower_half_goes_black(
     assert record.result["windows"] == 1
 
 
+# --- the discriminator, on the frames that produced the verdicts -----------------------------
+
+
+def test_a_shape_the_shot_has_all_night_is_scene_however_hard_it_scores() -> None:
+    """A wall of near-field mass scores 1.0 and is still not something to keep a cut out of."""
+    wall = gray_frame(0.3)
+
+    scan = _scored(wall, wall, wall, wall)
+
+    assert min(one.score for one in scan.readings) >= DEFAULT_THRESHOLD
+    assert [one.novel for one in scan.readings] == [0.0, 0.0, 0.0, 0.0]
+    assert [one.hidden for one in scan.readings] == [0.0, 0.0, 0.0, 0.0]
+    assert _classes(scan) == [blocking.SCENE] * 4
+
+
+def test_a_body_crossing_a_shot_that_is_usually_clear_is_an_obstruction() -> None:
+    crossing = _scored(*([CLEAN] * 8 + [BLOCKED] * 2))
+
+    arriving = crossing.readings[8]
+    assert arriving.novel >= blocking.NOVEL_AREA
+    assert arriving.hidden >= blocking.HIDDEN_AREA
+    assert blocking.verdict(arriving.novel, arriving.hidden) == blocking.OBSTRUCTION
+    assert _classes(crossing)[:8] == [blocking.SCENE] * 8
+
+
+@pytest.mark.parametrize(("scan", "window"), _adjudicated(blocking.OBSTRUCTION))
+def test_a_true_blocking_in_the_evidence_set_reads_as_an_obstruction(
+    scan: str, window: tuple[int, int]
+) -> None:
+    """The three the gauntlet confirmed by eye: an audience head, a hat and a player crossing."""
+    novel, hidden = _peaks(scan, window)
+
+    assert blocking.verdict(novel, hidden) == blocking.OBSTRUCTION
+
+
+@pytest.mark.parametrize(("scan", "window"), _adjudicated(blocking.SCENE))
+def test_a_false_positive_in_the_evidence_set_reads_as_scene(
+    scan: str, window: tuple[int, int]
+) -> None:
+    """The ten the gauntlet overrode: a piano lid, a parked head, a drummer, and a reframe."""
+    novel, hidden = _peaks(scan, window)
+
+    assert blocking.verdict(novel, hidden) == blocking.SCENE
+
+
+def test_the_mid_take_reframe_is_scene_rather_than_forty_two_seconds_of_veto() -> None:
+    """The FX6's own furniture, moved sideways by the lens — nothing was ever in the way.
+
+    Its signature is the opposite of the piano lid's: it holds for tens of seconds and then
+    falls to zero within one sample. No class of its own, because neither the settle test nor
+    global drift separates it from a true blocking on the one example there is.
+    """
+    novel, hidden = _peaks("mid-fx6", (0, 42))
+
+    assert blocking.verdict(novel, hidden) == blocking.SCENE
+
+
+def test_the_score_ranks_a_drummer_above_a_real_blocking_and_the_discriminator_does_not() -> None:
+    """Why the class exists at all: 90 seconds of one angle, the score upside down (#189)."""
+    readings = _measured("mid-a7iv").readings
+    crossing = readings[64]
+    drummer = readings[78]
+
+    assert crossing.score < drummer.score
+    assert crossing.novel > drummer.novel
+    assert crossing.hidden > drummer.hidden
+
+
+def test_the_ending_the_adjudication_found_clean_flags_nothing_to_class() -> None:
+    """The FX6 through the ending: two known corner heads, and not one sample over threshold."""
+    readings = _measured("ending-fx6").readings
+
+    assert max(one.score for one in readings) < DEFAULT_THRESHOLD
+
+
+def test_the_evidence_set_separates_with_room_either_side_of_both_levels() -> None:
+    """Both levels sit between the classes rather than on top of one of them."""
+    true_novel = [_peaks(*one)[0] for one in _adjudicated(blocking.OBSTRUCTION)]
+    true_hidden = [_peaks(*one)[1] for one in _adjudicated(blocking.OBSTRUCTION)]
+    false_novel = [_peaks(*one)[0] for one in _adjudicated(blocking.SCENE)]
+    false_hidden = [_peaks(*one)[1] for one in _adjudicated(blocking.SCENE)]
+
+    assert min(true_novel) > blocking.NOVEL_AREA > max(false_novel)
+    assert min(true_hidden) > blocking.HIDDEN_AREA > max(false_hidden)
+
+
+def test_a_window_carries_its_class_and_the_readings_behind_it(
+    attach: Attach, fixture_video: Path
+) -> None:
+    attach(_studio_holding(fixture_video))
+
+    record = _completed(_scan([], _run(5, 2, 5)))
+    catalog = json.loads(Path(record["path"]).read_text(encoding="utf-8"))
+
+    window = catalog["windows"][0]
+    assert window["kind"] == blocking.OBSTRUCTION
+    assert window["peak_novel"] >= blocking.NOVEL_AREA
+    assert window["peak_hidden"] >= blocking.HIDDEN_AREA
+    assert record["obstructions"] == 1
+    assert record["unusable_seconds"] == window["duration_seconds"]
+
+
+def test_the_gist_puts_an_obstruction_ahead_of_a_scene_window_that_scored_higher(
+    attach: Attach, fixture_video: Path
+) -> None:
+    """The inline budget is small and the veto is the part a builder has to honour."""
+    attach(_studio_holding(fixture_video))
+    bed = gray_frame(0.35)
+    crossing = gray_frame(0.15, anchor="side")
+    frames = [bed] * 5 + [CLEAN] * 2 + [crossing] * 2 + [CLEAN] * 2 + [bed] * 5
+
+    record = _completed(_scan([], frames))
+
+    kinds = [one["kind"] for one in record["worst_windows"]]
+    assert kinds[0] == blocking.OBSTRUCTION
+    assert kinds.count(blocking.SCENE) == 2
+    assert record["worst_windows"][0]["peak_score"] < record["worst_windows"][1]["peak_score"]
+    assert record["obstructions"] == 1
+
+
+def test_the_result_says_what_the_classes_mean_and_what_the_window_edges_do_not(
+    attach: Attach, fixture_video: Path
+) -> None:
+    """The detector loses a body once it stops moving; a result that implied otherwise would
+    have a builder cutting into the second after a crossing (#189)."""
+    attach(_studio_holding(fixture_video))
+
+    record = _completed(_scan([], _run(5, 2, 5)))
+
+    assert set(record["discriminator"]["classes"]) == {blocking.OBSTRUCTION, blocking.SCENE}
+    assert "stops moving" in record["discriminator"]["bounds"]
+
+
 # --- helpers ---------------------------------------------------------------------------------
+
+
+def _completed(envelope: dict[str, Any]) -> dict[str, Any]:
+    """The result of a scan that has to have finished for the test to mean anything."""
+    record = wait_for(envelope["job_id"])
+    assert record.state == "completed", record.error
+    assert record.result is not None
+    return dict(record.result)
+
+
+def _classes(scan: blocking.Scan) -> list[str]:
+    return [blocking.verdict(one.novel, one.hidden) for one in scan.readings]
 
 
 def _scored(*frames: bytes) -> blocking.Scan:
