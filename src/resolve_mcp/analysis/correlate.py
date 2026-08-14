@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import json
 import statistics
+from bisect import bisect_right
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
@@ -128,7 +129,38 @@ HEURISTIC = (
 )
 """The heuristic in words, carried in the report so nobody has to read this file to check it."""
 
-READING = 4
+GEAR_WINDOW_SECONDS = 1.0
+"""How coarse the loudness curve the gearing is read against is, in seconds per window.
+
+A second is a bar at slow rock tempo and half of one at anything faster: coarse enough that
+a snare hit does not move a window into the loud third, fine enough that the quiet verse and
+the last chorus land in different ones. Nothing here is a loudness measurement anybody
+publishes — the only question asked of it is which windows are louder than which.
+"""
+
+QUIET, MID, LOUD = "quiet", "mid", "loud"
+"""The three gears, named where the report names them."""
+
+SUB_TWO_SECONDS = RHYTHM_BINS[0][1]
+"""What counts as a short shot: the corpus's own ``<2`` edge, not a second threshold."""
+
+RATE_RATIO_FLOOR = 1.3
+GEAR_CV_FLOOR = 0.65
+"""The two numbers ``one_speed`` is drawn at — see ``GEAR_HEURISTIC``."""
+
+GEAR_HEURISTIC = (
+    "one_speed is true when the loud third of the music is cut less than "
+    f"{RATE_RATIO_FLOOR}x as fast as the quiet third (rate_ratio) and the coefficient of "
+    f"variation of shot lengths is under {GEAR_CV_FLOOR}. Terciles are thirds of the span by "
+    "level, not by time: the 1 s RMS windows inside the cut are ranked and split three ways, "
+    "and each shot is counted in the window its first frame lands in. It is a warning to look "
+    "at, not a verdict — a ballad cut at one speed throughout is a real edit, and a passage "
+    "whose loudness never moves has no gears to change. What it catches is the build that cut "
+    "the guitar solo at the pace it cut the intro."
+)
+"""The gearing heuristic in words, carried in the report beside the numbers it was drawn from."""
+
+READING = 5
 """What this measurement *is*; bumped whenever a rerun over unchanged inputs would differ.
 
 The cache is keyed on what was measured, not on the code that measured it, so a call whose
@@ -136,8 +168,9 @@ inputs have not changed is otherwise answered out of a file the previous version
 #142 that is a report with no track on its records and no ``visible`` on its header, handed
 back as though it were this measurement rather than the one before it. Both the shape and
 the reading count: 3 rather than 2 because the same shots now resolve to a different strip,
-and 4 rather than 3 because the header now carries ``shot_rhythm`` — a cached hit from 3
-would answer the self-review question with a file that never asked it.
+4 rather than 3 because the header now carries ``shot_rhythm``, and 5 rather than 4 because
+that block now carries ``gears`` — a cached hit from an earlier reading answers the
+self-review question with a file that never asked it.
 """
 
 GIVEN = "given"
@@ -145,6 +178,14 @@ GIVEN = "given"
 
 Onsets = Callable[[Path], tuple[float, ...]]
 """The transient seam: a WAV in, onset times in seconds out."""
+
+Levels = Callable[[Path], tuple[tuple[float, float], ...]]
+"""The loudness seam: a WAV in, ``(window start in seconds, RMS in dBFS)`` per window out.
+
+Pairs rather than a record type because every caller of it does one thing — rank the windows
+against each other — and a fake curve a test writes by hand should be readable as the curve
+it is.
+"""
 
 
 class Shot(NamedTuple):
@@ -214,6 +255,7 @@ def correlate_timeline(
     audio_at: Any | None = None,
     refresh: bool = False,
     onsets: Onsets | None = None,
+    loudness: Levels | None = None,
     config: Config | None = None,
 ) -> dict[str, Any]:
     """Start a job measuring a timeline against its music analysis. Returns the job record.
@@ -235,7 +277,8 @@ def correlate_timeline(
     ``audio_at`` is the timeline frame the analysed audio's own zero sits at, for when no
     clip on the timeline carries it and so none can be read.
 
-    ``onsets`` is the transient seam; the default decodes the audio for real.
+    ``onsets`` is the transient seam and ``loudness`` the level one; both defaults decode the
+    audio for real.
     """
     config = config or get_config()
     roles = _roles(angles)
@@ -266,6 +309,7 @@ def correlate_timeline(
             cut.visible,
             progress,
             onsets,
+            loudness,
             config,
         )
 
@@ -282,6 +326,7 @@ def correlate(
     visible: dict[str, Any],
     progress: Progress,
     onsets: Onsets | None = None,
+    loudness: Levels | None = None,
     config: Config | None = None,
 ) -> JobOutput:
     """The worker: transients, then one record per shot on disk and the stats inline."""
@@ -290,11 +335,14 @@ def correlate(
     progress(0.1, "reading the transients")
     transients = _transients(music.audio, onsets)
 
+    progress(0.5, "reading the level curve")
+    levels = _levels(music.audio, loudness)
+
     progress(0.7, "measuring the cut against the music")
     grid = trust(music.beats)
     rows = measure(shots, clock, music, transients, grid)
     summary = _summary(
-        rows, clock, visible, transients, [float(one["t"]) for one in music.beats], grid
+        rows, clock, visible, transients, [float(one["t"]) for one in music.beats], grid, levels
     )
 
     target = config.analysis_dir / keyed_name(name, key, ".correlate.json", "correlate")
@@ -758,6 +806,38 @@ def measured_onsets(path: Path) -> tuple[float, ...]:
     return tuple(float(seconds) for seconds in energy.onsets(decode.read(path)))
 
 
+def _levels(audio: Path | None, loudness: Levels | None) -> tuple[tuple[float, float], ...] | None:
+    """The mix's level curve, or ``None`` when no mix was named.
+
+    Same distinction the transients keep: a cut nobody could measure the music's loudness for
+    has no gears to report, and reporting flat ones would say the music never moved.
+    """
+    if audio is None:
+        return None
+    read = loudness or measured_levels
+    return tuple(sorted(read(audio)))
+
+
+def measured_levels(path: Path) -> tuple[tuple[float, float], ...]:
+    """The default curve: decode the mix and take a coarse RMS window by window.
+
+    RMS rather than the LUFS curve ``analyze_energy`` writes, and this file's own read rather
+    than that job's output, for the same reason: the only question asked of it is which
+    windows are louder than which, and ranking survives the missing K-weighting intact. It
+    also keeps the reading available on a concert nobody ran the energy job over.
+
+    It costs a second decode of the mix, because the seam is a path in and numbers out and
+    the transient detector behind the other one is injectable for the same reason. One extra
+    read of a file this job already reads is the price of both seams staying testable without
+    audio; if it ever stops being, the fix is one decode handed to both, not a curve this
+    file computes inline.
+    """
+    return tuple(
+        (float(point.seconds), float(point.rms_dbfs))
+        for point in energy.rms_curve(decode.read(path), GEAR_WINDOW_SECONDS)
+    )
+
+
 def _fingerprints(*files: str | None) -> list[dict[str, Any]]:
     """What the cache watches besides the cut: the analysis the measurement is made against."""
     return [cache.fingerprint(Path(file).expanduser()) for file in files if file is not None]
@@ -921,6 +1001,7 @@ def _summary(
     transients: Sequence[float] | None,
     grid: Sequence[float],
     trusted: GridTrust,
+    levels: Sequence[tuple[float, float]] | None = None,
 ) -> dict[str, Any]:
     """The list-free reading: what a style profile is written from, and a self-review read.
 
@@ -929,7 +1010,8 @@ def _summary(
     file and averages the column gets the number it was already told.
 
     ``shot_rhythm`` is the one reading here that is about the cut rather than about the music
-    — the metronome check a build cannot perform on itself by looking at its offsets.
+    — the metronome check a build cannot perform on itself by looking at its offsets, and the
+    gearing check that joins the two.
     """
     cut_to_music = [row for row in rows if not row["opening"]]
     # The gate is applied here and nowhere else (#112). Transients need no grid, so they are
@@ -966,7 +1048,7 @@ def _summary(
         "tunes": _spread("tune", cut_to_music) if _measured("tune", rows) else None,
         "solos": _spread("front", cut_to_music) if _measured("front", rows) else None,
         "shot_seconds": _lengths([row["seconds"] for row in rows]),
-        "shot_rhythm": _rhythm(rows),
+        "shot_rhythm": _rhythm(rows, levels),
         "clips": _usage(rows, "clip"),
         "roles": _usage(rows, "role") if _measured("role", rows) else None,
     }
@@ -1018,7 +1100,10 @@ def _lengths(seconds: Sequence[float]) -> dict[str, Any]:
     }
 
 
-def _rhythm(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
+def _rhythm(
+    rows: Sequence[dict[str, Any]],
+    levels: Sequence[tuple[float, float]] | None = None,
+) -> dict[str, Any]:
     """How varied the cutting is, in the three shapes a metronomic cut shows up in.
 
     A build reviews itself with this report, and the failure it cannot see from the inside is
@@ -1027,10 +1112,18 @@ def _rhythm(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
     metronome — so it needs its own reading: how the shot lengths spread, how strictly the
     angles alternate, and how much of the cut sits in a single length bin.
 
-    Nothing here is a gate. ``reads_metronomic`` is a sentence the report says out loud along
-    with the numbers and the rule it applied (``HEURISTIC``), so a builder can disagree with
-    it on the evidence rather than argue with a threshold. Trading two cameras for four
-    minutes is a real edit some music asks for; the point is that the builder *decided* it.
+    ``gears`` asks the other half of the same question. A cut can vary its lengths and still
+    run at one speed through the whole concert — the intro cut as fast as the solo — and no
+    reading over the shot list alone can see it, because the thing missing is the music's own
+    dynamics. So the level curve is split into thirds by loudness and the cutting rate is
+    reported per third: a build that changes gear shows it here, and one that does not is
+    told so before a critic says it.
+
+    Nothing here is a gate. ``reads_metronomic`` and ``one_speed`` are sentences the report
+    says out loud along with the numbers and the rules that drew them (``HEURISTIC``,
+    ``GEAR_HEURISTIC``), so a builder can disagree with them on the evidence rather than argue
+    with a threshold. Trading two cameras for four minutes is a real edit some music asks for;
+    the point is that the builder *decided* it.
     """
     lengths = [float(row["seconds"]) for row in rows]
     # The angle on screen is what alternation is about, so black counts as one source rather
@@ -1053,6 +1146,7 @@ def _rhythm(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
         "alternation": alternation,
         "uniformity": uniformity,
         "reads_metronomic": _metronomic(alternation, uniformity),
+        "gears": _gears(rows, levels, uniformity),
         "heuristic": HEURISTIC,
     }
 
@@ -1126,6 +1220,130 @@ def _metronomic(alternation: Mapping[str, Any], uniformity: Mapping[str, Any]) -
         cv is not None and cv < CV_FLOOR
     )
     return float(alternation["fraction"]) > ALTERNATION_FLOOR and uniform
+
+
+def _gears(
+    rows: Sequence[dict[str, Any]],
+    levels: Sequence[tuple[float, float]] | None,
+    uniformity: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    """How the cutting rate changes with the music's loudness — the one-speed read.
+
+    ``None`` when there is no level curve to read, or none of it covers the cut: not looking
+    and finding no gearing are different answers, and only one of them is about the edit.
+
+    The span the terciles are taken over is the cut's own, not the mix's. A four-minute song
+    inside a two-hour concert is quiet *in that concert* from end to end, and thirds taken
+    over the whole mix would drop every shot in it into one gear and report nothing.
+    """
+    if not rows or not levels:
+        return None
+    span_start = min(float(row["t"]) for row in rows)
+    span_end = max(float(row["t"]) + float(row["seconds"]) for row in rows)
+    windows = [
+        (start, level)
+        for start, level in levels
+        if start < span_end and start + GEAR_WINDOW_SECONDS > span_start
+    ]
+    if not windows:
+        return None
+
+    placed = _terciles(windows)
+    starts = [start for start, _ in windows]
+    held: dict[str, list[dict[str, Any]]] = {QUIET: [], MID: [], LOUD: []}
+    for row in rows:
+        held[placed[_window_at(starts, float(row["t"]))]].append(row)
+
+    terciles = {
+        gear: _gear(
+            held[gear],
+            [level for index, (_, level) in enumerate(windows) if placed[index] == gear],
+        )
+        for gear in (QUIET, MID, LOUD)
+    }
+    ratio = _rate_ratio(terciles[LOUD]["cuts_per_minute"], terciles[QUIET]["cuts_per_minute"])
+    # The short shots are the ones a fast passage is made of, so where they sit is the
+    # gearing read in its bluntest form: a build that saves them for the loud third has
+    # changed gear even if the averages move less than the ratio floor.
+    short = sum(1 for row in rows if float(row["seconds"]) < SUB_TWO_SECONDS)
+    in_loud = sum(1 for row in held[LOUD] if float(row["seconds"]) < SUB_TWO_SECONDS)
+    return {
+        "window_seconds": GEAR_WINDOW_SECONDS,
+        "terciles": terciles,
+        "rate_ratio": ratio,
+        "sub2s_count": short,
+        "sub2s_in_loud": in_loud,
+        "sub2s_loud_fraction": _rounded(in_loud / short) if short else None,
+        "one_speed": _one_speed(ratio, uniformity["cv"]),
+        "heuristic": GEAR_HEURISTIC,
+    }
+
+
+def _terciles(windows: Sequence[tuple[float, float]]) -> list[str]:
+    """Which third of the loudness each window sits in, by rank rather than by level range.
+
+    Ranking, because the levels themselves are not a scale anything can be split evenly on:
+    a mix mastered hot spends most of its windows inside four decibels, and thirds of *that*
+    range would put the whole concert in one gear. Thirds of the windows always split the
+    span three ways, so the rate in each is a rate over comparable amounts of music.
+
+    Ties break by time, which matters only on a curve flat enough that the split is arbitrary
+    — and there the ratio it produces lands near one, which is exactly what a passage whose
+    loudness never moves should read as.
+    """
+    order = sorted(range(len(windows)), key=lambda index: (windows[index][1], windows[index][0]))
+    lower, upper = len(order) // 3, (2 * len(order)) // 3
+    placed = [MID] * len(windows)
+    for rank, index in enumerate(order):
+        placed[index] = QUIET if rank < lower else LOUD if rank >= upper else MID
+    return placed
+
+
+def _window_at(starts: Sequence[float], seconds: float) -> int:
+    """The window a shot's first frame lands in — its first frame, not its span.
+
+    A shot is counted whole in the gear it was cut *into*: that is the decision the editor
+    made at that frame. Splitting a long shot across two gears would credit the loud third
+    with screen time nobody cut there.
+    """
+    return max(bisect_right(starts, seconds) - 1, 0)
+
+
+def _gear(shots: Sequence[dict[str, Any]], levels: Sequence[float]) -> dict[str, Any]:
+    """One tercile: how much music it holds, how many shots were cut in it, and how fast.
+
+    ``seconds`` is counted in whole windows rather than in the shots' own lengths, because
+    the denominator has to be the music: a gear where one long shot runs over a minute of
+    loud music has a real cutting rate, and dividing by that shot's length would report the
+    rate of the shot instead.
+    """
+    lengths = [float(shot["seconds"]) for shot in shots]
+    seconds = len(levels) * GEAR_WINDOW_SECONDS
+    return {
+        "seconds": _rounded(seconds),
+        "shots": len(shots),
+        "cuts_per_minute": _rounded(len(shots) / (seconds / 60.0)) if seconds > 0 else None,
+        "median_seconds": _rounded(statistics.median(lengths)) if lengths else None,
+        "level_dbfs": _rounded(statistics.median(levels)) if levels else None,
+    }
+
+
+def _rate_ratio(loud: Any, quiet: Any) -> float | None:
+    """How much faster the loud third is cut than the quiet one.
+
+    ``None`` when nothing was cut in the quiet third: a ratio against zero is a number the
+    report cannot mean anything by, and inventing one there would read as a verdict.
+    """
+    if not isinstance(loud, int | float) or not isinstance(quiet, int | float) or not quiet:
+        return None
+    return _rounded(float(loud) / float(quiet))
+
+
+def _one_speed(ratio: float | None, cv: Any) -> bool:
+    """``GEAR_HEURISTIC``, applied. A reading it cannot take is not a reading against the cut."""
+    if ratio is None or not isinstance(cv, int | float):
+        return False
+    return ratio < RATE_RATIO_FLOOR and float(cv) < GEAR_CV_FLOOR
 
 
 def _usage(rows: Sequence[dict[str, Any]], field: str) -> dict[str, dict[str, Any]]:

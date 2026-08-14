@@ -103,12 +103,16 @@ statistics on `trust`, refuses as `stranded` a cut further from its beat than a
 beat is wide — the grid does not reach it, #160 — and leaves the transient ones
 ungated. Also reads the cutting itself: `shot_rhythm` bins the shot lengths,
 measures the longest strict A/B alternation run and says `reads_metronomic`
-with the heuristic that drew it — a warning the report carries, never a gate),
+with the heuristic that drew it, and its `gears` block splits the cut's span
+into loudness terciles off a 1 s RMS curve and reports cuts per minute in each,
+the loud/quiet `rate_ratio`, where the sub-2 s shots sit and `one_speed` —
+warnings the report carries, never gates),
 `cuda` (preloads
 the CUDA runtime the `analysis` extra ships, so CTranslate2 finds it on Windows;
 pure decisions, #128),
 `decode` (WAV → numpy, no third-party decoder), `drums` (hits per stem), `energy`
-(loudness curves), `fills` (drum-fill candidates), `halves` (shared
+(loudness curves; `rms_curve` is the cheap level-only pass, no K-weighting and
+no onsets), `fills` (drum-fill candidates), `halves` (shared
 identify/cache/write pattern), `melody` (notes off one melodic stem —
 monophonic pitch + gating, model injected per ADR 0002; the reading `phrases`
 is a rule layer over, as `drums` is to `fills`), `music` (beats + energy + gist

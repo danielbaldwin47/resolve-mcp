@@ -200,6 +200,39 @@ def curve(audio: Audio, window_seconds: float, hop_seconds: float) -> tuple[Ener
     return measure(audio, window_seconds, hop_seconds).points
 
 
+class Level(NamedTuple):
+    """One window of the coarse level curve. ``seconds`` is where the window *starts*."""
+
+    seconds: float
+    rms_dbfs: float
+
+
+def rms_curve(
+    audio: Audio, window_seconds: float, hop_seconds: float | None = None
+) -> tuple[Level, ...]:
+    """Unweighted level per window, and nothing else — the cheap half of ``measure``.
+
+    ``measure`` is the reading a curve file is written from: it K-weights every channel and
+    runs onset detection to fill in the other two columns. A caller that only wants to know
+    which stretches of a concert are the loud ones pays for both, and over an hour of mix
+    that is the expensive part of a job whose real work is arithmetic on shot lengths.
+
+    This is that reading alone: one unweighted sweep, in the dBFS the rest of the module
+    speaks. It is coarse by intent — comparing one window against another is all it is for,
+    and RMS orders a mix's loud passages against its quiet ones perfectly well without the
+    filter. Anything that has to say *how loud* in the units a standard defines wants
+    ``measure``.
+    """
+    hop = window_seconds if hop_seconds is None else hop_seconds
+    windows = _windows(audio, window_seconds, hop)
+    (squares,) = _sweep(audio, (windows,), weighted=False)
+    levels = _dbfs(squares.mean(axis=0))
+    return tuple(
+        Level(seconds=round(float(start), 3), rms_dbfs=round(float(level), 2))
+        for start, level in zip(windows.seconds, levels, strict=True)
+    )
+
+
 def integrated_lufs(audio: Audio) -> float:
     """The whole file as one number, gated the way the standard gates it."""
     blocks = _windows(audio, BLOCK_SECONDS, BLOCK_SECONDS * (1.0 - BLOCK_OVERLAP))

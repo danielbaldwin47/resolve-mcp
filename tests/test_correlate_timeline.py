@@ -20,14 +20,21 @@ from typing import Any
 import pytest
 
 from resolve_mcp.analysis import beats as beats_module
-from resolve_mcp.analysis import correlate, records
+from resolve_mcp.analysis import correlate, energy, records
 from resolve_mcp.analysis.beats import BeatGrid
 from resolve_mcp.jobs.runner import wait_for
 from resolve_mcp.resolve.connection import get_connection
 from resolve_mcp.tools import analysis as analysis_tools
 
 from .conftest import Attach
-from .fakes import FakeMediaPoolItem, FakeTimeline, FakeTimelineItem, FakeTrack, studio
+from .fakes import (
+    FakeMediaPoolItem,
+    FakeTimeline,
+    FakeTimelineItem,
+    FakeTrack,
+    studio,
+    write_wav,
+)
 
 FPS = "60"
 
@@ -177,6 +184,33 @@ def _onsets(times: Sequence[float] = ONSETS) -> correlate.Onsets:
     return detect
 
 
+RISING = tuple((float(second), -60.0 + second * 0.05) for second in range(600))
+"""Ten minutes of level rising steadily: the default curve, so every cut has a gearing read.
+
+Steady rather than flat because a flat curve makes the tercile split arbitrary, and steady
+rather than random because a fixture whose loudness nobody can predict cannot be asserted
+against. Where a test is about the gearing it passes its own curve.
+"""
+
+
+def _levels(curve: Sequence[tuple[float, float]] = RISING) -> correlate.Levels:
+    """The loudness seam, injected: no test in this file opens the stand-in WAV."""
+
+    def read(path: Path) -> tuple[tuple[float, float], ...]:
+        return tuple(curve)
+
+    return read
+
+
+def _steps(*levels: tuple[float, int]) -> tuple[tuple[float, float], ...]:
+    """A curve given as (dBFS, how many seconds at it) — quiet stretch, then loud, in order."""
+    curve: list[tuple[float, float]] = []
+    for level, seconds in levels:
+        start = len(curve)
+        curve.extend((float(start + step), level) for step in range(seconds))
+    return tuple(curve)
+
+
 def _audio(tmp_path: Path) -> Path:
     """A stand-in master mix: the injected detector never opens it, the cache only stats it."""
     target = tmp_path / "master_mix.wav"
@@ -190,6 +224,7 @@ def _started(tmp_path: Path, **overrides: Any) -> dict[str, Any]:
         "beats": str(beats_file(tmp_path)),
         "audio": str(_audio(tmp_path)),
         "onsets": _onsets(),
+        "loudness": _levels(),
     }
     call.update(overrides)
     return correlate.correlate_timeline(get_connection(), **call)
@@ -1466,6 +1501,7 @@ def test_the_rhythm_reading_carries_the_rule_it_applied(attach: Attach, tmp_path
         "alternation",
         "uniformity",
         "reads_metronomic",
+        "gears",
         "heuristic",
     }
 
@@ -1488,3 +1524,243 @@ def test_a_cut_that_misses_the_last_beat_by_less_than_a_beat_is_still_measured(
     assert cuts[2]["stranded"] is False
     assert cuts[2]["in_grid"] is True
     assert result["stranded"] == 0
+
+
+# --- the gearing ------------------------------------------------------------------------------
+#
+# One curve shape throughout: 36 one-second windows, twelve at each of three levels, over a
+# 36-second cut. Thirds of the windows are thirds of the cut, so every cuts-per-minute below
+# divides by a fifth of a minute and can be checked by hand.
+
+THIRDS = ((-50.0, 12), (-35.0, 12), (-20.0, 12))
+"""Quiet twelve seconds, middling twelve, loud twelve — the fixture the gearing is read on."""
+
+SECOND = 60
+"""Frames in a second at the fixture's 60fps, so a shot list reads in seconds."""
+
+
+def _gears(result: dict[str, Any]) -> dict[str, Any]:
+    block = _rhythm(result)["gears"]
+    assert isinstance(block, dict), "the curve was injected, so a gearing read was possible"
+    return block
+
+
+def test_the_terciles_are_thirds_of_the_loudness_not_thirds_of_the_clock(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """A cut that opens loud and stays quiet after: the loud third is the opening.
+
+    Thirds by time would call the first twelve seconds the quiet gear because that is where
+    the cut starts, and the whole reading would then describe the running order rather than
+    the music. Here the loud stretch is first, and the fast cutting in it has to come back as
+    the loud tercile's rate.
+    """
+    opening = [(f"{'AB'[turn % 2]}.mp4", SECOND) for turn in range(12)]
+    later = [(f"{'AB'[turn % 2]}.mp4", 4 * SECOND) for turn in range(6)]
+    attach(studio(timeline=_paced(*opening, *later)))
+
+    gears = _gears(_measured(tmp_path, loudness=_levels(_steps((-20.0, 12), (-50.0, 24)))))
+
+    assert gears["terciles"]["loud"]["level_dbfs"] == -20.0
+    assert gears["terciles"]["loud"]["shots"] == 12  # the opening twelve, first in time
+    assert gears["terciles"]["loud"]["median_seconds"] == 1.0
+    assert gears["terciles"]["quiet"]["level_dbfs"] == -50.0
+    assert gears["terciles"]["quiet"]["median_seconds"] == 4.0
+    assert gears["rate_ratio"] == 4.0
+
+
+def test_each_tercile_reports_its_cutting_rate_over_the_music_it_holds(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The arithmetic in full: three shots in twelve quiet seconds is fifteen cuts a minute.
+
+    The denominator is the music the tercile holds, not the screen time the shots in it run
+    for — the two differ the moment a shot starts in one gear and ends in the next, and only
+    the first is a rate the director can compare against another passage.
+    """
+    quiet = [(f"{'AB'[turn % 2]}.mp4", 4 * SECOND) for turn in range(3)]
+    middling = [(f"{'CD'[turn % 2]}.mp4", 3 * SECOND) for turn in range(4)]
+    loud = [(f"{'EF'[turn % 2]}.mp4", SECOND) for turn in range(12)]
+    attach(studio(timeline=_paced(*quiet, *middling, *loud)))
+
+    gears = _gears(_measured(tmp_path, loudness=_levels(_steps(*THIRDS))))
+
+    assert gears["window_seconds"] == 1.0
+    assert gears["terciles"] == {
+        "quiet": {
+            "seconds": 12.0,
+            "shots": 3,
+            "cuts_per_minute": 15.0,
+            "median_seconds": 4.0,
+            "level_dbfs": -50.0,
+        },
+        "mid": {
+            "seconds": 12.0,
+            "shots": 4,
+            "cuts_per_minute": 20.0,
+            "median_seconds": 3.0,
+            "level_dbfs": -35.0,
+        },
+        "loud": {
+            "seconds": 12.0,
+            "shots": 12,
+            "cuts_per_minute": 60.0,
+            "median_seconds": 1.0,
+            "level_dbfs": -20.0,
+        },
+    }
+    assert gears["rate_ratio"] == 4.0  # sixty cuts a minute against fifteen
+
+
+def test_a_quiet_third_nobody_cut_in_reports_no_ratio_rather_than_a_number(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """One long shot over the loud opening and everything else after it: the quiet gear is empty.
+
+    A rate of zero in the denominator is not a slow cut, it is no reading — and a ratio
+    invented there would read as the strongest gearing in the report.
+    """
+    held = [("A.mp4", 24 * SECOND)]
+    after = [(f"{'BC'[turn % 2]}.mp4", SECOND) for turn in range(12)]
+    attach(studio(timeline=_paced(*held, *after)))
+
+    gears = _gears(_measured(tmp_path, loudness=_levels(_steps((-20.0, 12), (-50.0, 24)))))
+
+    assert gears["terciles"]["quiet"]["shots"] == 0
+    assert gears["terciles"]["quiet"]["cuts_per_minute"] == 0.0
+    assert gears["terciles"]["quiet"]["median_seconds"] is None
+    assert gears["rate_ratio"] is None
+    assert gears["one_speed"] is False  # a reading it cannot take is not a finding
+
+
+def test_the_short_shots_are_counted_and_told_which_gear_they_sit_in(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Six shots under two seconds, four of them in the loud third — the bluntest gearing read.
+
+    Where the short shots sit says what the averages can blur: a build that saves its fast
+    cutting for the loud passages has changed gear whatever the rate ratio rounds to.
+    """
+    quiet = [("A.mp4", SECOND), ("B.mp4", SECOND), ("A.mp4", 10 * SECOND)]
+    middling = [(f"{'CD'[turn % 2]}.mp4", 3 * SECOND) for turn in range(4)]
+    loud = [(f"{'EF'[turn % 2]}.mp4", SECOND) for turn in range(4)] + [("G.mp4", 8 * SECOND)]
+    attach(studio(timeline=_paced(*quiet, *middling, *loud)))
+
+    gears = _gears(_measured(tmp_path, loudness=_levels(_steps(*THIRDS))))
+
+    assert gears["sub2s_count"] == 6
+    assert gears["sub2s_in_loud"] == 4
+    assert gears["sub2s_loud_fraction"] == 0.667
+
+
+def test_one_length_through_loud_and_quiet_alike_reads_as_one_speed(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The finding the check exists for: the intro cut at the pace of the last chorus."""
+    attach(studio(timeline=_paced(*[(f"{'AB'[turn % 2]}.mp4", 3 * SECOND) for turn in range(12)])))
+
+    gears = _gears(_measured(tmp_path, loudness=_levels(_steps((-50.0, 18), (-20.0, 18)))))
+
+    assert gears["terciles"]["quiet"]["cuts_per_minute"] == 20.0
+    assert gears["terciles"]["loud"]["cuts_per_minute"] == 20.0
+    assert gears["rate_ratio"] == 1.0
+    assert gears["one_speed"] is True
+
+
+def test_a_cut_that_changes_gear_is_not_one_speed_though_its_lengths_barely_vary(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The rate arm alone: three-second shots in the quiet, two-second in the loud.
+
+    The spread is well under its floor — this is nearly a metronome by length — and the
+    reading still comes back false, because the cutting rate went up with the music.
+    """
+    quiet = [(f"{'AB'[turn % 2]}.mp4", 3 * SECOND) for turn in range(4)]
+    middling = [(f"{'CD'[turn % 2]}.mp4", 3 * SECOND) for turn in range(4)]
+    loud = [(f"{'EF'[turn % 2]}.mp4", 2 * SECOND) for turn in range(6)]
+    attach(studio(timeline=_paced(*quiet, *middling, *loud)))
+
+    result = _measured(tmp_path, loudness=_levels(_steps(*THIRDS)))
+    rhythm, gears = _rhythm(result), _gears(result)
+
+    assert gears["rate_ratio"] == 1.5  # thirty cuts a minute against twenty
+    assert rhythm["uniformity"]["cv"] < correlate.GEAR_CV_FLOOR
+    assert gears["one_speed"] is False
+
+
+def test_a_cut_whose_lengths_vary_is_not_one_speed_though_its_rate_holds(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The spread arm alone: the same three cuts in every gear, of wildly different lengths.
+
+    The rate ratio is exactly one here, so the rate arm is inert — and a cut that runs a ten
+    second shot against a one second shot is not cutting at one speed by any reading.
+    """
+    quiet = [("A.mp4", 10 * SECOND), ("B.mp4", SECOND), ("A.mp4", SECOND)]
+    middling = [("C.mp4", 4 * SECOND), ("D.mp4", 4 * SECOND), ("C.mp4", 4 * SECOND)]
+    loud = [("E.mp4", SECOND), ("F.mp4", SECOND), ("E.mp4", 10 * SECOND)]
+    attach(studio(timeline=_paced(*quiet, *middling, *loud)))
+
+    result = _measured(tmp_path, loudness=_levels(_steps(*THIRDS)))
+    rhythm, gears = _rhythm(result), _gears(result)
+
+    assert gears["rate_ratio"] == 1.0
+    assert rhythm["uniformity"]["cv"] > correlate.GEAR_CV_FLOOR
+    assert gears["one_speed"] is False
+
+
+def test_a_cut_with_no_mix_named_has_no_gearing_rather_than_flat_gears(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Nobody looked at the loudness, so the report says nothing about it.
+
+    Flat terciles would read as a concert whose dynamics never moved, which is a finding
+    about the music — and this measurement has not heard the music at all.
+    """
+    attach(studio(timeline=_paced(("A.mp4", SECOND), ("B.mp4", SECOND))))
+
+    rhythm = _rhythm(_measured(tmp_path, audio=None))
+
+    assert rhythm["gears"] is None
+    assert rhythm["reads_metronomic"] is False  # the rest of the block is unaffected
+
+
+def test_the_gearing_reading_carries_the_rule_it_applied(attach: Attach, tmp_path: Path) -> None:
+    """A warning-shaped fact, like the metronome one: numbers, verdict, and the rule between."""
+    attach(studio(timeline=_paced(*[(f"{'AB'[turn % 2]}.mp4", 3 * SECOND) for turn in range(12)])))
+
+    gears = _gears(_measured(tmp_path))
+
+    assert gears["heuristic"] == correlate.GEAR_HEURISTIC
+    assert "warning" in gears["heuristic"]
+    assert str(correlate.RATE_RATIO_FLOOR) in gears["heuristic"]
+    assert str(correlate.GEAR_CV_FLOOR) in gears["heuristic"]
+    assert set(gears) == {
+        "window_seconds",
+        "terciles",
+        "rate_ratio",
+        "sub2s_count",
+        "sub2s_in_loud",
+        "sub2s_loud_fraction",
+        "one_speed",
+        "heuristic",
+    }
+
+
+def test_the_default_curve_is_read_off_the_mix_itself(attach: Attach, tmp_path: Path) -> None:
+    """No injected curve: the levels come from the WAV, and the silent half is the quiet gear.
+
+    The one test here that opens real audio, because the seam under it is the one nothing
+    else can check — a curve fixture agrees with itself whatever ``measured_levels`` does.
+    """
+    mix = write_wav(
+        tmp_path / "halves.wav", seconds=12.0, sample_rate=8_000, silence=[(0.0, 6.0)]
+    )
+    attach(studio(timeline=_paced(*[(f"{'AB'[turn % 2]}.mp4", 2 * SECOND) for turn in range(6)])))
+
+    gears = _gears(_measured(tmp_path, audio=str(mix), loudness=None))
+
+    assert gears["terciles"]["quiet"]["level_dbfs"] == energy.SILENCE_LUFS
+    assert gears["terciles"]["quiet"]["shots"] == 2  # the first four seconds, both silent
+    assert gears["terciles"]["loud"]["level_dbfs"] > -30.0
+    assert gears["rate_ratio"] == 1.0  # one cut every two seconds throughout

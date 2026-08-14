@@ -105,6 +105,32 @@ def test_the_curve_follows_a_level_change(tmp_path: Path) -> None:
     assert last.rms_dbfs > first.rms_dbfs + 15.0
 
 
+def test_the_rms_curve_reads_the_same_levels_the_full_pass_does(tmp_path: Path) -> None:
+    """The cheap curve is the full one's RMS column, window for window.
+
+    That is the whole claim it makes: a caller ranking loud passages against quiet ones can
+    have the level without paying for the K-weighting and the onset pass, and get the same
+    numbers it would have read off ``curve``.
+    """
+    audio = decode.read(write_wav(tmp_path / "tone.wav", seconds=2.0, silence=[(0.0, 1.0)]))
+
+    full = energy.curve(audio, window_seconds=0.5, hop_seconds=0.5)
+    levels = energy.rms_curve(audio, window_seconds=0.5)
+
+    assert [(one.seconds, one.rms_dbfs) for one in levels] == [
+        (one.seconds, one.rms_dbfs) for one in full
+    ]
+    assert levels[0].rms_dbfs == energy.SILENCE_LUFS  # the silent half, at the floor
+    assert levels[-1].rms_dbfs > -30.0
+
+
+def test_the_rms_curve_hops_by_its_window_unless_told_otherwise(tmp_path: Path) -> None:
+    audio = decode.read(write_wav(tmp_path / "tone.wav", seconds=2.0))
+
+    assert [one.seconds for one in energy.rms_curve(audio, 0.5)] == [0.0, 0.5, 1.0, 1.5]
+    assert [one.seconds for one in energy.rms_curve(audio, 1.0, 0.5)] == [0.0, 0.5, 1.0]
+
+
 def test_onsets_land_on_the_clicks(tmp_path: Path) -> None:
     audio = decode.read(write_clicks(tmp_path / "clicks.wav", beats_per_minute=120.0, seconds=4.0))
 
