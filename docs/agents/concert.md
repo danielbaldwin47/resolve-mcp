@@ -89,7 +89,11 @@ measured on exactly the axes the profile's `[measured]` claims stand on.
 The tool reports and never judges — the bar is the profile. Compare the inline gist
 against `styles/concert.md`'s measured claims: the transient-offset distribution
 (fourth-wall risk, §1), shot-duration runs (§3), role shares and transitions (§4),
-event responses (§5). **Every outlier is either fixed — edit the cut JSON, rebuild —
+event responses (§5). With a solo map and a sidecar that names subjects, the
+`on_soloist` block is the one that answers the core concert question — what share of
+the solo-window screen time went to the player out front, to the ensemble, and to
+somebody who was not soloing. Read `unlabelled_seconds` next to it: a high share on
+the soloist over a quarter of the cut is a claim about a quarter of the cut. **Every outlier is either fixed — edit the cut JSON, rebuild —
 or justified by name in the cut report** ("spectacle earns the hold"). Nothing lands
 off-style silently. Check `alignment.mode` before trusting a run, per
 `docs/agents/style-layer.md`.

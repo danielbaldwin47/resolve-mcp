@@ -64,7 +64,15 @@ Round 1 critic, verbatim needs; each is server measurement work:
    cannot resolve musicality).
 5. Audio class track (applause/speech/music/silence at 1 s resolution).
 6. Per-shot subject labeling × who-is-soloing track — the core concert
-   question.
+   question. **Fixed in #181** (`analysis/subject.py`): the sidecar's subject
+   read as player/ensemble/other and joined to the solo windows in seconds, so
+   `correlate_timeline` carries `subject`/`subject_kind`/`on_soloist` per shot
+   and an `on_soloist` share inline, and `ab_pack.py` carries the same track
+   into a pack (`--a-subjects`/`--b-subjects`, both or neither). Authored, not
+   detected: no pixel here knows a drummer from a horn player, so the answer is
+   only as good as the sidecar — a camera that roams the band is labelled by
+   habit rather than by shot, and `unlabelled_seconds` is what says how much of
+   the cut no label reached.
 7. Per-shot sharpness, clipped-highlight %, exposure variance.
 8. Super/graphic presence detection with in/out timecodes + straddle check.
 9. Head/tail treatment: fade-in vs dropped frames, audio floor handling.

@@ -8,7 +8,8 @@ assigns them to labels A and B, and builds a scrubbed evidence pack:
     out/<label>/clip.mp4         the extracted span, 540p
     out/<label>/cuts.json        cut times + transition type, shots + motion,
                                  stats, loudness, the 1-s audio class track,
-                                 the ending type and slow-transition events
+                                 the ending type, slow-transition events and
+                                 the on-soloist track where one was given
     out/<label>/sheet_N.jpg      contact sheets, 6 per row, timestamp burned in
     out/<label>/cutstrip_N.jpg   cut-boundary filmstrips, one cut per row:
                                  3 outgoing frames then 3 incoming frames
@@ -28,9 +29,17 @@ visible 5.9 s tail dissolve as "hard", so the ending and every weak boundary
 are refitted against a multi-second luma ramp, and mid-shot double images are
 reported as ghosting events.
 
+Pack v4 answers the core concert question (gap G5 item 6, #181): given each
+label's own correlate_timeline reading, the pack carries an on-soloist track --
+per shot, what it is framed on and whether that is the player out front, and per
+label, what share of the solo-window screen time went to the soloist. It is
+authored rather than detected: no pixel here knows a drummer from a horn player.
+Both labels carry one or neither does.
+
 Usage:
     uv run python gauntlet/tools/ab_pack.py \
-        --a <video> --b <video> [--a-span S,E] [--b-span S,E] --out <dir>
+        --a <video> --b <video> [--a-span S,E] [--b-span S,E] --out <dir> \
+        [--a-subjects <cuts.json> --b-subjects <cuts.json>]
 
 Dependencies: stdlib + numpy + ffmpeg/ffprobe on PATH, and the repo's own
 resolve_mcp package for the shot-length bin labels -- run it with `uv run` so
@@ -62,6 +71,7 @@ from typing import Any, NamedTuple
 
 import numpy as np
 
+from resolve_mcp.analysis import subject as subject_module
 from resolve_mcp.analysis.correlate import RHYTHM_BINS
 
 # --------------------------------------------------------------------------
@@ -1168,6 +1178,117 @@ def audio_class_summary(track: list[dict[str, Any]], spans: list[dict[str, Any]]
 
 
 # --------------------------------------------------------------------------
+# subject track (who the shot is on, crossed with who is soloing)
+
+
+SUBJECT_FIELDS = ("subject", "subject_kind", "on_soloist", "on_soloist_seconds")
+"""The only fields carried over from a correlate reading.
+
+Everything else in that file names the cut -- the timeline, the camera clips, the angle
+roles -- and a blind pack that carries a timeline name is not a blind pack. Copying the
+four columns by name is the guard: a field added to correlate later cannot leak through
+this without someone adding it here.
+"""
+
+
+def load_subject_track(path: Path) -> list[dict[str, Any]]:
+    """The on-soloist track out of a correlate_timeline cuts file, stripped to four columns."""
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    rows = doc.get("cuts", []) if isinstance(doc, dict) else doc
+    if not isinstance(rows, list):
+        sys.exit(f"error: {path} is neither a correlate cuts file nor a list of shots")
+    track = []
+    for row in rows:
+        if not isinstance(row, dict) or "t" not in row or "seconds" not in row:
+            sys.exit(f"error: {path} has a shot with no t/seconds -- not a correlate cuts file")
+        track.append(
+            {
+                "t": float(row["t"]),
+                "seconds": float(row["seconds"]),
+                **{name: row.get(name) for name in SUBJECT_FIELDS},
+            }
+        )
+    return track
+
+
+def place_subject_track(
+    track: list[dict[str, Any]], span: tuple[float, float] | None, duration: float
+) -> dict[str, Any]:
+    """The track in the extracted clip's own time: shifted, and cut to what the clip holds.
+
+    A shot the span cuts through keeps its place so a judge can still read what shot 7 is on.
+    Its seconds still count where the front held all the way through it -- the line is the
+    same either side of the cut, so the part inside the clip is exact arithmetic rather than
+    a guess. Where the front changed inside that shot they are dropped: scaling a split
+    across a boundary nobody measured would overstate whichever line the shot opened on.
+    """
+    start = span[0] if span else 0.0
+    placed: list[dict[str, Any]] = []
+    partial = 0
+    for row in track:
+        head, tail = row["t"] - start, row["t"] - start + row["seconds"]
+        if tail <= 0 or head >= duration:
+            continue
+        whole = head >= 0 and tail <= duration
+        partial += 0 if whole else 1
+        inside = round(min(tail, duration) - max(head, 0.0), 3)
+        placed.append(
+            {
+                "start": round(max(head, 0.0), 3),
+                "end": round(min(tail, duration), 3),
+                "whole": whole,
+                "counted_seconds": _counted(row.get("on_soloist_seconds"), whole, inside),
+                **{name: row.get(name) for name in SUBJECT_FIELDS},
+            }
+        )
+    counted = [{"on_soloist_seconds": row["counted_seconds"]} for row in placed]
+    return {
+        "shots": placed,
+        "shots_outside_clip": len(track) - len(placed),
+        "shots_cut_by_the_span": partial,
+        "shots_left_out_of_the_share": sum(1 for row in placed if row["counted_seconds"] is None),
+        "summary": subject_module.summary(counted),
+    }
+
+
+def _counted(split: Any, whole: bool, inside: float) -> dict[str, float] | None:
+    """What a placed shot contributes to the share: all of it, the part inside, or nothing."""
+    if not isinstance(split, dict) or not split:
+        return None
+    if whole:
+        return {str(line): float(held) for line, held in split.items()}
+    if len(split) > 1:
+        return None
+    return {str(next(iter(split))): inside}
+
+
+def attach_subjects(shot_docs: list[dict[str, Any]], placed: list[dict[str, Any]]) -> None:
+    """Label each *detected* shot with the authored shot that holds most of it.
+
+    The pack's own shots come from a scene scan and the track comes from the timeline, so the
+    two boundary lists agree only as well as the detector does. Matching by overlap rather
+    than by index means a missed cut reads as one shot carrying the subject it mostly is,
+    instead of a track silently sliding one shot out of step for the rest of the film.
+    """
+    for shot in shot_docs:
+        best, held = None, 0.0
+        for row in placed:
+            overlap = min(shot["end"], row["end"]) - max(shot["start"], row["start"])
+            if overlap > held:
+                best, held = row, overlap
+        shot["subject"] = (
+            None
+            if best is None
+            else {
+                "subject": best["subject"],
+                "subject_kind": best["subject_kind"],
+                "on_soloist": best["on_soloist"],
+                "overlap_sec": round(held, 3),
+            }
+        )
+
+
+# --------------------------------------------------------------------------
 # contact sheets
 
 
@@ -1429,6 +1550,7 @@ def build_label(
     span: tuple[float, float] | None,
     out: Path,
     keep_work: bool,
+    subjects: Path | None = None,
 ) -> dict[str, Any]:
     label_dir = out / label
     label_dir.mkdir(parents=True, exist_ok=True)
@@ -1472,6 +1594,14 @@ def build_label(
             }
         )
 
+    subject_track = (
+        None
+        if subjects is None
+        else place_subject_track(load_subject_track(subjects), span, duration)
+    )
+    if subject_track is not None:
+        attach_subjects(shot_docs, subject_track["shots"])
+
     cuts_doc: dict[str, Any] = {
         "label": label,
         "clip_duration_sec": round(duration, 3),
@@ -1500,6 +1630,9 @@ def build_label(
         "slow_transitions": slow_events,
         "ghosting": ghosts,
     }
+    if subject_track is not None:
+        cuts_doc["subject_track"] = subject_track
+
     samples = decode_mono(clip)
     features = audio_features(samples)
     audio_track, audio_thresholds = classify_audio(features)
@@ -1546,6 +1679,7 @@ def build_label(
         "slow_transitions": len(slow_events),
         "ghost_events": len(ghosts),
         "audio_classes": cuts_doc.get("audio_class_summary", {}).get("seconds_by_class"),
+        "on_soloist": None if subject_track is None else subject_track["summary"],
         "files": ["clip.mp4", "cuts.json", *sheets, *strips],
     }
 
@@ -1577,6 +1711,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", required=True, help="output pack directory")
     parser.add_argument("--keep-work", action="store_true", help="keep intermediate frames")
     parser.add_argument(
+        "--a-subjects",
+        default=None,
+        help="correlate_timeline cuts file for --a: carries its on-soloist track into the pack",
+    )
+    parser.add_argument(
+        "--b-subjects",
+        default=None,
+        help="correlate_timeline cuts file for --b",
+    )
+    parser.add_argument(
         "--expect-a",
         type=int,
         default=None,
@@ -1602,6 +1746,25 @@ def main(argv: list[str] | None = None) -> int:
     a_span = parse_span(args.a_span)
     b_span = parse_span(args.b_span)
 
+    # Both or neither. One side carrying a subject track and the other not is a difference
+    # between the labels that has nothing to do with the cuts, and a critic reading one
+    # annotated version against one bare one is no longer comparing the two edits.
+    subject_files = {"--a-subjects": args.a_subjects, "--b-subjects": args.b_subjects}
+    if any(subject_files.values()) and not all(subject_files.values()):
+        missing = [flag for flag, given in subject_files.items() if not given]
+        sys.exit(
+            f"error: {', '.join(missing)} missing. A subject track on one label only is an "
+            "asymmetry between the labels, not a measurement -- pass both or neither."
+        )
+    # Keyed by input flag rather than by source path: two spans of one video are two labels
+    # sharing a path, and keying on the path would hand both of them the same track.
+    track_of_flag: dict[str, Path | None] = {}
+    for flag, given in (("--a", args.a_subjects), ("--b", args.b_subjects)):
+        track = None if given is None else Path(given).resolve()
+        if track is not None and not track.is_file():
+            sys.exit(f"error: subject track not found: {track}")
+        track_of_flag[flag] = track
+
     out = Path(args.out).resolve()
     out.mkdir(parents=True, exist_ok=True)
 
@@ -1618,11 +1781,20 @@ def main(argv: list[str] | None = None) -> int:
                 unclaimed.pop(i)
                 break
 
+    # A label that never matched back to its flag would silently build without its track,
+    # which is the asymmetry the both-or-neither check above exists to refuse.
+    if all(subject_files.values()) and set(flag_of) != {"A", "B"}:
+        sys.exit(
+            "error: subject tracks were given, but a label could not be matched back to the "
+            "flag it came from, so one label would build without its track. Refusing to build."
+        )
+
     label_entries = []
     for label in ("A", "B"):
         src, span = labels[label]
         print(f"[{label}] building...", file=sys.stderr)
-        label_entries.append(build_label(label, src, span, out, args.keep_work))
+        subjects = track_of_flag.get(flag_of.get(label, ""))
+        label_entries.append(build_label(label, src, span, out, args.keep_work, subjects))
 
     # Refuse to seal a pack whose detector couldn't see the cuts it was told
     # to expect -- a confident manifest built on a blind detector is worse
@@ -1676,7 +1848,7 @@ def main(argv: list[str] | None = None) -> int:
     (out / "assignment.json").write_text(json.dumps(assignment, indent=2), encoding="utf-8")
 
     manifest = {
-        "pack_version": 3,
+        "pack_version": 4,
         "kind": "blind_ab_comparison",
         "scene_threshold": SCENE_THRESHOLD,
         "contact_sheet": {
@@ -1768,6 +1940,29 @@ def main(argv: list[str] | None = None) -> int:
             "onsets": "each run carries start_refined -- the loudness edge inside the "
             "window that moved the class",
             "written_to": "cuts.json: audio_class_1s, audio_class_spans, audio_class_summary",
+        },
+        "subject_track": {
+            "carried": all(subject_files.values()),
+            "method": "authored, not detected: each label's own correlate_timeline reading of "
+            "what its shots are framed on (the angle sidecar's subject) crossed with who was "
+            "out front (the solo changes), shifted into the extracted clip's own time",
+            "lines": {
+                "soloist": "framed on the player out front",
+                "ensemble": "framed on the band rather than one player",
+                "other": "framed on somebody who was not soloing",
+                "unlabelled": "screen time no sidecar label reaches -- counted apart from the "
+                "shares, never in them",
+            },
+            "per_detected_shot": "shots[].subject -- the authored shot holding most of it, with "
+            "the overlap in seconds, because the pack's boundaries are a scene scan's and the "
+            "track's are the timeline's",
+            "seconds": "a shot the span cuts through counts the part inside the clip where "
+            "the front held through it, and is left out of the share where it did not "
+            "(subject_track.shots_left_out_of_the_share counts those); every shot carries its "
+            "own counted_seconds",
+            "both_or_neither": "one label annotated and the other bare would be a difference "
+            "between the labels that is not a difference between the cuts",
+            "written_to": "cuts.json: subject_track, and shots[].subject",
         },
         "labels": label_entries,
         "sealed_envelope": "assignment.json",

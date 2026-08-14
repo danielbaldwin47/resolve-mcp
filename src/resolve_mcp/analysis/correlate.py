@@ -3,7 +3,9 @@
 This is the instrument style is learned with (#22, story 32) and the one a build is reviewed
 with (story 47). Both directions need the same numbers: for every shot, how far its start
 sits from the nearest beat and from the nearest transient, where in the bar that is, which
-tune it happens in, who was out front, how long the shot runs and which angle it came from.
+tune it happens in, who was out front, how long the shot runs, which angle it came from and
+— where the sidecar labels its subject — whether the shot is on the player out front
+(`subject.py`, #181).
 
 Two rules shape everything here.
 
@@ -62,7 +64,7 @@ from ..resolve.timeline import (
     track_enabled,
 )
 from ..timing import SECONDS_PRECISION, dual_time, to_frames
-from . import decode, energy, records
+from . import decode, energy, records, subject
 from .beats import GridTrust, nearest, spacing, trust
 
 log = get_logger("analysis")
@@ -254,6 +256,7 @@ class Music(NamedTuple):
     tunes: tuple[dict[str, Any], ...] | None
     solos: tuple[dict[str, Any], ...] | None
     roles: dict[str, str] | None
+    subjects: dict[str, subject.Subject] | None
     audio: Path | None
 
 
@@ -296,7 +299,8 @@ def correlate_timeline(
     """
     config = config or get_config()
     roles = _roles(angles)
-    music = _music(beats, audio, tunes, solos, roles)
+    subjects = _subjects(angles)
+    music = _music(beats, audio, tunes, solos, roles, subjects)
     cut = _read_cut(connection, timeline, track, music.audio, audio_at)
 
     params: dict[str, Any] = {
@@ -308,6 +312,10 @@ def correlate_timeline(
         "tunes": _named(tunes),
         "solos": _named(solos),
         "angles": dict(sorted(roles.items())) if roles is not None else None,
+        # Carried apart from the roles so that relabelling a camera's subject — the one edit
+        # that moves the on-soloist track and nothing else — is a different job rather than a
+        # cache hit on the reading it replaces.
+        "subjects": None if subjects is None else _labelling(subjects),
     }
     watched = [{"reading": READING}, cut.fingerprint, *_fingerprints(beats, audio, tunes, solos)]
     key = cache.cache_key(KIND, watched, params)
@@ -705,6 +713,7 @@ def _music(
     tunes: str | None,
     solos: str | None,
     roles: dict[str, str] | None,
+    subjects: dict[str, subject.Subject] | None,
 ) -> Music:
     """Every file the measurement joins — or a refusal naming the one that is not there."""
     return Music(
@@ -712,6 +721,7 @@ def _music(
         tunes=_optional_rows(tunes, "tune list", "tunes"),
         solos=_optional_rows(solos, "solo changes", "solos"),
         roles=roles,
+        subjects=subjects,
         audio=_path(audio, "master mix", "it is the file the analysis ran on") if audio else None,
     )
 
@@ -802,6 +812,29 @@ def _role(entry: Any) -> str | None:
     return None
 
 
+def _subjects(angles: Mapping[str, Any] | None) -> dict[str, subject.Subject] | None:
+    """Clip name to what that camera is framed on — the other half of the same sidecar.
+
+    Separate from the roles because the two answer different questions and a sidecar can hold
+    either alone: the role is how a cut spends its angles, the subject is who the shot is on.
+    ``angles`` is validated by ``_roles``, which runs first on the same mapping.
+    """
+    if angles is None:
+        return None
+    return {
+        str(clip): found
+        for clip, entry in angles.items()
+        if (found := subject.subject_of(entry)) is not None
+    }
+
+
+def _labelling(subjects: Mapping[str, subject.Subject]) -> dict[str, dict[str, str]]:
+    """The subject labels as the job records them — plain JSON, in clip order."""
+    return {
+        clip: {"subject": one.name, "voice": one.voice} for clip, one in sorted(subjects.items())
+    }
+
+
 def _transients(audio: Path | None, onsets: Onsets | None) -> tuple[float, ...] | None:
     """Onset times for the mix, or ``None`` when no mix was named.
 
@@ -882,12 +915,17 @@ def measure(
     tune_times = [float(row["t"]) for row in (music.tunes or ())]
     solo_times = [float(row["t"]) for row in (music.solos or ())]
     roles = music.roles or {}
+    subjects = music.subjects or {}
+    voices = subject.voices(music.solos)
+    spans = subject.windows(music.solos)
     trusted = (grid if grid is not None else trust(music.beats)).trusted
     widths = spacing(times)
 
     rows: list[dict[str, Any]] = []
     for index, shot in enumerate(shots, start=1):
         seconds = clock.seconds(shot.record_in)
+        framed = None if shot.clip is None else subjects.get(shot.clip)
+        framed_kind = subject.kind(framed, voices)
         found = nearest(times, seconds)
         beat = None if found is None else music.beats[found]
         # Only rows the beat gate let through are claimed by the reach rule, so ``gated`` keeps
@@ -904,6 +942,15 @@ def measure(
                 "clip": shot.clip,
                 "track": shot.track,
                 "role": None if shot.clip is None else roles.get(shot.clip),
+                # What the shot is on, and who was playing while it held (#181). The subject
+                # is the sidecar's; the join against the solo map is measured over the shot's
+                # whole length, because a shot that outlives the solo it opened in is two
+                # facts and reading the front at the cut alone records only the first.
+                "subject": None if framed is None else framed.name,
+                "subject_kind": framed_kind,
+                **subject.reading(
+                    framed, framed_kind, seconds, seconds + shot.duration / clock.fps, spans
+                ),
                 "opening": _opens(index, shot, shots),
                 "t": _rounded(seconds),
                 # Dual time for the two timeline positions, because an outlier the agent
@@ -1065,6 +1112,10 @@ def _summary(
         "shot_rhythm": _rhythm(rows, levels),
         "clips": _usage(rows, "clip"),
         "roles": _usage(rows, "role") if _measured("role", rows) else None,
+        "subjects": _usage(rows, "subject") if _measured("subject", rows) else None,
+        # Taken over every shot, openings included: the question is where the screen time
+        # went, and a shot that starts the film is screen time like any other (#181).
+        "on_soloist": subject.summary(rows),
     }
 
 
