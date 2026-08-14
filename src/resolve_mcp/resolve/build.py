@@ -20,6 +20,13 @@ found it full of silent failures. Everything in this file exists to make one gua
   matters more for a cut with gaps than for one without.
 * **A new version every time.** The name is ``<base> v<N+1>`` scanned off the project's
   existing names, so no build ever writes into a timeline someone has already reviewed.
+* **A tail is built twice, because the API cannot cut a transition.** A cut whose ``tail``
+  has a transition to cut in is appended to ``<base> v<N+1> (tail staging)`` and
+  round-tripped through OTIO into its real name (:mod:`resolve_mcp.resolve.tail`); a hard
+  out that does not fade the mix has nothing to inject and builds directly. Everything
+  after the round trip — the placement read-back, takes, markers — is done on the timeline
+  that came *back*, and a round trip that fails fails the build rather than delivering a
+  cut with a hard edge where its tail should be.
 * **Resolve's answer is never the evidence.** An append onto a locked track returns
   TimelineItems and places nothing; an append that overlaps existing media slides to the
   next free frame and reports success; a still ignores ``endFrame`` until an out point has
@@ -37,6 +44,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Final
 
+from ..cut import tail as cut_tail
 from ..cut.validate import gaps as cut_gaps
 from ..cut.validate import (
     is_gap,
@@ -49,6 +57,7 @@ from ..errors import BuildFailedError, CutInvalidError, TimelineNotFoundError
 from ..logging_config import get_logger
 from ..naming import latest_version, next_version_name, version_name
 from . import cut, markers, media, mix, takes
+from . import tail as tail_route
 from . import timeline as timeline_read
 from .connection import ResolveConnection
 from .session import frame_rate
@@ -166,16 +175,59 @@ def build_timeline(
     clips = cut.clips_by_alias(checked)
     _unlock_stills(clips)
 
-    built = _create(pool, project, name)
-    shots = _shots(doc, clips, timeline_read.start_frame(built))
-    _make_tracks(built, shots, name)
-    _refuse_locked_tracks(built, shots, name)
-    _append(pool, shots, name)
-    _verify(built, shots, name)
+    # A cut whose tail has something to cut in is appended to a staging timeline and
+    # round-tripped into its own name, because the scripting API cannot cut a transition
+    # (see :mod:`.tail`). A hard out that does not fade the mix has nothing to inject, so it
+    # builds straight into its own name rather than paying an export and an import to hand
+    # back the same cut. Every step below therefore names the timeline it is actually
+    # writing to, which for a round-tripped build is the staging one until the import lands.
+    tail = cut_tail.read(doc)
+    round_tripped = tail is not None and tail.needs_transitions
+    writing = tail_route.staging_name(name, existing) if round_tripped else name
+
+    built = _create(pool, project, writing)
+    # The frame the shots are positioned against. Kept, rather than re-read per check: a
+    # round-tripped build reads its placements back on a *second* timeline, whose own start
+    # is Resolve's to choose, and the comparison there is offset against offset.
+    origin = timeline_read.start_frame(built)
+    shots = _shots(doc, clips, origin)
+    _make_tracks(built, shots, writing)
+    _refuse_locked_tracks(built, shots, writing)
+    _append(pool, shots, writing)
+    _verify(built, shots, writing, origin)
+    applied: dict[str, Any] | None = None
+    if tail is not None and round_tripped:
+        # Before takes: the round trip makes a new timeline, and a selector attached to the
+        # staging one would be alternates for a cut that is about to be deleted. ``_verify``
+        # goes with it: the timeline checked above is the staging one, and the cut that
+        # ships is the one the import made out of it.
+        built, applied = tail_route.materialise(
+            connection,
+            project,
+            pool,
+            built,
+            writing,
+            name,
+            tail,
+            verify=lambda landed: _verify(landed, shots, name, origin),
+        )
+    elif tail is not None:
+        # Nothing was injected and nothing was round-tripped, but the cut file did ask for a
+        # tail — so the report says what it asked for and that it took no route.
+        applied = {
+            **tail.as_dict(),
+            "video_tracks": [],
+            "audio_tracks": [],
+            "route": "direct",
+            "confirmed": [],
+        }
     # Takes hang off placed clips, so they are attached only once every placement has been
     # read back — a selector on a shot that slid somewhere else would be alternates for a
-    # shot the cut file does not have.
-    made = takes.attach_takes(built, _selectors(doc, clips, shots), name)
+    # shot the cut file does not have. Read against the timeline actually being attached to,
+    # which after a round trip is the import and need not start where the staging cut did.
+    made = takes.attach_takes(
+        built, _selectors(doc, clips, shots, timeline_read.start_frame(built) - origin), name
+    )
     carried = _carry_markers(
         connection,
         project,
@@ -201,6 +253,10 @@ def build_timeline(
             "audio": bool(_count(shots, A1)),
             "selectors": made,
         },
+        # None when the cut has no tail — the hard out v1 always built. Never a bare
+        # "false": what landed is the frame counts, and the report is where a review round
+        # reads back whether the device it asked for is the device that arrived.
+        "tail": applied,
         "markers": carried,
         "warnings": [finding.as_dict() for finding in checked.warnings],
     }
@@ -437,9 +493,16 @@ def _selectors(
     doc: dict[str, Any],
     clips: dict[str, media.LocatedClip],
     shots: list[Shot],
+    shift: int = 0,
 ) -> list[takes.Selector]:
-    """The alternates each segment carries, against the record frame its shot landed on."""
-    records = {shot.id: shot.record for shot in shots if shot.track == V1}
+    """The alternates each segment carries, against the record frame its shot landed on.
+
+    ``shift`` is how far the timeline being attached to starts from the one the shots were
+    positioned against — zero on a direct build, and whatever a round trip's import chose
+    for itself otherwise. A selector is found by its record frame, so a shift left out here
+    would look for every shot an hour before the cut that holds it.
+    """
+    records = {shot.id: shot.record + shift for shot in shots if shot.track == V1}
     found = []
     for segment in doc["segments"]:
         alternates = segment.get("alternates") or []
@@ -582,9 +645,31 @@ def _append(pool: Pool, shots: list[Shot], name: str) -> None:
     log.info("Appended %d clips to %s; Resolve returned %d", len(shots), name, len(appended))
 
 
-def _verify(timeline: Timeline, shots: list[Shot], name: str) -> None:
-    """Read the tracks back: the only way to know an append landed where it was told to."""
-    misplaced = [shot for track in _tracks(shots) for shot in _adrift(timeline, shots, track)]
+def _verify(timeline: Timeline, shots: list[Shot], name: str, origin: int) -> None:
+    """Read the tracks back: the only way to know an append landed where it was told to.
+
+    ``origin`` is the timeline start the shots were positioned against. Placement is judged
+    as an offset from each timeline's own first frame, never as an absolute frame, because
+    the cut a tail delivers is read back on a *different* timeline from the one it was
+    appended to: the round trip imports the document, and Resolve is free to start what it
+    imports at a timecode of its own choosing. Compared absolutely, an import that begins
+    one hour later than the staging cut reports every shot in a correct cut as misplaced —
+    and the build then deletes it.
+    """
+    landed_origin = timeline_read.start_frame(timeline)
+    if landed_origin != origin:
+        log.info(
+            "%s starts at frame %d, not the %d its shots were placed against; "
+            "placement is checked as offsets from each timeline's own start",
+            name,
+            landed_origin,
+            origin,
+        )
+    misplaced = [
+        shot
+        for track in _tracks(shots)
+        for shot in _adrift(timeline, shots, track, origin, landed_origin)
+    ]
     if not misplaced:
         return
     raise BuildFailedError(
@@ -601,15 +686,22 @@ def _verify(timeline: Timeline, shots: list[Shot], name: str) -> None:
     )
 
 
-def _adrift(timeline: Timeline, shots: list[Shot], track: Track) -> list[Shot]:
+def _adrift(
+    timeline: Timeline,
+    shots: list[Shot],
+    track: Track,
+    origin: int,
+    landed_origin: int,
+) -> list[Shot]:
+    """The shots this track does not hold, matched on ``(offset from start, duration)``."""
     wanted = [shot for shot in shots if shot.track == track]
     if not wanted:
         return []
     landed = {
-        (item.GetStart(), item.GetDuration())
+        (item.GetStart() - landed_origin, item.GetDuration())
         for item in timeline.GetItemListInTrack(track.type, track.index) or []
     }
-    return [shot for shot in wanted if (shot.record, shot.duration) not in landed]
+    return [shot for shot in wanted if (shot.record - origin, shot.duration) not in landed]
 
 
 def _expected(shot: Shot) -> dict[str, Any]:

@@ -20,13 +20,18 @@ Four decisions:
   and two jobs pushing the render queue at once corrupt it. Jobs that touch Resolve
   serialise on one lock; pure compute (analysis on already-acquired audio) does not wait.
 
-* **Threads, not processes.** The heavy libraries are not loaded yet — they get imported
-  inside the workers that need them, so server startup stays fast either way — and a
-  worker driving the Resolve API has to live in the process holding the handle.
+* **Threads, not processes — until the work stops needing this process.** The heavy
+  libraries are not loaded yet — they get imported inside the workers that need them, so
+  server startup stays fast either way — and a worker driving the Resolve API has to live in
+  the process holding the handle. But a thread dies with its process, and stem separation is
+  half an hour of GPU work that needs no handle at all once the audio is on disk. So a
+  worker may return ``Detached`` instead of a result: the rest of that job moves into a
+  process of its own (``detached``), and the record on disk is how the two stay in touch.
 """
 
 from __future__ import annotations
 
+import os
 import threading
 import time
 from collections.abc import Callable
@@ -36,7 +41,7 @@ from typing import Any, NamedTuple
 from ..config import Config, get_config
 from ..errors import ChainedJobError, InternalError, ResolveMcpError
 from ..logging_config import get_logger
-from . import cache, store
+from . import cache, detached, store
 from .store import JobRecord
 
 log = get_logger("jobs")
@@ -44,6 +49,14 @@ log = get_logger("jobs")
 WAIT_TIMEOUT = 30.0
 FOLLOW_POLL = 0.1
 WAITING = "waiting for Resolve"
+
+PROGRESS_INTERVAL = 1.0
+"""How often a moving progress bar is written to the record, in seconds. See ``execute``.
+
+Comfortably below ``store.HEARTBEAT_CEILING``, which reads a record nothing has written to as
+a worker that is gone: the bar is the heartbeat, and a throttle that outran the ceiling would
+have a running job declare itself dead.
+"""
 
 RESOLVE_LOCK = threading.Lock()
 """Held for the whole of any job that drives the Resolve application."""
@@ -63,8 +76,20 @@ class JobOutput(NamedTuple):
     artifacts: tuple[Path, ...] = ()
 
 
+class Detached(NamedTuple):
+    """What a worker returns instead of a result when the rest of the job leaves this process.
+
+    ``plan`` is everything the standalone worker will need that the job's params do not
+    already carry — for stems, the acquired audio, which only exists once the part of the job
+    that *did* need the Resolve handle has run. It goes onto the record, because the record
+    is all the two processes share.
+    """
+
+    plan: dict[str, Any]
+
+
 Progress = Callable[[float, str], None]
-Work = Callable[[Progress], JobOutput]
+Work = Callable[[Progress], JobOutput | Detached]
 Watch = Callable[[JobRecord], None]
 
 
@@ -136,21 +161,48 @@ def _run(record: JobRecord, work: Work, touches_resolve: bool, config: Config) -
             if record.step == WAITING:
                 record.step = ""
                 store.save(record, config)
-            _work(record, work, config)
+            execute(record, work, config)
         return
-    _work(record, work, config)
+    execute(record, work, config)
 
 
-def _work(record: JobRecord, work: Work, config: Config) -> None:
-    """Run the worker, and turn whatever comes out of it into a closed job record."""
+def execute(record: JobRecord, work: Work, config: Config) -> None:
+    """Run the worker, and turn whatever comes out of it into a closed job record.
+
+    Public because the detached worker process runs a job through exactly this: the caching,
+    the error shaping and the guarantee that nothing escapes are the same guarantees whether
+    the work is on a thread here or alone in a process of its own.
+    """
+    # The bar reaches disk at most once a second. It moves several times a second and a
+    # separation moves it for half an hour, which is tens of thousands of writes to a file
+    # ``get_job`` is polling at the same time — on Windows the two sides already have to retry
+    # around each other's handles (``store._sharing``), and one write a second says everything
+    # a poller can read anyway. Two things are never throttled: a step change, which is the one
+    # line an agent reads to know what is happening and happens a dozen times in a job rather
+    # than a thousand, and the ending, which ``store.finish`` writes itself — so whichever tick
+    # the throttle skipped, the last thing the record says is the true one.
+    last_save = float("-inf")
 
     def progress(fraction: float, step: str) -> None:
+        nonlocal last_save
         record.progress = min(max(fraction, 0.0), 1.0)
+        moved_on = step != record.step
         record.step = step
-        store.save(record, config)
+        now = time.monotonic()
+        if moved_on or now - last_save >= PROGRESS_INTERVAL:
+            last_save = now
+            store.save(record, config)
 
     try:
         output = work(progress)
+        if isinstance(output, Detached):
+            # Not an ending: the record stays running, and the worker process closes it. The
+            # cache entry is written there too, for the same reason the result is — a job is
+            # only cacheable once it has a result, and this one does not have one yet.
+            resumed = _hand_off(record, output.plan, progress, config)
+            if resumed is None:
+                return
+            output = resumed
         if record.cache_key is not None:
             cache.remember(record.cache_key, record.kind, output.result, output.artifacts, config)
     except ResolveMcpError as exc:
@@ -168,12 +220,45 @@ def _work(record: JobRecord, work: Work, config: Config) -> None:
     store.finish(record, result=output.result, config=config)
 
 
+def _hand_off(
+    record: JobRecord,
+    plan: dict[str, Any],
+    progress: Progress,
+    config: Config,
+) -> JobOutput | None:
+    """Move the rest of the job into a process of its own — unless this already *is* that one.
+
+    ``execute`` is shared on purpose: the detached worker closes its job through exactly this
+    path. That makes the hand-off branch reachable inside the worker too, and a worker that
+    launched a worker would launch another, and another — one process per generation, each
+    holding the same record. The record says which side of the hand-off we are on: it is
+    marked detached and names *this* pid only in the process that adopted it. There the plan
+    is run here instead, which is what a launch would have arranged anyway, minus the process.
+    """
+    if record.detached and record.pid == os.getpid():
+        log.warning(
+            "Job %s handed off inside its own detached worker (pid %s); running it here",
+            record.job_id,
+            record.pid,
+        )
+        record.plan = plan
+        store.save(record, config)
+        from .worker import worker_for  # local: worker imports this module at its own import
+
+        return worker_for(record.kind)(record, progress, config)
+    detached.launch(record, plan, config)
+    return None
+
+
 def alive(job_id: str) -> bool:
     """Whether a worker thread for this job is still running in this process.
 
     A job that a chained job is following can only be finished by that thread. If the
     thread is gone while the record still says running, nothing will ever close it, and a
     follower that kept polling would wait forever.
+
+    Says nothing about a detached job: its thread ends at the hand-off, on purpose, and what
+    is still running is a process this registry never held. ``store`` answers for those.
     """
     with _threads_lock:
         thread = _threads.get(job_id)
@@ -201,7 +286,7 @@ def follow(
             watch(record)
         sleep(poll)
         record = store.load(job_id, config)
-        if record.state == store.RUNNING and not alive(job_id):
+        if record.state == store.RUNNING and not record.detached and not alive(job_id):
             # The thread may have closed the record between that read and this check, so
             # the answer is the record read *after* the thread is known to be gone.
             record = store.load(job_id, config)
@@ -220,7 +305,9 @@ def wait_for(job_id: str, timeout: float = WAIT_TIMEOUT, config: Config | None =
     """Block until the job is off the thread pool — for chained work, and for tests.
 
     A job started by an earlier server process has no thread here; its record already says
-    what happened to it, so the answer comes straight off disk.
+    what happened to it, so the answer comes straight off disk. A detached job comes back
+    still running for the same reason: its thread ended at the hand-off and the process that
+    will finish it is not one this can join.
     """
     with _threads_lock:
         thread = _threads.get(job_id)

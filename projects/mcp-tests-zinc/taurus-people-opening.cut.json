@@ -1,0 +1,141 @@
+{
+  "schema": 1,
+  "timeline": {
+    "name": "Taurus People Opening R3",
+    "fps": 23.976
+  },
+  "sources": {
+    "fx6_wide": {
+      "clip": "A015C001_2606170J.MXF",
+      "bin": "Zinc Bar/Footage/FX6/Set 2",
+      "sync_offset": 117576
+    },
+    "a7iv_kit": {
+      "clip": "20260617_D_A7IV_0006.MP4",
+      "bin": "Zinc Bar/Footage/A7IV/Set 2",
+      "sync_offset": 86306
+    },
+    "master_mix": {
+      "clip": "Zinc Set 2 Reaper v4.wav",
+      "bin": "Zinc Bar/Audio",
+      "sync_offset": 86401
+    }
+  },
+  "audio": {
+    "source": "master_mix",
+    "in": 85558,
+    "out": 87716
+  },
+  "segments": [
+    {
+      "id": "g001",
+      "gap": 56,
+      "note": "full-frame title card over black through the room's dead air, clearing one frame before the entrance - the measured convention for this tune (styles/concert.md sec 5b). Text+ supplied by the titles pass"
+    },
+    {
+      "id": "s01",
+      "source": "fx6_wide",
+      "in": 54439,
+      "out": 54638,
+      "note": "the card clears one frame before the first note (2.371 s) and the widest picture of the room lands on the entrance; the shot then waits out the operator's 5.25-7.92 reframe instead of being cut into it (sec 5b, sec 4)"
+    },
+    {
+      "id": "s02",
+      "source": "a7iv_kit",
+      "in": 85908,
+      "out": 86144,
+      "note": "downbeat phrase boundary 10.50 (the 9.92 boundary+fill pair resolves into it) - and the last clean exit before the FX6's audience-head blocking at 11.97; the kit angle takes the whole vetoed window"
+    },
+    {
+      "id": "s03",
+      "source": "fx6_wide",
+      "in": 54874,
+      "out": 54981,
+      "note": "the strongest phrase boundary of the head's first build (conf 0.82, downbeat) and the first frame after the FX6 blocking clears at 18.94 - the wide returns on a boundary, not on the veto's edge"
+    },
+    {
+      "id": "s04",
+      "source": "a7iv_kit",
+      "in": 86251,
+      "out": 86411,
+      "note": "energy peak +3.1 dB on the head's second build; the FX6 is about to reframe (26.92-30.42) so the locked angle carries the move and the wide comes back on a picture that changed while it was away (sec 4, sec 5b)"
+    },
+    {
+      "id": "s05",
+      "source": "fx6_wide",
+      "in": 55141,
+      "out": 55194,
+      "note": "downbeat phrase boundary 31.66, first clean frame after the FX6 reframe lands at 30.42 and after the window's biggest energy peak (30.02, +5.46 dB) - ACCELERATION 1 into the section change (sec 3)"
+    },
+    {
+      "id": "s06",
+      "source": "a7iv_kit",
+      "in": 86464,
+      "out": 86518,
+      "note": "downbeat phrase boundary 33.84 - ACCELERATION 2; the pair both judges praised in round 2, kept frame-for-frame"
+    },
+    {
+      "id": "s07",
+      "source": "fx6_wide",
+      "in": 55248,
+      "out": 55446,
+      "note": "THE CHANGE: solo change on a downbeat (timbre, -7.14 dB) with a drum fill on the same frame - the sax head ends and the room drops 13 dB"
+    },
+    {
+      "id": "s08",
+      "source": "a7iv_kit",
+      "in": 86716,
+      "out": 86954,
+      "note": "drum fill 44.38, on the frame the FX6's reframe settles (41.08-44.25). The shot before it is the RELEASE and it is the moving camera doing the editing (sec 4): one 8.3 s shot rides the sax off, the bass taking the lead at 40.50 and the camera settling onto the bassist - no cut needed, and it is what keeps A7IV's confirmed blocking at 41.96-42.92 off the screen"
+    },
+    {
+      "id": "s09",
+      "source": "fx6_wide",
+      "in": 55684,
+      "out": 55858,
+      "note": "drum fill (0.583, the strongest of the passage's first half) with the +1.86 dB secondary swell 0.24 s ahead of it. The A7IV shot it ends held 9.9 s because the picture developed - the drummer switches to brushes and the sax walks in and parks his horn in frame (sec 3's ceiling test)"
+    },
+    {
+      "id": "s10",
+      "source": "a7iv_kit",
+      "in": 87128,
+      "out": 87255,
+      "note": "the biggest secondary swell of the whole quiet passage (+3.3 dB) with its drum fill at 61.62 - the swell is made of brushwork, so go and look at it. TIGHTENING starts here: 5.34 / 4.92 / 4.12 / 3.64 / 3.00 (sec 3)"
+    },
+    {
+      "id": "s11",
+      "source": "fx6_wide",
+      "in": 55985,
+      "out": 56104,
+      "note": "drum fill 66.86, second of the 66.02/66.86 pair - back to the two players carrying the passage"
+    },
+    {
+      "id": "s12",
+      "source": "a7iv_kit",
+      "in": 87374,
+      "out": 87471,
+      "note": "the only back-half event to survive cluster suppression (fill, score 0.833) with the +2.84 dB swell 0.24 s behind it"
+    },
+    {
+      "id": "s13",
+      "source": "fx6_wide",
+      "in": 56201,
+      "out": 56293,
+      "note": "drum fill 75.90 - the shortening run continues; the bass answers"
+    },
+    {
+      "id": "s14",
+      "source": "a7iv_kit",
+      "in": 87563,
+      "out": 87632,
+      "note": "the drum cluster 79.54 / 80.16 / 80.58, the strongest drum event of the last fifteen seconds, taken on the drums - the tightest shot of the piece sits on the thing that is happening"
+    },
+    {
+      "id": "s15",
+      "source": "fx6_wide",
+      "in": 56362,
+      "out": 56541,
+      "note": "drum fill 82.54, the cluster's resolution - RELEASE: 7.5 s on the soloist after the shortening run (sec 3: accelerate in, release after)"
+    }
+  ]
+}

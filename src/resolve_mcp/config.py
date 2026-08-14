@@ -86,6 +86,32 @@ class Config:
             ),
         )
 
+    def to_env(self) -> dict[str, str]:
+        """This config as the variables ``from_env`` reads it back out of.
+
+        A detached worker is a fresh process: it builds its own config from its own
+        environment, and nothing else it inherits says which cache directory or which models
+        the server it came from was using. Handing it these means the record it writes lands
+        where the server is looking for it — every field, not the ones stems happens to need,
+        because a worker that agreed with its server about the cache and disagreed about a
+        model would be the hardest kind of bug to see.
+        """
+        return {
+            "RESOLVE_SCRIPT_API": str(self.script_api),
+            "RESOLVE_SCRIPT_LIB": str(self.script_lib),
+            "RESOLVE_MCP_CACHE": str(self.cache_dir),
+            "RESOLVE_MCP_LOG_LEVEL": self.log_level,
+            "RESOLVE_MCP_FFMPEG": self.ffmpeg,
+            "RESOLVE_MCP_AUDIO_SEPARATOR": self.audio_separator,
+            "RESOLVE_MCP_STEM_MODEL": self.stem_model,
+            "RESOLVE_MCP_DRUM_MODEL": self.drum_model,
+            "RESOLVE_MCP_WIND_MODEL": self.wind_model,
+            "RESOLVE_MCP_DEFAULT_RENDER_PRESET": self.default_render_preset,
+            "RESOLVE_MCP_WHISPER_DEVICE": self.whisper_device,
+            "RESOLVE_MCP_WHISPER_COMPUTE_TYPE": self.whisper_compute_type,
+            BYPASS_ENV: "1" if self.allow_any_python else "0",
+        }
+
     @property
     def script_modules(self) -> Path:
         """Where ``DaVinciResolveScript.py`` lives."""

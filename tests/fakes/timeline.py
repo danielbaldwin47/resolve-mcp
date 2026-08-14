@@ -6,12 +6,16 @@ append lands on.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from .core import AnswersNone
 from .media import IMAGE_SUFFIXES, STILL_DEFAULT_FRAMES
+
+READ_ONLY = 0o444
+"""What a file Resolve is holding open behaves like to a rewrite — see ``Export``."""
 
 if TYPE_CHECKING:
     from .connection import FakeResolve
@@ -82,6 +86,13 @@ class FakeTimeline(AnswersNone):
         # takes the delete, refuses the add, and the restore of the displaced marker has
         # to be free to succeed or the test could not tell a restore from a loss.
         self.refuse_marker_names: set[str] = set()
+        #: Transitions this cut carries, as ``{track, kind, name, in_offset}``. Not a
+        #: Resolve attribute and deliberately not reachable through any API method: the
+        #: scripting API has no getter for a transition at all, which is why a caller that
+        #: wants to know reads them back out of an interchange export. They land here on
+        #: import and go back out on export, so a fake round trip carries them the way the
+        #: real one does.
+        self.transitions: list[dict[str, Any]] = []
         self.exports: list[tuple[str, Any, tuple[Any, ...]]] = []
         self.export_result = True
         self.export_writes_the_file = True
@@ -91,6 +102,11 @@ class FakeTimeline(AnswersNone):
         # Paths one of those types has touched. Resolve keeps the handle for the life of
         # the process, so the name is spent whatever type asks for it next (#26, live).
         self.export_paths_held_open: set[str] = set()
+        # Every file this timeline exports comes back read-only, which is what a file
+        # Resolve is holding open looks like to anything that tries to rewrite it on
+        # Windows (#26). Modelled on the filesystem rather than in the fake because the
+        # code under test writes with ``Path.write_text`` and never asks the fake first.
+        self.locks_written_exports = False
         self.add_track_result = True
         self.set_track_name_result = True
         # A clear that answers True and leaves the clips standing is the failure a caller
@@ -116,6 +132,10 @@ class FakeTimeline(AnswersNone):
     def _track(self, track_type: str, index: int) -> FakeTrack | None:
         tracks = self._tracks.get(track_type, [])
         return tracks[index - 1] if 1 <= index <= len(tracks) else None
+
+    def tracks_of(self, track_type: str) -> list[FakeTrack]:
+        """Every track of one kind, in order — what an interchange export walks."""
+        return list(self._tracks.get(track_type, []))
 
     def first_video_track(self) -> FakeTrack:
         """The track an append lands on; a timeline Resolve made always has one."""
@@ -298,7 +318,17 @@ class FakeTimeline(AnswersNone):
         if self.export_writes_the_file:
             target = Path(file_name)
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(f"fake-export of {self._name}", encoding="utf-8")
+            # An .otio target gets a real document, because the tail device is built by
+            # editing one — a placeholder string there would let a tail test pass over a
+            # document no import could ever have taken.
+            from .interchange import document_of, is_otio
+
+            if is_otio(file_name):
+                target.write_text(json.dumps(document_of(self), indent=1), encoding="utf-8")
+            else:
+                target.write_text(f"fake-export of {self._name}", encoding="utf-8")
+            if self.locks_written_exports:
+                target.chmod(READ_ONLY)
         return True
 
     def AddTrack(self, track_type: str, *_: Any) -> bool:  # noqa: N802

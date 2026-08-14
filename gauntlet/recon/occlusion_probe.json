@@ -1,0 +1,2032 @@
+{
+  "window": {
+    "sync_in": 171959,
+    "sync_out": 174117,
+    "fps": 23.976023976023978
+  },
+  "critic_spans": [
+    {
+      "start_s": 15.0,
+      "end_s": 23.0,
+      "on_screen": "FX6"
+    },
+    {
+      "start_s": 33.7,
+      "end_s": 36.0,
+      "on_screen": "A7IV"
+    },
+    {
+      "start_s": 38.2,
+      "end_s": 48.0,
+      "on_screen": "A7IV"
+    }
+  ],
+  "visual_check": {
+    "occlusion_frames/a7iv_42.5s_flagged.jpg": "Inside the window the scan flagged (41.96-42.92 s, peak 0.604): an out-of-focus head and shoulder fills the right half of frame and runs off the bottom and right edges. This is the obstruction the critic saw, and the scan found it.",
+    "occlusion_frames/a7iv_35.0s_clear.jpg": "Inside the stretch the scan did NOT flag (33.7-36 s, peak 0.0): the stage is clear to the lens \u2014 sax, piano, bass and kit all visible, nothing in the near field. Grabs at 34.0 and 36.0 look the same. The miss is worth reading as the critic's range being wide rather than the scan being blind, but it is unproven either way."
+  },
+  "angles": {
+    "A7IV": {
+      "clip": "20260617_D_A7IV_0006.MP4",
+      "bin": "Zinc Bar/Footage/A7IV/Set 2",
+      "source_range": {
+        "in": 85653,
+        "out": 87811
+      },
+      "ok": true,
+      "job_id": "analyze_occlusion-6fdca7f11f45",
+      "state": "completed",
+      "elapsed_s": 0.0,
+      "error": null,
+      "result": {
+        "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\analysis\\20260617_D_A7IV_0006.MP4-1fdcab82138c.occlusion.json",
+        "clip": "20260617_D_A7IV_0006.MP4",
+        "range": {
+          "in": {
+            "frames": 85653,
+            "seconds": 3572.447,
+            "timecode": "00:59:28:21",
+            "fps": 23.976
+          },
+          "out": {
+            "frames": 87811,
+            "seconds": 3662.454,
+            "timecode": "01:00:58:19",
+            "fps": 23.976
+          }
+        },
+        "sample_fps": 1.0,
+        "threshold": 0.35,
+        "baseline": 0.0,
+        "samples": 90,
+        "blocked_samples": 1,
+        "blocked_fraction": 0.011,
+        "windows": 1,
+        "worst_windows": [
+          {
+            "in": {
+              "frames": 86659,
+              "seconds": 3614.406,
+              "timecode": "01:00:10:19",
+              "fps": 23.976
+            },
+            "out": {
+              "frames": 86682,
+              "seconds": 3615.365,
+              "timecode": "01:00:11:18",
+              "fps": 23.976
+            },
+            "duration_frames": 23,
+            "duration_seconds": 0.959,
+            "samples": 1,
+            "peak_score": 0.604,
+            "mean_score": 0.604
+          }
+        ],
+        "worst_sample": {
+          "time": {
+            "frames": 86659,
+            "seconds": 3614.406,
+            "timecode": "01:00:10:19",
+            "fps": 23.976
+          },
+          "score": 0.604,
+          "coverage": 0.1363,
+          "largest": 0.0635,
+          "blobs": 2
+        },
+        "score": {
+          "mean": 0.061,
+          "max": 0.604
+        }
+      },
+      "windows_in_piece": [
+        {
+          "start_s": 41.96,
+          "end_s": 42.92,
+          "peak_score": 0.604,
+          "mean_score": 0.604
+        }
+      ],
+      "samples_in_piece": [
+        {
+          "at_s": 0.0,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 0.96,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 1.96,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 2.96,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 3.96,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 4.96,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 5.96,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 6.97,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 7.97,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 8.97,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 9.97,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 10.97,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 11.97,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 12.97,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 13.97,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 14.97,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 15.97,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 16.98,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 17.98,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 18.98,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 19.98,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 20.98,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 21.98,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 22.98,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 23.98,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 24.98,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 25.98,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 26.99,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 27.99,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 28.99,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 29.99,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 30.99,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 31.99,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 32.99,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 33.99,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 34.99,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 35.99,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 37.0,
+          "score": 0.309,
+          "coverage": 0.0529
+        },
+        {
+          "at_s": 38.0,
+          "score": 0.18,
+          "coverage": 0.0536
+        },
+        {
+          "at_s": 39.0,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 40.0,
+          "score": 0.13,
+          "coverage": 0.0222
+        },
+        {
+          "at_s": 41.0,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 41.96,
+          "score": 0.604,
+          "coverage": 0.1363
+        },
+        {
+          "at_s": 42.96,
+          "score": 0.23,
+          "coverage": 0.069
+        },
+        {
+          "at_s": 43.96,
+          "score": 0.088,
+          "coverage": 0.0264
+        },
+        {
+          "at_s": 44.96,
+          "score": 0.086,
+          "coverage": 0.0259
+        },
+        {
+          "at_s": 45.96,
+          "score": 0.202,
+          "coverage": 0.0457
+        },
+        {
+          "at_s": 46.96,
+          "score": 0.086,
+          "coverage": 0.0259
+        },
+        {
+          "at_s": 47.96,
+          "score": 0.086,
+          "coverage": 0.0258
+        },
+        {
+          "at_s": 48.97,
+          "score": 0.085,
+          "coverage": 0.0255
+        },
+        {
+          "at_s": 49.97,
+          "score": 0.085,
+          "coverage": 0.0254
+        },
+        {
+          "at_s": 50.97,
+          "score": 0.085,
+          "coverage": 0.0255
+        },
+        {
+          "at_s": 51.97,
+          "score": 0.085,
+          "coverage": 0.0254
+        },
+        {
+          "at_s": 52.97,
+          "score": 0.084,
+          "coverage": 0.0252
+        },
+        {
+          "at_s": 53.97,
+          "score": 0.084,
+          "coverage": 0.0251
+        },
+        {
+          "at_s": 54.97,
+          "score": 0.085,
+          "coverage": 0.0254
+        },
+        {
+          "at_s": 55.97,
+          "score": 0.085,
+          "coverage": 0.0255
+        },
+        {
+          "at_s": 56.97,
+          "score": 0.085,
+          "coverage": 0.0255
+        },
+        {
+          "at_s": 57.97,
+          "score": 0.085,
+          "coverage": 0.0255
+        },
+        {
+          "at_s": 58.98,
+          "score": 0.089,
+          "coverage": 0.0262
+        },
+        {
+          "at_s": 59.98,
+          "score": 0.085,
+          "coverage": 0.0254
+        },
+        {
+          "at_s": 60.98,
+          "score": 0.084,
+          "coverage": 0.0252
+        },
+        {
+          "at_s": 61.98,
+          "score": 0.082,
+          "coverage": 0.0245
+        },
+        {
+          "at_s": 62.98,
+          "score": 0.087,
+          "coverage": 0.0254
+        },
+        {
+          "at_s": 63.98,
+          "score": 0.086,
+          "coverage": 0.0256
+        },
+        {
+          "at_s": 64.98,
+          "score": 0.089,
+          "coverage": 0.0262
+        },
+        {
+          "at_s": 65.98,
+          "score": 0.085,
+          "coverage": 0.0254
+        },
+        {
+          "at_s": 66.98,
+          "score": 0.083,
+          "coverage": 0.0248
+        },
+        {
+          "at_s": 67.98,
+          "score": 0.089,
+          "coverage": 0.0259
+        },
+        {
+          "at_s": 68.99,
+          "score": 0.086,
+          "coverage": 0.0258
+        },
+        {
+          "at_s": 69.99,
+          "score": 0.084,
+          "coverage": 0.0252
+        },
+        {
+          "at_s": 70.99,
+          "score": 0.086,
+          "coverage": 0.0255
+        },
+        {
+          "at_s": 71.99,
+          "score": 0.082,
+          "coverage": 0.0247
+        },
+        {
+          "at_s": 72.99,
+          "score": 0.088,
+          "coverage": 0.0256
+        },
+        {
+          "at_s": 73.99,
+          "score": 0.086,
+          "coverage": 0.0258
+        },
+        {
+          "at_s": 74.99,
+          "score": 0.083,
+          "coverage": 0.0248
+        },
+        {
+          "at_s": 75.99,
+          "score": 0.088,
+          "coverage": 0.0258
+        },
+        {
+          "at_s": 76.99,
+          "score": 0.086,
+          "coverage": 0.0258
+        },
+        {
+          "at_s": 77.99,
+          "score": 0.084,
+          "coverage": 0.0252
+        },
+        {
+          "at_s": 79.0,
+          "score": 0.083,
+          "coverage": 0.025
+        },
+        {
+          "at_s": 80.0,
+          "score": 0.094,
+          "coverage": 0.0269
+        },
+        {
+          "at_s": 81.0,
+          "score": 0.084,
+          "coverage": 0.0251
+        },
+        {
+          "at_s": 82.0,
+          "score": 0.088,
+          "coverage": 0.0258
+        },
+        {
+          "at_s": 83.0,
+          "score": 0.084,
+          "coverage": 0.0252
+        },
+        {
+          "at_s": 83.96,
+          "score": 0.082,
+          "coverage": 0.0247
+        },
+        {
+          "at_s": 84.96,
+          "score": 0.086,
+          "coverage": 0.0254
+        },
+        {
+          "at_s": 85.96,
+          "score": 0.086,
+          "coverage": 0.0256
+        },
+        {
+          "at_s": 86.96,
+          "score": 0.084,
+          "coverage": 0.0252
+        },
+        {
+          "at_s": 87.96,
+          "score": 0.079,
+          "coverage": 0.0236
+        },
+        {
+          "at_s": 88.96,
+          "score": 0.091,
+          "coverage": 0.0258
+        }
+      ],
+      "baseline": 0.0,
+      "curve": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.96,
+          0.0
+        ],
+        [
+          1.96,
+          0.0
+        ],
+        [
+          2.96,
+          0.0
+        ],
+        [
+          3.96,
+          0.0
+        ],
+        [
+          4.96,
+          0.0
+        ],
+        [
+          5.96,
+          0.0
+        ],
+        [
+          6.97,
+          0.0
+        ],
+        [
+          7.97,
+          0.0
+        ],
+        [
+          8.97,
+          0.0
+        ],
+        [
+          9.97,
+          0.0
+        ],
+        [
+          10.97,
+          0.0
+        ],
+        [
+          11.97,
+          0.0
+        ],
+        [
+          12.97,
+          0.0
+        ],
+        [
+          13.97,
+          0.0
+        ],
+        [
+          14.97,
+          0.0
+        ],
+        [
+          15.97,
+          0.0
+        ],
+        [
+          16.98,
+          0.0
+        ],
+        [
+          17.98,
+          0.0
+        ],
+        [
+          18.98,
+          0.0
+        ],
+        [
+          19.98,
+          0.0
+        ],
+        [
+          20.98,
+          0.0
+        ],
+        [
+          21.98,
+          0.0
+        ],
+        [
+          22.98,
+          0.0
+        ],
+        [
+          23.98,
+          0.0
+        ],
+        [
+          24.98,
+          0.0
+        ],
+        [
+          25.98,
+          0.0
+        ],
+        [
+          26.99,
+          0.0
+        ],
+        [
+          27.99,
+          0.0
+        ],
+        [
+          28.99,
+          0.0
+        ],
+        [
+          29.99,
+          0.0
+        ],
+        [
+          30.99,
+          0.0
+        ],
+        [
+          31.99,
+          0.0
+        ],
+        [
+          32.99,
+          0.0
+        ],
+        [
+          33.99,
+          0.0
+        ],
+        [
+          34.99,
+          0.0
+        ],
+        [
+          35.99,
+          0.0
+        ],
+        [
+          37.0,
+          0.309
+        ],
+        [
+          38.0,
+          0.18
+        ],
+        [
+          39.0,
+          0.0
+        ],
+        [
+          40.0,
+          0.13
+        ],
+        [
+          41.0,
+          0.0
+        ],
+        [
+          41.96,
+          0.604
+        ],
+        [
+          42.96,
+          0.23
+        ],
+        [
+          43.96,
+          0.088
+        ],
+        [
+          44.96,
+          0.086
+        ],
+        [
+          45.96,
+          0.202
+        ],
+        [
+          46.96,
+          0.086
+        ],
+        [
+          47.96,
+          0.086
+        ],
+        [
+          48.97,
+          0.085
+        ],
+        [
+          49.97,
+          0.085
+        ],
+        [
+          50.97,
+          0.085
+        ],
+        [
+          51.97,
+          0.085
+        ],
+        [
+          52.97,
+          0.084
+        ],
+        [
+          53.97,
+          0.084
+        ],
+        [
+          54.97,
+          0.085
+        ],
+        [
+          55.97,
+          0.085
+        ],
+        [
+          56.97,
+          0.085
+        ],
+        [
+          57.97,
+          0.085
+        ],
+        [
+          58.98,
+          0.089
+        ],
+        [
+          59.98,
+          0.085
+        ],
+        [
+          60.98,
+          0.084
+        ],
+        [
+          61.98,
+          0.082
+        ],
+        [
+          62.98,
+          0.087
+        ],
+        [
+          63.98,
+          0.086
+        ],
+        [
+          64.98,
+          0.089
+        ],
+        [
+          65.98,
+          0.085
+        ],
+        [
+          66.98,
+          0.083
+        ],
+        [
+          67.98,
+          0.089
+        ],
+        [
+          68.99,
+          0.086
+        ],
+        [
+          69.99,
+          0.084
+        ],
+        [
+          70.99,
+          0.086
+        ],
+        [
+          71.99,
+          0.082
+        ],
+        [
+          72.99,
+          0.088
+        ],
+        [
+          73.99,
+          0.086
+        ],
+        [
+          74.99,
+          0.083
+        ],
+        [
+          75.99,
+          0.088
+        ],
+        [
+          76.99,
+          0.086
+        ],
+        [
+          77.99,
+          0.084
+        ],
+        [
+          79.0,
+          0.083
+        ],
+        [
+          80.0,
+          0.094
+        ],
+        [
+          81.0,
+          0.084
+        ],
+        [
+          82.0,
+          0.088
+        ],
+        [
+          83.0,
+          0.084
+        ],
+        [
+          83.96,
+          0.082
+        ],
+        [
+          84.96,
+          0.086
+        ],
+        [
+          85.96,
+          0.086
+        ],
+        [
+          86.96,
+          0.084
+        ],
+        [
+          87.96,
+          0.079
+        ],
+        [
+          88.96,
+          0.091
+        ]
+      ],
+      "verdict": [
+        {
+          "critic_span": {
+            "start_s": 15.0,
+            "end_s": 23.0
+          },
+          "on_screen": "FX6",
+          "seconds_flagged": 0.0,
+          "fraction_flagged": 0.0,
+          "peak_score_inside": 0.0,
+          "mean_score_inside": 0.0
+        },
+        {
+          "critic_span": {
+            "start_s": 33.7,
+            "end_s": 36.0
+          },
+          "on_screen": "A7IV",
+          "seconds_flagged": 0.0,
+          "fraction_flagged": 0.0,
+          "peak_score_inside": 0.0,
+          "mean_score_inside": 0.0
+        },
+        {
+          "critic_span": {
+            "start_s": 38.2,
+            "end_s": 48.0
+          },
+          "on_screen": "A7IV",
+          "seconds_flagged": 0.96,
+          "fraction_flagged": 0.1,
+          "peak_score_inside": 0.604,
+          "mean_score_inside": 0.151
+        }
+      ]
+    },
+    "FX6": {
+      "clip": "A015C001_2606170J.MXF",
+      "bin": "Zinc Bar/Footage/FX6/Set 2",
+      "source_range": {
+        "in": 54383,
+        "out": 56541
+      },
+      "ok": true,
+      "job_id": "analyze_occlusion-db9cbcbd4710",
+      "state": "completed",
+      "elapsed_s": 0.0,
+      "error": null,
+      "result": {
+        "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\analysis\\A015C001_2606170J.MXF-9e578e553473.occlusion.json",
+        "clip": "A015C001_2606170J.MXF",
+        "range": {
+          "in": {
+            "frames": 54383,
+            "seconds": 2268.227,
+            "timecode": "00:37:45:23",
+            "fps": 23.976
+          },
+          "out": {
+            "frames": 56541,
+            "seconds": 2358.233,
+            "timecode": "00:39:15:21",
+            "fps": 23.976
+          }
+        },
+        "sample_fps": 1.0,
+        "threshold": 0.35,
+        "baseline": 0.0489,
+        "samples": 90,
+        "blocked_samples": 40,
+        "blocked_fraction": 0.444,
+        "windows": 5,
+        "worst_windows": [
+          {
+            "in": {
+              "frames": 54670,
+              "seconds": 2280.197,
+              "timecode": "00:37:57:22",
+              "fps": 23.976
+            },
+            "out": {
+              "frames": 54837,
+              "seconds": 2287.162,
+              "timecode": "00:38:04:21",
+              "fps": 23.976
+            },
+            "duration_frames": 167,
+            "duration_seconds": 6.965,
+            "samples": 7,
+            "peak_score": 1.0,
+            "mean_score": 0.727
+          },
+          {
+            "in": {
+              "frames": 55653,
+              "seconds": 2321.196,
+              "timecode": "00:38:38:21",
+              "fps": 23.976
+            },
+            "out": {
+              "frames": 55676,
+              "seconds": 2322.155,
+              "timecode": "00:38:39:20",
+              "fps": 23.976
+            },
+            "duration_frames": 23,
+            "duration_seconds": 0.959,
+            "samples": 1,
+            "peak_score": 0.682,
+            "mean_score": 0.682
+          },
+          {
+            "in": {
+              "frames": 55725,
+              "seconds": 2324.199,
+              "timecode": "00:38:41:21",
+              "fps": 23.976
+            },
+            "out": {
+              "frames": 55844,
+              "seconds": 2329.162,
+              "timecode": "00:38:46:20",
+              "fps": 23.976
+            },
+            "duration_frames": 119,
+            "duration_seconds": 4.963,
+            "samples": 5,
+            "peak_score": 0.624,
+            "mean_score": 0.361
+          },
+          {
+            "in": {
+              "frames": 55413,
+              "seconds": 2311.186,
+              "timecode": "00:38:28:21",
+              "fps": 23.976
+            },
+            "out": {
+              "frames": 55580,
+              "seconds": 2318.151,
+              "timecode": "00:38:35:20",
+              "fps": 23.976
+            },
+            "duration_frames": 167,
+            "duration_seconds": 6.965,
+            "samples": 7,
+            "peak_score": 0.594,
+            "mean_score": 0.438
+          },
+          {
+            "in": {
+              "frames": 55989,
+              "seconds": 2335.21,
+              "timecode": "00:38:52:21",
+              "fps": 23.976
+            },
+            "out": {
+              "frames": 56539,
+              "seconds": 2358.15,
+              "timecode": "00:39:15:19",
+              "fps": 23.976
+            },
+            "duration_frames": 550,
+            "duration_seconds": 22.94,
+            "samples": 23,
+            "peak_score": 0.582,
+            "mean_score": 0.499
+          }
+        ],
+        "worst_sample": {
+          "time": {
+            "frames": 54670,
+            "seconds": 2280.197,
+            "timecode": "00:37:57:22",
+            "fps": 23.976
+          },
+          "score": 1.0,
+          "coverage": 0.3067,
+          "largest": 0.1956,
+          "blobs": 2
+        },
+        "score": {
+          "mean": 0.288,
+          "max": 1.0
+        }
+      },
+      "windows_in_piece": [
+        {
+          "start_s": 11.97,
+          "end_s": 18.94,
+          "peak_score": 1.0,
+          "mean_score": 0.727
+        },
+        {
+          "start_s": 42.96,
+          "end_s": 49.92,
+          "peak_score": 0.594,
+          "mean_score": 0.438
+        },
+        {
+          "start_s": 52.97,
+          "end_s": 53.93,
+          "peak_score": 0.682,
+          "mean_score": 0.682
+        },
+        {
+          "start_s": 55.97,
+          "end_s": 60.94,
+          "peak_score": 0.624,
+          "mean_score": 0.361
+        },
+        {
+          "start_s": 66.98,
+          "end_s": 89.92,
+          "peak_score": 0.582,
+          "mean_score": 0.499
+        }
+      ],
+      "samples_in_piece": [
+        {
+          "at_s": 0.0,
+          "score": 0.022,
+          "coverage": 0.0555
+        },
+        {
+          "at_s": 0.96,
+          "score": 0.024,
+          "coverage": 0.0559
+        },
+        {
+          "at_s": 1.96,
+          "score": 0.09,
+          "coverage": 0.0673
+        },
+        {
+          "at_s": 2.96,
+          "score": 0.06,
+          "coverage": 0.0669
+        },
+        {
+          "at_s": 3.96,
+          "score": 0.063,
+          "coverage": 0.0674
+        },
+        {
+          "at_s": 4.96,
+          "score": 0.059,
+          "coverage": 0.0666
+        },
+        {
+          "at_s": 5.96,
+          "score": 0.136,
+          "coverage": 0.0799
+        },
+        {
+          "at_s": 6.97,
+          "score": 0.161,
+          "coverage": 0.0898
+        },
+        {
+          "at_s": 7.97,
+          "score": 0.171,
+          "coverage": 0.0958
+        },
+        {
+          "at_s": 8.97,
+          "score": 0.228,
+          "coverage": 0.1081
+        },
+        {
+          "at_s": 9.97,
+          "score": 0.198,
+          "coverage": 0.1082
+        },
+        {
+          "at_s": 10.97,
+          "score": 0.196,
+          "coverage": 0.1078
+        },
+        {
+          "at_s": 11.97,
+          "score": 1.0,
+          "coverage": 0.3067
+        },
+        {
+          "at_s": 12.97,
+          "score": 0.762,
+          "coverage": 0.2774
+        },
+        {
+          "at_s": 13.97,
+          "score": 0.682,
+          "coverage": 0.2535
+        },
+        {
+          "at_s": 14.97,
+          "score": 0.582,
+          "coverage": 0.2235
+        },
+        {
+          "at_s": 15.97,
+          "score": 0.671,
+          "coverage": 0.2389
+        },
+        {
+          "at_s": 16.98,
+          "score": 0.715,
+          "coverage": 0.2528
+        },
+        {
+          "at_s": 17.98,
+          "score": 0.679,
+          "coverage": 0.2527
+        },
+        {
+          "at_s": 18.98,
+          "score": 0.331,
+          "coverage": 0.1482
+        },
+        {
+          "at_s": 19.98,
+          "score": 0.217,
+          "coverage": 0.1139
+        },
+        {
+          "at_s": 20.98,
+          "score": 0.201,
+          "coverage": 0.1092
+        },
+        {
+          "at_s": 21.98,
+          "score": 0.187,
+          "coverage": 0.1051
+        },
+        {
+          "at_s": 22.98,
+          "score": 0.142,
+          "coverage": 0.0914
+        },
+        {
+          "at_s": 23.98,
+          "score": 0.115,
+          "coverage": 0.0836
+        },
+        {
+          "at_s": 24.98,
+          "score": 0.102,
+          "coverage": 0.0796
+        },
+        {
+          "at_s": 25.98,
+          "score": 0.091,
+          "coverage": 0.0761
+        },
+        {
+          "at_s": 26.99,
+          "score": 0.03,
+          "coverage": 0.0579
+        },
+        {
+          "at_s": 27.99,
+          "score": 0.081,
+          "coverage": 0.0666
+        },
+        {
+          "at_s": 28.99,
+          "score": 0.061,
+          "coverage": 0.067
+        },
+        {
+          "at_s": 29.99,
+          "score": 0.06,
+          "coverage": 0.0669
+        },
+        {
+          "at_s": 30.99,
+          "score": 0.058,
+          "coverage": 0.0662
+        },
+        {
+          "at_s": 31.99,
+          "score": 0.055,
+          "coverage": 0.0654
+        },
+        {
+          "at_s": 32.99,
+          "score": 0.06,
+          "coverage": 0.0663
+        },
+        {
+          "at_s": 33.99,
+          "score": 0.0,
+          "coverage": 0.0372
+        },
+        {
+          "at_s": 34.99,
+          "score": 0.0,
+          "coverage": 0.0332
+        },
+        {
+          "at_s": 35.99,
+          "score": 0.11,
+          "coverage": 0.061
+        },
+        {
+          "at_s": 37.0,
+          "score": 0.212,
+          "coverage": 0.0905
+        },
+        {
+          "at_s": 38.0,
+          "score": 0.145,
+          "coverage": 0.0916
+        },
+        {
+          "at_s": 39.0,
+          "score": 0.0,
+          "coverage": 0.0227
+        },
+        {
+          "at_s": 40.0,
+          "score": 0.0,
+          "coverage": 0.0221
+        },
+        {
+          "at_s": 41.0,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 41.96,
+          "score": 0.0,
+          "coverage": 0.0
+        },
+        {
+          "at_s": 42.96,
+          "score": 0.58,
+          "coverage": 0.178
+        },
+        {
+          "at_s": 43.96,
+          "score": 0.432,
+          "coverage": 0.1783
+        },
+        {
+          "at_s": 44.96,
+          "score": 0.594,
+          "coverage": 0.2061
+        },
+        {
+          "at_s": 45.96,
+          "score": 0.527,
+          "coverage": 0.2065
+        },
+        {
+          "at_s": 46.96,
+          "score": 0.397,
+          "coverage": 0.1681
+        },
+        {
+          "at_s": 47.96,
+          "score": 0.0,
+          "coverage": 0.0229
+        },
+        {
+          "at_s": 48.97,
+          "score": 0.536,
+          "coverage": 0.1647
+        },
+        {
+          "at_s": 49.97,
+          "score": 0.0,
+          "coverage": 0.045
+        },
+        {
+          "at_s": 50.97,
+          "score": 0.0,
+          "coverage": 0.0449
+        },
+        {
+          "at_s": 51.97,
+          "score": 0.0,
+          "coverage": 0.0452
+        },
+        {
+          "at_s": 52.97,
+          "score": 0.682,
+          "coverage": 0.2084
+        },
+        {
+          "at_s": 53.97,
+          "score": 0.0,
+          "coverage": 0.0422
+        },
+        {
+          "at_s": 54.97,
+          "score": 0.0,
+          "coverage": 0.0252
+        },
+        {
+          "at_s": 55.97,
+          "score": 0.576,
+          "coverage": 0.1768
+        },
+        {
+          "at_s": 56.97,
+          "score": 0.001,
+          "coverage": 0.0492
+        },
+        {
+          "at_s": 57.97,
+          "score": 0.604,
+          "coverage": 0.1851
+        },
+        {
+          "at_s": 58.98,
+          "score": 0.0,
+          "coverage": 0.0245
+        },
+        {
+          "at_s": 59.98,
+          "score": 0.624,
+          "coverage": 0.1912
+        },
+        {
+          "at_s": 60.98,
+          "score": 0.0,
+          "coverage": 0.0476
+        },
+        {
+          "at_s": 61.98,
+          "score": 0.0,
+          "coverage": 0.0475
+        },
+        {
+          "at_s": 62.98,
+          "score": 0.0,
+          "coverage": 0.0452
+        },
+        {
+          "at_s": 63.98,
+          "score": 0.112,
+          "coverage": 0.0665
+        },
+        {
+          "at_s": 64.98,
+          "score": 0.0,
+          "coverage": 0.0222
+        },
+        {
+          "at_s": 65.98,
+          "score": 0.0,
+          "coverage": 0.0433
+        },
+        {
+          "at_s": 66.98,
+          "score": 0.582,
+          "coverage": 0.1784
+        },
+        {
+          "at_s": 67.98,
+          "score": 0.581,
+          "coverage": 0.204
+        },
+        {
+          "at_s": 68.99,
+          "score": 0.498,
+          "coverage": 0.1983
+        },
+        {
+          "at_s": 69.99,
+          "score": 0.433,
+          "coverage": 0.1789
+        },
+        {
+          "at_s": 70.99,
+          "score": 0.415,
+          "coverage": 0.1733
+        },
+        {
+          "at_s": 71.99,
+          "score": 0.421,
+          "coverage": 0.1744
+        },
+        {
+          "at_s": 72.99,
+          "score": 0.539,
+          "coverage": 0.195
+        },
+        {
+          "at_s": 73.99,
+          "score": 0.421,
+          "coverage": 0.1752
+        },
+        {
+          "at_s": 74.99,
+          "score": 0.537,
+          "coverage": 0.1951
+        },
+        {
+          "at_s": 75.99,
+          "score": 0.504,
+          "coverage": 0.198
+        },
+        {
+          "at_s": 76.99,
+          "score": 0.498,
+          "coverage": 0.1982
+        },
+        {
+          "at_s": 77.99,
+          "score": 0.506,
+          "coverage": 0.1997
+        },
+        {
+          "at_s": 79.0,
+          "score": 0.515,
+          "coverage": 0.2019
+        },
+        {
+          "at_s": 80.0,
+          "score": 0.499,
+          "coverage": 0.1987
+        },
+        {
+          "at_s": 81.0,
+          "score": 0.499,
+          "coverage": 0.1987
+        },
+        {
+          "at_s": 82.0,
+          "score": 0.505,
+          "coverage": 0.1997
+        },
+        {
+          "at_s": 83.0,
+          "score": 0.495,
+          "coverage": 0.1974
+        },
+        {
+          "at_s": 83.96,
+          "score": 0.475,
+          "coverage": 0.1914
+        },
+        {
+          "at_s": 84.96,
+          "score": 0.538,
+          "coverage": 0.2022
+        },
+        {
+          "at_s": 85.96,
+          "score": 0.513,
+          "coverage": 0.2025
+        },
+        {
+          "at_s": 86.96,
+          "score": 0.508,
+          "coverage": 0.2012
+        },
+        {
+          "at_s": 87.96,
+          "score": 0.504,
+          "coverage": 0.2001
+        },
+        {
+          "at_s": 88.96,
+          "score": 0.499,
+          "coverage": 0.1985
+        }
+      ],
+      "baseline": 0.0489,
+      "curve": [
+        [
+          0.0,
+          0.022
+        ],
+        [
+          0.96,
+          0.024
+        ],
+        [
+          1.96,
+          0.09
+        ],
+        [
+          2.96,
+          0.06
+        ],
+        [
+          3.96,
+          0.063
+        ],
+        [
+          4.96,
+          0.059
+        ],
+        [
+          5.96,
+          0.136
+        ],
+        [
+          6.97,
+          0.161
+        ],
+        [
+          7.97,
+          0.171
+        ],
+        [
+          8.97,
+          0.228
+        ],
+        [
+          9.97,
+          0.198
+        ],
+        [
+          10.97,
+          0.196
+        ],
+        [
+          11.97,
+          1.0
+        ],
+        [
+          12.97,
+          0.762
+        ],
+        [
+          13.97,
+          0.682
+        ],
+        [
+          14.97,
+          0.582
+        ],
+        [
+          15.97,
+          0.671
+        ],
+        [
+          16.98,
+          0.715
+        ],
+        [
+          17.98,
+          0.679
+        ],
+        [
+          18.98,
+          0.331
+        ],
+        [
+          19.98,
+          0.217
+        ],
+        [
+          20.98,
+          0.201
+        ],
+        [
+          21.98,
+          0.187
+        ],
+        [
+          22.98,
+          0.142
+        ],
+        [
+          23.98,
+          0.115
+        ],
+        [
+          24.98,
+          0.102
+        ],
+        [
+          25.98,
+          0.091
+        ],
+        [
+          26.99,
+          0.03
+        ],
+        [
+          27.99,
+          0.081
+        ],
+        [
+          28.99,
+          0.061
+        ],
+        [
+          29.99,
+          0.06
+        ],
+        [
+          30.99,
+          0.058
+        ],
+        [
+          31.99,
+          0.055
+        ],
+        [
+          32.99,
+          0.06
+        ],
+        [
+          33.99,
+          0.0
+        ],
+        [
+          34.99,
+          0.0
+        ],
+        [
+          35.99,
+          0.11
+        ],
+        [
+          37.0,
+          0.212
+        ],
+        [
+          38.0,
+          0.145
+        ],
+        [
+          39.0,
+          0.0
+        ],
+        [
+          40.0,
+          0.0
+        ],
+        [
+          41.0,
+          0.0
+        ],
+        [
+          41.96,
+          0.0
+        ],
+        [
+          42.96,
+          0.58
+        ],
+        [
+          43.96,
+          0.432
+        ],
+        [
+          44.96,
+          0.594
+        ],
+        [
+          45.96,
+          0.527
+        ],
+        [
+          46.96,
+          0.397
+        ],
+        [
+          47.96,
+          0.0
+        ],
+        [
+          48.97,
+          0.536
+        ],
+        [
+          49.97,
+          0.0
+        ],
+        [
+          50.97,
+          0.0
+        ],
+        [
+          51.97,
+          0.0
+        ],
+        [
+          52.97,
+          0.682
+        ],
+        [
+          53.97,
+          0.0
+        ],
+        [
+          54.97,
+          0.0
+        ],
+        [
+          55.97,
+          0.576
+        ],
+        [
+          56.97,
+          0.001
+        ],
+        [
+          57.97,
+          0.604
+        ],
+        [
+          58.98,
+          0.0
+        ],
+        [
+          59.98,
+          0.624
+        ],
+        [
+          60.98,
+          0.0
+        ],
+        [
+          61.98,
+          0.0
+        ],
+        [
+          62.98,
+          0.0
+        ],
+        [
+          63.98,
+          0.112
+        ],
+        [
+          64.98,
+          0.0
+        ],
+        [
+          65.98,
+          0.0
+        ],
+        [
+          66.98,
+          0.582
+        ],
+        [
+          67.98,
+          0.581
+        ],
+        [
+          68.99,
+          0.498
+        ],
+        [
+          69.99,
+          0.433
+        ],
+        [
+          70.99,
+          0.415
+        ],
+        [
+          71.99,
+          0.421
+        ],
+        [
+          72.99,
+          0.539
+        ],
+        [
+          73.99,
+          0.421
+        ],
+        [
+          74.99,
+          0.537
+        ],
+        [
+          75.99,
+          0.504
+        ],
+        [
+          76.99,
+          0.498
+        ],
+        [
+          77.99,
+          0.506
+        ],
+        [
+          79.0,
+          0.515
+        ],
+        [
+          80.0,
+          0.499
+        ],
+        [
+          81.0,
+          0.499
+        ],
+        [
+          82.0,
+          0.505
+        ],
+        [
+          83.0,
+          0.495
+        ],
+        [
+          83.96,
+          0.475
+        ],
+        [
+          84.96,
+          0.538
+        ],
+        [
+          85.96,
+          0.513
+        ],
+        [
+          86.96,
+          0.508
+        ],
+        [
+          87.96,
+          0.504
+        ],
+        [
+          88.96,
+          0.499
+        ]
+      ],
+      "verdict": [
+        {
+          "critic_span": {
+            "start_s": 15.0,
+            "end_s": 23.0
+          },
+          "on_screen": "FX6",
+          "seconds_flagged": 3.94,
+          "fraction_flagged": 0.49,
+          "peak_score_inside": 0.715,
+          "mean_score_inside": 0.393
+        },
+        {
+          "critic_span": {
+            "start_s": 33.7,
+            "end_s": 36.0
+          },
+          "on_screen": "A7IV",
+          "seconds_flagged": 0.0,
+          "fraction_flagged": 0.0,
+          "peak_score_inside": 0.11,
+          "mean_score_inside": 0.037
+        },
+        {
+          "critic_span": {
+            "start_s": 38.2,
+            "end_s": 48.0
+          },
+          "on_screen": "A7IV",
+          "seconds_flagged": 5.04,
+          "fraction_flagged": 0.51,
+          "peak_score_inside": 0.594,
+          "mean_score_inside": 0.253
+        }
+      ]
+    }
+  },
+  "errors": [],
+  "summary": [
+    {
+      "critic_span": {
+        "start_s": 33.7,
+        "end_s": 36.0
+      },
+      "on_screen": "A7IV",
+      "seconds_flagged": 0.0,
+      "fraction_flagged": 0.0,
+      "peak_score_inside": 0.0,
+      "mean_score_inside": 0.0
+    },
+    {
+      "critic_span": {
+        "start_s": 38.2,
+        "end_s": 48.0
+      },
+      "on_screen": "A7IV",
+      "seconds_flagged": 0.96,
+      "fraction_flagged": 0.1,
+      "peak_score_inside": 0.604,
+      "mean_score_inside": 0.151
+    },
+    {
+      "critic_span": {
+        "start_s": 15.0,
+        "end_s": 23.0
+      },
+      "on_screen": "FX6",
+      "seconds_flagged": 3.94,
+      "fraction_flagged": 0.49,
+      "peak_score_inside": 0.715,
+      "mean_score_inside": 0.393
+    }
+  ]
+}

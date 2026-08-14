@@ -1,0 +1,51 @@
+{
+  "_source": "Personnel read off the human deliverable's own lower-third super: 'S:/Deliverables/Ryan Devlin/6-17-26 Zinc Bar/Full Videos/6-17 - Zinc Set 2 - Taurus People.mp4', frame at t=23.0 s (the super runs 20.646-26.777 s, full-strength 20.896-26.652 s per gauntlet/recon/openings_survey.json). Grab: gauntlet/recon/super_frames/pers_full.jpg. Same quartet plays the whole set, so the four names are applied to all five tunes; only Taurus was read off a frame.",
+  "_super_form": "Label '\u2014 PERSONNEL \u2014' (letterspaced small caps, warm gold) centred above a row of four columns separated by thin vertical rules; each column is an instrument label in the same gold small caps over the player's name in a large cream serif.",
+  "_title_card_form": "Full-frame card over black: '\u2014 LIVE AT ZINC BAR \u2014' (letterspaced gold small caps) above the song title in a large cream serif, centred. Grab: gauntlet/recon/super_frames/card_1s.jpg.",
+  "maitland-boulevard": {
+    "title": "Maitland Boulevard",
+    "personnel": [
+      { "name": "Ryan Devlin", "instrument": "saxophone", "role": "leader" },
+      { "name": "Leo Genovese", "instrument": "piano" },
+      { "name": "Gene Perla", "instrument": "bass" },
+      { "name": "Willie Bowman", "instrument": "drums" }
+    ]
+  },
+  "hardest-part": {
+    "title": "Hardest Part",
+    "personnel": [
+      { "name": "Ryan Devlin", "instrument": "saxophone", "role": "leader" },
+      { "name": "Leo Genovese", "instrument": "piano" },
+      { "name": "Gene Perla", "instrument": "bass" },
+      { "name": "Willie Bowman", "instrument": "drums" }
+    ]
+  },
+  "soultrane": {
+    "title": "Soultrane",
+    "personnel": [
+      { "name": "Ryan Devlin", "instrument": "saxophone", "role": "leader" },
+      { "name": "Leo Genovese", "instrument": "piano" },
+      { "name": "Gene Perla", "instrument": "bass" },
+      { "name": "Willie Bowman", "instrument": "drums" }
+    ]
+  },
+  "sambra": {
+    "title": "Sambra",
+    "personnel": [
+      { "name": "Ryan Devlin", "instrument": "saxophone", "role": "leader" },
+      { "name": "Leo Genovese", "instrument": "piano" },
+      { "name": "Gene Perla", "instrument": "bass" },
+      { "name": "Willie Bowman", "instrument": "drums" }
+    ]
+  },
+  "taurus-people": {
+    "title": "Taurus People",
+    "subtitle": "Live at Zinc Bar",
+    "personnel": [
+      { "name": "Ryan Devlin", "instrument": "saxophone", "role": "leader" },
+      { "name": "Leo Genovese", "instrument": "piano" },
+      { "name": "Gene Perla", "instrument": "bass" },
+      { "name": "Willie Bowman", "instrument": "drums" }
+    ]
+  }
+}

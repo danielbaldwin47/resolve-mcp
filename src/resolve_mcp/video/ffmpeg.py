@@ -1,4 +1,4 @@
-"""The two ffmpeg commands the video routes run, and what their refusals mean.
+"""The ffmpeg commands the video routes run, and what their refusals mean.
 
 Both are argv lists, never shell strings, and both take the same ``runner`` seam the audio
 route takes — the filter expressions below are the part worth testing, and they are testable
@@ -12,7 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..config import Config, get_config
-from ..errors import FrameGrabError, SceneDetectionError
+from ..errors import FrameGrabError, OcclusionScanError, SceneDetectionError
 from ..ffmpeg import Runner, invoke, refused
 from ..logging_config import get_logger
 
@@ -83,6 +83,51 @@ def scene_command(executable: str, source: Path | str, threshold: float) -> list
     ]
 
 
+def sample_command(
+    executable: str,
+    source: Path | str,
+    target: Path | str,
+    start_seconds: float,
+    duration_seconds: float,
+    rate: float,
+    width: int,
+    height: int,
+) -> list[str]:
+    """Seek, take ``rate`` frames a second of the next ``duration_seconds``, write raw grey.
+
+    Raw rather than an image sequence: the occlusion scan reads pixels, and one file of
+    ``width * height`` bytes per sample is a numpy reshape rather than a decoder. Grey
+    because every part of the heuristic is luma — a colour plane would triple the bytes to
+    answer nothing. The scale is forced rather than fitted: the measurement is in fractions
+    of frame area, and a fixed grid is what lets the raw file be reshaped without asking
+    ffmpeg what shape it wrote.
+
+    The comma in the filter chain separates two filters and is left unescaped; the commas
+    that need escaping are the ones *inside* a filter's arguments.
+    """
+    return [
+        executable,
+        "-nostdin",
+        "-loglevel",
+        "error",
+        "-y",
+        "-ss",
+        f"{start_seconds:.6f}",
+        "-i",
+        str(source),
+        "-t",
+        f"{duration_seconds:.6f}",
+        "-an",
+        "-vf",
+        f"fps={rate:g},scale={width}:{height}",
+        "-pix_fmt",
+        "gray",
+        "-f",
+        "rawvideo",
+        str(target),
+    ]
+
+
 def grab(
     source: Path | str,
     target: Path | str,
@@ -128,6 +173,65 @@ def scan(
         raise refused(source, finished, SceneDetectionError, threshold=threshold)
     log.info("Scanned %s for scene cuts at threshold %.2f", source, threshold)
     return finished.stderr
+
+
+def sample(
+    source: Path | str,
+    target: Path | str,
+    start_seconds: float,
+    duration_seconds: float,
+    rate: float,
+    width: int,
+    height: int,
+    runner: Runner | None = None,
+    config: Config | None = None,
+) -> Path:
+    """Write the sampled frames of a range to ``target`` as raw grey, or say why not.
+
+    An empty file is a failure rather than an empty scan: ffmpeg seeked past the end of a
+    file exits zero and writes nothing, and a scan of no frames would otherwise come back
+    saying the shot is clean.
+    """
+    config = config or get_config()
+    destination = Path(target)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    argv = sample_command(
+        config.ffmpeg,
+        source,
+        destination,
+        start_seconds,
+        duration_seconds,
+        rate,
+        width,
+        height,
+    )
+    finished = invoke(argv, runner=runner, config=config)
+
+    if finished.returncode != 0:
+        raise refused(source, finished, OcclusionScanError, start_seconds=start_seconds)
+    if not destination.exists() or destination.stat().st_size < width * height:
+        raise OcclusionScanError(
+            cause=f"ffmpeg reported success but wrote no frames to {destination}.",
+            fix=(
+                "A range that starts past the end of the file exits zero and writes nothing. "
+                "inspect_clip reports the media bounds the range has to sit inside."
+            ),
+            detail={
+                "source": str(source),
+                "start_seconds": start_seconds,
+                "duration_seconds": duration_seconds,
+                "expected": str(destination),
+            },
+        )
+    log.info(
+        "Sampled %s from %.3fs for %.3fs at %g fps to %s",
+        source,
+        start_seconds,
+        duration_seconds,
+        rate,
+        destination,
+    )
+    return destination
 
 
 def selected_seconds(log_text: str) -> list[float]:

@@ -1,0 +1,603 @@
+{
+ "validate": {
+  "ok": true,
+  "cut_file": "C:\\Users\\Daniel\\repos\\resolve-mcp\\.claude\\worktrees\\gauntlet-loop-1\\projects\\mcp-tests-zinc\\taurus-people-ending-r3.cut.json",
+  "content_hash": "b3a56e09994c6957c82991efc6d6148b",
+  "valid": true,
+  "errors": [],
+  "warnings": [
+   {
+    "rule": "W2",
+    "id": null,
+    "message": "The cut runs 2154 frames over a 2158-frame master-audio span.",
+    "fix_hint": "Expected when the cut opens cold or runs past the mix; otherwise check the ends."
+   }
+  ],
+  "cut": {
+   "timeline": "Taurus People Ending P2 R3",
+   "segments": 13,
+   "gaps": 0,
+   "overlays": 0,
+   "duration": {
+    "frames": 2154,
+    "seconds": 89.84,
+    "timecode": "00:01:29:18",
+    "fps": 23.976
+   }
+  },
+  "context": {
+   "connected": true,
+   "resolve_version": "21.0.3.7",
+   "project": "mcp-tests-zinc",
+   "timeline": "Zinc SYNC",
+   "fps": 23.976
+  }
+ },
+ "build": {
+  "ok": true,
+  "cut_file": "C:\\Users\\Daniel\\repos\\resolve-mcp\\.claude\\worktrees\\gauntlet-loop-1\\projects\\mcp-tests-zinc\\taurus-people-ending-r3.cut.json",
+  "content_hash": "b3a56e09994c6957c82991efc6d6148b",
+  "timeline": {
+   "name": "Taurus People Ending P2 R3 v1",
+   "base_name": "Taurus People Ending P2 R3",
+   "version": 1,
+   "current": true,
+   "fps": 23.976,
+   "start": {
+    "frames": 86400,
+    "seconds": 3603.604,
+    "timecode": "01:00:00:00",
+    "fps": 23.976
+   },
+   "end": {
+    "frames": 88558,
+    "seconds": 3693.61,
+    "timecode": "01:01:29:22",
+    "fps": 23.976
+   },
+   "duration": {
+    "frames": 2158,
+    "seconds": 90.007,
+    "timecode": "00:01:29:22",
+    "fps": 23.976
+   },
+   "tracks": {
+    "video": 1,
+    "audio": 1,
+    "subtitle": 0
+   }
+  },
+  "placed": {
+   "segments": 13,
+   "gaps": 0,
+   "overlays": 0,
+   "audio": true,
+   "selectors": 0
+  },
+  "tail": {
+   "type": "dissolve_to_black",
+   "duration_frames": 142,
+   "audio_fade_frames": 125,
+   "video_tracks": [
+    "Video 1"
+   ],
+   "audio_tracks": [
+    "Audio 1"
+   ],
+   "route": "otio_round_trip",
+   "document": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\interchange\\Taurus-People-Ending-P2-R3-v1-tail-staging-20260813-213522 (tail).otio",
+   "confirmed": [
+    {
+     "track": "Video 1",
+     "kind": "Video",
+     "name": "Cross Dissolve",
+     "in_offset": 142
+    },
+    {
+     "track": "Audio 1",
+     "kind": "Audio",
+     "name": "Cross Fade 0 dB",
+     "in_offset": 125
+    }
+   ]
+  },
+  "markers": {
+   "carried": 0,
+   "skipped": 0,
+   "from": null,
+   "shift": null,
+   "by_color": {},
+   "refused": [],
+   "reason": "Nothing to carry: this is the first version of this cut."
+  },
+  "warnings": [
+   {
+    "rule": "W2",
+    "id": null,
+    "message": "The cut runs 2154 frames over a 2158-frame master-audio span.",
+    "fix_hint": "Expected when the cut opens cold or runs past the mix; otherwise check the ends."
+   }
+  ],
+  "context": {
+   "connected": true,
+   "resolve_version": "21.0.3.7",
+   "project": "mcp-tests-zinc",
+   "timeline": "Taurus People Ending P2 R3 v1",
+   "fps": 23.976
+  }
+ },
+ "correlate": {
+  "job_id": "correlate_timeline-4311f6e408e6",
+  "kind": "correlate_timeline",
+  "state": "completed",
+  "params": {
+   "timeline": "Taurus People Ending P2 R3 v1",
+   "track": null,
+   "audio_at": null,
+   "beats": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\analysis\\Zinc-Set-2-Reaper-v4-62537c590a14-beats.json",
+   "audio": "P:\\Client Work\\Ryan Devlin\\2026-06-17_Zinc Bar\\Audio\\Reaper\\Zinc Set 2 Reaper v4.wav",
+   "tunes": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\analysis\\Zinc-Set-2-Reaper-v4-08f33521bdda-tunes.json",
+   "solos": null,
+   "angles": {
+    "20260617_D_A7IV_0006.MP4": "drums-tight",
+    "A014C002_2606170Z.MXF": "ensemble-wide",
+    "A015C001_2606170J.MXF": "ensemble-wide"
+   }
+  },
+  "session": "c9d64fcd20364db68e41b06008ef3d9f",
+  "sequence": 0,
+  "started_at": "2026-08-14T01:35:23.655834+00:00",
+  "updated_at": "2026-08-14T01:35:37.247086+00:00",
+  "finished_at": "2026-08-14T01:35:37.247086+00:00",
+  "progress": 1.0,
+  "step": "measuring the cut against the music",
+  "result": {
+   "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\analysis\\Taurus-People-Ending-P2-R3-v1-ad2db5b69e0f.correlate.json",
+   "timeline_fps": 23.976,
+   "alignment": {
+    "mode": "audio_clip",
+    "audio": "Zinc Set 2 Reaper v4.wav",
+    "matched": true,
+    "zero_frame": -8932
+   },
+   "visible": {
+    "mode": "visible",
+    "video_tracks": 1,
+    "measured": [
+     1
+    ],
+    "skipped": [],
+    "enabled_known": true,
+    "black": 0
+   },
+   "cuts": 13,
+   "openings": 1,
+   "outside_grid": 0,
+   "gated": 12,
+   "stranded": 0,
+   "grid_meter": 1,
+   "grid_refused": {
+    "bar_position": 11130,
+    "tempo": 3176
+   },
+   "beat_offsets": null,
+   "transient_offsets": {
+    "measured": 12,
+    "mean_abs": 0.03,
+    "median_abs": 0.032,
+    "max_abs": 0.041,
+    "early": 4,
+    "late": 8,
+    "on": 0
+   },
+   "bars": {},
+   "tunes": {
+    "covered": 1,
+    "outside": 0,
+    "cuts": {
+     "1": 12
+    }
+   },
+   "solos": null,
+   "shot_seconds": {
+    "mean": 6.911,
+    "median": 6.048,
+    "min": 3.253,
+    "max": 13.722
+   },
+   "clips": {
+    "A015C001_2606170J.MXF": {
+     "cuts": 7,
+     "seconds": 63.438,
+     "share": 0.706
+    },
+    "20260617_D_A7IV_0006.MP4": {
+     "cuts": 6,
+     "seconds": 26.401,
+     "share": 0.294
+    }
+   },
+   "roles": {
+    "ensemble-wide": {
+     "cuts": 7,
+     "seconds": 63.438,
+     "share": 0.706
+    },
+    "drums-tight": {
+     "cuts": 6,
+     "seconds": 26.401,
+     "share": 0.294
+    }
+   },
+   "first_cuts": [
+    {
+     "cut": 1,
+     "clip": "A015C001_2606170J.MXF",
+     "track": 1,
+     "role": "ensemble-wide",
+     "opening": true,
+     "t": 3976.143,
+     "in": {
+      "frames": 86400,
+      "seconds": 3603.604,
+      "timecode": "01:00:00:00",
+      "fps": 23.976
+     },
+     "out": {
+      "frames": 86561,
+      "seconds": 3610.319,
+      "timecode": "01:00:06:17",
+      "fps": 23.976
+     },
+     "seconds": 6.715,
+     "beat_offset": -0.037,
+     "beat": 10208,
+     "bar": 4515,
+     "in_bar": 1,
+     "in_grid": false,
+     "stranded": false,
+     "transient_offset": 0.036,
+     "tune": 1,
+     "front": null
+    },
+    {
+     "cut": 2,
+     "clip": "20260617_D_A7IV_0006.MP4",
+     "track": 1,
+     "role": "drums-tight",
+     "opening": false,
+     "t": 3982.858,
+     "in": {
+      "frames": 86561,
+      "seconds": 3610.319,
+      "timecode": "01:00:06:17",
+      "fps": 23.976
+     },
+     "out": {
+      "frames": 86663,
+      "seconds": 3614.573,
+      "timecode": "01:00:10:23",
+      "fps": 23.976
+     },
+     "seconds": 4.254,
+     "beat_offset": 0.118,
+     "beat": 10229,
+     "bar": 4525,
+     "in_bar": 4,
+     "in_grid": false,
+     "stranded": false,
+     "transient_offset": -0.022,
+     "tune": 1,
+     "front": null
+    },
+    {
+     "cut": 3,
+     "clip": "A015C001_2606170J.MXF",
+     "track": 1,
+     "role": "ensemble-wide",
+     "opening": false,
+     "t": 3987.112,
+     "in": {
+      "frames": 86663,
+      "seconds": 3614.573,
+      "timecode": "01:00:10:23",
+      "fps": 23.976
+     },
+     "out": {
+      "frames": 86878,
+      "seconds": 3623.54,
+      "timecode": "01:00:19:22",
+      "fps": 23.976
+     },
+     "seconds": 8.967,
+     "beat_offset": 0.072,
+     "beat": 10245,
+     "bar": 4529,
+     "in_bar": 4,
+     "in_grid": false,
+     "stranded": false,
+     "transient_offset": 0.029,
+     "tune": 1,
+     "front": null
+    },
+    {
+     "cut": 4,
+     "clip": "20260617_D_A7IV_0006.MP4",
+     "track": 1,
+     "role": "drums-tight",
+     "opening": false,
+     "t": 3996.079,
+     "in": {
+      "frames": 86878,
+      "seconds": 3623.54,
+      "timecode": "01:00:19:22",
+      "fps": 23.976
+     },
+     "out": {
+      "frames": 86974,
+      "seconds": 3627.544,
+      "timecode": "01:00:23:22",
+      "fps": 23.976
+     },
+     "seconds": 4.004,
+     "beat_offset": -0.081,
+     "beat": 10268,
+     "bar": 4541,
+     "in_bar": 1,
+     "in_grid": false,
+     "stranded": false,
+     "transient_offset": 0.037,
+     "tune": 1,
+     "front": null
+    },
+    {
+     "cut": 5,
+     "clip": "A015C001_2606170J.MXF",
+     "track": 1,
+     "role": "ensemble-wide",
+     "opening": false,
+     "t": 4000.083,
+     "in": {
+      "frames": 86974,
+      "seconds": 3627.544,
+      "timecode": "01:00:23:22",
+      "fps": 23.976
+     },
+     "out": {
+      "frames": 87293,
+      "seconds": 3640.849,
+      "timecode": "01:00:37:05",
+      "fps": 23.976
+     },
+     "seconds": 13.305,
+     "beat_offset": 0.023,
+     "beat": 10275,
+     "bar": 4544,
+     "in_bar": 2,
+     "in_grid": false,
+     "stranded": false,
+     "transient_offset": 0.041,
+     "tune": 1,
+     "front": null
+    },
+    {
+     "cut": 6,
+     "clip": "20260617_D_A7IV_0006.MP4",
+     "track": 1,
+     "role": "drums-tight",
+     "opening": false,
+     "t": 4013.388,
+     "in": {
+      "frames": 87293,
+      "seconds": 3640.849,
+      "timecode": "01:00:37:05",
+      "fps": 23.976
+     },
+     "out": {
+      "frames": 87431,
+      "seconds": 3646.605,
+      "timecode": "01:00:42:23",
+      "fps": 23.976
+     },
+     "seconds": 5.756,
+     "beat_offset": 0.008,
+     "beat": 10299,
+     "bar": 4563,
+     "in_bar": 1,
+     "in_grid": false,
+     "stranded": false,
+     "transient_offset": -0.03,
+     "tune": 1,
+     "front": null
+    },
+    {
+     "cut": 7,
+     "clip": "A015C001_2606170J.MXF",
+     "track": 1,
+     "role": "ensemble-wide",
+     "opening": false,
+     "t": 4019.144,
+     "in": {
+      "frames": 87431,
+      "seconds": 3646.605,
+      "timecode": "01:00:42:23",
+      "fps": 23.976
+     },
+     "out": {
+      "frames": 87581,
+      "seconds": 3652.861,
+      "timecode": "01:00:49:05",
+      "fps": 23.976
+     },
+     "seconds": 6.256,
+     "beat_offset": -0.076,
+     "beat": 10312,
+     "bar": 4572,
+     "in_bar": 1,
+     "in_grid": false,
+     "stranded": false,
+     "transient_offset": 0.04,
+     "tune": 1,
+     "front": null
+    },
+    {
+     "cut": 8,
+     "clip": "20260617_D_A7IV_0006.MP4",
+     "track": 1,
+     "role": "drums-tight",
+     "opening": false,
+     "t": 4025.4,
+     "in": {
+      "frames": 87581,
+      "seconds": 3652.861,
+      "timecode": "01:00:49:05",
+      "fps": 23.976
+     },
+     "out": {
+      "frames": 87681,
+      "seconds": 3657.032,
+      "timecode": "01:00:53:09",
+      "fps": 23.976
+     },
+     "seconds": 4.171,
+     "beat_offset": 0.02,
+     "beat": 10333,
+     "bar": 4581,
+     "in_bar": 2,
+     "in_grid": false,
+     "stranded": false,
+     "transient_offset": 0.035,
+     "tune": 1,
+     "front": null
+    },
+    {
+     "cut": 9,
+     "clip": "A015C001_2606170J.MXF",
+     "track": 1,
+     "role": "ensemble-wide",
+     "opening": false,
+     "t": 4029.571,
+     "in": {
+      "frames": 87681,
+      "seconds": 3657.032,
+      "timecode": "01:00:53:09",
+      "fps": 23.976
+     },
+     "out": {
+      "frames": 87883,
+      "seconds": 3665.457,
+      "timecode": "01:01:01:19",
+      "fps": 23.976
+     },
+     "seconds": 8.425,
+     "beat_offset": -0.049,
+     "beat": 10348,
+     "bar": 4585,
+     "in_bar": 1,
+     "in_grid": false,
+     "stranded": false,
+     "transient_offset": -0.018,
+     "tune": 1,
+     "front": null
+    },
+    {
+     "cut": 10,
+     "clip": "20260617_D_A7IV_0006.MP4",
+     "track": 1,
+     "role": "drums-tight",
+     "opening": false,
+     "t": 4037.996,
+     "in": {
+      "frames": 87883,
+      "seconds": 3665.457,
+      "timecode": "01:01:01:19",
+      "fps": 23.976
+     },
+     "out": {
+      "frames": 88002,
+      "seconds": 3670.42,
+      "timecode": "01:01:06:18",
+      "fps": 23.976
+     },
+     "seconds": 4.963,
+     "beat_offset": 0.096,
+     "beat": 10369,
+     "bar": 4592,
+     "in_bar": 1,
+     "in_grid": false,
+     "stranded": false,
+     "transient_offset": 0.034,
+     "tune": 1,
+     "front": null
+    },
+    {
+     "cut": 11,
+     "clip": "A015C001_2606170J.MXF",
+     "track": 1,
+     "role": "ensemble-wide",
+     "opening": false,
+     "t": 4042.96,
+     "in": {
+      "frames": 88002,
+      "seconds": 3670.42,
+      "timecode": "01:01:06:18",
+      "fps": 23.976
+     },
+     "out": {
+      "frames": 88147,
+      "seconds": 3676.468,
+      "timecode": "01:01:12:19",
+      "fps": 23.976
+     },
+     "seconds": 6.048,
+     "beat_offset": -0.16,
+     "beat": 10382,
+     "bar": 4600,
+     "in_bar": 1,
+     "in_grid": false,
+     "stranded": false,
+     "transient_offset": -0.016,
+     "tune": 1,
+     "front": null
+    },
+    {
+     "cut": 12,
+     "clip": "20260617_D_A7IV_0006.MP4",
+     "track": 1,
+     "role": "drums-tight",
+     "opening": false,
+     "t": 4049.007,
+     "in": {
+      "frames": 88147,
+      "seconds": 3676.468,
+      "timecode": "01:01:12:19",
+      "fps": 23.976
+     },
+     "out": {
+      "frames": 88225,
+      "seconds": 3679.721,
+      "timecode": "01:01:16:01",
+      "fps": 23.976
+     },
+     "seconds": 3.253,
+     "beat_offset": 1.667,
+     "beat": 10393,
+     "bar": 4606,
+     "in_bar": 4,
+     "in_grid": false,
+     "stranded": false,
+     "transient_offset": 0.037,
+     "tune": 1,
+     "front": null
+    }
+   ]
+  },
+  "error": null,
+  "cache_key": "ad2db5b69e0f2f7a20ab05c3b48d368c1d8d40876c5b51c0872bcf359460561f",
+  "cached": false,
+  "detached": false,
+  "pid": null,
+  "launcher_pid": null,
+  "plan": null
+ }
+}

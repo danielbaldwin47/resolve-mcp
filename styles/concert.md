@@ -88,6 +88,20 @@ that the grid is a live band's grid, so it moves.
   sax phrase has ended". No phrase detector exists in the analysis stack;
   phrase boundaries are currently readable only from the music itself.
   `[review feedback, 2026-08]`
+- **Transient-snap alone does not read as musical at phrase scale; the cut has
+  to sit near an accent too.** A cut can be 30 ms from an onset and still land
+  where the music is doing nothing: an onset is a 30 ms-scale event, while what
+  a viewer hears as *on the music* at phrase scale is the **accent** — an
+  RMS/energy event at the 0.5–1 s scale, a swell arriving, a hit that moves the
+  level, the peak of a phrase. Both scales matter, and the snap is the cheaper
+  one to satisfy. The panel behind this note measured our piece at a **mean
+  2.06 s from the nearest RMS accent, only 2 of 11 cuts within half a second**
+  — every cut transient-snapped, and the cut still read as sitting off the
+  music. So placement is two-part and in this order: choose the moment from the
+  accent curve (which phrase boundary, which swell), then snap to the nearest
+  transient a few frames from it. Snapping first and picking the accent second
+  reproduces the 17–41 ms median above while losing the thing the median is
+  evidence of. `[review feedback, 2026-08]`
 - **Trading inverts the transient rule.** When the band trades (sax and drums
   exchanging bars), the switch itself is the event, and cutting *on* the
   transient of each entrance — repeatedly, as a committed run — is the
@@ -131,20 +145,221 @@ that the grid is a live band's grid, so it moves.
   bullet above are not scattered across the cut — every one of them is on a
   camera somebody was running. See §4.
   `[measured — 3 projects, n=847 shots, concert]`
-- Duration distributions conditioned on section type and energy band. *Open;
-  the conditioning needs the structure analysis, which has not been run over
-  the corpus.*
+- **The spread is bimodal, not uniform: long holds and 2–4 s bursts are the
+  same language.** A window of the director's own cutting through a mid-song
+  solo section runs 2.25 / 13.05 / 2.59 / 17.02 / 3.29 / 5.84 / 10.30 / 3.59 /
+  2.79 / 11.22 / 5.05 / 7.59 / 2.54 / 21.02 s — **six of fourteen shots in the
+  2–4 s bin, against holds of 13, 17 and 21 s in the same minute**, with almost
+  nothing in between. He holds long through the sparse trading and **clusters
+  the short cuts at the transitions**. That is one distribution with two modes,
+  not a middling rate with a few outliers, and the bullets above describe its
+  long mode only. What follows is a check on the histogram rather than on any
+  one cut: **a cut list whose lengths cluster in a single bin reads metronomic
+  however well each cut is motivated.** The panel behind this note called our
+  4.4 s-and-up band "metronomic to the point of being callable — strict
+  wide/drum alternation, no shot under 4.4 s, by 30 seconds you can call every
+  remaining cut" — all three judges, including the one who voted for us — and
+  every cut in it had a nameable cause. So: a sparse stretch may hold far past
+  the medians in this section's first bullet, and a **2–4 s burst onto new
+  pictures at a transition is corpus-measured practice, not a tic**. The
+  "never return to a framing for under ~3 s" constraint below governs
+  **returns to a picture just left**, not shot length; it never set a floor on
+  how briefly a *new* picture may be held.
+  `[measured — this window, n=14 shots + review feedback 2026-08 unanimous]`
+- **The cutting changes gear with the song: the quietest sections run ~0.74×
+  the song's mean cut rate, the loudest sustained music ~1.15×, and the peak
+  ~1.3×.** First measurement of a *whole* song rather than a window — the
+  director's own deliverable of an 8.3-minute tune, 77 cuts over 78 shots,
+  9.28 cuts/min overall, crossed against the song's own energy legs and solo
+  handovers:
+
+  | section | d (s) | LUFS | cuts/min | gear | median shot | <2 s |
+  | --- | --- | --- | --- | --- | --- | --- |
+  | head | 0–36 | −14.5 | 9.98 | 1.08× | 4.84 s | 1 |
+  | floor | 36–96 | −25.2 | 8.01 | 0.86× | 5.71 s | 0 |
+  | breath | 96–154 | −22.5 | 7.30 | 0.79× | 5.05 s | 1 |
+  | trade | 154–233 | −18.0 | 9.07 | 0.98× | 3.44 s | 0 |
+  | plateau | 233–295 | −11.2 | 7.79 | 0.84× | 6.38 s | 0 |
+  | build | 295–328 | −11.5 | 8.96 | 0.97× | 4.21 s | 2 |
+  | fast | 328–381 | −11.5 | 14.72 | 1.59× | 4.17 s | 0 |
+  | summit | 381–475 | −11.8 | 10.90 | 1.17× | 3.80 s | 3 |
+  | ending | 475–498 | −22.6 | 2.61 | 0.28× | 21.27 s | 0 |
+
+  Banded by measured loudness rather than by name: the three sections at or
+  below −22 LUFS run **6.83 cuts/min (0.74×)**, the four at or above −12 LUFS
+  run **10.67 (1.15×)** — a **1.56× swing** — and across the sustained peak
+  d330–480 he pushes **12.0 cuts/min (1.29×)**. The extremes are wider still —
+  the ending is a single 21.3 s shot at 0.28×, the fast zone 1.59× — so the
+  full gearbox spans **5.7× top to bottom**. Our cut of the same song ran
+  0.85× quiet / 1.10× loud (a 1.29× swing) and 10.8 cuts/min across d330–480,
+  and lost 1–2 to *"it never surprises… under-drives the sustained peak at
+  330–480 s where the song is asking to be pushed"*, all three judges. The
+  bullets above this one set the **shape** a passage takes; this one sets the
+  **rate that passage is allowed to run at**, and the failure it names is only
+  visible at song scale — every passage defensible on its own, the song flat.
+  A full song needs the full gearbox.
+  `[measured — 1 project, full song, n=78 shots + review feedback 2026-08]`
+- **Sub-2 s accent shots belong in the loudest music.** The seven sub-2 s shots
+  in that cut sit at d32.5 / 103.5 / 320.9 / 322.5 / 435.7 / 440.4 / 461.4 —
+  **five of seven above −12 LUFS**, six of seven above −18 LUFS, and exactly
+  one in the quiet band. They arrive in pairs and at the two places the song
+  peaks: 320.9 + 322.5 tightening into the summit at d328, then 435.7 + 440.4
+  inside the sustained finale. A sub-2 s shot is not general-purpose spice to
+  be sprinkled for variety; it is **what the loudest sustained music is cut
+  with**, and it is the register our cut never entered — one sub-2 s shot in
+  8.3 minutes, at d354, against his seven. This does not contradict the
+  "never return to a framing for under ~3 s" rule, which governs returns: all
+  seven are cuts to a picture the run had not just been on.
+  `[measured — 1 project, full song, n=78 shots + review feedback 2026-08]`
+- **One-speed is a *within-section* failure at least as often as a
+  between-section one — check both axes.** The obvious diagnosis of a flat cut
+  is that the section rates never move, and on this pair that diagnosis was
+  wrong. Our section rates varied about as much as his (CV across the nine
+  section rates 0.305 against his 0.345) and our section mean shot lengths
+  spanned slightly *more* (3.76–8.68 s against his 4.16–8.50 s). What separated
+  our overall shot-length CV of **0.59** from his **0.77** was the spread
+  *inside* each section: his lengths vary at a mean within-section CV of
+  **0.692**, ours at **0.478**. We had built the gearbox and then driven every
+  section at its own constant speed. The two axes fail independently — a plan
+  whose section gears are right still reads one-speed if each section's shots
+  cluster on that section's mean, and a cut full of local variety still reads
+  one-speed if the section means never move — so a distribution that is bimodal
+  inside a window proves nothing about the song, and neither does a table of
+  section rates. Before shipping a song, measure **both**: the per-section rate
+  against the song mean, and the shot-length CV within each section.
+  `[measured — 1 project, full song, n=78 shots + review feedback 2026-08]`
+- Duration distributions conditioned on section type and energy band. *Partly
+  closed by the three bullets above — but that is one song, one director, one
+  cut. What stays open is whether those gear ratios hold across the corpus, and
+  whether the gear is set by loudness, by section type, or by both: inside this
+  song the loudest sections are also the late ones, so energy and position are
+  confounded and nothing here separates them.*
 - **The drum cam's frequent-and-short shape needs internal variety too.** The
   #46 recut kept the drum shots short (median 3.3 s against the agent cut's
   4.5 s) but deliberately broke their sameness: one held to 8 s "since the drum
   cam shots tend to all be the same length, and feel monotonous", another ran
   11.3 s because the interaction on screen earned it. Frequent-and-short is the
   angle's shape, not a fixed duration. `[review feedback, 2026-08]`
+- **Sparse passages hold longer.** Where the music thins, the answer is fewer
+  cuts — not the same rate carried over onto quieter material. A thin passage
+  is the one place a locked frame stops being a compromise, because there is
+  nothing arriving for a cut to be about. In the blind round behind this note
+  the agent cut carried its usual rate straight through a quiet section and
+  lost partly there, while the human released into a 15.8 s locked hold — the
+  longest, stillest stretch in either version. **The same hold was the only
+  thing the critic held against the human's version**, and both halves of that
+  are worth keeping: holding through a thin passage is the move, and it is the
+  move with a ceiling. The two bullets below are the first attempts to say
+  where that ceiling is and what fills the passage under it; neither replaces
+  this one, and both come from a round whose judges disagreed.
+  `[review feedback, 2026-08]`
+- **A quiet-passage hold carries to about 10 s only if the picture develops.**
+  What buys a long hold in a thin passage is motion, not the thinness: where
+  the shot develops — a motion class of pan or drift with **real net travel**,
+  or a musician entering or moving inside the frame — a hold out to ~10 s is
+  motivated and reads as held. Where the picture is static, past roughly 10 s
+  is where a viewer leaves. In the blind round behind this note our cut ran
+  five holds through a quiet passage (9.8 / 13.6 / 10.2 / 8.4 / 9.9 s) and the
+  two fresh judges split on the same 42 seconds: one read them as "motivated
+  and held", the other as "a metronome — 13.6 s of unbroken piano wide from
+  48–61.5 s is where a viewer leaves". Both readings stay here because only one
+  of them can be right and nothing measured says which. So this is a **check,
+  not a limit**: past ~10 s, name what in the picture is developing, or cut.
+  `[review feedback, 2026-08, split verdict — one of two judges]` — it does not
+  overturn the measured holds in the bullets above, and may be the same fact
+  from the other side: in the corpus every hold past 30 s is on an operated
+  camera (§4), which is to say on a picture that was still developing.
+- **Across a quiet passage's second half, tighten toward the resolve.** The
+  human cut in the same round ran 7.8 / 3.8 / 2.5 / 6.1 / 3.3 s and then
+  released into a 14.3 s resolve — shots shortening through the passage, then
+  one long shot on the arrival. This is the accelerate-and-release gesture
+  below at passage scale rather than at a section change, and the shortening
+  run is what a quiet passage does with its second half.
+  `[review feedback, 2026-08]` — honest caveat, and it is the same disagreement
+  as the bullet above seen from the other arm: the judge who read our holds as
+  motivated read this shortening run as the human "timer-cutting" through the
+  quiet section. One judge's corpus shape is the other judge's metronome; what
+  decides between them is §5's test — whether each of those shorter shots has a
+  nameable cause, which for this passage is the secondary swells in §5.
+  **Three constraints on the run, and these are not a split verdict.** The next
+  round's panel read our own tightening ladder — 9.9 / 7.3 / 5.3 / 5.0 / 4.0 /
+  3.8 / 2.9 s, strict alternation between drums-close and piano/bass, over flat
+  −29 dB audio — as "an editor's metronome", "accelerating while the music
+  decays, so you feel the editor counting instead of listening". All three
+  judges said it, including the two who picked our cut, which is as close as
+  this profile gets to a settled reading:
+  - **The run must not be a strict two-framing alternation.** A ping-pong
+    between the same two pictures is one picture-pair getting shorter, so the
+    shortening becomes the only thing happening and the schedule is audible.
+    Break the ladder with a third picture, a scale change on one of the two
+    (the cheapest third picture — §4), or a hold that declines to descend.
+  - **The acceleration answers the music, not a schedule.** Something has to be
+    rising — swell density climbing, a resolve approaching — for shortening to
+    read as listening rather than counting. Over flat or decaying audio there
+    is nothing to accelerate toward, and **holding is better than shrinking**:
+    tightening is not the default shape of a quiet passage's second half, it is
+    what a quiet passage does when its second half builds.
+  - **Never return to a framing for under ~3 s.** A blink-length return to a
+    picture just left reads as a tic, and returning to the *exact frame* it was
+    left on reads as an error; our 2.9 s round trip did both at once. Once a
+    run has tightened past ~3 s, the next shot is a new picture or the run is
+    over. **This constrains the return, not the length**: a 2–4 s shot on a
+    picture the run has not just been on is not what this rule refuses — see
+    the bimodal bullet above.
+  `[review feedback, 2026-08, unanimous 3/3 panel]` — this narrows the bullet
+  rather than retiring it, and it partly settles the split above: on this
+  evidence the "timer-cutting" judge was describing a real failure mode, though
+  only for a run built as a ladder. Note that the human run the bullet was
+  drawn from is not one — 7.8 / **3.8 / 2.5 / 6.1** / 3.3 steps back up in the
+  middle. The non-monotonicity is the shape being asked for here, and reading
+  that run as a smooth shortening is what produced the metronome.
+- **Break the alternation itself, not only the ladder.** With two cameras the
+  A/B/A/B sequence is the shape the footage falls into by default, and it is
+  the pattern a viewer learns fastest — the panel above did not only call the
+  *rate* callable, it called the *angles* callable: "strict wide/drum
+  alternation… by 30 seconds you can call every remaining cut", said by all
+  three judges including the one who voted for us. So the A/B sequence has to
+  be interrupted, and **wherever the music turns is the minimum**: at a section
+  change, a trade starting or ending, a swell landing, do something the
+  alternation cannot predict — two consecutive cuts on the same camera to
+  different framings, a reframe on a held camera ridden as a picture change
+  (the cheapest third picture — §4), or a short burst (the bimodal bullet
+  above). If a viewer can call the next angle, the pattern has become the
+  content, and no amount of per-cut motivation reads through it.
+  `[review feedback, 2026-08, unanimous 3/3 panel]`
+- **Approach a section change with acceleration; release into stillness after
+  it.** Shots shorten into the turn (1.7 s, then 2.2 s, through the decay), the
+  change itself lands on the section's loudest peak, and what follows is a long
+  hold. The gesture is the pair, and neither half survives alone: acceleration
+  with nothing after it is agitation, and a hold that nothing was accelerating
+  toward is just a long shot. An unmarked step from one section to the next —
+  the same rate before and after — spends the transition without showing it.
+  `[review feedback, 2026-08]` — this is the response half of the "section
+  boundary" item left open in §5; its timing signature is still unmeasured.
+- **Into a free or rubato coda, the cutting decelerates.** As the pulse
+  dissolves the shots grow and the cuts thin out, so a tune's last shots are
+  among its longest. A steady alternation carried through a coda reads
+  metronomic **even when every cut is event-motivated** — the panel behind this
+  note said the piece "never decelerates for the coda", with the same rate
+  running from the last in-tempo chorus straight through the free ending. That
+  is §5's motivation test meeting its limit: across a coda a nameable cause per
+  cut stays necessary and stops being sufficient, because what the viewer is
+  reading is the *rate* against a pulse that is going away. This is the mirror
+  of the gesture above — into a section change the pulse tightens and the
+  cutting tightens with it; into a coda the pulse dissolves and the cutting has
+  to dissolve too, which makes the ending's long shots earned rather than a
+  stall. `[review feedback, 2026-08]` — two of three judges said it. Nothing
+  measured stands behind it and nothing can yet: §1 gates rubato out of the
+  cut-placement evidence, so the corpus is silent about exactly the regions
+  this bullet governs.
 - The variation instinct and "spectacle earns a hold" are base claims, and a
   concert changes nothing about them — they carry their tags in `base.md` and
   are named here only so this section is not read as silent on them.
 - Whether shots shorten through a solo's build and lengthen through a head.
-  *Open.*
+  *One song says neither, at least not by rate: in the gear table above the
+  head runs 1.08× and the song's longest build 0.97×. The build is instead
+  where two of the seven sub-2 s shots sit — it tightens its **extremes**
+  without lifting its average. Still open across the corpus.*
 
 ## 4. Angle roles
 
@@ -240,6 +455,32 @@ that the grid is a live band's grid, so it moves.
   is technically in frame. Sidecars should record what a framing actually
   contains, because that is what decides which cuts it can carry.
   `[review feedback, 2026-08]`
+- **Obstruction veto: near-field blocking makes a shot unusable, full stop.**
+  An audience head, hat or back sitting in the **foreground third** of the
+  frame disqualifies the shot no matter what else is right about it — the
+  motivation, the role, the scale change, the placement against the transient.
+  This is a veto and not a penalty, because it is the one defect a viewer
+  cannot look past: the thing they came to see is behind something. In the
+  blind round behind this note **three obstructed shots decided a verdict**,
+  and the judge who called them named nothing else about our cut that a viewer
+  would have to forgive. The same shot is fine the moment the blocking is not
+  near-field — a head low in the frame between the camera and an empty part of
+  the room is background, not obstruction. `[review feedback, 2026-08]` — this
+  pairs with the incoming `analyze_occlusion` measurement, which is what turns
+  the veto from a thing to look for in a grab into a number a shot either
+  passes or fails; until it lands, check it by eye on the boundary frames and
+  treat a maybe as a fail, since a vetoed shot costs one alternative and a kept
+  one costs the verdict.
+- **A scale change is a picture worth more than a framing return.** When a cut
+  needs a new picture, a different distance on the same subject beats returning
+  to a framing already used. Two framings alternating are two pictures however
+  many cuts join them; a wide-to-tight step on one of them is a third, and it
+  is the cheapest third picture a two-camera rig can produce. The blind round
+  behind this note counted 2 distinct pictures in the agent cut against 3 in
+  the human's, and the whole difference was one scale change. The corollary is
+  a smell rather than a rule: a passage that keeps arriving back at a framing
+  it just left is usually a passage with no third picture in it.
+  `[review feedback, 2026-08]`
 - **The moving camera is a second editor.** Its reframings substitute for
   cuts: the recut deletes agent cuts because "the moving camera quickly
   focuses on the drums, so it has the same effect", rides a single shot from
@@ -273,6 +514,30 @@ that the grid is a live band's grid, so it moves.
 Per event type: the response, and its **timing signature** — the lead/lag
 distribution measured by correlating detected events against actual cut points.
 
+- **Every cut carries a nameable motivation, and "time elapsed" is not one.**
+  Before a cut goes in, say what it is *for*: an event, an entrance, a peak, a
+  phrase ending, a look between two players. A cut whose only justification is
+  how long the previous shot has run is the residue of a coverage pass, and it
+  reads as one — the blind round behind this note turned partly on a quiet
+  section where the agent cut ping-ponged two framings on a timer while the
+  passage's own 13 dB character change went unmarked. It does not have to be
+  loud; it has to be nameable. This is the general form of the fill claim
+  below: the detector finds a subset of the motivations, and the rest are still
+  named, just not by a tool. `[review feedback, 2026-08]`
+- **A secondary swell is cut-worthy; in a quiet passage it is the peak.** A
+  thin passage has no loud events in it, and that is not the same as having no
+  motivations: local loudness bumps of only **+2–3 dB prominence** are
+  legitimate cues. In the round behind this note the human's cuts through the
+  quiet section track secondary bumps at **64 / 67 / 73 s** — nothing that
+  would survive a peak threshold set for the tune as a whole, and the loudest
+  thing available where it sits. Read prominence against the passage, not
+  against the song. `[review feedback, 2026-08]` — the honest caveat is that
+  this is the contested half of a split verdict: the other judge read those
+  same cuts as timer-cutting and read our long holds over the same seconds as
+  the motivated version. Both judges are applying the bullet above; they
+  disagree about whether a +2–3 dB bump clears the bar for "nameable". Until
+  something measures it, cutting on a secondary swell is defensible and holding
+  through it is defensible, and cutting on nothing is not.
 - **Drum fill** — arrive on the drummer around the start of the fill, ride
   through the transition, and leave after the new section has settled.
   `[believed, unverified]` — seed pattern recorded as such in #13; the lead/lag
@@ -295,14 +560,84 @@ distribution measured by correlating detected events against actual cut points.
   the front changed, never who it is; the sidecar's `role` closes that gap.
   `[believed, unverified]` — follows from how #38 and the sidecar are built;
   the corpus has not been read yet for how strictly past edits follow the front.
-- **Section boundary**, **build** — response and timing signature. *Open.*
+- **Section boundary** — the response is measured out in §3 (accelerate in,
+  cut on the peak, release into a hold). Its **timing signature** is still
+  open, and so is **build**.
 
 ## 5b. Openings and endings
 
-Both ends of a tune are staged, not covered. All of this landed in one review
-round on one tune, which the tags say — but every device below was the
-director's own move, unprompted, on top of an agent cut that had simply
-covered both ends.
+Both ends of a tune are staged, not covered. Two different kinds of evidence
+sit here and the tags keep them apart. The `[review feedback]` bullets landed
+in one round on one tune, where every device was the director's own move,
+unprompted, on an agent cut that had simply covered both ends. The
+`[measured]` bullets come from the other direction: five finished deliverables
+from one night, read frame by frame, where the staging is whatever survived to
+the client.
+
+### What the deliverables do
+
+Five songs, one night — `6-17-26 Zinc Bar` set 2, the whole *Full Videos*
+folder. Every number below is in `gauntlet/recon/openings_survey.json`, with
+the method that produced it.
+
+- **A tune opens on black, and the black is never a flash.** All five start on
+  one frame of true black and then take their time: four dissolve up out of it
+  over **1.00 / 1.21 / 1.46 / 2.34 s**, and the fifth holds a full-frame title
+  card for 2.29 s. Nothing in the set clears black in under a second. Half a
+  second of black is not a shorter version of this device; it is a different
+  one, and a bad one — see "Sub-second black at a song head" below.
+  `[measured — 1 project, n=5 songs, Zinc 6-17 set 2]`
+- **The title card is what pre-entrance dead air is for, and it clears on the
+  entrance.** Taurus People is the one tune in the set with real dead air at
+  its head — room tone at −34 to −46 dB, first note at **2.38 s** — and it is
+  the one tune that opens on a full-frame card over black. The card cuts to
+  picture at **2.336 s: 44 ms, one frame, ahead of the entrance.** The reveal
+  *is* the downbeat, and it is placed the way §1 says this corpus places
+  everything else — near, not on, at the edge of the 17–41 ms band the six
+  timelines report. The other four are already sounding by
+  0.25 / 0.45 / 0.65 / 1.15 s, have no
+  dead air to spend, and carry the same title as a lower-third super over live
+  picture instead: in at **4.67 / 5.30 / 5.38 / 7.97 s**, held **2.84–5.21 s**,
+  fading in and out over about 0.3 s each way. So the convention is not "always
+  open on a card" — it is **the title takes whatever room the music leaves it,
+  and a card is what a silent head is spent on.** A tune that starts in the
+  middle of a phrase gets its title later, over picture, and loses nothing.
+  `[measured — 1 project, n=5 songs, Zinc 6-17 set 2]`
+- **A personnel super follows the title in every one of the five**, in at
+  16.2 / 17.0 / 19.3 / 20.6 s — and, on Soultrane, **69.9 s** — and held
+  6.1–7.9 s, longer than any of the title supers. The gap from the title's exit
+  to its entry runs 6.5 s on one tune and 57 s on another, so its placement is
+  a musical choice and not an offset from anything. Treat it as a second, later
+  beat of the same staging rather than part of the opening.
+  `[measured — 1 project, n=5 songs, Zinc 6-17 set 2]`
+- **The picture leaves before the file does, and the band is still playing when
+  it goes.** Two deliverables hard-cut to black — Hardest Part 6.5 s from the
+  end, Sambra 7.9 s — and sit on black for the whole remainder. The other three
+  dissolve out across roughly the last 6–10 s, reaching black with 0.17 s
+  (Taurus, essentially landing on the final frame), 0.55 s and 1.90 s to spare.
+  Nobody ends on a picture frame; the last frame of picture has the band still
+  playing in all five; not one of the five carries an applause tail. Cuts keep
+  happening under the dissolve — the departure is a fade, not a freeze. The
+  audio outlives the picture every time and fades under it, four of the five
+  reaching digital silence in the last 0.2–0.5 s. Read together with "End
+  inside the performance" below: the review round said *why*, and these five
+  say the finished work does it.
+  `[measured — 1 project, n=5 songs, Zinc 6-17 set 2]`
+
+**How much this is worth.** One project, one night, five songs, and by the
+thin-support rule in `docs/agents/style-layer.md` a single-project claim
+normally downgrades to `[believed, unverified]`. These are tagged `[measured]`
+anyway, for two reasons worth being explicit about: every number comes off a
+finished deliverable rather than an inference about one, and 5 of 5 agree on
+the shape — black first, a title always, the picture gone before the file ends
+— while agreeing on almost none of the durations. That is what a convention
+looks like; a template would have matched to the frame. What it still cannot
+say is whether the convention is this director's or this client's house style,
+since all five are one night of one series — and it says nothing at all about
+the *hundreds* of seconds between each opening and its ending. The evidence row
+is in `corpus.md`, "The deliverable head/tail survey".
+
+### What the review round said
 
 - **Do not open on the camera finding its shot.** The tune opened on the
   moving camera mid-pan; the director restaged it — a breath of black, a
@@ -315,12 +650,46 @@ covered both ends.
   entirely and ends 10 s before the agent cut did: black beats any frame in
   which the players have visibly stopped playing. `[review feedback,
   2026-08]`
+- **The set's last image belongs to the ensemble.** The final cadence, the
+  applause where any is kept, and the fade all play on the **widest framing
+  that holds the band**. A tight or foreground-heavy angle never carries the
+  last picture, however strong the drum event that would otherwise pull a cut
+  there — a last shot is not a reaction shot. In the round behind this note the
+  piece cut to the drum cam (cymbal in the foreground, the drummer's back) 0.69 s
+  before the final cadence and faded out on it, and all three judges wrote the
+  same sentence: "the last thing the viewer sees is a drummer's back behind a
+  cymbal, not the band finishing the tune." The practical form is a deadline
+  rather than a rule about the last cut: by the approach to the cadence the
+  picture is already where it means to finish, so nothing arriving in the last
+  couple of seconds can be answered by cutting away.
+  `[review feedback, 2026-08, unanimous 3/3 panel]`
+  - **This constrains which framing, not when the picture leaves.** "End inside
+    the performance" and the deliverables' 6–10 s dissolve-out over players who
+    are still playing are untouched; the wide is what those seconds land on.
+  - **And it is not a licence to park.** The human's own tail in an earlier
+    round sat 21+ s on the master wide and was judged "stops instead of ending"
+    in that round — then, in the next, the same wide was preferred as a final
+    image. Both readings are right about different things: **the park is the
+    flaw, the wide is not.** Arrive at the wide late and let it carry the
+    cadence and the fade, rather than arriving early and waiting on it. The
+    deceleration bullet in §3 is what fills the approach; a long final shot
+    reads as an ending when the shots before it were already growing, and as a
+    stall when they were not.
 - **Black is a device.** A false ending gets literal black ("this sounds like
   it could be the end of the tune") so the surprise stinger lands as a
   surprise, a "landing" shot shows the pickup, and the final crash cuts to
   black *on* the hit, before any release. The agent schema builds butt-joined
   V1 segments only; the recut uses gaps and a second video track as
   first-class material. `[review feedback, 2026-08]`
+- **Sub-second black at a song head is a glitch, not a device.** A half-second
+  of black at a tune's opening is too short to read as a fade and too long to
+  be invisible; it reads as a dropout, and a blind round was decided against an
+  agent cut in its first three seconds for exactly that. Black at a head is
+  either staged — a card held to the entrance, or a dissolve of a second or
+  more, which is the whole range the deliverables use — or not used at all.
+  The same test applies to what the black is *for*: a reveal spent on silence
+  is dead air, and dead air is the thing a card exists to fill.
+  `[review feedback, 2026-08]`
 
 ## 6. Observations
 
@@ -398,6 +767,27 @@ Free prose, first-class.
   the V1 skeleton of a cut whose character is partly in what the measurement
   cannot see; a number-only reading of the round would have missed the black
   entirely.
+- **Scene-detect count ≈ timeline item count, or the measurement is what is
+  broken.** Correlate proves the timeline; scene detection over the render
+  proves the pixels; disagreement between the two is an alarm about the
+  instrument, not a note about the edit. Read that pair before reading any
+  verdict a pack produced. The R1 round was judged on a pack whose scene
+  threshold could not see matched-grade cuts between two cameras in one dim
+  room — a 13-shot cut scanned as 1, the human's 13 as 9 — and both arms were
+  corrupt while every number in them looked answerable. A detected-cut count
+  that wildly undershoots the cut file means re-run the measurement, never
+  re-cut. `[review feedback, 2026-08]`
+- **The deliverables answered a question no timeline in the corpus can.** Six
+  timelines have been correlated and not one of them says what a tune's first
+  three seconds look like: `correlate_timeline` reads shots, and a title is not
+  a shot — the staging that decides a viewer's first impression sits in exactly
+  the blind spot §5b's review round already named. Reading five finished
+  renders frame by frame cost an afternoon of ffmpeg and settled the device the
+  round had only gestured at: the card is not decoration on the front of a cut,
+  it is what makes silence watchable, which is why the one tune with silence at
+  its head is the one tune with a card. The route generalises — the deliverable
+  is a second instrument pointed at the same work, and it sees what the
+  timeline reader cannot.
 - **The best result of this pass came from testing what the director said
   rather than recording it.** His account predicts that an operated camera can
   sustain a shot and a locked one cannot — so the shots were split by role, and

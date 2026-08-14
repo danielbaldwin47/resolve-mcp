@@ -63,6 +63,16 @@ separate timelines.
   answers only the visual questions the profile actually asks. Band interaction is
   primarily an audio signal — read it from stem activity and onsets; frames verify,
   they do not discover.
+- **Obstruction is a veto, not a preference.** `analyze_occlusion` over the range you
+  are cutting returns per-sample block scores and the unusable windows; a candidate
+  angle whose frame is blocked at the moment you want it is out, whatever the role
+  chart says. It samples rather than reads every frame, so treat its windows as where
+  to look and confirm the marginal ones with `grab_frames`.
+- **A song's ending is authored, not left.** The last segment takes the cut file's
+  `tail` — `dissolve_to_black` with `duration_frames`, or `hard_to_black` — plus
+  `audio_fade_frames`, so the picture's release and the mix's are one decision instead
+  of a hard out that fades nothing. What shape an ending takes is `styles/concert.md`
+  §5b; that it is decided at all is this step.
 - Every taste call — where the cut lands relative to the transient, how long shots
   run, who deserves the frame — comes from `styles/concert.md`. When the profile is
   silent, that is an observation to add, not a licence to improvise silently.
@@ -83,6 +93,17 @@ event responses (§5). **Every outlier is either fixed — edit the cut JSON, re
 or justified by name in the cut report** ("spectacle earns the hold"). Nothing lands
 off-style silently. Check `alignment.mode` before trusting a run, per
 `docs/agents/style-layer.md`.
+
+Two readings in that report are **blockers, not deviations you may justify**:
+`shot_rhythm.reads_metronomic` — the cutting has acquired a pulse of its own, a long
+strict A/B alternation or shot lengths piled into one bin — and `gears.one_speed`, the
+same cut rate carried through loud and quiet where the music has an arc. Either one
+firing means edit the cut JSON and rebuild before the director sees it; both are things
+blind critics named unprompted in the rounds that went against us. The server only
+warns — this gate is yours. And when the cut has also been rendered and scanned, check
+scene-detect count against timeline item count before believing any of it
+(`styles/concert.md` §6): the two disagreeing is an alarm about the measurement, not a
+note about the edit.
 
 ## The cut report
 
@@ -119,6 +140,15 @@ concert-only):
    sort; the director can override.
 5. **Done is when the director says done.** The final version renders the per-song
    deliverables as range renders.
+
+When a cut is **judged** rather than reviewed — a blind round, an A/B pack against
+another edit — two further rules hold. The close is a **majority of three fresh,
+independent critics** on the same sealed pack; fresh means no earlier round of this
+piece, so a 1–1 split is never closed by asking the same judge again. And the director
+rules what a critic is told to **ignore**: colour and grade differences are out of
+scope (ruling of 2026-08-13) and every critic brief must say so — an ungraded render
+losing on look is not a note about the edit. The ignore list is his to set, not the
+critic's to decide.
 
 ## Titling on a concert cut
 

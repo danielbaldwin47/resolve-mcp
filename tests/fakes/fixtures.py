@@ -358,6 +358,85 @@ def write_jpeg(path: Path, width: int = 1568, height: int = 882) -> Path:
     return path
 
 
+GRAY_LIGHT = 180
+GRAY_DARK = 100
+"""The two values the fixture stage alternates between: bright enough that neither is 'dark'
+against the frame's own median, and alternating per pixel so the background is full of
+texture. A near-field blocker has to be distinguishable from a busy dark stage, not just
+from a blank one, so the fixture background is busy and dark-ish on purpose."""
+
+BLOCKER_VALUE = 8
+"""A silhouette: near black and, being one value, without a scrap of texture."""
+
+
+def gray_frame(
+    fraction: float = 0.0,
+    anchor: str = "bottom",
+    value: int = BLOCKER_VALUE,
+    width: int = 128,
+    height: int = 72,
+) -> bytes:
+    """One raw 8-bit grey frame: a textured stage with ``fraction`` of it behind a flat blob.
+
+    ``anchor`` is where the blob sits — ``bottom`` and ``side`` are what a body in the near
+    field looks like, ``top`` is the club's ceiling and ``float`` is something in the picture
+    rather than in front of it. The last two exist so the tests can prove the measurement
+    tells them apart.
+
+    The frame is composed here from plain bytes rather than by the module under test: a
+    fixture that borrowed the scorer's own idea of a blocker could only ever agree with it.
+    """
+    pixels = bytearray(
+        GRAY_LIGHT if (x + y) % 2 else GRAY_DARK for y in range(height) for x in range(width)
+    )
+    if fraction > 0:
+        side = math.sqrt(fraction)
+        box_width = max(1, round(width * side))
+        box_height = max(1, round(height * side))
+        left = (width - box_width) // 2
+        top = {
+            "bottom": height - box_height,
+            "top": 0,
+            "side": height - box_height,
+            "float": (height - box_height) // 2,
+        }[anchor]
+        if anchor == "side":
+            left = 0
+        elif anchor == "float":
+            left = (width - box_width) // 2
+        for y in range(top, top + box_height):
+            for x in range(left, left + box_width):
+                pixels[y * width + x] = value
+    return bytes(pixels)
+
+
+def ffmpeg_sampling(calls: list[Sequence[str]], frames: Sequence[bytes]) -> Runner:
+    """An ffmpeg that writes the raw grey a sampling command asked for, and records the call.
+
+    The raw file is the seam the occlusion worker reads: substituting the subprocess means
+    the scoring, the spans and the cache are all testable on a machine with no decoder.
+    """
+
+    def runner(argv: Sequence[str]) -> Completed:
+        calls.append(list(argv))
+        target = Path(argv[-1])
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"".join(frames))
+        return Completed(0, "")
+
+    return runner
+
+
+def ffmpeg_writing_nothing(calls: list[Sequence[str]]) -> Runner:
+    """An ffmpeg that exits zero and writes no frames — what a seek past the end does."""
+
+    def runner(argv: Sequence[str]) -> Completed:
+        calls.append(list(argv))
+        return Completed(0, "")
+
+    return runner
+
+
 def ffmpeg_absent(argv: Sequence[str]) -> Completed:
     """A machine with no ffmpeg on it: the runner raises what ``subprocess`` would raise."""
     raise FileNotFoundError(argv[0])

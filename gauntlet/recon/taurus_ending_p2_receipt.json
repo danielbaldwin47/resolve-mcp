@@ -1,0 +1,72 @@
+{
+  "piece": "Taurus People ENDING - piece 2, round 1",
+  "window": {
+    "mix_seconds": [3976.15, 4066.15],
+    "sync_frames": [181733, 183891],
+    "deliverable_seconds": [407.669, 497.669],
+    "frames": 2158,
+    "seconds": 90.007
+  },
+  "timeline": "Taurus People Ending P2 v1",
+  "cut_file": "projects/mcp-tests-zinc/taurus-people-ending.cut.json",
+  "cut_file_hash": "01723d2439cf8efcc3e795979db34432",
+  "render": "gauntlet/renders/taurus_ending_p2r1.mp4",
+  "scripts": {
+    "recon": "gauntlet/recon/end_p2_recon.py (onsets + camera motion + grabs)",
+    "sync_proof": "gauntlet/recon/end_p2_synccheck.py, end_p2_fx6sync.py",
+    "plan": "gauntlet/recon/taurus_ending_plan_p2.py",
+    "build": "gauntlet/recon/taurus_ending_build_p2.py",
+    "render": "gauntlet/recon/taurus_ending_render_p2.py",
+    "checks": "gauntlet/recon/end_p2_pixelcheck.py, end_p2_frameproof.py, end_p2_audiocheck.py"
+  },
+  "items": {"picture_segments": 13, "gaps": 1, "video_cuts": 13, "picture_to_picture": 12},
+  "angle_share": {"fx6_wide (ensemble-wide, operated)": 0.664, "a7iv_kit (drums-tight, locked)": 0.336},
+  "correlate_self_review": {
+    "gated": 12,
+    "stranded": 0,
+    "outside_grid": 0,
+    "transient_offsets_ms": {"median_abs": 29, "mean_abs": 29, "max_abs": 37, "early": 5, "late": 7, "on": 0},
+    "shot_seconds": {"median": 6.048, "mean": 6.42, "min": 3.253, "max": 12.471},
+    "revisions_needed": 0
+  },
+  "pixel_check": {
+    "scene_cuts_at_0.10": 13,
+    "authored_boundaries": 13,
+    "max_boundary_error_ms": 0.0,
+    "blackdetect": [83.458, 89.965],
+    "ffprobe": {"duration_s": 90.027, "resolution": "1920x1080", "video": "h264 24000/1001", "audio": "aac 2ch"}
+  },
+  "frame_proof": {
+    "sampled_shots": 13,
+    "worst_authored_frame_diff": 3.75,
+    "closest_wrong_angle_diff": 26.26,
+    "reading": "every sampled render frame is the authored source frame; the other angle is 7x further away"
+  },
+  "sync_proof": {
+    "method": "camera audio vs master mix, 30 ms RMS envelope cross-correlation over window t 60-92",
+    "A7IV": "+0.020 s, corr 0.902",
+    "FX6": "+0.020 s, corr 0.652 (stream a:2; a:0/1/3-7 are silent)",
+    "why": "the two angles' frame grabs at window t 83.4 read differently by eye, so the record->source mapping was proved by sound before anything was authored"
+  },
+  "tail": {
+    "device": "hard cut to literal black on the last note, 6.55 s of black under the running master mix",
+    "picture_leaves_window_t": 83.458,
+    "last_note_window_t": 83.43,
+    "offset_ms": 38,
+    "deliverable_comparison": {
+      "taurus": "dissolve_to_black 5.923 s from 83.905, black from 89.828, file end 89.995",
+      "hardest_part": "hard cut to black 6.5 s from the end",
+      "sambra": "hard cut to black 7.9 s from the end"
+    },
+    "why_not_a_dissolve": "the cut schema builds butt-joined V1 segments and literal-black gaps; it has no dissolve, and Resolve exposes no scriptable transition or clip fade (only Text+ opacity keyframes). So the piece takes the family's other measured device - the hard cut two of the five deliverables use - at Taurus's own instant.",
+    "audio_under_black": {"rms_db": -32.1, "peak_db": -6.9, "digital_silence": false},
+    "applause": "no applause tail in the picture; the crowd is audible under black only, which is what the deliverable's own audio does (rms at end-8 s -28.3 dB, never digital silence)"
+  },
+  "obstruction": "gauntlet/recon/occlusion_ending.json adjudicated every flagged window in this piece: no veto on either angle, so no shot here was placement-constrained",
+  "camera_moves": {
+    "fx6_reframes_window_t": [[19.42, 19.75], [24.75, 27.08], [27.75, 28.75], [37.25, 38.08], [39.75, 40.08], [40.42, 41.08], [85.42, 86.42]],
+    "a7iv": "locked - moving_share 0.005, not one run",
+    "rule_applied": "no cut TO the FX6 inside a reframe or within 0.30 s of its settle; the two reframe runs are carried off screen by the kit angle and the wide returns as a changed picture"
+  },
+  "leaves_current_timeline": "Zinc SYNC"
+}

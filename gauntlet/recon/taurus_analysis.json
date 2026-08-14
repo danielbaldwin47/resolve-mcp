@@ -1,0 +1,192 @@
+{
+  "state": "done",
+  "jobs": {
+    "analyze_structure": {
+      "job_id": "analyze_structure-54a743808e72",
+      "kind": "analyze_structure",
+      "state": "completed",
+      "params": {
+        "audio": "Zinc Set 2 Reaper v4.wav",
+        "stems": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\stems\\Zinc-Set-2-Reaper-v4.wav-8833f33949fe-d73a1e4c156e",
+        "tunes": false,
+        "solos": true,
+        "threshold": 0.3,
+        "burst_seconds": 3.0,
+        "gap_seconds": 1.5,
+        "tune_seconds": 60.0,
+        "density_per_second": 0.5,
+        "window_seconds": 4.0,
+        "hop_seconds": 1.0,
+        "solo_seconds": 12.0,
+        "margin_db": 3.0,
+        "semitones": 4.0,
+        "snap_seconds": 2.0
+      },
+      "session": "3dbf1cf615bc4127b80f5aeacd6e7dda",
+      "sequence": 0,
+      "started_at": "2026-08-13T20:31:41.248386+00:00",
+      "updated_at": "2026-08-13T20:33:39.100371+00:00",
+      "finished_at": "2026-08-13T20:33:39.100371+00:00",
+      "progress": 1.0,
+      "step": "written",
+      "result": {
+        "audio": {
+          "path": "P:\\Client Work\\Ryan Devlin\\2026-06-17_Zinc Bar\\Audio\\Reaper\\Zinc Set 2 Reaper v4.wav",
+          "duration_seconds": 4450.5,
+          "sample_rate": 48000,
+          "channels": 2
+        },
+        "solos": {
+          "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\analysis\\Zinc-Set-2-Reaper-v4-0f3a70a16e52-solos.json",
+          "count": 130,
+          "snapped": 115,
+          "timbre_changes": 86,
+          "runs": 44,
+          "seconds_in_front": {
+            "bass": 576.0,
+            "vocals": 431.0,
+            "other": 2196.0,
+            "drums": 1235.0
+          },
+          "longest_lead": {
+            "stem": "drums",
+            "t": 674.0,
+            "seconds": 605.0
+          },
+          "window_seconds": 4.0,
+          "hop_seconds": 1.0,
+          "solo_seconds": 12.0,
+          "margin_db": 3.0,
+          "semitones": 4.0,
+          "snap_seconds": 2.0,
+          "stem_count": 4,
+          "voices": "bass, drums, other, vocals",
+          "timbre_stem": "other"
+        }
+      },
+      "error": null,
+      "cache_key": "fbb747504f9775d343104890bae6d4d2dc2e1618789615a3c0cd2ec4c1ec2966",
+      "cached": false,
+      "detached": false,
+      "pid": null,
+      "launcher_pid": null,
+      "plan": null
+    },
+    "detect_drum_fills": {
+      "job_id": "detect_drum_fills-08a87237adac",
+      "kind": "detect_drum_fills",
+      "state": "completed",
+      "params": {
+        "audio": "Zinc Set 2 Reaper v4.wav",
+        "stems": [
+          "crash",
+          "kick",
+          "ride",
+          "snare",
+          "toms"
+        ],
+        "minimum_confidence": 0.35
+      },
+      "session": "3dbf1cf615bc4127b80f5aeacd6e7dda",
+      "sequence": 1,
+      "started_at": "2026-08-13T20:31:41.257197+00:00",
+      "updated_at": "2026-08-13T20:33:09.614623+00:00",
+      "finished_at": "2026-08-13T20:33:09.614623+00:00",
+      "progress": 1.0,
+      "step": "written",
+      "result": {
+        "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\analysis\\Zinc-Set-2-Reaper-v4-8673f286dbb2-fills.json",
+        "count": 1293,
+        "considered": 1421,
+        "below_confidence": 128,
+        "long_runs_dropped": 94,
+        "minimum_confidence": 0.35,
+        "baseline_hits_per_second": 34.33,
+        "hits": 142444,
+        "stems": [
+          "crash",
+          "kick",
+          "ride",
+          "snare",
+          "toms"
+        ],
+        "mean_confidence": 0.474,
+        "strongest": {
+          "t": 3442.1,
+          "confidence": 0.857
+        }
+      },
+      "error": null,
+      "cache_key": "8673f286dbb26973821775b09b3737f3766f6da3a1ff3a2003f1ec0d0ae93c8a",
+      "cached": false,
+      "detached": false,
+      "pid": null,
+      "launcher_pid": null,
+      "plan": null
+    },
+    "detect_phrases": {
+      "job_id": "detect_phrases-2a99d6dfbd5a",
+      "kind": "detect_phrases",
+      "state": "completed",
+      "params": {
+        "audio": "Zinc Set 2 Reaper v4.wav",
+        "stem": "other",
+        "minimum_confidence": 0.35
+      },
+      "session": "3dbf1cf615bc4127b80f5aeacd6e7dda",
+      "sequence": 2,
+      "started_at": "2026-08-13T20:31:41.263708+00:00",
+      "updated_at": "2026-08-13T20:32:23.761246+00:00",
+      "finished_at": "2026-08-13T20:32:23.761246+00:00",
+      "progress": 1.0,
+      "step": "written",
+      "result": {
+        "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\analysis\\Zinc-Set-2-Reaper-v4-b9d11d65279a-phrases.json",
+        "count": 1938,
+        "considered": 4513,
+        "below_confidence": 282,
+        "too_soon_dropped": 2293,
+        "minimum_confidence": 0.35,
+        "median_note_seconds": 0.1,
+        "median_phrase_seconds": 0.87,
+        "notes": 9462,
+        "stem": "other",
+        "snapped": 1801,
+        "mean_confidence": 0.615,
+        "strongest": {
+          "t": 464.18,
+          "confidence": 1.0
+        }
+      },
+      "error": null,
+      "cache_key": "b9d11d65279ada4702b36c53e8b72c8ec8cdadbee0559334596cf07c5ec874cc",
+      "cached": false,
+      "detached": false,
+      "pid": null,
+      "launcher_pid": null,
+      "plan": null
+    }
+  },
+  "wind_pass": {
+    "state": "failed",
+    "pid": 26936,
+    "separator": "C:\\Users\\Daniel\\.venvs\\audio-separator-gpu\\Scripts\\audio-separator.exe",
+    "wind_model": "17_HP-Wind_Inst-UVR.pth",
+    "config_separator": "C:\\Users\\Daniel\\.venvs\\audio-separator-gpu\\Scripts\\audio-separator.exe",
+    "source": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\stems\\Zinc-Set-2-Reaper-v4.wav-8833f33949fe-d73a1e4c156e\\mix\\Zinc-Set-2-Reaper-v4.wav-8833f33949fe_(Other)_htdemucs_ft.wav",
+    "out_dir": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\stems\\Zinc-Set-2-Reaper-v4.wav-8833f33949fe-d73a1e4c156e\\other",
+    "progress": 1.0,
+    "elapsed_seconds": 78.2,
+    "error": "StemSeparationError: audio-separator refused Zinc-Set-2-Reaper-v4.wav-8833f33949fe_(Other)_htdemucs_ft.wav with 17_HP-Wind_Inst-UVR.pth (exit 1).",
+    "trace": "Traceback (most recent call last):\n  File \"C:\\Users\\Daniel\\repos\\resolve-mcp\\.claude\\worktrees\\gauntlet-loop-1\\gauntlet\\recon\\wind_pass.py\", line 86, in <module>\n    main()\n  File \"C:\\Users\\Daniel\\repos\\resolve-mcp\\.claude\\worktrees\\gauntlet-loop-1\\gauntlet\\recon\\wind_pass.py\", line 66, in main\n    found = separator.separate(\n            ^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Daniel\\repos\\resolve-mcp\\.claude\\worktrees\\gauntlet-loop-1\\src\\resolve_mcp\\audio\\separator.py\", line 131, in separate\n    raise StemSeparationError(\nresolve_mcp.errors.StemSeparationError: audio-separator refused Zinc-Set-2-Reaper-v4.wav-8833f33949fe_(Other)_htdemucs_ft.wav with 17_HP-Wind_Inst-UVR.pth (exit 1).\n"
+  },
+  "third_pass_landed": false,
+  "melodic_stem": "other",
+  "melodic_path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\stems\\Zinc-Set-2-Reaper-v4.wav-8833f33949fe-d73a1e4c156e\\mix\\Zinc-Set-2-Reaper-v4.wav-8833f33949fe_(Other)_htdemucs_ft.wav",
+  "elapsed_seconds": 120.9,
+  "states": {
+    "analyze_structure": "completed",
+    "detect_drum_fills": "completed",
+    "detect_phrases": "completed"
+  }
+}

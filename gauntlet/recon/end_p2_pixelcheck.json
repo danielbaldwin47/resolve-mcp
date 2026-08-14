@@ -1,0 +1,142 @@
+{
+ "render": "C:\\Users\\Daniel\\repos\\resolve-mcp\\.claude\\worktrees\\gauntlet-loop-1\\gauntlet\\renders\\taurus_ending_p2r1.mp4",
+ "ffprobe": {
+  "programs": [],
+  "stream_groups": [],
+  "streams": [
+   {
+    "index": 0,
+    "codec_name": "h264",
+    "codec_type": "video",
+    "width": 1920,
+    "height": 1080,
+    "r_frame_rate": "24000/1001",
+    "nb_frames": "2158"
+   },
+   {
+    "index": 1,
+    "codec_name": "aac",
+    "codec_type": "audio",
+    "sample_rate": "48000",
+    "channels": 2,
+    "r_frame_rate": "0/0",
+    "nb_frames": "4220"
+   },
+   {
+    "index": 2,
+    "codec_type": "data",
+    "r_frame_rate": "0/0",
+    "nb_frames": "1"
+   }
+  ],
+  "format": {
+   "duration": "90.026667",
+   "size": "384297648"
+  }
+ },
+ "scene_cuts_010": [
+  6.715,
+  12.012,
+  24.483,
+  30.03,
+  37.246,
+  42.459,
+  49.258,
+  54.054,
+  62.896,
+  66.817,
+  72.864,
+  76.118,
+  83.458
+ ],
+ "blackdetect": [
+  [
+   "83.458375",
+   "89.964875"
+  ]
+ ],
+ "authored_item_starts": [
+  0.0,
+  6.715,
+  12.012,
+  24.483,
+  30.03,
+  37.246,
+  42.459,
+  49.258,
+  54.054,
+  62.896,
+  66.817,
+  72.864,
+  76.118,
+  83.458
+ ],
+ "items": 14,
+ "boundary_pairs": [
+  {
+   "authored": 6.715,
+   "detected": 6.715,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 12.012,
+   "detected": 12.012,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 24.483,
+   "detected": 24.483,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 30.03,
+   "detected": 30.03,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 37.246,
+   "detected": 37.246,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 42.459,
+   "detected": 42.459,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 49.258,
+   "detected": 49.258,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 54.054,
+   "detected": 54.054,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 62.896,
+   "detected": 62.896,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 66.817,
+   "detected": 66.817,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 72.864,
+   "detected": 72.864,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 76.118,
+   "detected": 76.118,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 83.458,
+   "detected": 83.458,
+   "delta_ms": 0.0
+  }
+ ]
+}

@@ -101,11 +101,20 @@ every frame resolved to the topmost enabled video item with uncovered stretches
 as black shots, #142; `track=` measures one video track alone. Gates the beat
 statistics on `trust`, refuses as `stranded` a cut further from its beat than a
 beat is wide — the grid does not reach it, #160 — and leaves the transient ones
-ungated), `cuda` (preloads
+ungated. Also reads the cutting itself: `shot_rhythm` bins the shot lengths,
+measures the longest strict A/B alternation run and the longest monotonic
+duration `ramp`, and says `reads_metronomic` with the heuristic that drew it,
+and its `gears` block splits the cut's span into loudness terciles off a 1 s
+RMS curve and reports cuts per minute in each, the loud/quiet `rate_ratio`,
+where the sub-2 s shots sit, `one_speed`, and `outside_shots` — shots past
+the analysed mix, counted apart rather than clamped into a tercile —
+warnings the report carries, never gates),
+`cuda` (preloads
 the CUDA runtime the `analysis` extra ships, so CTranslate2 finds it on Windows;
 pure decisions, #128),
 `decode` (WAV → numpy, no third-party decoder), `drums` (hits per stem), `energy`
-(loudness curves), `fills` (drum-fill candidates), `halves` (shared
+(loudness curves; `rms_curve` is the cheap level-only pass, no K-weighting and
+no onsets), `fills` (drum-fill candidates), `halves` (shared
 identify/cache/write pattern), `melody` (notes off one melodic stem —
 monophonic pitch + gating, model injected per ADR 0002; the reading `phrases`
 is a rule layer over, as `drums` is to `fills`), `music` (beats + energy + gist
@@ -132,14 +141,25 @@ accompaniment, never a piano stem), `wav` (header facts + the one
 unreadable-WAV error).
 
 `cut/` — cut-file schema v1: `document` (read off disk), `schema`
-(verbatim, served by `get_cut_schema`), `validate` (11 errors + W1, W2,
+(verbatim, served by `get_cut_schema`), `validate` (12 errors + W1, W2,
 W8 — W3-W7 are `virtual_transcript`'s over the same document — shared by
-dry run and build pre-flight). A `segments` entry is a shot or a **gap**
+dry run and build pre-flight), `tail` (the optional **tail** device: one
+reading of `{type, duration_frames, audio_fade_frames}` for both the rules
+and the build). A `segments` entry is a shot or a **gap**
 (`{"id", "gap": <frames>}`, literal black); `is_gap`/`entry_duration`/
 `overlay_track` are the accessors every walker of that array shares.
 
 `jobs/` — `cache` (hash-keyed results), `runner` (start heavy work without
-stalling stdio), `store` (one JSON record per job on disk).
+stalling stdio), `store` (one JSON record per job on disk), `detached` (hand
+a job to a process that outlives this one — flags, command, environment),
+`worker` (that process's entry point: `python -m resolve_mcp.jobs.worker
+<job-id>`). A worker returning `runner.Detached` instead of a result moves
+the rest of its job into that process; `separate_stems` does, once the audio
+is acquired, so a half-hour separation survives the server exiting. A
+detached record is judged by its pid rather than by its session, and only the
+worker writes it — the launcher's reading of the worker pid goes to a
+`<job-id>.launcher` note beside the record, folded in by readers only while
+the record has no pid of its own, so a launcher can never overwrite a result.
 
 `resolve/` — connection management + thin scripting-API wrappers: `apply`
 (titles file → owned track), `build` (materialise cut file), `connection`
@@ -153,9 +173,12 @@ mix sits under a timeline — the one axis a rebuild does not move; read by
 queue), `camera_sidecar` (camera model off the card's own XML, for media
 Resolve reports no camera metadata for — #94; not an **angle sidecar**),
 `scripting` (`run_python` with handles pre-bound), `session`
-(session/project wrappers), `takes` (take selectors + in-place swap),
-`timeline` (timeline read wrappers), `titles` (titles file against a
-project + dry run).
+(session/project wrappers), `tail` (materialising a cut's tail: the OTIO
+document edit + the export/import round trip `build` takes when a tail has
+a transition to cut in — a hard out that fades nothing builds directly —
+because the scripting API cannot cut a transition at all), `takes`
+(take selectors + in-place swap), `timeline` (timeline read wrappers),
+`titles` (titles file against a project + dry run).
 
 `titles/` — `document` (read off disk), `schema` (verbatim, served by
 `get_titles_schema`), `validate` (9 errors + 2 warnings).
@@ -171,10 +194,13 @@ tool is callable in tests without the transport.
 There is no `styles/` module and there never will be: the style layer is data
 the agent owns, not code the server runs.
 
-`video/` — `ffmpeg` (the two commands video routes run), `frames` (frame
+`video/` — `ffmpeg` (the commands video routes run), `frames` (frame
 grabs — the one compute route that is not a job), `jpeg` (read back
-dimensions), `scenes` (scene-cut detection as cached job), `source` (clip
-name → file path + the clip's own frame numbering).
+dimensions), `scenes` (scene-cut detection as cached job), `blocking` (how
+blocked one frame is: the near-field obstruction arithmetic, numpy + scipy,
+no I/O), `occlusion` (that arithmetic as a cached job over a sampled range —
+per-sample scores and the unusable windows to keep a cut out of), `source`
+(clip name → file path + the clip's own frame numbering).
 
 ## Test map — `tests/`
 
@@ -227,7 +253,10 @@ exceptions: it covers no single module, walking the P4 pillar across `cut`,
 per-module test cannot see. `test_cut_devices.py` (#141) is the second, for the
 same reason: gaps and overlay tracks are one device each across `cut/validate`,
 `resolve/build`, `resolve/takes` and `analysis/virtual`, and the interesting
-failures are the disagreements between them. Live tier: `test_live_smoke.py` (module-level
+failures are the disagreements between them. `test_cut_tail.py` is the third: the
+tail is one device across `cut/tail`, `cut/validate`, `resolve/tail` and
+`resolve/build`, and a dissolve that did not land looks exactly like a cut that
+never asked for one. Live tier: `test_live_smoke.py` (module-level
 `pytest.mark.live`) and two `@pytest.mark.live` tests in
 `test_live_analysis.py`; everything else is fake-tier. The live tier assumes no
 project state it can build itself (#135): a session-scoped sweep clears the last
@@ -237,6 +266,34 @@ unless `RESOLVE_MCP_SCENE_SCAN_CLIP` names a real one. That variable is
 **unset on the live box**: its pool was checked in #135 and holds no flattened
 render, only raw continuous angles — so the generated clip is the default there,
 and the variable is for a project that does have an edit to scan.
+
+## Agent-owned trees — `gauntlet/`, `projects/`
+
+Neither is read by server code; both are the agent's own working record, and
+like `styles/` they are data, not modules.
+
+`gauntlet/` — the gauntlet loop: agent-built cuts judged blind against the
+director's own final cuts, piece by piece, where every critic loss becomes
+server or workflow work and never a hand-tuned edit. `STATE.md` (protocol,
+close rule, where each piece stands), `GAPS.md` (the gap ledger — one entry
+per critic loss or prep finding, open/in-work/fixed), `HANDOFF.md`.
+`tools/ab_pack.py` is the harness proper: a **sealed blind A/B pack builder**
+— two videos in, deterministic A/B labels out, plus contact sheets,
+cut-boundary filmstrips and a measured `cuts.json`, with the label→source
+mapping quarantined in `assignment.json` so a critic reads the pack without
+knowing whose cut is whose; it refuses to seal when its scene scan finds far
+fewer cuts than the timeline holds (G3). `recon/` is one-off instruments —
+one script plus its JSON receipt per question (plans, builds, pixel checks,
+occlusion scans). Renders, packs, frame dirs and the per-frame ffmpeg dumps
+under `recon/` are regenerable and gitignored; only scripts and receipts are
+committed.
+
+`projects/<project>/` — the agent-authored files for one Resolve project:
+`README.md` (its fixed facts — timelines, master mix, what is unverified),
+`songs.json`, the cut and titles files, and `cards/` — the PNG title-card
+route (`bake_taurus_cards.py` bakes a `%04d` RGBA frame run per card, fade
+ramps included, for a project whose media pool holds no GUI-authored Text+
+template; `titles/schema.py` §6).
 
 ## Docs
 

@@ -1,0 +1,231 @@
+{
+ "removed": [
+  {
+   "d": 75.826,
+   "frame": 173777,
+   "why": "floor: the 3.8/2.9 s tail chain was the fastest cutting in the quietest music"
+  },
+  {
+   "d": 79.663,
+   "frame": 173869,
+   "why": "floor: same chain"
+  },
+  {
+   "d": 82.541,
+   "frame": 173938,
+   "why": "floor: same chain -- the release becomes a single 17 s locked frame"
+  },
+  {
+   "d": 149.358,
+   "frame": 175540,
+   "why": "breath: the 4.0/3.5 s pair under the sparsest bass writing"
+  },
+  {
+   "d": 153.362,
+   "frame": 175636,
+   "why": "breath: same pair -- the kit holds through the handover instead"
+  },
+  {
+   "d": 366.116,
+   "frame": 180737,
+   "why": "fast: pays for the 361.65 accent so the fast zone keeps its count and gains a hold"
+  }
+ ],
+ "added": [
+  {
+   "d": 78.912,
+   "frame": 173851,
+   "event": "fill_start d78.92",
+   "why": "floor: the release lands on the fill rather than on a clock",
+   "onset_d": 78.944,
+   "ms_before_transient": 31.8
+  },
+  {
+   "d": 268.935,
+   "frame": 178407,
+   "event": "phrase d268.98",
+   "why": "plateau: a 2.5 s jab so the post-arrival hold cannot park",
+   "onset_d": 268.9707,
+   "ms_before_transient": 35.3
+  },
+  {
+   "d": 291.917,
+   "frame": 178958,
+   "event": "phrase* d291.94",
+   "why": "plateau: breaks R1's 14.6 s park before the build",
+   "onset_d": 291.9253,
+   "ms_before_transient": 8.7
+  },
+  {
+   "d": 320.487,
+   "frame": 179643,
+   "event": "fill_start d320.52",
+   "why": "build: first of the accent pair tightening into the summit",
+   "onset_d": 320.5013,
+   "ms_before_transient": 14.5
+  },
+  {
+   "d": 324.199,
+   "frame": 179732,
+   "event": "fill_start d324.12 (its next struck hit -- the start itself has no onset)",
+   "why": "build: second of the pair",
+   "onset_d": 324.2133,
+   "ms_before_transient": 14.5
+  },
+  {
+   "d": 361.528,
+   "frame": 180627,
+   "event": "phrase* d361.66 (the hit before it)",
+   "why": "fast: a 1.6 s accent, and the shot after it becomes a 7.8 s hold",
+   "onset_d": 361.5467,
+   "ms_before_transient": 18.8
+  },
+  {
+   "d": 397.897,
+   "frame": 181499,
+   "event": "phrase d397.96 (ranked #1)",
+   "why": "summit: tightening onto the summit's arrival",
+   "onset_d": 397.8987,
+   "ms_before_transient": 1.2
+  },
+  {
+   "d": 403.612,
+   "frame": 181636,
+   "event": "fill_start d403.66",
+   "why": "summit: breaks R1's 14.4 s shot -- the flatline the judges named",
+   "onset_d": 403.616,
+   "ms_before_transient": 4.5
+  },
+  {
+   "d": 407.449,
+   "frame": 181728,
+   "event": "phrase d407.42",
+   "why": "summit: same shot, second break",
+   "onset_d": 407.4667,
+   "ms_before_transient": 18.0
+  },
+  {
+   "d": 433.224,
+   "frame": 182346,
+   "event": "phrase* d433.24",
+   "why": "summit: a 1.6 s accent INSIDE a loud-tercile run -- R2's first pass put this burst at 436-441, which measures mid, so the accents moved to where the music actually peaks",
+   "onset_d": 433.2373,
+   "ms_before_transient": 12.9
+  },
+  {
+   "d": 437.646,
+   "frame": 182452,
+   "event": "fill_start d437.66",
+   "why": "summit: burst",
+   "onset_d": 437.664,
+   "ms_before_transient": 18.5
+  },
+  {
+   "d": 441.524,
+   "frame": 182545,
+   "event": "phrase* d441.58",
+   "why": "summit: burst closes",
+   "onset_d": 441.5573,
+   "ms_before_transient": 32.9
+  },
+  {
+   "d": 459.668,
+   "frame": 182980,
+   "event": "fill_start + phrase d459.70",
+   "why": "summit: the second loud-tercile accent, 1.4 s inside the sustained finale",
+   "onset_d": 459.6907,
+   "ms_before_transient": 23.1
+  },
+  {
+   "d": 463.421,
+   "frame": 183070,
+   "event": "phrase* d463.46",
+   "why": "summit: breaks the last long shot before the ending",
+   "onset_d": 463.4347,
+   "ms_before_transient": 13.4
+  }
+ ],
+ "sections": [
+  {
+   "section": "head",
+   "shots": 6,
+   "cpm": 9.98,
+   "human_cpm": 9.98,
+   "cv": 0.516,
+   "max_shot": 9.84
+  },
+  {
+   "section": "floor",
+   "shots": 7,
+   "cpm": 7.0,
+   "human_cpm": 8.01,
+   "cv": 0.448,
+   "max_shot": 17.14
+  },
+  {
+   "section": "breath",
+   "shots": 5,
+   "cpm": 5.22,
+   "human_cpm": 7.3,
+   "cv": 0.488,
+   "max_shot": 20.73
+  },
+  {
+   "section": "trade",
+   "shots": 11,
+   "cpm": 8.31,
+   "human_cpm": 9.07,
+   "cv": 0.544,
+   "max_shot": 15.56
+  },
+  {
+   "section": "plateau",
+   "shots": 10,
+   "cpm": 9.74,
+   "human_cpm": 7.79,
+   "cv": 0.446,
+   "max_shot": 10.09
+  },
+  {
+   "section": "build",
+   "shots": 7,
+   "cpm": 12.54,
+   "human_cpm": 8.96,
+   "cv": 0.517,
+   "max_shot": 9.01
+  },
+  {
+   "section": "fast",
+   "shots": 14,
+   "cpm": 15.85,
+   "human_cpm": 14.72,
+   "cv": 0.458,
+   "max_shot": 7.84
+  },
+  {
+   "section": "summit",
+   "shots": 21,
+   "cpm": 13.46,
+   "human_cpm": 10.9,
+   "cv": 0.432,
+   "max_shot": 8.97
+  },
+  {
+   "section": "ending",
+   "shots": 2,
+   "cpm": 5.21,
+   "human_cpm": 2.61,
+   "cv": 0.617,
+   "max_shot": 13.72
+  }
+ ],
+ "shots": 83,
+ "cuts": 82,
+ "song_cpm": 10.01,
+ "shot_cv": 0.639,
+ "quiet_cpm": 7.47,
+ "loud_cpm": 12.91,
+ "band_ratio": 1.73,
+ "drive_cpm": 14.0,
+ "within_section_cv": 0.496
+}

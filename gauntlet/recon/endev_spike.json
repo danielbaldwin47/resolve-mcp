@@ -1,0 +1,244 @@
+{
+ "build_ok": true,
+ "built": "SCRATCH endev v1",
+ "export": {
+  "ok": true,
+  "timeline": "SCRATCH endev v1",
+  "format": "otio",
+  "export_type": "EXPORT_OTIO",
+  "path": "C:\\Users\\Daniel\\repos\\resolve-mcp\\.claude\\worktrees\\gauntlet-loop-1\\gauntlet\\recon\\endev_spike.otio",
+  "bytes": 45534,
+  "context": {
+   "connected": true,
+   "resolve_version": "21.0.3.7",
+   "project": "mcp-tests-zinc",
+   "timeline": "SCRATCH endev v1",
+   "fps": 23.976
+  }
+ },
+ "exported_shape": [
+  {
+   "kind": "Video",
+   "name": "Video 1",
+   "children": [
+    {
+     "schema": "Clip.2",
+     "name": "A015C001_2606170J.MXF",
+     "frames": 240.0,
+     "rate": 23.976023976023978,
+     "transition_type": null,
+     "in_offset": null,
+     "out_offset": null
+    },
+    {
+     "schema": "Clip.2",
+     "name": "20260617_D_A7IV_0006.MP4",
+     "frames": 240.0,
+     "rate": 23.976023976023978,
+     "transition_type": null,
+     "in_offset": null,
+     "out_offset": null
+    }
+   ]
+  },
+  {
+   "kind": "Audio",
+   "name": "Audio 1",
+   "children": [
+    {
+     "schema": "Clip.2",
+     "name": "Zinc Set 2 Reaper v4.wav",
+     "frames": 480.0,
+     "rate": 23.976023976023978,
+     "transition_type": null,
+     "in_offset": null,
+     "out_offset": null
+    }
+   ]
+  }
+ ],
+ "injected_shape": [
+  {
+   "kind": "Video",
+   "name": "Video 1",
+   "children": [
+    {
+     "schema": "Clip.2",
+     "name": "A015C001_2606170J.MXF",
+     "frames": 240.0,
+     "rate": 23.976023976023978,
+     "transition_type": null,
+     "in_offset": null,
+     "out_offset": null
+    },
+    {
+     "schema": "Clip.2",
+     "name": "20260617_D_A7IV_0006.MP4",
+     "frames": 240.0,
+     "rate": 23.976023976023978,
+     "transition_type": null,
+     "in_offset": null,
+     "out_offset": null
+    },
+    {
+     "schema": "Transition.1",
+     "name": "Fade to Black",
+     "frames": null,
+     "rate": null,
+     "transition_type": "SMPTE_Dissolve",
+     "in_offset": 142,
+     "out_offset": 0
+    },
+    {
+     "schema": "Gap.1",
+     "name": "gap",
+     "frames": 4,
+     "rate": 23.976023976023978,
+     "transition_type": null,
+     "in_offset": null,
+     "out_offset": null
+    }
+   ]
+  },
+  {
+   "kind": "Audio",
+   "name": "Audio 1",
+   "children": [
+    {
+     "schema": "Clip.2",
+     "name": "Zinc Set 2 Reaper v4.wav",
+     "frames": 480.0,
+     "rate": 23.976023976023978,
+     "transition_type": null,
+     "in_offset": null,
+     "out_offset": null
+    },
+    {
+     "schema": "Transition.1",
+     "name": "Fade to Black",
+     "frames": null,
+     "rate": null,
+     "transition_type": "SMPTE_Dissolve",
+     "in_offset": 142,
+     "out_offset": 0
+    },
+    {
+     "schema": "Gap.1",
+     "name": "gap",
+     "frames": 4,
+     "rate": 23.976023976023978,
+     "transition_type": null,
+     "in_offset": null,
+     "out_offset": null
+    }
+   ]
+  }
+ ],
+ "import": {
+  "ok": true,
+  "path": "C:\\Users\\Daniel\\repos\\resolve-mcp\\.claude\\worktrees\\gauntlet-loop-1\\gauntlet\\recon\\endev_spike_injected.otio",
+  "requested_name": "SCRATCH endev injected",
+  "renamed": false,
+  "timeline": {
+   "name": "SCRATCH endev injected",
+   "base_name": "SCRATCH endev injected",
+   "version": null,
+   "current": true,
+   "fps": 23.976,
+   "start": {
+    "frames": 86400,
+    "seconds": 3603.604,
+    "timecode": "01:00:00:00",
+    "fps": 23.976
+   },
+   "end": {
+    "frames": 86880,
+    "seconds": 3623.624,
+    "timecode": "01:00:20:00",
+    "fps": 23.976
+   },
+   "duration": {
+    "frames": 480,
+    "seconds": 20.02,
+    "timecode": "00:00:20:00",
+    "fps": 23.976
+   },
+   "tracks": {
+    "video": 1,
+    "audio": 1,
+    "subtitle": 0
+   }
+  },
+  "context": {
+   "connected": true,
+   "resolve_version": "21.0.3.7",
+   "project": "mcp-tests-zinc",
+   "timeline": "SCRATCH endev injected",
+   "fps": 23.976
+  }
+ },
+ "landed": "SCRATCH endev injected",
+ "readback_export": {
+  "ok": true,
+  "error": null
+ },
+ "readback_shape": [
+  {
+   "kind": "Video",
+   "name": "Video 1",
+   "children": [
+    {
+     "schema": "Clip.2",
+     "name": "A015C001_2606170J.MXF",
+     "frames": 240.0,
+     "rate": 23.976023976023978,
+     "transition_type": null,
+     "in_offset": null,
+     "out_offset": null
+    },
+    {
+     "schema": "Clip.2",
+     "name": "20260617_D_A7IV_0006.MP4",
+     "frames": 240.0,
+     "rate": 23.976023976023978,
+     "transition_type": null,
+     "in_offset": null,
+     "out_offset": null
+    },
+    {
+     "schema": "Transition.1",
+     "name": "Cross Dissolve",
+     "frames": null,
+     "rate": null,
+     "transition_type": "SMPTE_Dissolve",
+     "in_offset": 142.0,
+     "out_offset": 0.0
+    }
+   ]
+  },
+  {
+   "kind": "Audio",
+   "name": "Audio 1",
+   "children": [
+    {
+     "schema": "Clip.2",
+     "name": "Zinc Set 2 Reaper v4.wav",
+     "frames": 480.0,
+     "rate": 23.976023976023978,
+     "transition_type": null,
+     "in_offset": null,
+     "out_offset": null
+    },
+    {
+     "schema": "Transition.1",
+     "name": "Cross Fade 0 dB",
+     "frames": null,
+     "rate": null,
+     "transition_type": "SMPTE_Dissolve",
+     "in_offset": 142.0,
+     "out_offset": 0.0
+    }
+   ]
+  }
+ ]
+}

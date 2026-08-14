@@ -1,0 +1,226 @@
+{
+ "piece": "PIECE 3 round 2 - Taurus People mid-song window",
+ "window": {
+  "mix_seconds": [
+   3735.16,
+   3825.16
+  ],
+  "deliverable_seconds": [
+   166.68,
+   256.68
+  ],
+  "zinc_sync_frames": [
+   175955,
+   178113
+  ],
+  "seconds": 90.007
+ },
+ "timeline": "Taurus People Mid P3 R2 v1",
+ "cut_file": "projects/mcp-tests-zinc/taurus-people-mid-p3r2.cut.json",
+ "render": "C:\\Users\\Daniel\\repos\\resolve-mcp\\.claude\\worktrees\\gauntlet-loop-1\\gauntlet\\renders\\taurus_mid_p3r2.mp4",
+ "shots": 14,
+ "cuts": 13,
+ "the_fix": {
+  "round_1_loss": "unanimous: no shot under 4.4 s, strict alternation, callable by 30 s; and cuts a mean 2.06 s from the nearest RMS accent",
+  "round_2_shape": "bimodal - 7 shots in the 2-4 s bin clustered at the three front changes and the ride-out, against holds of 10.8 / 15.6 / 10.1 / 10.3 s through the sparse trading; every moment chosen from the accent curve first and snapped to an onset second",
+  "durations": [
+   2.04,
+   10.8,
+   2.42,
+   3.67,
+   3.09,
+   15.56,
+   9.26,
+   10.14,
+   3.96,
+   10.34,
+   3.29,
+   6.17,
+   3.63,
+   5.63
+  ],
+  "human_durations": [
+   2.253,
+   13.054,
+   2.586,
+   17.017,
+   3.295,
+   5.839,
+   10.302,
+   3.587,
+   2.795,
+   11.219,
+   5.047,
+   7.591,
+   2.544,
+   21.021
+  ],
+  "histogram": {
+   "<2": 0,
+   "2-4": 7,
+   "4-8": 2,
+   "8-15": 4,
+   "15-30": 1,
+   ">30": 0
+  },
+  "human_histogram": {
+   "<2": 0,
+   "2-4": 6,
+   "4-8": 3,
+   "8-15": 3,
+   "15-30": 2,
+   ">30": 0
+  },
+  "cv": 0.614,
+  "human_cv": 0.746,
+  "min_shot_seconds": 2.04,
+  "round_1_min_shot_seconds": 4.46,
+  "accent_gap_s": {
+   "mean": 0.246,
+   "median": 0.28,
+   "max": 0.67,
+   "within_0_5": 12
+  },
+  "round_1_accent_gap_mean_s": 2.06
+ },
+ "self_review": {
+  "transient_offsets": {
+   "measured": 13,
+   "mean_abs": 0.024,
+   "median_abs": 0.025,
+   "max_abs": 0.035,
+   "early": 11,
+   "late": 2,
+   "on": 0
+  },
+  "offsets_band_17_41ms": "median_abs 25 ms - inside",
+  "shot_rhythm": {
+   "shots": 14,
+   "lengths": {
+    "histogram": {
+     "<2": 0,
+     "2-4": 7,
+     "4-8": 2,
+     "8-15": 4,
+     "15-30": 1,
+     ">30": 0
+    },
+    "spread_ratio": 7.611,
+    "mean": 6.429,
+    "median": 4.796
+   },
+   "alternation": {
+    "cuts": 13,
+    "longest_run": 13,
+    "fraction": 1.0
+   },
+   "uniformity": {
+    "bin": "2-4",
+    "one_bin": 0.5,
+    "cv": 0.614
+   },
+   "reads_metronomic": false,
+   "heuristic": "reads_metronomic is true when the longest strict A/B alternation run covers more than 0.8 of the cuts and either one length bin holds more than 0.6 of the shots or the coefficient of variation of shot lengths is under 0.35. It is a warning to look at, not a verdict: a passage that genuinely wants a two-camera ping-pong scores the same as a cut nobody varied, and only the director can tell them apart."
+  },
+  "reads_metronomic": false,
+  "shot_seconds": {
+   "mean": 6.429,
+   "median": 4.796,
+   "min": 2.044,
+   "max": 15.557
+  },
+  "clips": {
+   "20260617_D_A7IV_0006.MP4": {
+    "cuts": 7,
+    "seconds": 27.694,
+    "share": 0.308
+   },
+   "A015C001_2606170J.MXF": {
+    "cuts": 7,
+    "seconds": 62.312,
+    "share": 0.692
+   }
+  },
+  "roles": {
+   "drums-tight": {
+    "cuts": 7,
+    "seconds": 27.694,
+    "share": 0.308
+   },
+   "ensemble-wide": {
+    "cuts": 7,
+    "seconds": 62.312,
+    "share": 0.692
+   }
+  },
+  "gated": 13,
+  "stranded": 0,
+  "outside_grid": 0,
+  "visible": {
+   "mode": "visible",
+   "video_tracks": 1,
+   "measured": [
+    1
+   ],
+   "skipped": [],
+   "enabled_known": true,
+   "black": 0
+  },
+  "revisions_used": 0
+ },
+ "constraints": {
+  "a7iv_veto_62.90_66.60": {
+   "violations": 0,
+   "note": "the peak return at 66.84 is taken on the FX6, inside the 61.05-71.28 hold that rides the 65.25-67.08 pan onto the sax"
+  },
+  "locked_camera_ceiling_21.5s": {
+   "violations": 0,
+   "longest_a7iv_shot": 9.26
+  },
+  "home_angle_band": {
+   "fx6_share_pct": 69.2,
+   "corpus_band_pct": [
+    68.5,
+    76.3
+   ],
+   "human_this_window_pct": 73
+  },
+  "sub_3s_returns": {
+   "violations": 0,
+   "rule": "a shot under 3 s must be a picture the cut has not been on in the previous 8 s"
+  },
+  "pan_arrivals": {
+   "violations": 0,
+   "measured_exemption": "the 46.84 arrival: r2_settle.py reads 4 px per 0.5 s at 384 px easing to 1 px by 48.8, under the recon detector's own 1 px/frame threshold"
+  }
+ },
+ "proofs": {
+  "pixel_check": {
+   "duration_s": 90.027,
+   "video": {
+    "width": 1920,
+    "height": 1080,
+    "codec_name": "h264",
+    "r_frame_rate": "24000/1001",
+    "nb_frames": "2158"
+   },
+   "audio_streams": 1,
+   "timeline_items": 14,
+   "planned_cuts": 13,
+   "matched": 13,
+   "unmatched_planned": [],
+   "extra_detections": []
+  },
+  "frame_proof": {
+   "shots_checked": 14,
+   "camera_mismatches": 0
+  },
+  "human_angle_map": {
+   "share_seconds": {
+    "FX6": 79.328,
+    "A7IV": 28.822000000000003
+   },
+   "method": "deliverable frames matched to both cameras by normalised cross-correlation, 0.93-0.94 against -0.12 to +0.18 - the director's window is 73% FX6, and every hold over 7 s except one is on the FX6"
+  }
+ }
+}

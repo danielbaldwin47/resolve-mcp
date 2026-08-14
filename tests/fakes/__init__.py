@@ -54,6 +54,9 @@ from .core import AnswersNone as AnswersNone
 from .core import DroppedHandleError as DroppedHandleError
 from .fixtures import ffmpeg_absent as ffmpeg_absent
 from .fixtures import ffmpeg_refusing as ffmpeg_refusing
+from .fixtures import ffmpeg_sampling as ffmpeg_sampling
+from .fixtures import ffmpeg_writing_nothing as ffmpeg_writing_nothing
+from .fixtures import gray_frame as gray_frame
 from .fixtures import write_clicks as write_clicks
 from .fixtures import write_extensible_pcm_wav as write_extensible_pcm_wav
 from .fixtures import write_float_wav as write_float_wav

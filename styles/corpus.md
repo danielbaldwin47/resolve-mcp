@@ -629,3 +629,66 @@ What the visible reading adds, and what it is worth:
 - **Transient medians are computed over the new cut set** — more cuts, so
   small moves: Zinc 33 ms (unchanged), Monkfish 41, Freefall 25, Sunshine 17,
   Mercies 19, Scullers 30. Still spanning 17–41 ms, all inside a frame.
+
+## The deliverable head/tail survey (G8), measured 2026-08-13
+
+Not a timeline row. Every entry above is a Resolve timeline read through
+`correlate_timeline`; this one is five **finished deliverables** read with
+ffmpeg, because the thing being measured — what a tune's first and last
+seconds are staged as — is invisible to a shot reader. A title is not a shot,
+and a dissolve to black is not a cut.
+
+Source: `S:/Deliverables/Ryan Devlin/6-17-26 Zinc Bar/Full Videos`, the whole
+folder, five songs from Zinc Bar set 2 on 6-17. 3840×2160, 23.976 fps, 10-bit.
+Result: `gauntlet/recon/openings_survey.json` (`summary` block, over the curves
+it was derived from); scripts `gauntlet/recon/openings_survey.py`,
+`openings_summary.py`; contact sheets under `gauntlet/recon/openings_frames/`
+(gitignored; regenerate with `openings_survey.py sheets`, then `long`, `luma`,
+`tailluma`, `text`, `bandsheet`, then `openings_summary.py`).
+
+| Song | Head device | Black → picture | First note | Title super | Personnel super | Tail |
+| --- | --- | --- | --- | --- | --- | --- |
+| Sambra | dissolve up from black | 1.46 s | 0.25 s | 4.67–7.51 s (2.84) | 19.27–25.40 s | hard cut to black at −7.94 s |
+| Soultrane | dissolve up from black | 2.34 s | 0.45 s | 7.97–13.18 s (5.21) | 69.95–77.87 s | dissolve; black from −1.90 s |
+| Maitland Boulevard | dissolve up from black | 1.21 s | 0.65 s | 5.30–9.64 s (4.34) | 16.18–22.98 s | dissolve; black from −0.55 s |
+| The Hardest Part is Starting | dissolve up from black | 1.00 s | 1.15 s | 5.38–8.30 s (2.92) | 17.02–23.77 s | hard cut to black at −6.51 s |
+| Taurus People | **full-frame title card** | 2.336 s (hard cut) | **2.38 s** | card 0.04–2.336 s (2.29) | 20.65–26.78 s | dissolve; black from −0.17 s |
+
+Method, so the numbers can be re-derived or disbelieved specifically:
+
+- **Structure** (black, fade-up, card plateau, tail) from per-frame
+  `signalstats` YAVG. The sources are 10-bit, so limited-range black reads
+  **64**, not 16, and the Taurus card — black plus white type — reads 82.8. A
+  threshold keyed to 16 calls the whole opening "not black"; a card detector
+  keyed to frame 0 alone misses the card, because frame 0 is black and the card
+  starts at frame 1. Both mistakes were made before the table above.
+  Frame-accurate.
+- **Supers** from the near-white pixel share inside a crop of the lower-third
+  band (0.55w × 0.14h at 0.03w, 0.76h → gray → threshold 200). YMAX in the same
+  band does **not** work: a candle or a cymbal pins it, and the first attempt
+  returned four spurious spans per song. The share plateaus flat while type is
+  up and ramps over ~0.3 s either side, so the in/out times are good to a
+  frame. Every span was cross-read against a 0.5 s contact strip of the same
+  crop.
+- **Music** from `astats` RMS at 0.1 s, and at 0.02 s across the Taurus
+  entrance, which is the one number a claim turns on: room floor −30 to −46 dB
+  through 2.36 s, attack at **2.38 s**, peak −13 dB at 2.48 s, against a card
+  that cuts to picture at 2.336 s. One frame early.
+- Soultrane's personnel super sits at 69.9 s, outside the 60 s scan the other
+  four were found in; it was measured on a separate 40–180 s sweep. A scan
+  window that finds four of five is a scan window, not a convention.
+
+Two cautions on the tail numbers. Dissolve *lengths* are the weakest figure in
+the table — the reference luma is taken twelve seconds before black and a shot
+change inside that window moves it, which is why the three dissolves read
+5.8 / 5.9 / 10.3 s and nothing narrower than "roughly the last 6–10 s" is
+claimed anywhere. Black *onset* has no such problem and is frame-accurate. The
+"still playing at the last frame of picture" reading is from frames, by eye,
+on all five.
+
+What this row supports: the `[measured — 1 project, n=5 songs, Zinc 6-17 set 2]`
+bullets in `concert.md` §5b. What it does not: anything about cut placement,
+shot length or angle share — 5 songs of head and tail is a few dozen seconds of
+film, and the rest of each deliverable was not read. One project, one night, so
+the thin-support rule applies and the tag names the weakness rather than hiding
+it.

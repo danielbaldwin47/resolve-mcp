@@ -1,0 +1,159 @@
+{
+ "rows": [
+  {
+   "id": "s01",
+   "t": 1.02,
+   "intended": "a7iv",
+   "matched": "a7iv",
+   "ok": true,
+   "scores": {
+    "fx6": -0.074,
+    "a7iv": 0.996
+   }
+  },
+  {
+   "id": "s02",
+   "t": 7.45,
+   "intended": "fx6",
+   "matched": "fx6",
+   "ok": true,
+   "scores": {
+    "fx6": 0.996,
+    "a7iv": -0.089
+   }
+  },
+  {
+   "id": "s03",
+   "t": 14.06,
+   "intended": "a7iv",
+   "matched": "a7iv",
+   "ok": true,
+   "scores": {
+    "fx6": -0.077,
+    "a7iv": 0.996
+   }
+  },
+  {
+   "id": "s04",
+   "t": 17.1,
+   "intended": "fx6",
+   "matched": "fx6",
+   "ok": true,
+   "scores": {
+    "fx6": 0.993,
+    "a7iv": -0.056
+   }
+  },
+  {
+   "id": "s05",
+   "t": 20.48,
+   "intended": "a7iv",
+   "matched": "a7iv",
+   "ok": true,
+   "scores": {
+    "fx6": -0.074,
+    "a7iv": 0.996
+   }
+  },
+  {
+   "id": "s06",
+   "t": 29.8,
+   "intended": "fx6",
+   "matched": "fx6",
+   "ok": true,
+   "scores": {
+    "fx6": 0.996,
+    "a7iv": -0.087
+   }
+  },
+  {
+   "id": "s07",
+   "t": 42.21,
+   "intended": "a7iv",
+   "matched": "a7iv",
+   "ok": true,
+   "scores": {
+    "fx6": -0.04,
+    "a7iv": 0.996
+   }
+  },
+  {
+   "id": "s08",
+   "t": 51.91,
+   "intended": "fx6",
+   "matched": "fx6",
+   "ok": true,
+   "scores": {
+    "fx6": 0.991,
+    "a7iv": 0.105
+   }
+  },
+  {
+   "id": "s09",
+   "t": 58.95,
+   "intended": "a7iv",
+   "matched": "a7iv",
+   "ok": true,
+   "scores": {
+    "fx6": 0.079,
+    "a7iv": 0.976
+   }
+  },
+  {
+   "id": "s10",
+   "t": 66.11,
+   "intended": "fx6",
+   "matched": "fx6",
+   "ok": true,
+   "scores": {
+    "fx6": 0.975,
+    "a7iv": 0.036
+   }
+  },
+  {
+   "id": "s11",
+   "t": 72.93,
+   "intended": "a7iv",
+   "matched": "a7iv",
+   "ok": true,
+   "scores": {
+    "fx6": -0.038,
+    "a7iv": 0.996
+   }
+  },
+  {
+   "id": "s12",
+   "t": 77.66,
+   "intended": "fx6",
+   "matched": "fx6",
+   "ok": true,
+   "scores": {
+    "fx6": 0.995,
+    "a7iv": -0.074
+   }
+  },
+  {
+   "id": "s13",
+   "t": 82.56,
+   "intended": "a7iv",
+   "matched": "a7iv",
+   "ok": true,
+   "scores": {
+    "fx6": -0.031,
+    "a7iv": 0.996
+   }
+  },
+  {
+   "id": "s14",
+   "t": 87.19,
+   "intended": "fx6",
+   "matched": "fx6",
+   "ok": true,
+   "scores": {
+    "fx6": 0.996,
+    "a7iv": 0.001
+   }
+  }
+ ],
+ "mismatches": 0
+}

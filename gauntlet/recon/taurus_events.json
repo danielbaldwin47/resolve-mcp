@@ -1,0 +1,4695 @@
+{
+  "kind": "taurus_events",
+  "song": "Taurus People",
+  "span": {
+    "mix_seconds": [
+      3568.48,
+      4066.15
+    ],
+    "frames": [
+      171959,
+      183891
+    ]
+  },
+  "window": {
+    "label": "opening piece",
+    "mix_seconds": [
+      3568.48,
+      3658.48
+    ],
+    "frames": [
+      171959,
+      174117
+    ],
+    "seconds": 90.0
+  },
+  "frame_mapping": {
+    "formula": "frame = 86401 + round(seconds * 23.976)",
+    "fps": 23.976,
+    "frame_at_mix_zero": 86401
+  },
+  "sources": {
+    "solos": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\analysis\\Zinc-Set-2-Reaper-v4-0f3a70a16e52-solos.json",
+    "fills": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\analysis\\Zinc-Set-2-Reaper-v4-8673f286dbb2-fills.json",
+    "phrases": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\analysis\\Zinc-Set-2-Reaper-v4-b9d11d65279a-phrases.json",
+    "energy": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\analysis\\Zinc-Set-2-Reaper-v4-0b66b71707de-energy.json"
+  },
+  "reading": {
+    "voices": "bass, drums, other, vocals",
+    "timbre_stem": "other",
+    "phrase_stem": "other",
+    "fill_stems": [
+      "crash",
+      "kick",
+      "ride",
+      "snare",
+      "toms"
+    ],
+    "solo_changes_total": 130,
+    "fills_total": 1293,
+    "phrases_total": 1938
+  },
+  "counts": {
+    "solo_changes": 3,
+    "drum_fills": 33,
+    "phrase_boundaries": 36,
+    "energy_peaks": 8,
+    "total": 80
+  },
+  "counts_whole_span": {
+    "solo_changes": 9,
+    "drum_fills": 184,
+    "phrase_boundaries": 318
+  },
+  "front_at_window_open": {
+    "since": {
+      "t": 3527.0,
+      "frame": 170964
+    },
+    "stem": "other",
+    "signal": "timbre"
+  },
+  "solo_changes": [
+    {
+      "kind": "solo_change",
+      "change": 102,
+      "t": 3571.58,
+      "frame": 172033,
+      "measured": {
+        "t": 3570.0,
+        "frame": 171995
+      },
+      "downbeat": true,
+      "signal": "lead",
+      "from": "vocals",
+      "to": "other",
+      "detail": 6.27
+    },
+    {
+      "kind": "solo_change",
+      "change": 103,
+      "t": 3604.54,
+      "frame": 172823,
+      "measured": {
+        "t": 3604.0,
+        "frame": 172811
+      },
+      "downbeat": true,
+      "signal": "timbre",
+      "from": "other",
+      "to": "other",
+      "detail": -7.14
+    },
+    {
+      "kind": "solo_change",
+      "change": 104,
+      "t": 3608.98,
+      "frame": 172930,
+      "measured": {
+        "t": 3609.0,
+        "frame": 172930
+      },
+      "downbeat": true,
+      "signal": "lead",
+      "from": "other",
+      "to": "bass",
+      "detail": 4.3
+    }
+  ],
+  "drum_fills": [
+    {
+      "kind": "drum_fill",
+      "t": 3578.4,
+      "frame": 172197,
+      "end": {
+        "t": 3581.24,
+        "frame": 172265
+      },
+      "resolves_into_bar": 3949,
+      "duration": 2.84,
+      "bar": 3946,
+      "beat": 8870,
+      "in_bar": 1,
+      "hits": 103,
+      "density_ratio": 1.056,
+      "confidence": 0.588,
+      "counts": {
+        "kick": 25,
+        "snare": 24,
+        "toms": 27
+      },
+      "factors": {
+        "density": 0.028,
+        "toms": 0.711,
+        "resolution": 1.0,
+        "phrase": 1.0
+      }
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3582.9,
+      "frame": 172305,
+      "end": {
+        "t": 3584.58,
+        "frame": 172345
+      },
+      "resolves_into_bar": 3952,
+      "duration": 1.68,
+      "bar": 3950,
+      "beat": 8878,
+      "in_bar": 2,
+      "hits": 61,
+      "density_ratio": 1.058,
+      "confidence": 0.467,
+      "counts": {
+        "kick": 16,
+        "snare": 19,
+        "toms": 16
+      },
+      "factors": {
+        "density": 0.029,
+        "toms": 0.627,
+        "resolution": 1.0,
+        "phrase": 0.6
+      }
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3591.76,
+      "frame": 172517,
+      "end": {
+        "t": 3593.42,
+        "frame": 172557
+      },
+      "resolves_into_bar": 3960,
+      "duration": 1.66,
+      "bar": 3958,
+      "beat": 8894,
+      "in_bar": 2,
+      "hits": 61,
+      "density_ratio": 1.07,
+      "confidence": 0.525,
+      "counts": {
+        "kick": 15,
+        "snare": 12,
+        "toms": 20
+      },
+      "factors": {
+        "density": 0.035,
+        "toms": 0.851,
+        "resolution": 1.0,
+        "phrase": 0.6
+      }
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3594.56,
+      "frame": 172584,
+      "end": {
+        "t": 3596.8,
+        "frame": 172638
+      },
+      "resolves_into_bar": 3963,
+      "duration": 2.24,
+      "bar": 3961,
+      "beat": 8899,
+      "in_bar": 1,
+      "hits": 73,
+      "density_ratio": 0.949,
+      "confidence": 0.469,
+      "counts": {
+        "kick": 21,
+        "snare": 18,
+        "toms": 20
+      },
+      "factors": {
+        "density": 0.0,
+        "toms": 0.678,
+        "resolution": 1.0,
+        "phrase": 0.6
+      }
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3598.48,
+      "frame": 172678,
+      "end": {
+        "t": 3600.14,
+        "frame": 172718
+      },
+      "resolves_into_bar": 3966,
+      "duration": 1.66,
+      "bar": 3964,
+      "beat": 8906,
+      "in_bar": 2,
+      "hits": 53,
+      "density_ratio": 0.93,
+      "confidence": 0.487,
+      "counts": {
+        "kick": 11,
+        "snare": 14,
+        "toms": 15
+      },
+      "factors": {
+        "density": 0.0,
+        "toms": 0.75,
+        "resolution": 1.0,
+        "phrase": 0.6
+      }
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3603.44,
+      "frame": 172797,
+      "end": {
+        "t": 3604.0,
+        "frame": 172811
+      },
+      "resolves_into_bar": 3969,
+      "duration": 0.56,
+      "bar": 3969,
+      "beat": 8920,
+      "in_bar": 1,
+      "hits": 20,
+      "density_ratio": 1.04,
+      "confidence": 0.382,
+      "counts": {
+        "kick": 6,
+        "snare": 4,
+        "toms": 6
+      },
+      "factors": {
+        "density": 0.02,
+        "toms": 0.75,
+        "resolution": 1.0,
+        "phrase": 0.15
+      }
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3604.54,
+      "frame": 172823,
+      "end": {
+        "t": 3607.3,
+        "frame": 172890
+      },
+      "resolves_into_bar": 3972,
+      "duration": 2.76,
+      "bar": 3970,
+      "beat": 8923,
+      "in_bar": 1,
+      "hits": 91,
+      "density_ratio": 0.96,
+      "confidence": 0.37,
+      "counts": {
+        "kick": 26,
+        "snare": 21,
+        "toms": 27
+      },
+      "factors": {
+        "density": 0.0,
+        "toms": 0.73,
+        "resolution": 1.0,
+        "phrase": 0.15
+      }
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3609.54,
+      "frame": 172943,
+      "end": {
+        "t": 3609.82,
+        "frame": 172950
+      },
+      "resolves_into_bar": 3974,
+      "duration": 0.28,
+      "bar": 3974,
+      "beat": 8938,
+      "in_bar": 3,
+      "hits": 9,
+      "density_ratio": 0.936,
+      "confidence": 0.354,
+      "counts": {
+        "kick": 2,
+        "snare": 2,
+        "toms": 2
+      },
+      "factors": {
+        "density": 0.0,
+        "toms": 0.667,
+        "resolution": 1.0,
+        "phrase": 0.15
+      }
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3610.92,
+      "frame": 172976,
+      "end": {
+        "t": 3612.3,
+        "frame": 173010
+      },
+      "resolves_into_bar": 3977,
+      "duration": 1.38,
+      "bar": 3975,
+      "beat": 8943,
+      "in_bar": 4,
+      "hits": 35,
+      "density_ratio": 0.739,
+      "confidence": 0.54,
+      "counts": {
+        "kick": 10,
+        "snare": 8,
+        "toms": 7
+      },
+      "factors": {
+        "density": 0.0,
+        "toms": 0.56,
+        "resolution": 1.0,
+        "phrase": 1.0
+      }
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3612.86,
+      "frame": 173023,
+      "end": {
+        "t": 3613.12,
+        "frame": 173029
+      },
+      "resolves_into_bar": 3977,
+      "duration": 0.26,
+      "bar": 3977,
+      "beat": 8948,
+      "in_bar": 3,
+      "hits": 10,
+      "density_ratio": 1.12,
+      "confidence": 0.375,
+      "counts": {
+        "kick": 2,
+        "snare": 2,
+        "toms": 2
+      },
+      "factors": {
+        "density": 0.06,
+        "toms": 0.667,
+        "resolution": 1.0,
+        "phrase": 0.15
+      }
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3615.88,
+      "frame": 173095,
+      "end": {
+        "t": 3616.16,
+        "frame": 173102
+      },
+      "resolves_into_bar": 3980,
+      "duration": 0.28,
+      "bar": 3980,
+      "beat": 8959,
+      "in_bar": 2,
+      "hits": 10,
+      "density_ratio": 1.04,
+      "confidence": 0.382,
+      "counts": {
+        "kick": 2,
+        "snare": 3,
+        "toms": 3
+      },
+      "factors": {
+        "density": 0.02,
+        "toms": 0.75,
+        "resolution": 1.0,
+        "phrase": 0.15
+      }
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3618.04,
+      "frame": 173147,
+      "end": {
+        "t": 3618.6,
+        "frame": 173161
+      },
+      "resolves_into_bar": 3982,
+      "duration": 0.56,
+      "bar": 3982,
+      "beat": 8967,
+      "in_bar": 2,
+      "hits": 19,
+      "density_ratio": 0.988,
+      "confidence": 0.438,
+      "counts": {
+        "kick": 3,
+        "snare": 4,
+        "toms": 7
+      },
+      "factors": {
+        "density": 0.0,
+        "toms": 1.0,
+        "resolution": 1.0,
+        "phrase": 0.15
+      }
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3619.16,
+      "frame": 173174,
+      "end": {
+        "t": 3620.0,
+        "frame": 173194
+      },
+      "resolves_into_bar": 3984,
+      "duration": 0.84,
+      "bar": 3983,
+      "beat": 8971,
+      "in_bar": 2,
+      "hits": 19,
+      "density_ratio": 0.659,
+      "confidence": 0.492,
+      "counts": {
+        "kick": 5,
+        "snare": 3,
+        "toms": 5
+      },
+      "factors": {
+        "density": 0.0,
+        "toms": 0.769,
+        "resolution": 1.0,
+        "phrase": 0.6
+      }
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3620.82,
+      "frame": 173214,
+      "end": {
+        "t": 3621.08,
+        "frame": 173220
+      },
+      "resolves_into_bar": 3985,
+      "duration": 0.26,
+      "bar": 3984,
+      "beat": 8977,
+      "in_bar": 4,
+      "hits": 8,
+      "density_ratio": 0.896,
+      "confidence": 0.567,
+      "counts": {
+        "kick": 2,
+        "snare": 2,
+        "toms": 2
+      },
+      "factors": {
+        "density": 0.0,
+        "toms": 0.667,
+        "resolution": 1.0,
+        "phrase": 1.0
+      }
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3622.74,
+      "frame": 173260,
+      "end": {
+        "t": 3625.46,
+        "frame": 173325
+      },
+      "resolves_into_bar": 3989,
+      "duration": 2.72,
+      "bar": 3986,
+      "beat": 8984,
+      "in_bar": 3,
+      "hits": 77,
+      "density_ratio": 0.825,
+      "confidence": 0.583,
+      "counts": {
+        "kick": 18,
+        "snare": 20,
+        "toms": 22
+      },
+      "factors": {
+        "density": 0.0,
+        "toms": 0.733,
+        "resolution": 1.0,
+        "phrase": 1.0
+      }
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3628.18,
+      "frame": 173390,
+      "end": {
+        "t": 3628.74,
+        "frame": 173404
+      },
+      "resolves_into_bar": 3992,
+      "duration": 0.56,
+      "bar": 3991,
+      "beat": 9000,
+      "in_bar": 3,
+      "hits": 17,
+      "density_ratio": 0.884,
+      "confidence": 0.454,
+      "counts": {
+        "kick": 2,
+        "snare": 7,
+        "toms": 4
+      },
+      "factors": {
+        "density": 0.0,
+        "toms": 0.615,
+        "resolution": 1.0,
+        "phrase": 0.6
+      }
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3630.1,
+      "frame": 173436,
+      "end": {
+        "t": 3630.38,
+        "frame": 173443
+      },
+      "resolves_into_bar": 3993,
+      "duration": 0.28,
+      "bar": 3993,
+      "beat": 9006,
+      "in_bar": 2,
+      "hits": 9,
+      "density_ratio": 0.936,
+      "confidence": 0.438,
+      "counts": {
+        "kick": 1,
+        "snare": 3,
+        "toms": 4
+      },
+      "factors": {
+        "density": 0.0,
+        "toms": 1.0,
+        "resolution": 1.0,
+        "phrase": 0.15
+      }
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3632.58,
+      "frame": 173496,
+      "end": {
+        "t": 3633.12,
+        "frame": 173509
+      },
+      "resolves_into_bar": 3998,
+      "duration": 0.54,
+      "bar": 3997,
+      "beat": 9015,
+      "in_bar": 1,
+      "hits": 20,
+      "density_ratio": 1.079,
+      "confidence": 0.564,
+      "counts": {
+        "kick": 4,
+        "snare": 3,
+        "toms": 10
+      },
+      "factors": {
+        "density": 0.039,
+        "toms": 1.0,
+        "resolution": 1.0,
+        "phrase": 0.6
+      }
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3634.5,
+      "frame": 173542,
+      "end": {
+        "t": 3634.78,
+        "frame": 173548
+      },
+      "resolves_into_bar": 4001,
+      "duration": 0.28,
+      "bar": 4000,
+      "beat": 9022,
+      "in_bar": 2,
+      "hits": 12,
+      "density_ratio": 1.248,
+      "confidence": 0.543,
+      "counts": {
+        "kick": 6,
+        "snare": 2,
+        "toms": 2
+      },
+      "factors": {
+        "density": 0.124,
+        "toms": 0.4,
+        "resolution": 1.0,
+        "phrase": 1.0
+      }
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3635.34,
+      "frame": 173562,
+      "end": {
+        "t": 3635.88,
+        "frame": 173575
+      },
+      "resolves_into_bar": 4003,
+      "duration": 0.54,
+      "bar": 4002,
+      "beat": 9025,
+      "in_bar": 1,
+      "hits": 27,
+      "density_ratio": 1.456,
+      "confidence": 0.505,
+      "counts": {
+        "kick": 9,
+        "snare": 6,
+        "toms": 5
+      },
+      "factors": {
+        "density": 0.228,
+        "toms": 0.5,
+        "resolution": 1.0,
+        "phrase": 0.6
+      }
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3636.98,
+      "frame": 173601,
+      "end": {
+        "t": 3637.82,
+        "frame": 173621
+      },
+      "resolves_into_bar": 4006,
+      "duration": 0.84,
+      "bar": 4005,
+      "beat": 9031,
+      "in_bar": 1,
+      "hits": 29,
+      "density_ratio": 1.006,
+      "confidence": 0.362,
+      "counts": {
+        "kick": 7,
+        "snare": 8,
+        "toms": 8
+      },
+      "factors": {
+        "density": 0.003,
+        "toms": 0.696,
+        "resolution": 1.0,
+        "phrase": 0.15
+      }
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3639.46,
+      "frame": 173661,
+      "end": {
+        "t": 3639.72,
+        "frame": 173667
+      },
+      "resolves_into_bar": 4011,
+      "duration": 0.26,
+      "bar": 4010,
+      "beat": 9040,
+      "in_bar": 2,
+      "hits": 10,
+      "density_ratio": 1.12,
+      "confidence": 0.571,
+      "counts": {
+        "kick": 2,
+        "snare": 1,
+        "toms": 3
+      },
+      "factors": {
+        "density": 0.06,
+        "toms": 1.0,
+        "resolution": 1.0,
+        "phrase": 0.6
+      }
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3640.26,
+      "frame": 173680,
+      "end": {
+        "t": 3640.82,
+        "frame": 173693
+      },
+      "resolves_into_bar": 4013,
+      "duration": 0.56,
+      "bar": 4012,
+      "beat": 9043,
+      "in_bar": 1,
+      "hits": 18,
+      "density_ratio": 0.936,
+      "confidence": 0.633,
+      "counts": {
+        "kick": 4,
+        "snare": 4,
+        "toms": 7
+      },
+      "factors": {
+        "density": 0.0,
+        "toms": 0.933,
+        "resolution": 1.0,
+        "phrase": 1.0
+      }
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3641.64,
+      "frame": 173713,
+      "end": {
+        "t": 3642.18,
+        "frame": 173726
+      },
+      "resolves_into_bar": 4015,
+      "duration": 0.54,
+      "bar": 4014,
+      "beat": 9048,
+      "in_bar": 2,
+      "hits": 18,
+      "density_ratio": 0.971,
+      "confidence": 0.438,
+      "counts": {
+        "kick": 2,
+        "snare": 4,
+        "toms": 8
+      },
+      "factors": {
+        "density": 0.0,
+        "toms": 1.0,
+        "resolution": 1.0,
+        "phrase": 0.15
+      }
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3643.0,
+      "frame": 173746,
+      "end": {
+        "t": 3643.28,
+        "frame": 173752
+      },
+      "resolves_into_bar": 4017,
+      "duration": 0.28,
+      "bar": 4016,
+      "beat": 9053,
+      "in_bar": 1,
+      "hits": 9,
+      "density_ratio": 0.936,
+      "confidence": 0.525,
+      "counts": {
+        "kick": 3,
+        "snare": 3,
+        "toms": 2
+      },
+      "factors": {
+        "density": 0.0,
+        "toms": 0.5,
+        "resolution": 1.0,
+        "phrase": 1.0
+      }
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3644.38,
+      "frame": 173779,
+      "end": {
+        "t": 3645.5,
+        "frame": 173806
+      },
+      "resolves_into_bar": 4020,
+      "duration": 1.12,
+      "bar": 4018,
+      "beat": 9058,
+      "in_bar": 1,
+      "hits": 45,
+      "density_ratio": 1.17,
+      "confidence": 0.481,
+      "counts": {
+        "kick": 13,
+        "snare": 10,
+        "toms": 10
+      },
+      "factors": {
+        "density": 0.085,
+        "toms": 0.606,
+        "resolution": 1.0,
+        "phrase": 0.6
+      }
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3647.4,
+      "frame": 173851,
+      "end": {
+        "t": 3647.72,
+        "frame": 173859
+      },
+      "resolves_into_bar": 4022,
+      "duration": 0.32,
+      "bar": 4021,
+      "beat": 9070,
+      "in_bar": 5,
+      "hits": 12,
+      "density_ratio": 1.092,
+      "confidence": 0.483,
+      "counts": {
+        "kick": 2,
+        "snare": 4,
+        "toms": 3
+      },
+      "factors": {
+        "density": 0.046,
+        "toms": 0.667,
+        "resolution": 1.0,
+        "phrase": 0.6
+      }
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3648.02,
+      "frame": 173866,
+      "end": {
+        "t": 3648.24,
+        "frame": 173871
+      },
+      "resolves_into_bar": 4022,
+      "duration": 0.22,
+      "bar": 4022,
+      "beat": 9073,
+      "in_bar": 3,
+      "hits": 12,
+      "density_ratio": 1.589,
+      "confidence": 0.513,
+      "counts": {
+        "kick": 3,
+        "snare": 2,
+        "toms": 4
+      },
+      "factors": {
+        "density": 0.294,
+        "toms": 0.889,
+        "resolution": 1.0,
+        "phrase": 0.15
+      }
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3648.64,
+      "frame": 173881,
+      "end": {
+        "t": 3648.8,
+        "frame": 173885
+      },
+      "resolves_into_bar": 4023,
+      "duration": 0.16,
+      "bar": 4022,
+      "beat": 9076,
+      "in_bar": 6,
+      "hits": 9,
+      "density_ratio": 1.638,
+      "confidence": 0.578,
+      "counts": {
+        "kick": 2,
+        "snare": 2,
+        "toms": 2
+      },
+      "factors": {
+        "density": 0.319,
+        "toms": 0.667,
+        "resolution": 1.0,
+        "phrase": 0.6
+      }
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3649.06,
+      "frame": 173891,
+      "end": {
+        "t": 3649.9,
+        "frame": 173911
+      },
+      "resolves_into_bar": 4026,
+      "duration": 0.84,
+      "bar": 4025,
+      "beat": 9079,
+      "in_bar": 1,
+      "hits": 33,
+      "density_ratio": 1.144,
+      "confidence": 0.45,
+      "counts": {
+        "kick": 9,
+        "snare": 9,
+        "toms": 6
+      },
+      "factors": {
+        "density": 0.072,
+        "toms": 0.5,
+        "resolution": 1.0,
+        "phrase": 0.6
+      }
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3651.02,
+      "frame": 173938,
+      "end": {
+        "t": 3651.86,
+        "frame": 173958
+      },
+      "resolves_into_bar": 4029,
+      "duration": 0.84,
+      "bar": 4028,
+      "beat": 9086,
+      "in_bar": 1,
+      "hits": 34,
+      "density_ratio": 1.179,
+      "confidence": 0.373,
+      "counts": {
+        "kick": 10,
+        "snare": 8,
+        "toms": 8
+      },
+      "factors": {
+        "density": 0.09,
+        "toms": 0.615,
+        "resolution": 1.0,
+        "phrase": 0.15
+      }
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3653.5,
+      "frame": 173997,
+      "end": {
+        "t": 3654.34,
+        "frame": 174017
+      },
+      "resolves_into_bar": 4036,
+      "duration": 0.84,
+      "bar": 4033,
+      "beat": 9095,
+      "in_bar": 2,
+      "hits": 34,
+      "density_ratio": 1.179,
+      "confidence": 0.491,
+      "counts": {
+        "kick": 9,
+        "snare": 8,
+        "toms": 8
+      },
+      "factors": {
+        "density": 0.09,
+        "toms": 0.64,
+        "resolution": 1.0,
+        "phrase": 0.6
+      }
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3657.9,
+      "frame": 174103,
+      "end": {
+        "t": 3658.26,
+        "frame": 174111
+      },
+      "resolves_into_bar": 4042,
+      "duration": 0.36,
+      "bar": 4042,
+      "beat": 9112,
+      "in_bar": 1,
+      "hits": 18,
+      "density_ratio": 1.456,
+      "confidence": 0.498,
+      "counts": {
+        "kick": 5,
+        "snare": 2,
+        "toms": 6
+      },
+      "factors": {
+        "density": 0.228,
+        "toms": 0.923,
+        "resolution": 1.0,
+        "phrase": 0.15
+      }
+    }
+  ],
+  "phrase_boundaries": [
+    {
+      "kind": "phrase_boundary",
+      "t": 3571.08,
+      "frame": 172021,
+      "measured": {
+        "t": 3571.08,
+        "frame": 172021
+      },
+      "resumes": {
+        "t": 3571.253,
+        "frame": 172025
+      },
+      "snapped": false,
+      "downbeat": true,
+      "bar": 3937,
+      "in_bar": 1,
+      "rest_seconds": 0.173,
+      "held_ratio": 0.87,
+      "interval_semitones": 3.92,
+      "confidence": 0.461,
+      "factors": {
+        "rest": 0.309,
+        "held": 0.0,
+        "contour": 0.327,
+        "grid": 1.0
+      }
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3572.72,
+      "frame": 172061,
+      "measured": {
+        "t": 3572.591,
+        "frame": 172057
+      },
+      "resumes": {
+        "t": 3572.631,
+        "frame": 172058
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3940,
+      "in_bar": 1,
+      "rest_seconds": 0.04,
+      "held_ratio": 9.9,
+      "interval_semitones": -4.94,
+      "confidence": 0.748,
+      "factors": {
+        "rest": 0.071,
+        "held": 1.0,
+        "contour": 0.412,
+        "grid": 0.6
+      }
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3573.86,
+      "frame": 172088,
+      "measured": {
+        "t": 3574.031,
+        "frame": 172092
+      },
+      "resumes": {
+        "t": 3574.041,
+        "frame": 172092
+      },
+      "snapped": true,
+      "downbeat": false,
+      "bar": 3941,
+      "in_bar": 2,
+      "rest_seconds": 0.01,
+      "held_ratio": 2.58,
+      "interval_semitones": 3.17,
+      "confidence": 0.5,
+      "factors": {
+        "rest": 0.018,
+        "held": 0.79,
+        "contour": 0.264,
+        "grid": 0.15
+      }
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3575.0,
+      "frame": 172115,
+      "measured": {
+        "t": 3574.721,
+        "frame": 172109
+      },
+      "resumes": {
+        "t": 3574.731,
+        "frame": 172109
+      },
+      "snapped": true,
+      "downbeat": false,
+      "bar": 3942,
+      "in_bar": 2,
+      "rest_seconds": 0.01,
+      "held_ratio": 3.8,
+      "interval_semitones": -2.07,
+      "confidence": 0.606,
+      "factors": {
+        "rest": 0.018,
+        "held": 1.0,
+        "contour": 0.172,
+        "grid": 0.15
+      }
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3575.56,
+      "frame": 172129,
+      "measured": {
+        "t": 3575.41,
+        "frame": 172125
+      },
+      "resumes": {
+        "t": 3575.763,
+        "frame": 172133
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3943,
+      "in_bar": 1,
+      "rest_seconds": 0.353,
+      "held_ratio": 0.89,
+      "interval_semitones": 0.08,
+      "confidence": 0.497,
+      "factors": {
+        "rest": 0.63,
+        "held": 0.0,
+        "contour": 0.007,
+        "grid": 0.6
+      }
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3576.72,
+      "frame": 172156,
+      "measured": {
+        "t": 3576.711,
+        "frame": 172156
+      },
+      "resumes": {
+        "t": 3576.721,
+        "frame": 172156
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3944,
+      "in_bar": 1,
+      "rest_seconds": 0.01,
+      "held_ratio": 2.4,
+      "interval_semitones": -1.13,
+      "confidence": 0.546,
+      "factors": {
+        "rest": 0.018,
+        "held": 0.7,
+        "contour": 0.094,
+        "grid": 0.6
+      }
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3577.28,
+      "frame": 172170,
+      "measured": {
+        "t": 3577.551,
+        "frame": 172176
+      },
+      "resumes": {
+        "t": 3577.561,
+        "frame": 172177
+      },
+      "snapped": true,
+      "downbeat": false,
+      "bar": 3944,
+      "in_bar": 2,
+      "rest_seconds": 0.01,
+      "held_ratio": 3.8,
+      "interval_semitones": 2.13,
+      "confidence": 0.607,
+      "factors": {
+        "rest": 0.018,
+        "held": 1.0,
+        "contour": 0.178,
+        "grid": 0.15
+      }
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3578.4,
+      "frame": 172197,
+      "measured": {
+        "t": 3578.601,
+        "frame": 172202
+      },
+      "resumes": {
+        "t": 3578.611,
+        "frame": 172202
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3946,
+      "in_bar": 1,
+      "rest_seconds": 0.01,
+      "held_ratio": 1.1,
+      "interval_semitones": -18.85,
+      "confidence": 0.707,
+      "factors": {
+        "rest": 0.018,
+        "held": 0.05,
+        "contour": 1.0,
+        "grid": 0.6
+      }
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3578.98,
+      "frame": 172211,
+      "measured": {
+        "t": 3579.221,
+        "frame": 172216
+      },
+      "resumes": {
+        "t": 3579.231,
+        "frame": 172217
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3947,
+      "in_bar": 1,
+      "rest_seconds": 0.01,
+      "held_ratio": 2.3,
+      "interval_semitones": -2.78,
+      "confidence": 0.532,
+      "factors": {
+        "rest": 0.018,
+        "held": 0.65,
+        "contour": 0.232,
+        "grid": 0.6
+      }
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3581.8,
+      "frame": 172278,
+      "measured": {
+        "t": 3581.531,
+        "frame": 172272
+      },
+      "resumes": {
+        "t": 3581.541,
+        "frame": 172272
+      },
+      "snapped": true,
+      "downbeat": false,
+      "bar": 3949,
+      "in_bar": 2,
+      "rest_seconds": 0.01,
+      "held_ratio": 1.3,
+      "interval_semitones": -19.52,
+      "confidence": 0.604,
+      "factors": {
+        "rest": 0.018,
+        "held": 0.15,
+        "contour": 1.0,
+        "grid": 0.15
+      }
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3582.9,
+      "frame": 172305,
+      "measured": {
+        "t": 3582.851,
+        "frame": 172303
+      },
+      "resumes": {
+        "t": 3582.861,
+        "frame": 172304
+      },
+      "snapped": true,
+      "downbeat": false,
+      "bar": 3950,
+      "in_bar": 2,
+      "rest_seconds": 0.01,
+      "held_ratio": 2.1,
+      "interval_semitones": -1.61,
+      "confidence": 0.355,
+      "factors": {
+        "rest": 0.018,
+        "held": 0.55,
+        "contour": 0.134,
+        "grid": 0.15
+      }
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3583.46,
+      "frame": 172318,
+      "measured": {
+        "t": 3583.651,
+        "frame": 172323
+      },
+      "resumes": {
+        "t": 3583.661,
+        "frame": 172323
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3951,
+      "in_bar": 1,
+      "rest_seconds": 0.01,
+      "held_ratio": 2.9,
+      "interval_semitones": 1.26,
+      "confidence": 0.685,
+      "factors": {
+        "rest": 0.018,
+        "held": 0.95,
+        "contour": 0.105,
+        "grid": 0.6
+      }
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3584.58,
+      "frame": 172345,
+      "measured": {
+        "t": 3584.31,
+        "frame": 172338
+      },
+      "resumes": {
+        "t": 3584.593,
+        "frame": 172345
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3952,
+      "in_bar": 1,
+      "rest_seconds": 0.283,
+      "held_ratio": 1.79,
+      "interval_semitones": -8.11,
+      "confidence": 0.612,
+      "factors": {
+        "rest": 0.505,
+        "held": 0.395,
+        "contour": 0.676,
+        "grid": 0.6
+      }
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3585.14,
+      "frame": 172358,
+      "measured": {
+        "t": 3585.291,
+        "frame": 172362
+      },
+      "resumes": {
+        "t": 3585.301,
+        "frame": 172362
+      },
+      "snapped": true,
+      "downbeat": false,
+      "bar": 3952,
+      "in_bar": 2,
+      "rest_seconds": 0.01,
+      "held_ratio": 2.7,
+      "interval_semitones": 1.79,
+      "confidence": 0.522,
+      "factors": {
+        "rest": 0.018,
+        "held": 0.85,
+        "contour": 0.15,
+        "grid": 0.15
+      }
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3586.8,
+      "frame": 172398,
+      "measured": {
+        "t": 3586.711,
+        "frame": 172396
+      },
+      "resumes": {
+        "t": 3586.751,
+        "frame": 172397
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3954,
+      "in_bar": 1,
+      "rest_seconds": 0.04,
+      "held_ratio": 1.7,
+      "interval_semitones": -3.62,
+      "confidence": 0.38,
+      "factors": {
+        "rest": 0.071,
+        "held": 0.35,
+        "contour": 0.302,
+        "grid": 0.6
+      }
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3587.34,
+      "frame": 172411,
+      "measured": {
+        "t": 3587.581,
+        "frame": 172417
+      },
+      "resumes": {
+        "t": 3587.591,
+        "frame": 172417
+      },
+      "snapped": true,
+      "downbeat": false,
+      "bar": 3954,
+      "in_bar": 2,
+      "rest_seconds": 0.01,
+      "held_ratio": 1.78,
+      "interval_semitones": 12.08,
+      "confidence": 0.628,
+      "factors": {
+        "rest": 0.018,
+        "held": 0.39,
+        "contour": 1.0,
+        "grid": 0.15
+      }
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3588.98,
+      "frame": 172450,
+      "measured": {
+        "t": 3588.5,
+        "frame": 172439
+      },
+      "resumes": {
+        "t": 3589.023,
+        "frame": 172451
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3956,
+      "in_bar": 1,
+      "rest_seconds": 0.523,
+      "held_ratio": 6.99,
+      "interval_semitones": 3.02,
+      "confidence": 0.819,
+      "factors": {
+        "rest": 0.934,
+        "held": 1.0,
+        "contour": 0.251,
+        "grid": 0.6
+      }
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3588.98,
+      "frame": 172450,
+      "measured": {
+        "t": 3589.251,
+        "frame": 172457
+      },
+      "resumes": {
+        "t": 3589.261,
+        "frame": 172457
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3956,
+      "in_bar": 1,
+      "rest_seconds": 0.01,
+      "held_ratio": 2.28,
+      "interval_semitones": 3.97,
+      "confidence": 0.537,
+      "factors": {
+        "rest": 0.018,
+        "held": 0.64,
+        "contour": 0.331,
+        "grid": 0.6
+      }
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3590.1,
+      "frame": 172477,
+      "measured": {
+        "t": 3590.101,
+        "frame": 172477
+      },
+      "resumes": {
+        "t": 3590.111,
+        "frame": 172478
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3957,
+      "in_bar": 1,
+      "rest_seconds": 0.01,
+      "held_ratio": 5.7,
+      "interval_semitones": -0.98,
+      "confidence": 0.81,
+      "factors": {
+        "rest": 0.018,
+        "held": 1.0,
+        "contour": 0.082,
+        "grid": 1.0
+      }
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3591.2,
+      "frame": 172504,
+      "measured": {
+        "t": 3590.98,
+        "frame": 172498
+      },
+      "resumes": {
+        "t": 3591.433,
+        "frame": 172509
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3958,
+      "in_bar": 1,
+      "rest_seconds": 0.453,
+      "held_ratio": 4.49,
+      "interval_semitones": -2.06,
+      "confidence": 0.798,
+      "factors": {
+        "rest": 0.809,
+        "held": 1.0,
+        "contour": 0.171,
+        "grid": 0.6
+      }
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3591.76,
+      "frame": 172517,
+      "measured": {
+        "t": 3591.631,
+        "frame": 172514
+      },
+      "resumes": {
+        "t": 3591.671,
+        "frame": 172515
+      },
+      "snapped": true,
+      "downbeat": false,
+      "bar": 3958,
+      "in_bar": 2,
+      "rest_seconds": 0.04,
+      "held_ratio": 1.98,
+      "interval_semitones": -8.23,
+      "confidence": 0.471,
+      "factors": {
+        "rest": 0.071,
+        "held": 0.49,
+        "contour": 0.686,
+        "grid": 0.15
+      }
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3592.32,
+      "frame": 172530,
+      "measured": {
+        "t": 3592.571,
+        "frame": 172536
+      },
+      "resumes": {
+        "t": 3592.581,
+        "frame": 172537
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3959,
+      "in_bar": 1,
+      "rest_seconds": 0.01,
+      "held_ratio": 4.1,
+      "interval_semitones": -2.17,
+      "confidence": 0.72,
+      "factors": {
+        "rest": 0.018,
+        "held": 1.0,
+        "contour": 0.181,
+        "grid": 0.6
+      }
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3593.42,
+      "frame": 172557,
+      "measured": {
+        "t": 3593.25,
+        "frame": 172553
+      },
+      "resumes": {
+        "t": 3593.613,
+        "frame": 172561
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3960,
+      "in_bar": 1,
+      "rest_seconds": 0.363,
+      "held_ratio": 1.09,
+      "interval_semitones": 0.02,
+      "confidence": 0.511,
+      "factors": {
+        "rest": 0.648,
+        "held": 0.045,
+        "contour": 0.002,
+        "grid": 0.6
+      }
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3594.56,
+      "frame": 172584,
+      "measured": {
+        "t": 3594.301,
+        "frame": 172578
+      },
+      "resumes": {
+        "t": 3594.311,
+        "frame": 172578
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3961,
+      "in_bar": 1,
+      "rest_seconds": 0.01,
+      "held_ratio": 2.7,
+      "interval_semitones": -1.81,
+      "confidence": 0.734,
+      "factors": {
+        "rest": 0.018,
+        "held": 0.85,
+        "contour": 0.151,
+        "grid": 1.0
+      }
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3595.68,
+      "frame": 172611,
+      "measured": {
+        "t": 3595.411,
+        "frame": 172605
+      },
+      "resumes": {
+        "t": 3595.421,
+        "frame": 172605
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3962,
+      "in_bar": 1,
+      "rest_seconds": 0.01,
+      "held_ratio": 3.9,
+      "interval_semitones": 1.22,
+      "confidence": 0.712,
+      "factors": {
+        "rest": 0.018,
+        "held": 1.0,
+        "contour": 0.102,
+        "grid": 0.6
+      }
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3596.8,
+      "frame": 172638,
+      "measured": {
+        "t": 3596.531,
+        "frame": 172631
+      },
+      "resumes": {
+        "t": 3596.541,
+        "frame": 172632
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3963,
+      "in_bar": 1,
+      "rest_seconds": 0.01,
+      "held_ratio": 1.6,
+      "interval_semitones": -11.85,
+      "confidence": 0.725,
+      "factors": {
+        "rest": 0.018,
+        "held": 0.3,
+        "contour": 0.987,
+        "grid": 0.6
+      }
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3597.92,
+      "frame": 172665,
+      "measured": {
+        "t": 3597.53,
+        "frame": 172655
+      },
+      "resumes": {
+        "t": 3597.963,
+        "frame": 172666
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3964,
+      "in_bar": 1,
+      "rest_seconds": 0.433,
+      "held_ratio": 1.27,
+      "interval_semitones": -1.57,
+      "confidence": 0.602,
+      "factors": {
+        "rest": 0.773,
+        "held": 0.135,
+        "contour": 0.131,
+        "grid": 0.6
+      }
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3599.04,
+      "frame": 172692,
+      "measured": {
+        "t": 3598.87,
+        "frame": 172688
+      },
+      "resumes": {
+        "t": 3599.071,
+        "frame": 172692
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3965,
+      "in_bar": 1,
+      "rest_seconds": 0.201,
+      "held_ratio": 1.09,
+      "interval_semitones": 4.69,
+      "confidence": 0.506,
+      "factors": {
+        "rest": 0.359,
+        "held": 0.045,
+        "contour": 0.391,
+        "grid": 1.0
+      }
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3600.14,
+      "frame": 172718,
+      "measured": {
+        "t": 3599.931,
+        "frame": 172713
+      },
+      "resumes": {
+        "t": 3599.941,
+        "frame": 172713
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3966,
+      "in_bar": 1,
+      "rest_seconds": 0.01,
+      "held_ratio": 0.5,
+      "interval_semitones": 12.0,
+      "confidence": 0.702,
+      "factors": {
+        "rest": 0.018,
+        "held": 0.0,
+        "contour": 1.0,
+        "grid": 0.6
+      }
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3600.72,
+      "frame": 172732,
+      "measured": {
+        "t": 3600.831,
+        "frame": 172735
+      },
+      "resumes": {
+        "t": 3600.841,
+        "frame": 172735
+      },
+      "snapped": true,
+      "downbeat": false,
+      "bar": 3966,
+      "in_bar": 2,
+      "rest_seconds": 0.01,
+      "held_ratio": 2.1,
+      "interval_semitones": -1.66,
+      "confidence": 0.356,
+      "factors": {
+        "rest": 0.018,
+        "held": 0.55,
+        "contour": 0.138,
+        "grid": 0.15
+      }
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3601.5,
+      "frame": 172751,
+      "measured": {
+        "t": 3601.431,
+        "frame": 172749
+      },
+      "resumes": {
+        "t": 3601.441,
+        "frame": 172749
+      },
+      "snapped": true,
+      "downbeat": false,
+      "bar": 3967,
+      "in_bar": 2,
+      "rest_seconds": 0.01,
+      "held_ratio": 3.0,
+      "interval_semitones": 1.39,
+      "confidence": 0.601,
+      "factors": {
+        "rest": 0.018,
+        "held": 1.0,
+        "contour": 0.116,
+        "grid": 0.15
+      }
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3602.32,
+      "frame": 172770,
+      "measured": {
+        "t": 3602.08,
+        "frame": 172764
+      },
+      "resumes": {
+        "t": 3602.373,
+        "frame": 172771
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3968,
+      "in_bar": 1,
+      "rest_seconds": 0.293,
+      "held_ratio": 1.79,
+      "interval_semitones": -8.3,
+      "confidence": 0.622,
+      "factors": {
+        "rest": 0.523,
+        "held": 0.395,
+        "contour": 0.691,
+        "grid": 0.6
+      }
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3604.0,
+      "frame": 172811,
+      "measured": {
+        "t": 3603.871,
+        "frame": 172807
+      },
+      "resumes": {
+        "t": 3603.881,
+        "frame": 172808
+      },
+      "snapped": true,
+      "downbeat": false,
+      "bar": 3969,
+      "in_bar": 2,
+      "rest_seconds": 0.01,
+      "held_ratio": 1.4,
+      "interval_semitones": 7.98,
+      "confidence": 0.425,
+      "factors": {
+        "rest": 0.018,
+        "held": 0.2,
+        "contour": 0.665,
+        "grid": 0.15
+      }
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3605.1,
+      "frame": 172837,
+      "measured": {
+        "t": 3604.7,
+        "frame": 172827
+      },
+      "resumes": {
+        "t": 3605.191,
+        "frame": 172839
+      },
+      "snapped": true,
+      "downbeat": false,
+      "bar": 3970,
+      "in_bar": 2,
+      "rest_seconds": 0.491,
+      "held_ratio": 1.29,
+      "interval_semitones": -19.31,
+      "confidence": 0.69,
+      "factors": {
+        "rest": 0.877,
+        "held": 0.145,
+        "contour": 1.0,
+        "grid": 0.15
+      }
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3605.36,
+      "frame": 172843,
+      "measured": {
+        "t": 3605.361,
+        "frame": 172843
+      },
+      "resumes": {
+        "t": 3605.371,
+        "frame": 172843
+      },
+      "snapped": true,
+      "downbeat": false,
+      "bar": 3970,
+      "in_bar": 3,
+      "rest_seconds": 0.01,
+      "held_ratio": 1.7,
+      "interval_semitones": 14.14,
+      "confidence": 0.624,
+      "factors": {
+        "rest": 0.018,
+        "held": 0.35,
+        "contour": 1.0,
+        "grid": 0.15
+      }
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3606.72,
+      "frame": 172876,
+      "measured": {
+        "t": 3606.36,
+        "frame": 172867
+      },
+      "resumes": {
+        "t": 3772.263,
+        "frame": 176845
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3972,
+      "in_bar": 1,
+      "rest_seconds": 165.903,
+      "held_ratio": 8.39,
+      "interval_semitones": 17.99,
+      "confidence": 0.9,
+      "factors": {
+        "rest": 1.0,
+        "held": 1.0,
+        "contour": 1.0,
+        "grid": 0.6
+      }
+    }
+  ],
+  "energy": {
+    "window_seconds": 3.0,
+    "hop_seconds": 0.5,
+    "concert_integrated_lufs": -13.84,
+    "loudest_in_window": {
+      "t": 3593.5,
+      "frame": 172559,
+      "lufs": -11.56
+    },
+    "quietest_in_window": {
+      "t": 3625.0,
+      "frame": 173314,
+      "lufs": -27.58
+    },
+    "peaks": [
+      {
+        "t": 3576.0,
+        "frame": 172139,
+        "lufs": -11.88,
+        "rms_dbfs": -15.1,
+        "onsets_per_second": 9.333,
+        "prominence_db": 3.57
+      },
+      {
+        "t": 3584.0,
+        "frame": 172331,
+        "lufs": -12.35,
+        "rms_dbfs": -15.4,
+        "onsets_per_second": 9.0,
+        "prominence_db": 2.02
+      },
+      {
+        "t": 3593.5,
+        "frame": 172559,
+        "lufs": -11.56,
+        "rms_dbfs": -14.65,
+        "onsets_per_second": 9.667,
+        "prominence_db": 3.1
+      },
+      {
+        "t": 3598.5,
+        "frame": 172679,
+        "lufs": -12.76,
+        "rms_dbfs": -16.12,
+        "onsets_per_second": 10.0,
+        "prominence_db": 5.46
+      },
+      {
+        "t": 3616.5,
+        "frame": 173110,
+        "lufs": -25.02,
+        "rms_dbfs": -28.17,
+        "onsets_per_second": 7.333,
+        "prominence_db": 2.2
+      },
+      {
+        "t": 3622.5,
+        "frame": 173254,
+        "lufs": -25.72,
+        "rms_dbfs": -28.26,
+        "onsets_per_second": 8.0,
+        "prominence_db": 1.86
+      },
+      {
+        "t": 3630.0,
+        "frame": 173434,
+        "lufs": -24.28,
+        "rms_dbfs": -26.7,
+        "onsets_per_second": 7.333,
+        "prominence_db": 3.3
+      },
+      {
+        "t": 3640.5,
+        "frame": 173686,
+        "lufs": -23.3,
+        "rms_dbfs": -25.63,
+        "onsets_per_second": 6.333,
+        "prominence_db": 2.84
+      }
+    ]
+  },
+  "shortlist": [
+    {
+      "kind": "phrase_boundary",
+      "t": 3591.2,
+      "frame": 172504,
+      "measured": {
+        "t": 3590.98,
+        "frame": 172498
+      },
+      "resumes": {
+        "t": 3591.433,
+        "frame": 172509
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3958,
+      "in_bar": 1,
+      "rest_seconds": 0.453,
+      "held_ratio": 4.49,
+      "interval_semitones": -2.06,
+      "confidence": 0.798,
+      "factors": {
+        "rest": 0.809,
+        "held": 1.0,
+        "contour": 0.171,
+        "grid": 0.6
+      },
+      "base": 0.798,
+      "agrees_with": [
+        "drum_fill",
+        "phrase_boundary"
+      ],
+      "score": 1.348
+    },
+    {
+      "kind": "energy_peak",
+      "t": 3598.5,
+      "frame": 172679,
+      "lufs": -12.76,
+      "rms_dbfs": -16.12,
+      "onsets_per_second": 10.0,
+      "prominence_db": 5.46,
+      "confidence": 0.91,
+      "base": 0.91,
+      "agrees_with": [
+        "drum_fill",
+        "phrase_boundary"
+      ],
+      "score": 1.31
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3578.4,
+      "frame": 172197,
+      "measured": {
+        "t": 3578.601,
+        "frame": 172202
+      },
+      "resumes": {
+        "t": 3578.611,
+        "frame": 172202
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3946,
+      "in_bar": 1,
+      "rest_seconds": 0.01,
+      "held_ratio": 1.1,
+      "interval_semitones": -18.85,
+      "confidence": 0.707,
+      "factors": {
+        "rest": 0.018,
+        "held": 0.05,
+        "contour": 1.0,
+        "grid": 0.6
+      },
+      "base": 0.707,
+      "agrees_with": [
+        "drum_fill",
+        "phrase_boundary"
+      ],
+      "score": 1.257
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3583.46,
+      "frame": 172318,
+      "measured": {
+        "t": 3583.651,
+        "frame": 172323
+      },
+      "resumes": {
+        "t": 3583.661,
+        "frame": 172323
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3951,
+      "in_bar": 1,
+      "rest_seconds": 0.01,
+      "held_ratio": 2.9,
+      "interval_semitones": 1.26,
+      "confidence": 0.685,
+      "factors": {
+        "rest": 0.018,
+        "held": 0.95,
+        "contour": 0.105,
+        "grid": 0.6
+      },
+      "base": 0.685,
+      "agrees_with": [
+        "drum_fill",
+        "energy_peak",
+        "phrase_boundary"
+      ],
+      "score": 1.235
+    },
+    {
+      "kind": "solo_change",
+      "change": 102,
+      "t": 3571.58,
+      "frame": 172033,
+      "measured": {
+        "t": 3570.0,
+        "frame": 171995
+      },
+      "downbeat": true,
+      "signal": "lead",
+      "from": "vocals",
+      "to": "other",
+      "detail": 6.27,
+      "base": 0.8,
+      "agrees_with": [
+        "phrase_boundary"
+      ],
+      "score": 1.15
+    },
+    {
+      "kind": "solo_change",
+      "change": 103,
+      "t": 3604.54,
+      "frame": 172823,
+      "measured": {
+        "t": 3604.0,
+        "frame": 172811
+      },
+      "downbeat": true,
+      "signal": "timbre",
+      "from": "other",
+      "to": "other",
+      "detail": -7.14,
+      "base": 0.6,
+      "agrees_with": [
+        "drum_fill",
+        "phrase_boundary"
+      ],
+      "score": 1.15
+    },
+    {
+      "kind": "solo_change",
+      "change": 104,
+      "t": 3608.98,
+      "frame": 172930,
+      "measured": {
+        "t": 3609.0,
+        "frame": 172930
+      },
+      "downbeat": true,
+      "signal": "lead",
+      "from": "other",
+      "to": "bass",
+      "detail": 4.3,
+      "base": 0.8,
+      "agrees_with": [
+        "drum_fill"
+      ],
+      "score": 1.15
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3640.26,
+      "frame": 173680,
+      "end": {
+        "t": 3640.82,
+        "frame": 173693
+      },
+      "resolves_into_bar": 4013,
+      "duration": 0.56,
+      "bar": 4012,
+      "beat": 9043,
+      "in_bar": 1,
+      "hits": 18,
+      "density_ratio": 0.936,
+      "confidence": 0.633,
+      "counts": {
+        "kick": 4,
+        "snare": 4,
+        "toms": 7
+      },
+      "factors": {
+        "density": 0.0,
+        "toms": 0.933,
+        "resolution": 1.0,
+        "phrase": 1.0
+      },
+      "base": 0.633,
+      "agrees_with": [
+        "energy_peak"
+      ],
+      "score": 0.833
+    }
+  ],
+  "ranked": [
+    {
+      "kind": "phrase_boundary",
+      "t": 3591.2,
+      "frame": 172504,
+      "measured": {
+        "t": 3590.98,
+        "frame": 172498
+      },
+      "resumes": {
+        "t": 3591.433,
+        "frame": 172509
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3958,
+      "in_bar": 1,
+      "rest_seconds": 0.453,
+      "held_ratio": 4.49,
+      "interval_semitones": -2.06,
+      "confidence": 0.798,
+      "factors": {
+        "rest": 0.809,
+        "held": 1.0,
+        "contour": 0.171,
+        "grid": 0.6
+      },
+      "base": 0.798,
+      "agrees_with": [
+        "drum_fill",
+        "phrase_boundary"
+      ],
+      "score": 1.348
+    },
+    {
+      "kind": "energy_peak",
+      "t": 3598.5,
+      "frame": 172679,
+      "lufs": -12.76,
+      "rms_dbfs": -16.12,
+      "onsets_per_second": 10.0,
+      "prominence_db": 5.46,
+      "confidence": 0.91,
+      "base": 0.91,
+      "agrees_with": [
+        "drum_fill",
+        "phrase_boundary"
+      ],
+      "score": 1.31
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3592.32,
+      "frame": 172530,
+      "measured": {
+        "t": 3592.571,
+        "frame": 172536
+      },
+      "resumes": {
+        "t": 3592.581,
+        "frame": 172537
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3959,
+      "in_bar": 1,
+      "rest_seconds": 0.01,
+      "held_ratio": 4.1,
+      "interval_semitones": -2.17,
+      "confidence": 0.72,
+      "factors": {
+        "rest": 0.018,
+        "held": 1.0,
+        "contour": 0.181,
+        "grid": 0.6
+      },
+      "base": 0.72,
+      "agrees_with": [
+        "drum_fill",
+        "phrase_boundary"
+      ],
+      "score": 1.27
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3578.4,
+      "frame": 172197,
+      "measured": {
+        "t": 3578.601,
+        "frame": 172202
+      },
+      "resumes": {
+        "t": 3578.611,
+        "frame": 172202
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3946,
+      "in_bar": 1,
+      "rest_seconds": 0.01,
+      "held_ratio": 1.1,
+      "interval_semitones": -18.85,
+      "confidence": 0.707,
+      "factors": {
+        "rest": 0.018,
+        "held": 0.05,
+        "contour": 1.0,
+        "grid": 0.6
+      },
+      "base": 0.707,
+      "agrees_with": [
+        "drum_fill",
+        "phrase_boundary"
+      ],
+      "score": 1.257
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3583.46,
+      "frame": 172318,
+      "measured": {
+        "t": 3583.651,
+        "frame": 172323
+      },
+      "resumes": {
+        "t": 3583.661,
+        "frame": 172323
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3951,
+      "in_bar": 1,
+      "rest_seconds": 0.01,
+      "held_ratio": 2.9,
+      "interval_semitones": 1.26,
+      "confidence": 0.685,
+      "factors": {
+        "rest": 0.018,
+        "held": 0.95,
+        "contour": 0.105,
+        "grid": 0.6
+      },
+      "base": 0.685,
+      "agrees_with": [
+        "drum_fill",
+        "energy_peak",
+        "phrase_boundary"
+      ],
+      "score": 1.235
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3588.98,
+      "frame": 172450,
+      "measured": {
+        "t": 3588.5,
+        "frame": 172439
+      },
+      "resumes": {
+        "t": 3589.023,
+        "frame": 172451
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3956,
+      "in_bar": 1,
+      "rest_seconds": 0.523,
+      "held_ratio": 6.99,
+      "interval_semitones": 3.02,
+      "confidence": 0.819,
+      "factors": {
+        "rest": 0.934,
+        "held": 1.0,
+        "contour": 0.251,
+        "grid": 0.6
+      },
+      "base": 0.819,
+      "agrees_with": [
+        "phrase_boundary"
+      ],
+      "score": 1.169
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3584.58,
+      "frame": 172345,
+      "measured": {
+        "t": 3584.31,
+        "frame": 172338
+      },
+      "resumes": {
+        "t": 3584.593,
+        "frame": 172345
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3952,
+      "in_bar": 1,
+      "rest_seconds": 0.283,
+      "held_ratio": 1.79,
+      "interval_semitones": -8.11,
+      "confidence": 0.612,
+      "factors": {
+        "rest": 0.505,
+        "held": 0.395,
+        "contour": 0.676,
+        "grid": 0.6
+      },
+      "base": 0.612,
+      "agrees_with": [
+        "energy_peak",
+        "phrase_boundary"
+      ],
+      "score": 1.162
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3597.92,
+      "frame": 172665,
+      "measured": {
+        "t": 3597.53,
+        "frame": 172655
+      },
+      "resumes": {
+        "t": 3597.963,
+        "frame": 172666
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3964,
+      "in_bar": 1,
+      "rest_seconds": 0.433,
+      "held_ratio": 1.27,
+      "interval_semitones": -1.57,
+      "confidence": 0.602,
+      "factors": {
+        "rest": 0.773,
+        "held": 0.135,
+        "contour": 0.131,
+        "grid": 0.6
+      },
+      "base": 0.602,
+      "agrees_with": [
+        "drum_fill",
+        "energy_peak"
+      ],
+      "score": 1.152
+    },
+    {
+      "kind": "solo_change",
+      "change": 102,
+      "t": 3571.58,
+      "frame": 172033,
+      "measured": {
+        "t": 3570.0,
+        "frame": 171995
+      },
+      "downbeat": true,
+      "signal": "lead",
+      "from": "vocals",
+      "to": "other",
+      "detail": 6.27,
+      "base": 0.8,
+      "agrees_with": [
+        "phrase_boundary"
+      ],
+      "score": 1.15
+    },
+    {
+      "kind": "solo_change",
+      "change": 103,
+      "t": 3604.54,
+      "frame": 172823,
+      "measured": {
+        "t": 3604.0,
+        "frame": 172811
+      },
+      "downbeat": true,
+      "signal": "timbre",
+      "from": "other",
+      "to": "other",
+      "detail": -7.14,
+      "base": 0.6,
+      "agrees_with": [
+        "drum_fill",
+        "phrase_boundary"
+      ],
+      "score": 1.15
+    },
+    {
+      "kind": "solo_change",
+      "change": 104,
+      "t": 3608.98,
+      "frame": 172930,
+      "measured": {
+        "t": 3609.0,
+        "frame": 172930
+      },
+      "downbeat": true,
+      "signal": "lead",
+      "from": "other",
+      "to": "bass",
+      "detail": 4.3,
+      "base": 0.8,
+      "agrees_with": [
+        "drum_fill"
+      ],
+      "score": 1.15
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3605.1,
+      "frame": 172837,
+      "measured": {
+        "t": 3604.7,
+        "frame": 172827
+      },
+      "resumes": {
+        "t": 3605.191,
+        "frame": 172839
+      },
+      "snapped": true,
+      "downbeat": false,
+      "bar": 3970,
+      "in_bar": 2,
+      "rest_seconds": 0.491,
+      "held_ratio": 1.29,
+      "interval_semitones": -19.31,
+      "confidence": 0.69,
+      "factors": {
+        "rest": 0.877,
+        "held": 0.145,
+        "contour": 1.0,
+        "grid": 0.15
+      },
+      "base": 0.69,
+      "agrees_with": [
+        "drum_fill",
+        "phrase_boundary",
+        "solo_change"
+      ],
+      "score": 1.09
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3594.56,
+      "frame": 172584,
+      "measured": {
+        "t": 3594.301,
+        "frame": 172578
+      },
+      "resumes": {
+        "t": 3594.311,
+        "frame": 172578
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3961,
+      "in_bar": 1,
+      "rest_seconds": 0.01,
+      "held_ratio": 2.7,
+      "interval_semitones": -1.81,
+      "confidence": 0.734,
+      "factors": {
+        "rest": 0.018,
+        "held": 0.85,
+        "contour": 0.151,
+        "grid": 1.0
+      },
+      "base": 0.734,
+      "agrees_with": [
+        "drum_fill"
+      ],
+      "score": 1.084
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3578.98,
+      "frame": 172211,
+      "measured": {
+        "t": 3579.221,
+        "frame": 172216
+      },
+      "resumes": {
+        "t": 3579.231,
+        "frame": 172217
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3947,
+      "in_bar": 1,
+      "rest_seconds": 0.01,
+      "held_ratio": 2.3,
+      "interval_semitones": -2.78,
+      "confidence": 0.532,
+      "factors": {
+        "rest": 0.018,
+        "held": 0.65,
+        "contour": 0.232,
+        "grid": 0.6
+      },
+      "base": 0.532,
+      "agrees_with": [
+        "drum_fill",
+        "phrase_boundary"
+      ],
+      "score": 1.082
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3599.04,
+      "frame": 172692,
+      "measured": {
+        "t": 3598.87,
+        "frame": 172688
+      },
+      "resumes": {
+        "t": 3599.071,
+        "frame": 172692
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3965,
+      "in_bar": 1,
+      "rest_seconds": 0.201,
+      "held_ratio": 1.09,
+      "interval_semitones": 4.69,
+      "confidence": 0.506,
+      "factors": {
+        "rest": 0.359,
+        "held": 0.045,
+        "contour": 0.391,
+        "grid": 1.0
+      },
+      "base": 0.506,
+      "agrees_with": [
+        "drum_fill",
+        "energy_peak"
+      ],
+      "score": 1.056
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3600.14,
+      "frame": 172718,
+      "measured": {
+        "t": 3599.931,
+        "frame": 172713
+      },
+      "resumes": {
+        "t": 3599.941,
+        "frame": 172713
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3966,
+      "in_bar": 1,
+      "rest_seconds": 0.01,
+      "held_ratio": 0.5,
+      "interval_semitones": 12.0,
+      "confidence": 0.702,
+      "factors": {
+        "rest": 0.018,
+        "held": 0.0,
+        "contour": 1.0,
+        "grid": 0.6
+      },
+      "base": 0.702,
+      "agrees_with": [
+        "phrase_boundary"
+      ],
+      "score": 1.052
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3606.72,
+      "frame": 172876,
+      "measured": {
+        "t": 3606.36,
+        "frame": 172867
+      },
+      "resumes": {
+        "t": 3772.263,
+        "frame": 176845
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3972,
+      "in_bar": 1,
+      "rest_seconds": 165.903,
+      "held_ratio": 8.39,
+      "interval_semitones": 17.99,
+      "confidence": 0.9,
+      "factors": {
+        "rest": 1.0,
+        "held": 1.0,
+        "contour": 1.0,
+        "grid": 0.6
+      },
+      "base": 0.9,
+      "agrees_with": [],
+      "score": 1.05
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3575.56,
+      "frame": 172129,
+      "measured": {
+        "t": 3575.41,
+        "frame": 172125
+      },
+      "resumes": {
+        "t": 3575.763,
+        "frame": 172133
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3943,
+      "in_bar": 1,
+      "rest_seconds": 0.353,
+      "held_ratio": 0.89,
+      "interval_semitones": 0.08,
+      "confidence": 0.497,
+      "factors": {
+        "rest": 0.63,
+        "held": 0.0,
+        "contour": 0.007,
+        "grid": 0.6
+      },
+      "base": 0.497,
+      "agrees_with": [
+        "energy_peak",
+        "phrase_boundary"
+      ],
+      "score": 1.047
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3578.4,
+      "frame": 172197,
+      "end": {
+        "t": 3581.24,
+        "frame": 172265
+      },
+      "resolves_into_bar": 3949,
+      "duration": 2.84,
+      "bar": 3946,
+      "beat": 8870,
+      "in_bar": 1,
+      "hits": 103,
+      "density_ratio": 1.056,
+      "confidence": 0.588,
+      "counts": {
+        "kick": 25,
+        "snare": 24,
+        "toms": 27
+      },
+      "factors": {
+        "density": 0.028,
+        "toms": 0.711,
+        "resolution": 1.0,
+        "phrase": 1.0
+      },
+      "base": 0.588,
+      "agrees_with": [
+        "phrase_boundary"
+      ],
+      "score": 0.988
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3590.1,
+      "frame": 172477,
+      "measured": {
+        "t": 3590.101,
+        "frame": 172477
+      },
+      "resumes": {
+        "t": 3590.111,
+        "frame": 172478
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3957,
+      "in_bar": 1,
+      "rest_seconds": 0.01,
+      "held_ratio": 5.7,
+      "interval_semitones": -0.98,
+      "confidence": 0.81,
+      "factors": {
+        "rest": 0.018,
+        "held": 1.0,
+        "contour": 0.082,
+        "grid": 1.0
+      },
+      "base": 0.81,
+      "agrees_with": [],
+      "score": 0.96
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3591.76,
+      "frame": 172517,
+      "end": {
+        "t": 3593.42,
+        "frame": 172557
+      },
+      "resolves_into_bar": 3960,
+      "duration": 1.66,
+      "bar": 3958,
+      "beat": 8894,
+      "in_bar": 2,
+      "hits": 61,
+      "density_ratio": 1.07,
+      "confidence": 0.525,
+      "counts": {
+        "kick": 15,
+        "snare": 12,
+        "toms": 20
+      },
+      "factors": {
+        "density": 0.035,
+        "toms": 0.851,
+        "resolution": 1.0,
+        "phrase": 0.6
+      },
+      "base": 0.525,
+      "agrees_with": [
+        "phrase_boundary"
+      ],
+      "score": 0.925
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3572.72,
+      "frame": 172061,
+      "measured": {
+        "t": 3572.591,
+        "frame": 172057
+      },
+      "resumes": {
+        "t": 3572.631,
+        "frame": 172058
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3940,
+      "in_bar": 1,
+      "rest_seconds": 0.04,
+      "held_ratio": 9.9,
+      "interval_semitones": -4.94,
+      "confidence": 0.748,
+      "factors": {
+        "rest": 0.071,
+        "held": 1.0,
+        "contour": 0.412,
+        "grid": 0.6
+      },
+      "base": 0.748,
+      "agrees_with": [],
+      "score": 0.898
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3576.72,
+      "frame": 172156,
+      "measured": {
+        "t": 3576.711,
+        "frame": 172156
+      },
+      "resumes": {
+        "t": 3576.721,
+        "frame": 172156
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3944,
+      "in_bar": 1,
+      "rest_seconds": 0.01,
+      "held_ratio": 2.4,
+      "interval_semitones": -1.13,
+      "confidence": 0.546,
+      "factors": {
+        "rest": 0.018,
+        "held": 0.7,
+        "contour": 0.094,
+        "grid": 0.6
+      },
+      "base": 0.546,
+      "agrees_with": [
+        "phrase_boundary"
+      ],
+      "score": 0.896
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3588.98,
+      "frame": 172450,
+      "measured": {
+        "t": 3589.251,
+        "frame": 172457
+      },
+      "resumes": {
+        "t": 3589.261,
+        "frame": 172457
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3956,
+      "in_bar": 1,
+      "rest_seconds": 0.01,
+      "held_ratio": 2.28,
+      "interval_semitones": 3.97,
+      "confidence": 0.537,
+      "factors": {
+        "rest": 0.018,
+        "held": 0.64,
+        "contour": 0.331,
+        "grid": 0.6
+      },
+      "base": 0.537,
+      "agrees_with": [
+        "phrase_boundary"
+      ],
+      "score": 0.887
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3598.48,
+      "frame": 172678,
+      "end": {
+        "t": 3600.14,
+        "frame": 172718
+      },
+      "resolves_into_bar": 3966,
+      "duration": 1.66,
+      "bar": 3964,
+      "beat": 8906,
+      "in_bar": 2,
+      "hits": 53,
+      "density_ratio": 0.93,
+      "confidence": 0.487,
+      "counts": {
+        "kick": 11,
+        "snare": 14,
+        "toms": 15
+      },
+      "factors": {
+        "density": 0.0,
+        "toms": 0.75,
+        "resolution": 1.0,
+        "phrase": 0.6
+      },
+      "base": 0.487,
+      "agrees_with": [
+        "energy_peak",
+        "phrase_boundary"
+      ],
+      "score": 0.887
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3596.8,
+      "frame": 172638,
+      "measured": {
+        "t": 3596.531,
+        "frame": 172631
+      },
+      "resumes": {
+        "t": 3596.541,
+        "frame": 172632
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3963,
+      "in_bar": 1,
+      "rest_seconds": 0.01,
+      "held_ratio": 1.6,
+      "interval_semitones": -11.85,
+      "confidence": 0.725,
+      "factors": {
+        "rest": 0.018,
+        "held": 0.3,
+        "contour": 0.987,
+        "grid": 0.6
+      },
+      "base": 0.725,
+      "agrees_with": [],
+      "score": 0.875
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3591.76,
+      "frame": 172517,
+      "measured": {
+        "t": 3591.631,
+        "frame": 172514
+      },
+      "resumes": {
+        "t": 3591.671,
+        "frame": 172515
+      },
+      "snapped": true,
+      "downbeat": false,
+      "bar": 3958,
+      "in_bar": 2,
+      "rest_seconds": 0.04,
+      "held_ratio": 1.98,
+      "interval_semitones": -8.23,
+      "confidence": 0.471,
+      "factors": {
+        "rest": 0.071,
+        "held": 0.49,
+        "contour": 0.686,
+        "grid": 0.15
+      },
+      "base": 0.471,
+      "agrees_with": [
+        "drum_fill",
+        "phrase_boundary"
+      ],
+      "score": 0.871
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3582.9,
+      "frame": 172305,
+      "end": {
+        "t": 3584.58,
+        "frame": 172345
+      },
+      "resolves_into_bar": 3952,
+      "duration": 1.68,
+      "bar": 3950,
+      "beat": 8878,
+      "in_bar": 2,
+      "hits": 61,
+      "density_ratio": 1.058,
+      "confidence": 0.467,
+      "counts": {
+        "kick": 16,
+        "snare": 19,
+        "toms": 16
+      },
+      "factors": {
+        "density": 0.029,
+        "toms": 0.627,
+        "resolution": 1.0,
+        "phrase": 0.6
+      },
+      "base": 0.467,
+      "agrees_with": [
+        "phrase_boundary"
+      ],
+      "score": 0.867
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3595.68,
+      "frame": 172611,
+      "measured": {
+        "t": 3595.411,
+        "frame": 172605
+      },
+      "resumes": {
+        "t": 3595.421,
+        "frame": 172605
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3962,
+      "in_bar": 1,
+      "rest_seconds": 0.01,
+      "held_ratio": 3.9,
+      "interval_semitones": 1.22,
+      "confidence": 0.712,
+      "factors": {
+        "rest": 0.018,
+        "held": 1.0,
+        "contour": 0.102,
+        "grid": 0.6
+      },
+      "base": 0.712,
+      "agrees_with": [],
+      "score": 0.862
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3593.42,
+      "frame": 172557,
+      "measured": {
+        "t": 3593.25,
+        "frame": 172553
+      },
+      "resumes": {
+        "t": 3593.613,
+        "frame": 172561
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3960,
+      "in_bar": 1,
+      "rest_seconds": 0.363,
+      "held_ratio": 1.09,
+      "interval_semitones": 0.02,
+      "confidence": 0.511,
+      "factors": {
+        "rest": 0.648,
+        "held": 0.045,
+        "contour": 0.002,
+        "grid": 0.6
+      },
+      "base": 0.511,
+      "agrees_with": [
+        "energy_peak"
+      ],
+      "score": 0.861
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3640.26,
+      "frame": 173680,
+      "end": {
+        "t": 3640.82,
+        "frame": 173693
+      },
+      "resolves_into_bar": 4013,
+      "duration": 0.56,
+      "bar": 4012,
+      "beat": 9043,
+      "in_bar": 1,
+      "hits": 18,
+      "density_ratio": 0.936,
+      "confidence": 0.633,
+      "counts": {
+        "kick": 4,
+        "snare": 4,
+        "toms": 7
+      },
+      "factors": {
+        "density": 0.0,
+        "toms": 0.933,
+        "resolution": 1.0,
+        "phrase": 1.0
+      },
+      "base": 0.633,
+      "agrees_with": [
+        "energy_peak"
+      ],
+      "score": 0.833
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3587.34,
+      "frame": 172411,
+      "measured": {
+        "t": 3587.581,
+        "frame": 172417
+      },
+      "resumes": {
+        "t": 3587.591,
+        "frame": 172417
+      },
+      "snapped": true,
+      "downbeat": false,
+      "bar": 3954,
+      "in_bar": 2,
+      "rest_seconds": 0.01,
+      "held_ratio": 1.78,
+      "interval_semitones": 12.08,
+      "confidence": 0.628,
+      "factors": {
+        "rest": 0.018,
+        "held": 0.39,
+        "contour": 1.0,
+        "grid": 0.15
+      },
+      "base": 0.628,
+      "agrees_with": [
+        "phrase_boundary"
+      ],
+      "score": 0.828
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3604.0,
+      "frame": 172811,
+      "measured": {
+        "t": 3603.871,
+        "frame": 172807
+      },
+      "resumes": {
+        "t": 3603.881,
+        "frame": 172808
+      },
+      "snapped": true,
+      "downbeat": false,
+      "bar": 3969,
+      "in_bar": 2,
+      "rest_seconds": 0.01,
+      "held_ratio": 1.4,
+      "interval_semitones": 7.98,
+      "confidence": 0.425,
+      "factors": {
+        "rest": 0.018,
+        "held": 0.2,
+        "contour": 0.665,
+        "grid": 0.15
+      },
+      "base": 0.425,
+      "agrees_with": [
+        "drum_fill",
+        "solo_change"
+      ],
+      "score": 0.825
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3605.36,
+      "frame": 172843,
+      "measured": {
+        "t": 3605.361,
+        "frame": 172843
+      },
+      "resumes": {
+        "t": 3605.371,
+        "frame": 172843
+      },
+      "snapped": true,
+      "downbeat": false,
+      "bar": 3970,
+      "in_bar": 3,
+      "rest_seconds": 0.01,
+      "held_ratio": 1.7,
+      "interval_semitones": 14.14,
+      "confidence": 0.624,
+      "factors": {
+        "rest": 0.018,
+        "held": 0.35,
+        "contour": 1.0,
+        "grid": 0.15
+      },
+      "base": 0.624,
+      "agrees_with": [
+        "phrase_boundary"
+      ],
+      "score": 0.824
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3571.08,
+      "frame": 172021,
+      "measured": {
+        "t": 3571.08,
+        "frame": 172021
+      },
+      "resumes": {
+        "t": 3571.253,
+        "frame": 172025
+      },
+      "snapped": false,
+      "downbeat": true,
+      "bar": 3937,
+      "in_bar": 1,
+      "rest_seconds": 0.173,
+      "held_ratio": 0.87,
+      "interval_semitones": 3.92,
+      "confidence": 0.461,
+      "factors": {
+        "rest": 0.309,
+        "held": 0.0,
+        "contour": 0.327,
+        "grid": 1.0
+      },
+      "base": 0.461,
+      "agrees_with": [
+        "solo_change"
+      ],
+      "score": 0.811
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3577.28,
+      "frame": 172170,
+      "measured": {
+        "t": 3577.551,
+        "frame": 172176
+      },
+      "resumes": {
+        "t": 3577.561,
+        "frame": 172177
+      },
+      "snapped": true,
+      "downbeat": false,
+      "bar": 3944,
+      "in_bar": 2,
+      "rest_seconds": 0.01,
+      "held_ratio": 3.8,
+      "interval_semitones": 2.13,
+      "confidence": 0.607,
+      "factors": {
+        "rest": 0.018,
+        "held": 1.0,
+        "contour": 0.178,
+        "grid": 0.15
+      },
+      "base": 0.607,
+      "agrees_with": [
+        "phrase_boundary"
+      ],
+      "score": 0.807
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3575.0,
+      "frame": 172115,
+      "measured": {
+        "t": 3574.721,
+        "frame": 172109
+      },
+      "resumes": {
+        "t": 3574.731,
+        "frame": 172109
+      },
+      "snapped": true,
+      "downbeat": false,
+      "bar": 3942,
+      "in_bar": 2,
+      "rest_seconds": 0.01,
+      "held_ratio": 3.8,
+      "interval_semitones": -2.07,
+      "confidence": 0.606,
+      "factors": {
+        "rest": 0.018,
+        "held": 1.0,
+        "contour": 0.172,
+        "grid": 0.15
+      },
+      "base": 0.606,
+      "agrees_with": [
+        "phrase_boundary"
+      ],
+      "score": 0.806
+    },
+    {
+      "kind": "energy_peak",
+      "t": 3576.0,
+      "frame": 172139,
+      "lufs": -11.88,
+      "rms_dbfs": -15.1,
+      "onsets_per_second": 9.333,
+      "prominence_db": 3.57,
+      "confidence": 0.595,
+      "base": 0.595,
+      "agrees_with": [
+        "phrase_boundary"
+      ],
+      "score": 0.795
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3622.74,
+      "frame": 173260,
+      "end": {
+        "t": 3625.46,
+        "frame": 173325
+      },
+      "resolves_into_bar": 3989,
+      "duration": 2.72,
+      "bar": 3986,
+      "beat": 8984,
+      "in_bar": 3,
+      "hits": 77,
+      "density_ratio": 0.825,
+      "confidence": 0.583,
+      "counts": {
+        "kick": 18,
+        "snare": 20,
+        "toms": 22
+      },
+      "factors": {
+        "density": 0.0,
+        "toms": 0.733,
+        "resolution": 1.0,
+        "phrase": 1.0
+      },
+      "base": 0.583,
+      "agrees_with": [
+        "energy_peak"
+      ],
+      "score": 0.783
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3648.64,
+      "frame": 173881,
+      "end": {
+        "t": 3648.8,
+        "frame": 173885
+      },
+      "resolves_into_bar": 4023,
+      "duration": 0.16,
+      "bar": 4022,
+      "beat": 9076,
+      "in_bar": 6,
+      "hits": 9,
+      "density_ratio": 1.638,
+      "confidence": 0.578,
+      "counts": {
+        "kick": 2,
+        "snare": 2,
+        "toms": 2
+      },
+      "factors": {
+        "density": 0.319,
+        "toms": 0.667,
+        "resolution": 1.0,
+        "phrase": 0.6
+      },
+      "base": 0.578,
+      "agrees_with": [
+        "drum_fill"
+      ],
+      "score": 0.778
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3602.32,
+      "frame": 172770,
+      "measured": {
+        "t": 3602.08,
+        "frame": 172764
+      },
+      "resumes": {
+        "t": 3602.373,
+        "frame": 172771
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3968,
+      "in_bar": 1,
+      "rest_seconds": 0.293,
+      "held_ratio": 1.79,
+      "interval_semitones": -8.3,
+      "confidence": 0.622,
+      "factors": {
+        "rest": 0.523,
+        "held": 0.395,
+        "contour": 0.691,
+        "grid": 0.6
+      },
+      "base": 0.622,
+      "agrees_with": [],
+      "score": 0.772
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3604.54,
+      "frame": 172823,
+      "end": {
+        "t": 3607.3,
+        "frame": 172890
+      },
+      "resolves_into_bar": 3972,
+      "duration": 2.76,
+      "bar": 3970,
+      "beat": 8923,
+      "in_bar": 1,
+      "hits": 91,
+      "density_ratio": 0.96,
+      "confidence": 0.37,
+      "counts": {
+        "kick": 26,
+        "snare": 21,
+        "toms": 27
+      },
+      "factors": {
+        "density": 0.0,
+        "toms": 0.73,
+        "resolution": 1.0,
+        "phrase": 0.15
+      },
+      "base": 0.37,
+      "agrees_with": [
+        "phrase_boundary",
+        "solo_change"
+      ],
+      "score": 0.77
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3582.9,
+      "frame": 172305,
+      "measured": {
+        "t": 3582.851,
+        "frame": 172303
+      },
+      "resumes": {
+        "t": 3582.861,
+        "frame": 172304
+      },
+      "snapped": true,
+      "downbeat": false,
+      "bar": 3950,
+      "in_bar": 2,
+      "rest_seconds": 0.01,
+      "held_ratio": 2.1,
+      "interval_semitones": -1.61,
+      "confidence": 0.355,
+      "factors": {
+        "rest": 0.018,
+        "held": 0.55,
+        "contour": 0.134,
+        "grid": 0.15
+      },
+      "base": 0.355,
+      "agrees_with": [
+        "drum_fill",
+        "phrase_boundary"
+      ],
+      "score": 0.755
+    },
+    {
+      "kind": "energy_peak",
+      "t": 3630.0,
+      "frame": 173434,
+      "lufs": -24.28,
+      "rms_dbfs": -26.7,
+      "onsets_per_second": 7.333,
+      "prominence_db": 3.3,
+      "confidence": 0.5499999999999999,
+      "base": 0.55,
+      "agrees_with": [
+        "drum_fill"
+      ],
+      "score": 0.75
+    },
+    {
+      "kind": "energy_peak",
+      "t": 3584.0,
+      "frame": 172331,
+      "lufs": -12.35,
+      "rms_dbfs": -15.4,
+      "onsets_per_second": 9.0,
+      "prominence_db": 2.02,
+      "confidence": 0.33666666666666667,
+      "base": 0.337,
+      "agrees_with": [
+        "phrase_boundary"
+      ],
+      "score": 0.737
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3586.8,
+      "frame": 172398,
+      "measured": {
+        "t": 3586.711,
+        "frame": 172396
+      },
+      "resumes": {
+        "t": 3586.751,
+        "frame": 172397
+      },
+      "snapped": true,
+      "downbeat": true,
+      "bar": 3954,
+      "in_bar": 1,
+      "rest_seconds": 0.04,
+      "held_ratio": 1.7,
+      "interval_semitones": -3.62,
+      "confidence": 0.38,
+      "factors": {
+        "rest": 0.071,
+        "held": 0.35,
+        "contour": 0.302,
+        "grid": 0.6
+      },
+      "base": 0.38,
+      "agrees_with": [
+        "phrase_boundary"
+      ],
+      "score": 0.73
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3585.14,
+      "frame": 172358,
+      "measured": {
+        "t": 3585.291,
+        "frame": 172362
+      },
+      "resumes": {
+        "t": 3585.301,
+        "frame": 172362
+      },
+      "snapped": true,
+      "downbeat": false,
+      "bar": 3952,
+      "in_bar": 2,
+      "rest_seconds": 0.01,
+      "held_ratio": 2.7,
+      "interval_semitones": 1.79,
+      "confidence": 0.522,
+      "factors": {
+        "rest": 0.018,
+        "held": 0.85,
+        "contour": 0.15,
+        "grid": 0.15
+      },
+      "base": 0.522,
+      "agrees_with": [
+        "phrase_boundary"
+      ],
+      "score": 0.722
+    },
+    {
+      "kind": "energy_peak",
+      "t": 3593.5,
+      "frame": 172559,
+      "lufs": -11.56,
+      "rms_dbfs": -14.65,
+      "onsets_per_second": 9.667,
+      "prominence_db": 3.1,
+      "confidence": 0.5166666666666667,
+      "base": 0.517,
+      "agrees_with": [
+        "phrase_boundary"
+      ],
+      "score": 0.717
+    },
+    {
+      "kind": "energy_peak",
+      "t": 3640.5,
+      "frame": 173686,
+      "lufs": -23.3,
+      "rms_dbfs": -25.63,
+      "onsets_per_second": 6.333,
+      "prominence_db": 2.84,
+      "confidence": 0.47333333333333333,
+      "base": 0.473,
+      "agrees_with": [
+        "drum_fill"
+      ],
+      "score": 0.673
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3594.56,
+      "frame": 172584,
+      "end": {
+        "t": 3596.8,
+        "frame": 172638
+      },
+      "resolves_into_bar": 3963,
+      "duration": 2.24,
+      "bar": 3961,
+      "beat": 8899,
+      "in_bar": 1,
+      "hits": 73,
+      "density_ratio": 0.949,
+      "confidence": 0.469,
+      "counts": {
+        "kick": 21,
+        "snare": 18,
+        "toms": 20
+      },
+      "factors": {
+        "density": 0.0,
+        "toms": 0.678,
+        "resolution": 1.0,
+        "phrase": 0.6
+      },
+      "base": 0.469,
+      "agrees_with": [
+        "phrase_boundary"
+      ],
+      "score": 0.669
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3649.06,
+      "frame": 173891,
+      "end": {
+        "t": 3649.9,
+        "frame": 173911
+      },
+      "resolves_into_bar": 4026,
+      "duration": 0.84,
+      "bar": 4025,
+      "beat": 9079,
+      "in_bar": 1,
+      "hits": 33,
+      "density_ratio": 1.144,
+      "confidence": 0.45,
+      "counts": {
+        "kick": 9,
+        "snare": 9,
+        "toms": 6
+      },
+      "factors": {
+        "density": 0.072,
+        "toms": 0.5,
+        "resolution": 1.0,
+        "phrase": 0.6
+      },
+      "base": 0.45,
+      "agrees_with": [
+        "drum_fill"
+      ],
+      "score": 0.65
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3630.1,
+      "frame": 173436,
+      "end": {
+        "t": 3630.38,
+        "frame": 173443
+      },
+      "resolves_into_bar": 3993,
+      "duration": 0.28,
+      "bar": 3993,
+      "beat": 9006,
+      "in_bar": 2,
+      "hits": 9,
+      "density_ratio": 0.936,
+      "confidence": 0.438,
+      "counts": {
+        "kick": 1,
+        "snare": 3,
+        "toms": 4
+      },
+      "factors": {
+        "density": 0.0,
+        "toms": 1.0,
+        "resolution": 1.0,
+        "phrase": 0.15
+      },
+      "base": 0.438,
+      "agrees_with": [
+        "energy_peak"
+      ],
+      "score": 0.638
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3581.8,
+      "frame": 172278,
+      "measured": {
+        "t": 3581.531,
+        "frame": 172272
+      },
+      "resumes": {
+        "t": 3581.541,
+        "frame": 172272
+      },
+      "snapped": true,
+      "downbeat": false,
+      "bar": 3949,
+      "in_bar": 2,
+      "rest_seconds": 0.01,
+      "held_ratio": 1.3,
+      "interval_semitones": -19.52,
+      "confidence": 0.604,
+      "factors": {
+        "rest": 0.018,
+        "held": 0.15,
+        "contour": 1.0,
+        "grid": 0.15
+      },
+      "base": 0.604,
+      "agrees_with": [],
+      "score": 0.604
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3601.5,
+      "frame": 172751,
+      "measured": {
+        "t": 3601.431,
+        "frame": 172749
+      },
+      "resumes": {
+        "t": 3601.441,
+        "frame": 172749
+      },
+      "snapped": true,
+      "downbeat": false,
+      "bar": 3967,
+      "in_bar": 2,
+      "rest_seconds": 0.01,
+      "held_ratio": 3.0,
+      "interval_semitones": 1.39,
+      "confidence": 0.601,
+      "factors": {
+        "rest": 0.018,
+        "held": 1.0,
+        "contour": 0.116,
+        "grid": 0.15
+      },
+      "base": 0.601,
+      "agrees_with": [],
+      "score": 0.601
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3603.44,
+      "frame": 172797,
+      "end": {
+        "t": 3604.0,
+        "frame": 172811
+      },
+      "resolves_into_bar": 3969,
+      "duration": 0.56,
+      "bar": 3969,
+      "beat": 8920,
+      "in_bar": 1,
+      "hits": 20,
+      "density_ratio": 1.04,
+      "confidence": 0.382,
+      "counts": {
+        "kick": 6,
+        "snare": 4,
+        "toms": 6
+      },
+      "factors": {
+        "density": 0.02,
+        "toms": 0.75,
+        "resolution": 1.0,
+        "phrase": 0.15
+      },
+      "base": 0.382,
+      "agrees_with": [
+        "phrase_boundary"
+      ],
+      "score": 0.582
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3639.46,
+      "frame": 173661,
+      "end": {
+        "t": 3639.72,
+        "frame": 173667
+      },
+      "resolves_into_bar": 4011,
+      "duration": 0.26,
+      "bar": 4010,
+      "beat": 9040,
+      "in_bar": 2,
+      "hits": 10,
+      "density_ratio": 1.12,
+      "confidence": 0.571,
+      "counts": {
+        "kick": 2,
+        "snare": 1,
+        "toms": 3
+      },
+      "factors": {
+        "density": 0.06,
+        "toms": 1.0,
+        "resolution": 1.0,
+        "phrase": 0.6
+      },
+      "base": 0.571,
+      "agrees_with": [],
+      "score": 0.571
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3620.82,
+      "frame": 173214,
+      "end": {
+        "t": 3621.08,
+        "frame": 173220
+      },
+      "resolves_into_bar": 3985,
+      "duration": 0.26,
+      "bar": 3984,
+      "beat": 8977,
+      "in_bar": 4,
+      "hits": 8,
+      "density_ratio": 0.896,
+      "confidence": 0.567,
+      "counts": {
+        "kick": 2,
+        "snare": 2,
+        "toms": 2
+      },
+      "factors": {
+        "density": 0.0,
+        "toms": 0.667,
+        "resolution": 1.0,
+        "phrase": 1.0
+      },
+      "base": 0.567,
+      "agrees_with": [],
+      "score": 0.567
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3632.58,
+      "frame": 173496,
+      "end": {
+        "t": 3633.12,
+        "frame": 173509
+      },
+      "resolves_into_bar": 3998,
+      "duration": 0.54,
+      "bar": 3997,
+      "beat": 9015,
+      "in_bar": 1,
+      "hits": 20,
+      "density_ratio": 1.079,
+      "confidence": 0.564,
+      "counts": {
+        "kick": 4,
+        "snare": 3,
+        "toms": 10
+      },
+      "factors": {
+        "density": 0.039,
+        "toms": 1.0,
+        "resolution": 1.0,
+        "phrase": 0.6
+      },
+      "base": 0.564,
+      "agrees_with": [],
+      "score": 0.564
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3600.72,
+      "frame": 172732,
+      "measured": {
+        "t": 3600.831,
+        "frame": 172735
+      },
+      "resumes": {
+        "t": 3600.841,
+        "frame": 172735
+      },
+      "snapped": true,
+      "downbeat": false,
+      "bar": 3966,
+      "in_bar": 2,
+      "rest_seconds": 0.01,
+      "held_ratio": 2.1,
+      "interval_semitones": -1.66,
+      "confidence": 0.356,
+      "factors": {
+        "rest": 0.018,
+        "held": 0.55,
+        "contour": 0.138,
+        "grid": 0.15
+      },
+      "base": 0.356,
+      "agrees_with": [
+        "phrase_boundary"
+      ],
+      "score": 0.556
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3609.54,
+      "frame": 172943,
+      "end": {
+        "t": 3609.82,
+        "frame": 172950
+      },
+      "resolves_into_bar": 3974,
+      "duration": 0.28,
+      "bar": 3974,
+      "beat": 8938,
+      "in_bar": 3,
+      "hits": 9,
+      "density_ratio": 0.936,
+      "confidence": 0.354,
+      "counts": {
+        "kick": 2,
+        "snare": 2,
+        "toms": 2
+      },
+      "factors": {
+        "density": 0.0,
+        "toms": 0.667,
+        "resolution": 1.0,
+        "phrase": 0.15
+      },
+      "base": 0.354,
+      "agrees_with": [
+        "solo_change"
+      ],
+      "score": 0.554
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3634.5,
+      "frame": 173542,
+      "end": {
+        "t": 3634.78,
+        "frame": 173548
+      },
+      "resolves_into_bar": 4001,
+      "duration": 0.28,
+      "bar": 4000,
+      "beat": 9022,
+      "in_bar": 2,
+      "hits": 12,
+      "density_ratio": 1.248,
+      "confidence": 0.543,
+      "counts": {
+        "kick": 6,
+        "snare": 2,
+        "toms": 2
+      },
+      "factors": {
+        "density": 0.124,
+        "toms": 0.4,
+        "resolution": 1.0,
+        "phrase": 1.0
+      },
+      "base": 0.543,
+      "agrees_with": [],
+      "score": 0.543
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3610.92,
+      "frame": 172976,
+      "end": {
+        "t": 3612.3,
+        "frame": 173010
+      },
+      "resolves_into_bar": 3977,
+      "duration": 1.38,
+      "bar": 3975,
+      "beat": 8943,
+      "in_bar": 4,
+      "hits": 35,
+      "density_ratio": 0.739,
+      "confidence": 0.54,
+      "counts": {
+        "kick": 10,
+        "snare": 8,
+        "toms": 7
+      },
+      "factors": {
+        "density": 0.0,
+        "toms": 0.56,
+        "resolution": 1.0,
+        "phrase": 1.0
+      },
+      "base": 0.54,
+      "agrees_with": [],
+      "score": 0.54
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3643.0,
+      "frame": 173746,
+      "end": {
+        "t": 3643.28,
+        "frame": 173752
+      },
+      "resolves_into_bar": 4017,
+      "duration": 0.28,
+      "bar": 4016,
+      "beat": 9053,
+      "in_bar": 1,
+      "hits": 9,
+      "density_ratio": 0.936,
+      "confidence": 0.525,
+      "counts": {
+        "kick": 3,
+        "snare": 3,
+        "toms": 2
+      },
+      "factors": {
+        "density": 0.0,
+        "toms": 0.5,
+        "resolution": 1.0,
+        "phrase": 1.0
+      },
+      "base": 0.525,
+      "agrees_with": [],
+      "score": 0.525
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3648.02,
+      "frame": 173866,
+      "end": {
+        "t": 3648.24,
+        "frame": 173871
+      },
+      "resolves_into_bar": 4022,
+      "duration": 0.22,
+      "bar": 4022,
+      "beat": 9073,
+      "in_bar": 3,
+      "hits": 12,
+      "density_ratio": 1.589,
+      "confidence": 0.513,
+      "counts": {
+        "kick": 3,
+        "snare": 2,
+        "toms": 4
+      },
+      "factors": {
+        "density": 0.294,
+        "toms": 0.889,
+        "resolution": 1.0,
+        "phrase": 0.15
+      },
+      "base": 0.513,
+      "agrees_with": [],
+      "score": 0.513
+    },
+    {
+      "kind": "energy_peak",
+      "t": 3622.5,
+      "frame": 173254,
+      "lufs": -25.72,
+      "rms_dbfs": -28.26,
+      "onsets_per_second": 8.0,
+      "prominence_db": 1.86,
+      "confidence": 0.31,
+      "base": 0.31,
+      "agrees_with": [
+        "drum_fill"
+      ],
+      "score": 0.51
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3635.34,
+      "frame": 173562,
+      "end": {
+        "t": 3635.88,
+        "frame": 173575
+      },
+      "resolves_into_bar": 4003,
+      "duration": 0.54,
+      "bar": 4002,
+      "beat": 9025,
+      "in_bar": 1,
+      "hits": 27,
+      "density_ratio": 1.456,
+      "confidence": 0.505,
+      "counts": {
+        "kick": 9,
+        "snare": 6,
+        "toms": 5
+      },
+      "factors": {
+        "density": 0.228,
+        "toms": 0.5,
+        "resolution": 1.0,
+        "phrase": 0.6
+      },
+      "base": 0.505,
+      "agrees_with": [],
+      "score": 0.505
+    },
+    {
+      "kind": "phrase_boundary",
+      "t": 3573.86,
+      "frame": 172088,
+      "measured": {
+        "t": 3574.031,
+        "frame": 172092
+      },
+      "resumes": {
+        "t": 3574.041,
+        "frame": 172092
+      },
+      "snapped": true,
+      "downbeat": false,
+      "bar": 3941,
+      "in_bar": 2,
+      "rest_seconds": 0.01,
+      "held_ratio": 2.58,
+      "interval_semitones": 3.17,
+      "confidence": 0.5,
+      "factors": {
+        "rest": 0.018,
+        "held": 0.79,
+        "contour": 0.264,
+        "grid": 0.15
+      },
+      "base": 0.5,
+      "agrees_with": [],
+      "score": 0.5
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3657.9,
+      "frame": 174103,
+      "end": {
+        "t": 3658.26,
+        "frame": 174111
+      },
+      "resolves_into_bar": 4042,
+      "duration": 0.36,
+      "bar": 4042,
+      "beat": 9112,
+      "in_bar": 1,
+      "hits": 18,
+      "density_ratio": 1.456,
+      "confidence": 0.498,
+      "counts": {
+        "kick": 5,
+        "snare": 2,
+        "toms": 6
+      },
+      "factors": {
+        "density": 0.228,
+        "toms": 0.923,
+        "resolution": 1.0,
+        "phrase": 0.15
+      },
+      "base": 0.498,
+      "agrees_with": [],
+      "score": 0.498
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3619.16,
+      "frame": 173174,
+      "end": {
+        "t": 3620.0,
+        "frame": 173194
+      },
+      "resolves_into_bar": 3984,
+      "duration": 0.84,
+      "bar": 3983,
+      "beat": 8971,
+      "in_bar": 2,
+      "hits": 19,
+      "density_ratio": 0.659,
+      "confidence": 0.492,
+      "counts": {
+        "kick": 5,
+        "snare": 3,
+        "toms": 5
+      },
+      "factors": {
+        "density": 0.0,
+        "toms": 0.769,
+        "resolution": 1.0,
+        "phrase": 0.6
+      },
+      "base": 0.492,
+      "agrees_with": [],
+      "score": 0.492
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3653.5,
+      "frame": 173997,
+      "end": {
+        "t": 3654.34,
+        "frame": 174017
+      },
+      "resolves_into_bar": 4036,
+      "duration": 0.84,
+      "bar": 4033,
+      "beat": 9095,
+      "in_bar": 2,
+      "hits": 34,
+      "density_ratio": 1.179,
+      "confidence": 0.491,
+      "counts": {
+        "kick": 9,
+        "snare": 8,
+        "toms": 8
+      },
+      "factors": {
+        "density": 0.09,
+        "toms": 0.64,
+        "resolution": 1.0,
+        "phrase": 0.6
+      },
+      "base": 0.491,
+      "agrees_with": [],
+      "score": 0.491
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3647.4,
+      "frame": 173851,
+      "end": {
+        "t": 3647.72,
+        "frame": 173859
+      },
+      "resolves_into_bar": 4022,
+      "duration": 0.32,
+      "bar": 4021,
+      "beat": 9070,
+      "in_bar": 5,
+      "hits": 12,
+      "density_ratio": 1.092,
+      "confidence": 0.483,
+      "counts": {
+        "kick": 2,
+        "snare": 4,
+        "toms": 3
+      },
+      "factors": {
+        "density": 0.046,
+        "toms": 0.667,
+        "resolution": 1.0,
+        "phrase": 0.6
+      },
+      "base": 0.483,
+      "agrees_with": [],
+      "score": 0.483
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3644.38,
+      "frame": 173779,
+      "end": {
+        "t": 3645.5,
+        "frame": 173806
+      },
+      "resolves_into_bar": 4020,
+      "duration": 1.12,
+      "bar": 4018,
+      "beat": 9058,
+      "in_bar": 1,
+      "hits": 45,
+      "density_ratio": 1.17,
+      "confidence": 0.481,
+      "counts": {
+        "kick": 13,
+        "snare": 10,
+        "toms": 10
+      },
+      "factors": {
+        "density": 0.085,
+        "toms": 0.606,
+        "resolution": 1.0,
+        "phrase": 0.6
+      },
+      "base": 0.481,
+      "agrees_with": [],
+      "score": 0.481
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3628.18,
+      "frame": 173390,
+      "end": {
+        "t": 3628.74,
+        "frame": 173404
+      },
+      "resolves_into_bar": 3992,
+      "duration": 0.56,
+      "bar": 3991,
+      "beat": 9000,
+      "in_bar": 3,
+      "hits": 17,
+      "density_ratio": 0.884,
+      "confidence": 0.454,
+      "counts": {
+        "kick": 2,
+        "snare": 7,
+        "toms": 4
+      },
+      "factors": {
+        "density": 0.0,
+        "toms": 0.615,
+        "resolution": 1.0,
+        "phrase": 0.6
+      },
+      "base": 0.454,
+      "agrees_with": [],
+      "score": 0.454
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3618.04,
+      "frame": 173147,
+      "end": {
+        "t": 3618.6,
+        "frame": 173161
+      },
+      "resolves_into_bar": 3982,
+      "duration": 0.56,
+      "bar": 3982,
+      "beat": 8967,
+      "in_bar": 2,
+      "hits": 19,
+      "density_ratio": 0.988,
+      "confidence": 0.438,
+      "counts": {
+        "kick": 3,
+        "snare": 4,
+        "toms": 7
+      },
+      "factors": {
+        "density": 0.0,
+        "toms": 1.0,
+        "resolution": 1.0,
+        "phrase": 0.15
+      },
+      "base": 0.438,
+      "agrees_with": [],
+      "score": 0.438
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3641.64,
+      "frame": 173713,
+      "end": {
+        "t": 3642.18,
+        "frame": 173726
+      },
+      "resolves_into_bar": 4015,
+      "duration": 0.54,
+      "bar": 4014,
+      "beat": 9048,
+      "in_bar": 2,
+      "hits": 18,
+      "density_ratio": 0.971,
+      "confidence": 0.438,
+      "counts": {
+        "kick": 2,
+        "snare": 4,
+        "toms": 8
+      },
+      "factors": {
+        "density": 0.0,
+        "toms": 1.0,
+        "resolution": 1.0,
+        "phrase": 0.15
+      },
+      "base": 0.438,
+      "agrees_with": [],
+      "score": 0.438
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3615.88,
+      "frame": 173095,
+      "end": {
+        "t": 3616.16,
+        "frame": 173102
+      },
+      "resolves_into_bar": 3980,
+      "duration": 0.28,
+      "bar": 3980,
+      "beat": 8959,
+      "in_bar": 2,
+      "hits": 10,
+      "density_ratio": 1.04,
+      "confidence": 0.382,
+      "counts": {
+        "kick": 2,
+        "snare": 3,
+        "toms": 3
+      },
+      "factors": {
+        "density": 0.02,
+        "toms": 0.75,
+        "resolution": 1.0,
+        "phrase": 0.15
+      },
+      "base": 0.382,
+      "agrees_with": [],
+      "score": 0.382
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3612.86,
+      "frame": 173023,
+      "end": {
+        "t": 3613.12,
+        "frame": 173029
+      },
+      "resolves_into_bar": 3977,
+      "duration": 0.26,
+      "bar": 3977,
+      "beat": 8948,
+      "in_bar": 3,
+      "hits": 10,
+      "density_ratio": 1.12,
+      "confidence": 0.375,
+      "counts": {
+        "kick": 2,
+        "snare": 2,
+        "toms": 2
+      },
+      "factors": {
+        "density": 0.06,
+        "toms": 0.667,
+        "resolution": 1.0,
+        "phrase": 0.15
+      },
+      "base": 0.375,
+      "agrees_with": [],
+      "score": 0.375
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3651.02,
+      "frame": 173938,
+      "end": {
+        "t": 3651.86,
+        "frame": 173958
+      },
+      "resolves_into_bar": 4029,
+      "duration": 0.84,
+      "bar": 4028,
+      "beat": 9086,
+      "in_bar": 1,
+      "hits": 34,
+      "density_ratio": 1.179,
+      "confidence": 0.373,
+      "counts": {
+        "kick": 10,
+        "snare": 8,
+        "toms": 8
+      },
+      "factors": {
+        "density": 0.09,
+        "toms": 0.615,
+        "resolution": 1.0,
+        "phrase": 0.15
+      },
+      "base": 0.373,
+      "agrees_with": [],
+      "score": 0.373
+    },
+    {
+      "kind": "energy_peak",
+      "t": 3616.5,
+      "frame": 173110,
+      "lufs": -25.02,
+      "rms_dbfs": -28.17,
+      "onsets_per_second": 7.333,
+      "prominence_db": 2.2,
+      "confidence": 0.3666666666666667,
+      "base": 0.367,
+      "agrees_with": [],
+      "score": 0.367
+    },
+    {
+      "kind": "drum_fill",
+      "t": 3636.98,
+      "frame": 173601,
+      "end": {
+        "t": 3637.82,
+        "frame": 173621
+      },
+      "resolves_into_bar": 4006,
+      "duration": 0.84,
+      "bar": 4005,
+      "beat": 9031,
+      "in_bar": 1,
+      "hits": 29,
+      "density_ratio": 1.006,
+      "confidence": 0.362,
+      "counts": {
+        "kick": 7,
+        "snare": 8,
+        "toms": 8
+      },
+      "factors": {
+        "density": 0.003,
+        "toms": 0.696,
+        "resolution": 1.0,
+        "phrase": 0.15
+      },
+      "base": 0.362,
+      "agrees_with": [],
+      "score": 0.362
+    }
+  ],
+  "ranking_rule": "score = base + 0.20 per other event within 0.6 s (max 0.4) + 0.15 when the detector snapped it to a downbeat. base is the detector's confidence for fills and phrases, prominence_db / 6 (capped at 1) for an energy peak, and {'solo_change:lead': 0.8, 'solo_change:timbre': 0.6} for a solo change, which carries none. `shortlist` is `ranked` with everything within 4.0 s of a better event suppressed, because a cluster is one moment rather than several cuts."
+}

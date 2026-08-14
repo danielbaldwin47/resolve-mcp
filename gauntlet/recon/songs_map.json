@@ -1,0 +1,111 @@
+{
+  "_about": {
+    "purpose": "Song spans of the Zinc Set 2 master mix, matched to the five human final cuts.",
+    "mix": "P:\\Client Work\\Ryan Devlin\\2026-06-17_Zinc Bar\\Audio\\Reaper\\Zinc Set 2 Reaper v4.wav",
+    "mix_duration_s": 4450.5,
+    "timeline": "Zinc SYNC",
+    "timeline_fps": 23.976023976023978,
+    "timeline_start_frame": 86400,
+    "mix_zero_frame": 86401,
+    "frame_convention": "start_frame/end_frame are Zinc SYNC record frames (mix_zero_frame + round(t * fps)); mix_start_frame/mix_end_frame count from the mix's own frame 0.",
+    "method": "Each deliverable was decoded to 2 kHz mono and located in the mix by normalised FFT cross-correlation (gauntlet/recon/align_cuts.py), with a 45 s probe at the head and a second 45 s probe near the tail. Head and tail agreed to under a millisecond on every cut, so each deliverable is a contiguous range of the mix with no internal trim. Spans are therefore measured, not inferred from duration matching.",
+    "why_not_tune_boundaries": "analyze_structure(tunes=true) on this mix returned ONE tune and zero applause: peak applause probability across the whole 74 minutes is 0.2977, just under the 0.3 default threshold. A sweep (gauntlet/recon/tunes_sweep.json, density gating off) shows this is not mere under-confidence - at threshold 0.2 still 1 tune, at 0.12 two, and even at 0.06 (five times below default) only 4 tunes from 6 applause calls, finding 106.4 / 1308.3 / 3514.9 s and missing both the Hardest Part-Soultrane and the Soultrane-Sambra boundaries. The Reaper mix is a board/DI mix with effectively no room mic, so the applause route the concert pillar's song-start proposal depends on measures almost nothing here. Song starts on this project have to come from elsewhere; the beat grid's silence gaps and the energy curve were the independent cross-check used below.",
+    "cross_check": "Long gaps in the beat grid (gauntlet/recon/beat_trust.json) mark where the music stops between tunes: 23.1-110.4, 1270.0-1370.3, 2635.6-2722.7, 3501.4-3571.6, 4047.3-4085.0. Every cut boundary lands inside the matching gap. The energy curve agrees: a played tune sits near -15 LUFS, the gaps near -36 LUFS.",
+    "sources": [
+      "gauntlet/recon/align_cuts.json",
+      "gauntlet/recon/analysis_prep.json",
+      "gauntlet/recon/beat_trust.json",
+      "gauntlet/recon/mix_anchor.json",
+      "gauntlet/recon/tunes_sweep.json"
+    ],
+    "beat_grid_health": "11130 beats, median gap 0.28 s (214 bpm reported, meter 1 - the model never settled on a bar length, so bar/in_bar on this grid means nothing). Only 71.7% of beats sit within 10% of their local median spacing, and 27 gaps exceed 2 s. Treat the grid as usable for onset-scale placement inside a groove and NOT as a bar map; gate cut placement on local steadiness (per-minute steady_share is in beat_trust.json)."
+  },
+  "Maitland Boulevard": {
+    "start_s": 107.4405,
+    "end_s": 1280.6245,
+    "start_frame": 88977,
+    "end_frame": 117105,
+    "mix_start_frame": 2576,
+    "mix_end_frame": 30704,
+    "confidence": "high",
+    "notes": "Set opener, song 1 of 5. Deliverable duration 1173.184 s matches the measured span exactly. Cross-correlation 0.89/0.91 head/tail (lowest of the five - this cut is the most heavily processed on delivery), head/tail drift 0.0 ms. First beat of the tune is at 110.38 s, so the cut opens ~2.9 s ahead of the downbeat; the last beat is at 1269.96 s, so ~10.7 s of applause is kept at the tail. Applause-trimmed music span: 110.4-1270.0 s."
+  },
+  "Hardest Part": {
+    "start_s": 1373.8725,
+    "end_s": 1908.0378,
+    "start_frame": 119341,
+    "end_frame": 132148,
+    "mix_start_frame": 32940,
+    "mix_end_frame": 45747,
+    "confidence": "high",
+    "notes": "Song 2 of 5. Deliverable duration 534.165 s. Cross-correlation 0.9999 head and tail, drift -0.3 ms. 93.2 s of stage time (applause plus talk) precedes it after Maitland Boulevard. It runs almost straight into Soultrane - only 12.1 s separates its end from Soultrane's start - so the two cuts nearly abut."
+  },
+  "Soultrane": {
+    "start_s": 1920.1265,
+    "end_s": 2681.4065,
+    "start_frame": 132438,
+    "end_frame": 150690,
+    "mix_start_frame": 46037,
+    "mix_end_frame": 64289,
+    "confidence": "high",
+    "notes": "Song 3 of 5. Deliverable duration 761.28 s. Cross-correlation 0.987/0.992, drift 0.0 ms. The beat grid is unreliable across 1900-1966 s (several 7-19 s gaps) - a rubato or out-of-tempo opening - so beat-derived boundaries alone would have been ambiguous here; the audio match is not."
+  },
+  "Sambra": {
+    "start_s": 2725.014,
+    "end_s": 3509.3127,
+    "start_frame": 151736,
+    "end_frame": 170540,
+    "mix_start_frame": 65335,
+    "mix_end_frame": 84139,
+    "confidence": "high",
+    "notes": "Song 4 of 5. Deliverable duration 784.299 s. Cross-correlation 0.994/0.996, drift 0.3 ms. First beat 2722.74 s (the cut opens 2.3 s after the music starts, i.e. it is trimmed slightly INTO the tune), last beat 3501.4 s, so ~7.9 s of applause is kept. 43.6 s of stage time precedes it."
+  },
+  "Taurus People": {
+    "start_s": 3568.4815,
+    "end_s": 4066.1455,
+    "start_frame": 171959,
+    "end_frame": 183891,
+    "mix_start_frame": 85558,
+    "mix_end_frame": 97490,
+    "confidence": "high",
+    "notes": "Song 5 of 5 among the deliverables, and the last delivered tune. Deliverable duration 497.664 s. Cross-correlation 0.952/0.962, drift 0.0 ms. First beat 3571.58 s, last beat 4047.34 s, so ~3.1 s of lead-in and ~18.8 s of applause tail - the longest applause hold of the five. 59.2 s of stage time precedes it."
+  },
+  "_unmapped_mix_regions": [
+    {
+      "start_s": 0.0,
+      "end_s": 107.4405,
+      "seconds": 107.4,
+      "notes": "Pre-set: room, tuning, intro talk before Maitland Boulevard. No deliverable covers it."
+    },
+    {
+      "start_s": 1280.6245,
+      "end_s": 1373.8725,
+      "seconds": 93.2,
+      "notes": "Between Maitland Boulevard and Hardest Part."
+    },
+    {
+      "start_s": 1908.0378,
+      "end_s": 1920.1265,
+      "seconds": 12.1,
+      "notes": "Between Hardest Part and Soultrane - the two cuts nearly abut."
+    },
+    {
+      "start_s": 2681.4065,
+      "end_s": 2725.014,
+      "seconds": 43.6,
+      "notes": "Between Soultrane and Sambra."
+    },
+    {
+      "start_s": 3509.3127,
+      "end_s": 3568.4815,
+      "seconds": 59.2,
+      "notes": "Between Sambra and Taurus People."
+    },
+    {
+      "start_s": 4066.1455,
+      "end_s": 4450.5,
+      "seconds": 384.4,
+      "notes": "Tail of the mix, NOT covered by any deliverable, and NOT a sixth tune. The beat grid does report beats from 4084.98 s to 4432.2 s, but the energy curve reads -35 LUFS median there with a -22.5 LUFS peak, against -15 LUFS through a played tune - so the detector is tracking room noise and talk, not music. Treat the set as five performed tunes and this as outro room tone; the last 18 s (from 4432 s) is digital silence."
+    }
+  ]
+}

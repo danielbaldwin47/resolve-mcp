@@ -100,6 +100,11 @@ extend-exclude = [".claude"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
+[tool.ruff.lint.per-file-ignores]
+# One-off gauntlet recon scripts: documentary artifacts of the gauntlet loop;
+# long literal paths and printf lines stay as run.
+"gauntlet/recon/*" = ["E501"]
+
 [tool.mypy]
 python_version = "3.12"
 files = ["src", "tests"]

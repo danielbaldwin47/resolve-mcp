@@ -1,0 +1,11 @@
+{
+  "clip": "Zinc Set 2 Reaper v4.wav",
+  "state": "running",
+  "errors": [],
+  "interpreter": "passed",
+  "job_id": "separate_stems-670f1ceb22a4",
+  "cached": false,
+  "step": "separating four stems (32%)",
+  "progress": 0.362,
+  "elapsed_s": 7354.8
+}

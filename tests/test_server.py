@@ -47,6 +47,7 @@ def test_registers_the_p1_session_media_timeline_cut_titling_render_and_job_tool
         "swap_take",
         "grab_frames",
         "detect_scene_cuts",
+        "analyze_occlusion",
         "transcribe_audio",
         "analyze_music",
         "analyze_structure",

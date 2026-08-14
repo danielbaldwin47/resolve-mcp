@@ -1,0 +1,71 @@
+{
+  "kind": "gauntlet_build_receipt",
+  "round": 3,
+  "piece": "Taurus People opening",
+  "timeline": "Taurus People Opening R3 v3",
+  "render": "C:\\Users\\Daniel\\repos\\resolve-mcp\\.claude\\worktrees\\gauntlet-loop-1\\gauntlet\\renders\\taurus_opening_r3.mp4",
+  "render_probe": {
+    "duration_s": 90.026667,
+    "video": "h264 1920x1080 24000/1001",
+    "audio": "aac 48000 Hz stereo",
+    "size_bytes": 414038014
+  },
+  "span": {
+    "mix_seconds": [3568.4815, 3658.4885],
+    "sync_frames": [171959, 174117],
+    "fps": 23.976,
+    "timeline_start": 86400,
+    "mix_zero_frame": 86401
+  },
+  "items": 16,
+  "cuts": {
+    "total_boundaries": 15,
+    "card_reveal": 1,
+    "angle_cuts": 14
+  },
+  "shots": [
+    {"id": "s01", "angle": "FX6", "start_s": 2.336, "dur_s": 8.3, "motivation": "the card clears one frame before the first note (2.371 s) and the widest picture of the room lands on the entrance; the shot then waits out the operator's 5.25-7.92 reframe instead of being cut into it"},
+    {"id": "s02", "angle": "A7IV", "start_s": 10.636, "dur_s": 9.84, "motivation": "downbeat phrase boundary 10.50 (conf 0.53, the 9.92 boundary+fill pair resolving into it) - and the last clean exit before the FX6's confirmed audience-head blocking at 11.97; the kit angle carries the whole vetoed window"},
+    {"id": "s03", "angle": "FX6", "start_s": 20.479, "dur_s": 4.46, "motivation": "phrase boundary 20.50, conf 0.82 on a downbeat - the strongest of the head's first build, and the first clean frame after the FX6 blocking clears at 18.94"},
+    {"id": "s04", "angle": "A7IV", "start_s": 24.942, "dur_s": 6.67, "motivation": "energy peak 25.02, +3.1 dB; the FX6 reframes 26.92-30.42 behind the cut, so the locked angle carries the move"},
+    {"id": "s05", "angle": "FX6", "start_s": 31.615, "dur_s": 2.21, "motivation": "downbeat phrase boundary 31.66 (conf 0.70), after the reframe lands at 30.42 and after the window's biggest energy peak (30.02, +5.46 dB) - ACCELERATION 1"},
+    {"id": "s06", "angle": "A7IV", "start_s": 33.825, "dur_s": 2.25, "motivation": "downbeat phrase boundary 33.84 (conf 0.62) - ACCELERATION 2"},
+    {"id": "s07", "angle": "FX6", "start_s": 36.078, "dur_s": 8.26, "motivation": "THE CHANGE: solo change on a downbeat (timbre, -7.14 dB) with a drum fill on the same frame; then the RELEASE - one shot rides the sax off, the bass taking the lead at 40.50 and the camera settling onto the bassist, which is also what keeps A7IV's confirmed blocking at 41.96-42.92 off screen"},
+    {"id": "s08", "angle": "A7IV", "start_s": 44.336, "dur_s": 9.93, "motivation": "drum fill 44.38, on the frame the FX6 reframe settles (41.08-44.25); held 9.9 s because the picture develops - the drummer switches to brushes and the sax walks in and parks his horn in frame"},
+    {"id": "s09", "angle": "FX6", "start_s": 54.263, "dur_s": 7.26, "motivation": "drum fill 54.26 (0.583, the strongest of the passage's first half) with the +1.86 dB secondary swell 0.24 s ahead of it"},
+    {"id": "s10", "angle": "A7IV", "start_s": 61.52, "dur_s": 5.3, "motivation": "the biggest secondary swell of the quiet passage (+3.3 dB) with its drum fill at 61.62 - the swell is brushwork, so go and look at it. TIGHTENING starts here"},
+    {"id": "s11", "angle": "FX6", "start_s": 66.817, "dur_s": 4.96, "motivation": "drum fill 66.86, second of the 66.02/66.86 pair"},
+    {"id": "s12", "angle": "A7IV", "start_s": 71.78, "dur_s": 4.05, "motivation": "drum fill 71.78 (score 0.833, the only back-half event to survive cluster suppression) with the +2.84 dB swell 0.24 s behind it"},
+    {"id": "s13", "angle": "FX6", "start_s": 75.826, "dur_s": 3.84, "motivation": "drum fill 75.90 - the shortening run continues; the bass answers"},
+    {"id": "s14", "angle": "A7IV", "start_s": 79.663, "dur_s": 2.88, "motivation": "the drum cluster 79.54 / 80.16 / 80.58, the strongest drum event of the last fifteen seconds, taken on the drums - the tightest shot of the piece sits on the thing that is happening"},
+    {"id": "s15", "angle": "FX6", "start_s": 82.541, "dur_s": 7.47, "motivation": "drum fill 82.54, the cluster's resolution - RELEASE onto the soloist after the shortening run"}
+  ],
+  "self_review": {
+    "report": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\analysis\\Taurus-People-Opening-R3-v3-4eb34e74ea83.correlate.json",
+    "gated": 15,
+    "stranded": 0,
+    "openings": 1,
+    "outside_grid": 0,
+    "transient_offsets": {"measured": 15, "median_abs_ms": 29, "mean_abs_ms": 28, "max_abs_ms": 44, "early": 7, "late": 8, "on": 0},
+    "shot_seconds": {"mean": 5.625, "median": 5.13, "min": 2.211, "max": 9.927},
+    "shares": {"black": 0.026, "ensemble-wide (FX6)": 0.519, "drums-tight (A7IV)": 0.455},
+    "revisions": [
+      "v1 -> v2: five cuts read +11 / -6 / -5 / +16 / -54 ms in the self-review; one-frame nudges (two frames on the last) moved them.",
+      "v2 -> v3: root cause instead of nudges - correlate computes its own onsets from the mix, while the plan was snapping against taurus_window.json's list. mix_onsets_r3.py dumps correlate's own list (proved row by row against the v2 report) and the plan now snaps against it. Every angle cut landed in 17-44 ms first try."
+    ]
+  },
+  "pixel_check": {
+    "method": "ffmpeg scene detect at 0.10 on the finished render (scene_probe.py)",
+    "detected_cuts": 15,
+    "expected": 15,
+    "times_match_plan": true
+  },
+  "titles": {
+    "file": "projects/mcp-tests-zinc/taurus-people.titles.json",
+    "anchor": "blue marker 'taurus-people' at frame 86400 (r3_markers.py)",
+    "card": "full-frame title over black, 0-56 frames (2.336 s), 1-frame fade in, hard cut off",
+    "personnel": "super at 495-642 frames (20.646-26.777 s), 7-frame ramps - the deliverable's own measured span, unchanged from round 2"
+  },
+  "occlusion": "see occlusion_verdict_r3.json - 2 windows CONFIRMED and avoided, 4 OVERRIDDEN as false positives with frame evidence",
+  "state": "Zinc SYNC left current; 'Zinc - Set 2 Main' never opened or modified"
+}

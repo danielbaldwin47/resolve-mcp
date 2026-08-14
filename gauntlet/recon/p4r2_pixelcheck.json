@@ -1,0 +1,892 @@
+{
+ "render": "C:\\Users\\Daniel\\repos\\resolve-mcp\\.claude\\worktrees\\gauntlet-loop-1\\gauntlet\\renders\\taurus_full_p4r2.mp4",
+ "ffprobe": {
+  "programs": [],
+  "stream_groups": [],
+  "streams": [
+   {
+    "index": 0,
+    "codec_name": "h264",
+    "codec_type": "video",
+    "width": 1920,
+    "height": 1080,
+    "r_frame_rate": "24000/1001",
+    "nb_frames": "11932"
+   },
+   {
+    "index": 1,
+    "codec_name": "aac",
+    "codec_type": "audio",
+    "sample_rate": "48000",
+    "channels": 2,
+    "r_frame_rate": "0/0",
+    "nb_frames": "23328"
+   },
+   {
+    "index": 2,
+    "codec_type": "data",
+    "r_frame_rate": "0/0",
+    "nb_frames": "1"
+   }
+  ],
+  "format": {
+   "duration": "497.664000",
+   "size": "2258896492"
+  }
+ },
+ "scene_cuts_010": [
+  2.336,
+  10.636,
+  20.479,
+  24.942,
+  31.615,
+  33.825,
+  36.078,
+  44.336,
+  54.263,
+  61.52,
+  66.817,
+  71.78,
+  78.912,
+  96.054,
+  108.984,
+  111.486,
+  121.747,
+  142.476,
+  156.823,
+  164.456,
+  168.71,
+  179.513,
+  181.932,
+  185.602,
+  188.689,
+  204.246,
+  213.505,
+  223.64,
+  227.602,
+  237.946,
+  241.241,
+  247.414,
+  251.042,
+  261.094,
+  266.433,
+  268.935,
+  278.862,
+  287.454,
+  291.917,
+  302.01,
+  306.973,
+  315.982,
+  320.487,
+  322.447,
+  324.199,
+  327.953,
+  335.126,
+  337.128,
+  340.674,
+  344.469,
+  347.639,
+  350.141,
+  354.479,
+  356.106,
+  359.943,
+  361.528,
+  369.369,
+  373.039,
+  377.711,
+  380.964,
+  387.721,
+  391.099,
+  397.897,
+  399.941,
+  403.612,
+  407.449,
+  414.372,
+  418.627,
+  427.594,
+  431.598,
+  433.224,
+  437.646,
+  441.524,
+  444.903,
+  450.659,
+  456.915,
+  459.668,
+  461.086,
+  463.421,
+  469.511,
+  474.474,
+  480.522,
+  483.775
+ ],
+ "blackdetect": [
+  [
+   "0",
+   "2.335667"
+  ],
+  [
+   "496.787958",
+   "497.622125"
+  ]
+ ],
+ "authored_item_starts": [
+  0.0,
+  2.336,
+  10.636,
+  20.479,
+  24.942,
+  31.615,
+  33.825,
+  36.078,
+  44.336,
+  54.263,
+  61.52,
+  66.817,
+  71.78,
+  78.912,
+  96.054,
+  108.984,
+  111.486,
+  121.747,
+  142.476,
+  156.823,
+  164.456,
+  168.71,
+  179.513,
+  181.932,
+  185.602,
+  188.688,
+  204.246,
+  213.505,
+  223.64,
+  227.602,
+  237.946,
+  241.241,
+  247.414,
+  251.042,
+  261.094,
+  266.433,
+  268.935,
+  278.862,
+  287.454,
+  291.917,
+  302.01,
+  306.973,
+  315.982,
+  320.487,
+  322.447,
+  324.199,
+  327.953,
+  335.126,
+  337.128,
+  340.674,
+  344.469,
+  347.639,
+  350.141,
+  354.479,
+  356.106,
+  359.943,
+  361.528,
+  369.369,
+  373.039,
+  377.711,
+  380.964,
+  387.721,
+  391.099,
+  397.897,
+  399.941,
+  403.612,
+  407.449,
+  414.372,
+  418.627,
+  427.594,
+  431.598,
+  433.224,
+  437.646,
+  441.524,
+  444.903,
+  450.659,
+  456.915,
+  459.668,
+  461.086,
+  463.421,
+  469.511,
+  474.474,
+  480.522,
+  483.775
+ ],
+ "items": 84,
+ "authored_hard_cuts": 83,
+ "boundary_pairs": [
+  {
+   "authored": 2.336,
+   "detected": 2.336,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 10.636,
+   "detected": 10.636,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 20.479,
+   "detected": 20.479,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 24.942,
+   "detected": 24.942,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 31.615,
+   "detected": 31.615,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 33.825,
+   "detected": 33.825,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 36.078,
+   "detected": 36.078,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 44.336,
+   "detected": 44.336,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 54.263,
+   "detected": 54.263,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 61.52,
+   "detected": 61.52,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 66.817,
+   "detected": 66.817,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 71.78,
+   "detected": 71.78,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 78.912,
+   "detected": 78.912,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 96.054,
+   "detected": 96.054,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 108.984,
+   "detected": 108.984,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 111.486,
+   "detected": 111.486,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 121.747,
+   "detected": 121.747,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 142.476,
+   "detected": 142.476,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 156.823,
+   "detected": 156.823,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 164.456,
+   "detected": 164.456,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 168.71,
+   "detected": 168.71,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 179.513,
+   "detected": 179.513,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 181.932,
+   "detected": 181.932,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 185.602,
+   "detected": 185.602,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 188.688,
+   "detected": 188.689,
+   "delta_ms": 1.0
+  },
+  {
+   "authored": 204.246,
+   "detected": 204.246,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 213.505,
+   "detected": 213.505,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 223.64,
+   "detected": 223.64,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 227.602,
+   "detected": 227.602,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 237.946,
+   "detected": 237.946,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 241.241,
+   "detected": 241.241,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 247.414,
+   "detected": 247.414,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 251.042,
+   "detected": 251.042,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 261.094,
+   "detected": 261.094,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 266.433,
+   "detected": 266.433,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 268.935,
+   "detected": 268.935,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 278.862,
+   "detected": 278.862,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 287.454,
+   "detected": 287.454,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 291.917,
+   "detected": 291.917,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 302.01,
+   "detected": 302.01,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 306.973,
+   "detected": 306.973,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 315.982,
+   "detected": 315.982,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 320.487,
+   "detected": 320.487,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 322.447,
+   "detected": 322.447,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 324.199,
+   "detected": 324.199,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 327.953,
+   "detected": 327.953,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 335.126,
+   "detected": 335.126,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 337.128,
+   "detected": 337.128,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 340.674,
+   "detected": 340.674,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 344.469,
+   "detected": 344.469,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 347.639,
+   "detected": 347.639,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 350.141,
+   "detected": 350.141,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 354.479,
+   "detected": 354.479,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 356.106,
+   "detected": 356.106,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 359.943,
+   "detected": 359.943,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 361.528,
+   "detected": 361.528,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 369.369,
+   "detected": 369.369,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 373.039,
+   "detected": 373.039,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 377.711,
+   "detected": 377.711,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 380.964,
+   "detected": 380.964,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 387.721,
+   "detected": 387.721,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 391.099,
+   "detected": 391.099,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 397.897,
+   "detected": 397.897,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 399.941,
+   "detected": 399.941,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 403.612,
+   "detected": 403.612,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 407.449,
+   "detected": 407.449,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 414.372,
+   "detected": 414.372,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 418.627,
+   "detected": 418.627,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 427.594,
+   "detected": 427.594,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 431.598,
+   "detected": 431.598,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 433.224,
+   "detected": 433.224,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 437.646,
+   "detected": 437.646,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 441.524,
+   "detected": 441.524,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 444.903,
+   "detected": 444.903,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 450.659,
+   "detected": 450.659,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 456.915,
+   "detected": 456.915,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 459.668,
+   "detected": 459.668,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 461.086,
+   "detected": 461.086,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 463.421,
+   "detected": 463.421,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 469.511,
+   "detected": 469.511,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 474.474,
+   "detected": 474.474,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 480.522,
+   "detected": 480.522,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 483.775,
+   "detected": 483.775,
+   "delta_ms": 0.0
+  }
+ ],
+ "worst_boundary_delta_ms": 1.0,
+ "missed": [],
+ "every_cut_detected": true,
+ "extra_scene_cuts": [],
+ "no_extra_scene_cuts": true,
+ "final_stretch": {
+  "last_authored_cut_s": 483.775,
+  "detected_cuts_after_it": [],
+  "seconds_of_one_picture_to_end": 13.889,
+  "lead_before_near_gap_s": 6.605,
+  "lead_before_cadence_s": 7.285,
+  "one_picture_carries_the_ending": true
+ },
+ "tail": {
+  "passes": {
+   "luma_ramps_not_steps": true,
+   "ramp_spans_the_dissolve": true,
+   "ramp_is_monotone": true,
+   "lands_on_black": true,
+   "audio_falls_progressively": true,
+   "audio_ends_near_silence": true
+  },
+  "all_passed": true,
+  "dissolve_starts_s": 491.574,
+  "picture_ends_s": 497.497,
+  "audio_fade_starts_s": 492.45,
+  "steady_luma": 57.676,
+  "ramp_samples": 47,
+  "intermediate_samples": 42,
+  "intermediate_span_s": 5.125,
+  "luma_at_last_picture_frame": 0.005,
+  "luma_ramp_yavg": [
+   [
+    491.62,
+    54.9
+   ],
+   [
+    491.75,
+    54.0
+   ],
+   [
+    491.88,
+    53.3
+   ],
+   [
+    492.0,
+    52.5
+   ],
+   [
+    492.12,
+    51.7
+   ],
+   [
+    492.25,
+    51.0
+   ],
+   [
+    492.38,
+    50.5
+   ],
+   [
+    492.5,
+    49.6
+   ],
+   [
+    492.62,
+    48.7
+   ],
+   [
+    492.75,
+    47.8
+   ],
+   [
+    492.88,
+    47.1
+   ],
+   [
+    493.0,
+    46.1
+   ],
+   [
+    493.12,
+    45.2
+   ],
+   [
+    493.25,
+    44.3
+   ],
+   [
+    493.38,
+    43.6
+   ],
+   [
+    493.5,
+    42.8
+   ],
+   [
+    493.62,
+    41.9
+   ],
+   [
+    493.75,
+    40.9
+   ],
+   [
+    493.88,
+    40.0
+   ],
+   [
+    494.0,
+    39.0
+   ],
+   [
+    494.12,
+    38.0
+   ],
+   [
+    494.25,
+    37.2
+   ],
+   [
+    494.38,
+    36.3
+   ],
+   [
+    494.5,
+    35.4
+   ],
+   [
+    494.62,
+    34.5
+   ],
+   [
+    494.75,
+    33.5
+   ],
+   [
+    494.88,
+    32.7
+   ],
+   [
+    495.0,
+    31.9
+   ],
+   [
+    495.12,
+    31.2
+   ],
+   [
+    495.25,
+    30.4
+   ],
+   [
+    495.38,
+    29.7
+   ],
+   [
+    495.5,
+    29.0
+   ],
+   [
+    495.62,
+    28.2
+   ],
+   [
+    495.75,
+    27.3
+   ],
+   [
+    495.88,
+    26.5
+   ],
+   [
+    496.0,
+    25.6
+   ],
+   [
+    496.12,
+    24.8
+   ],
+   [
+    496.25,
+    23.9
+   ],
+   [
+    496.38,
+    23.1
+   ],
+   [
+    496.5,
+    22.3
+   ],
+   [
+    496.62,
+    21.4
+   ],
+   [
+    496.75,
+    20.6
+   ],
+   [
+    496.88,
+    19.7
+   ],
+   [
+    497.0,
+    19.0
+   ],
+   [
+    497.12,
+    18.0
+   ],
+   [
+    497.25,
+    17.3
+   ],
+   [
+    497.38,
+    16.2
+   ],
+   [
+    497.5,
+    16.0
+   ]
+  ],
+  "rms_ladder_db": [
+   [
+    492,
+    -35.93
+   ],
+   [
+    493,
+    -36.76
+   ],
+   [
+    494,
+    -37.66
+   ],
+   [
+    495,
+    -42.8
+   ],
+   [
+    496,
+    -51.74
+   ],
+   [
+    497,
+    -53.46
+   ]
+  ],
+  "rms_last_sample_db": -56.21,
+  "body_rms_mean_db": -19.8,
+  "tail_rms_mean_db": -53.41
+ }
+}

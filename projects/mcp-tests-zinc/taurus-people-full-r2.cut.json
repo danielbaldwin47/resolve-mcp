@@ -1,0 +1,622 @@
+{
+ "schema": 1,
+ "timeline": {
+  "name": "Taurus People Full P4 R2",
+  "fps": 23.976
+ },
+ "sources": {
+  "fx6_wide": {
+   "clip": "A015C001_2606170J.MXF",
+   "bin": "Zinc Bar/Footage/FX6/Set 2",
+   "sync_offset": 117576
+  },
+  "a7iv_kit": {
+   "clip": "20260617_D_A7IV_0006.MP4",
+   "bin": "Zinc Bar/Footage/A7IV/Set 2",
+   "sync_offset": 86306
+  },
+  "master_mix": {
+   "clip": "Zinc Set 2 Reaper v4.wav",
+   "bin": "Zinc Bar/Audio",
+   "sync_offset": 86401
+  }
+ },
+ "audio": {
+  "source": "master_mix",
+  "in": 85558,
+  "out": 97490
+ },
+ "tail": {
+  "type": "dissolve_to_black",
+  "duration_frames": 142,
+  "audio_fade_frames": 125
+ },
+ "segments": [
+  {
+   "id": "o001",
+   "gap": 56,
+   "note": "full-frame title card over black through the room's dead air, clearing one frame before the entrance - the measured convention for this tune (styles/concert.md sec 5b). Text+ supplied by the titles pass"
+  },
+  {
+   "id": "s001",
+   "source": "fx6_wide",
+   "in": 54439,
+   "out": 54638,
+   "note": "the card clears one frame before the first note (2.371 s) and the widest picture of the room lands on the entrance; the shot then waits out the operator's 5.25-7.92 reframe instead of being cut into it (sec 5b, sec 4)"
+  },
+  {
+   "id": "s002",
+   "source": "a7iv_kit",
+   "in": 85908,
+   "out": 86144,
+   "note": "downbeat phrase boundary 10.50 (the 9.92 boundary+fill pair resolves into it) - and the last clean exit before the FX6's audience-head blocking at 11.97; the kit angle takes the whole vetoed window"
+  },
+  {
+   "id": "s003",
+   "source": "fx6_wide",
+   "in": 54874,
+   "out": 54981,
+   "note": "the strongest phrase boundary of the head's first build (conf 0.82, downbeat) and the first frame after the FX6 blocking clears at 18.94 - the wide returns on a boundary, not on the veto's edge"
+  },
+  {
+   "id": "s004",
+   "source": "a7iv_kit",
+   "in": 86251,
+   "out": 86411,
+   "note": "energy peak +3.1 dB on the head's second build; the FX6 is about to reframe (26.92-30.42) so the locked angle carries the move and the wide comes back on a picture that changed while it was away (sec 4, sec 5b)"
+  },
+  {
+   "id": "s005",
+   "source": "fx6_wide",
+   "in": 55141,
+   "out": 55194,
+   "note": "downbeat phrase boundary 31.66, first clean frame after the FX6 reframe lands at 30.42 and after the window's biggest energy peak (30.02, +5.46 dB) - ACCELERATION 1 into the section change (sec 3)"
+  },
+  {
+   "id": "s006",
+   "source": "a7iv_kit",
+   "in": 86464,
+   "out": 86518,
+   "note": "downbeat phrase boundary 33.84 - ACCELERATION 2; the pair both judges praised in round 2, kept frame-for-frame"
+  },
+  {
+   "id": "s007",
+   "source": "fx6_wide",
+   "in": 55248,
+   "out": 55446,
+   "note": "THE CHANGE: solo change on a downbeat (timbre, -7.14 dB) with a drum fill on the same frame - the sax head ends and the room drops 13 dB"
+  },
+  {
+   "id": "s008",
+   "source": "a7iv_kit",
+   "in": 86716,
+   "out": 86954,
+   "note": "drum fill 44.38, on the frame the FX6's reframe settles (41.08-44.25). The shot before it is the RELEASE and it is the moving camera doing the editing (sec 4): one 8.3 s shot rides the sax off, the bass taking the lead at 40.50 and the camera settling onto the bassist - no cut needed, and it is what keeps A7IV's confirmed blocking at 41.96-42.92 off the screen"
+  },
+  {
+   "id": "s009",
+   "source": "fx6_wide",
+   "in": 55684,
+   "out": 55858,
+   "note": "drum fill (0.583, the strongest of the passage's first half) with the +1.86 dB secondary swell 0.24 s ahead of it. The A7IV shot it ends held 9.9 s because the picture developed - the drummer switches to brushes and the sax walks in and parks his horn in frame (sec 3's ceiling test)"
+  },
+  {
+   "id": "s010",
+   "source": "a7iv_kit",
+   "in": 87128,
+   "out": 87255,
+   "note": "the biggest secondary swell of the whole quiet passage (+3.3 dB) with its drum fill at 61.62 - the swell is made of brushwork, so go and look at it. TIGHTENING starts here: 5.34 / 4.92 / 4.12 / 3.64 / 3.00 (sec 3)"
+  },
+  {
+   "id": "s011",
+   "source": "fx6_wide",
+   "in": 55985,
+   "out": 56104,
+   "note": "drum fill 66.86, second of the 66.02/66.86 pair - back to the two players carrying the passage"
+  },
+  {
+   "id": "s012",
+   "source": "a7iv_kit",
+   "in": 87374,
+   "out": 87545,
+   "note": "[R2 7.13 s on a7iv_kit; was 4.05 s in R1] the only back-half event to survive cluster suppression (fill, score 0.833) with the +2.84 dB swell 0.24 s behind it"
+  },
+  {
+   "id": "s013",
+   "source": "fx6_wide",
+   "in": 56275,
+   "out": 56686,
+   "note": "R2 gearbox: floor: the release lands on the fill rather than on a clock"
+  },
+  {
+   "id": "s014",
+   "source": "a7iv_kit",
+   "in": 87956,
+   "out": 88266,
+   "note": "12.82 s, LONG. THE BREATH. Fill 96.20 (0.589) in; fills 97.86, 101.14, 102.24, 103.34, 105.80, 106.62 and 108.28 all pass on the near-field kit without pulling a cut - sec 5: the detector finds a subset of the motivations, not a cue list, and a 10-15 hit fill in the quietest sustained music of the song is not an event. Out ON the breath's biggest swell (109.02, +3.99 dB - sec 5: read prominence against the passage, not the song). RECON: full_motion.json measures moving_share 0.000 on BOTH angles across d88-170 - the operated camera never moves once in 82 seconds, so there is no reframe to ride and no third picture to be had; the arc here is carried by rate and hold length alone."
+  },
+  {
+   "id": "s015",
+   "source": "fx6_wide",
+   "in": 56996,
+   "out": 57056,
+   "note": "2.62 s, THE BREATH'S ONE BURST and the shortest shot in the first half. Cut ON the breath's loudest instant, to the soloist - the FX6 here is a piano-and-bass two-shot (full_sheets/sheet_A_FX6.jpg), no drummer and no sax, which is the soloist picture for a bass solo (sec 4). Fill 109.96 inside. Sec 3: a 2-4 s shot on a picture the run has not just been on (12.82 s away) is corpus practice, and it is what stops four holds in a row from reading as one bin."
+  },
+  {
+   "id": "s016",
+   "source": "a7iv_kit",
+   "in": 88326,
+   "out": 88572,
+   "note": "10.20 s, LONG. Fill 111.64 in; peak 117.02 and THE BREATH'S BIGGEST FILL (119.36, 1.66 s, 68 hits) play inside. Sec 3's ceiling test asks what develops past ~10 s: the drummer does - this shot spans the whole -24.70 -> -21.93 leg and the fill that tops it."
+  },
+  {
+   "id": "s017",
+   "source": "fx6_wide",
+   "in": 57302,
+   "out": 57799,
+   "note": "20.68 s, THE LONGEST HOLD IN THE SONG AND THE POINT OF THE PASSAGE. Fill 121.84 in. Peak 124.52, fills 128.46 and 129.28, peak 129.52, fills 132.86, 135.90, 137.54, 138.38 and 140.60 ALL pass with no cut. This is the song breathing: sec 3 says a sparse stretch may hold far past the medians and that the answer to thin material is fewer cuts, never the same rate carried over. RECEIPT: the human deliverable holds 20.14 s across almost exactly these seconds - his 121.37-141.52 shot (human_cuts_taurus.json), the second-longest in his whole cut. Out ON peak 142.52 (+2.68)."
+  },
+  {
+   "id": "s018",
+   "source": "a7iv_kit",
+   "in": 89069,
+   "out": 89413,
+   "note": "[R2 14.35 s on a7iv_kit; was 6.88 s in R1] 6.86 s. Cut ON the swell. Peak 147.52 (+2.39) and fills 145.30, 148.56 and 149.38 inside. THE QUICKENING STARTS HERE: 20.68 -> 6.86 -> 4.14 -> 3.36, and the acceleration answers a real rise - the smoothed curve climbs +4.90 dB from d151.02 to d165.02 (arc_legs), which is sec 3's condition for tightening at all."
+  },
+  {
+   "id": "s019",
+   "source": "fx6_wide",
+   "in": 58143,
+   "out": 58326,
+   "note": "7.64 s. Fill 156.88 in. THE HOLD THAT DECLINES TO DESCEND: the run has gone 6.86 / 4.14 / 3.36 and instead of a fourth shorter step it steps back UP, which is the shape sec 3 asks for after a 3/3 panel called a smooth ladder 'an editor's metronome'. The piano and bass answer the new front; fill 162.78 (1.42 s, 62 hits) plays here on purpose rather than pulling a cut."
+  },
+  {
+   "id": "s020",
+   "source": "a7iv_kit",
+   "in": 89596,
+   "out": 89698,
+   "note": "4.19 s. CUT ON THE +6.59 dB PEAK at d164.52 - the biggest single prominence between the head and the return, and only 5.33 onsets/second, so it is a struck band accent and it is caught ON the frame rather than 4.8 s late. This is mid-P3R2's s01 entered EARLIER: in the 90 s piece it began cold at the window edge as a 2.04 s shot; in the song it arrives on the peak and the drums' closing statement (fills 165.34, 167.56 and 168.70) finishes inside it. Original note: 2.04 s, SHORT. The window opens on the outgoing front: the drums have held it since -13.16 and fill 0.88 plus fill 2.02 are the kit finishing its statement. The piece hands over ON the change rather than after it - solo change drums->bass at 2.02, on a downbeat, 24.3 ms early of the mix's own onset. sec 3: a 2-4 s shot on a picture the cut has not just been on is corpus-measured practice, and this is the first picture in the piece"
+  },
+  {
+   "id": "s021",
+   "source": "fx6_wide",
+   "in": 58428,
+   "out": 58687,
+   "note": "10.80 s, LONG. The bass has the front and this is the quietest passage in the whole song (-21.6 to -23.2 LUFS, the sparse bass/drums trading). FX6 framing W1 holds the pianist at the keys left, the bassist centre and the kit at the right edge, so the new front is already on screen when it arrives. sec 3: sparse passages hold longer, and the answer is fewer cuts rather than the same rate carried onto thinner material. RECEIPT: the director's own cut of this window holds 13.05 s here, on this same camera (r2_human_angles.json matches his 0.82-13.88 shot to FX6 at +0.942 against A7IV -0.122)"
+  },
+  {
+   "id": "s022",
+   "source": "a7iv_kit",
+   "in": 89957,
+   "out": 90015,
+   "note": "2.42 s, SHORT - and the first of a three-cut BURST at the front change. Cut 37.8 ms early on energy peak 12.84 (+5.31 dB, the biggest event of the first third), which carries the window's highest-confidence fill (12.86, conf 0.628) and an RMS accent 0.10 s away (12.95, +9.0 dB over its floor). The near-field kit arrives 1.94 s BEFORE the front changes bass->drums at 14.80, so the drums take the front on a picture already looking at them (sec 4: follow the audience's gaze at a structure change). The A7IV is a four-shot, not a kit close-up - drummer near field right, bassist beyond the kit, pianist deep left"
+  },
+  {
+   "id": "s023",
+   "source": "fx6_wide",
+   "in": 58745,
+   "out": 58833,
+   "note": "3.67 s, SHORT. Cut 18.8 ms early on the RMS accent at 15.15: the bass and piano answer the drummer's entrance, and the cut shows the trade as an exchange instead of sitting through it (sec 4: soloist doing something worth seeing, drummer lighting up at the same time - the exchange is the content). sec 3: this burst is what breaks the callable pattern - three cuts in 6 s inside a minute whose other shots run 10, 15 and 10 s"
+  },
+  {
+   "id": "s024",
+   "source": "a7iv_kit",
+   "in": 90103,
+   "out": 90177,
+   "note": "3.09 s, SHORT - the burst's third shot. Arrives 0.43 s AHEAD of fill 18.98 (31 hits) so the fill lands inside the shot rather than being jabbed at (sec 5: arrive around the start of the fill and ride it), and the 19.34-30.84 build leg (+2.99 dB) begins inside it too: the drummer starts to climb and this is the picture that shows it"
+  },
+  {
+   "id": "s025",
+   "source": "fx6_wide",
+   "in": 58907,
+   "out": 59280,
+   "note": "15.56 s, the LONGEST shot in the piece and the deliberate one. Cut 25.0 ms early on the accent at 22.05, where the trade resolves, and then the cutting stops: fills 23.98, 24.80 (1.72 s, 71 hits - the largest of the first half), 27.36, 28.20, 30.68, 33.74 and 37.32 all play inside this one shot, along with the top of the build at the 30.84 peak. The picture is W1, which holds all three players with the kit at the right edge, so nothing of the drum feature is given up. sec 3: the spread is bimodal - hold long through the sparse trading and cluster the short cuts at the transitions. RECEIPT: the director holds 17.02 s of this same picture across these same seconds (his 16.46-33.48 shot matches FX6 at +0.943 against A7IV -0.107), which is what buys a 15.6 s hold on a picture that is not itself moving"
+  },
+  {
+   "id": "s026",
+   "source": "a7iv_kit",
+   "in": 90550,
+   "out": 90772,
+   "note": "9.26 s, LONG. Cut 29.8 ms early on phrase boundary 37.62 (conf 0.764): the piano's phrase ENDS here and it then rests 12.352 s, the longest rest in the window. With the piano out the music is bass and drums, which is exactly what the A7IV four-shot holds - drummer in the near field, bassist beyond the kit. The 42.34-47.84 build climbs inside this shot with fills 39.52, 40.36, 42.88, 44.48, 45.34 and 46.16 in it, and the shot spends the FX6's 41.25-46.75 walk OFF SCREEN so the wide's new framing arrives as a picture instead of as a move the viewer sat through. Under the corpus's 21.5 s locked-camera ceiling, and the director's own cut holds this camera 10.30 s over 42.61-52.91"
+  },
+  {
+   "id": "s027",
+   "source": "fx6_wide",
+   "in": 59502,
+   "out": 59745,
+   "note": "10.14 s, LONG. Cut 29.5 ms early on energy peak 46.84 (+6.18 dB, the duo's climax) and the cut REVEALS a new picture: while the piece was on the kit the FX6 walked left off the piano onto W2, a bass-and-drums two-shot, which is what the music has been for nine seconds. sec 4: a scale change is a picture worth more than a framing return. The camera is settled at the arrival - the walk's fast phase ends at 45.4 and r2_settle.py measures 4 px per 0.5 s easing to 1 px by 48.8 at 384 px, under the 1 px/frame threshold the recon's own detector uses. Inside the hold the FX6 reframes back left (53.92-55.92) and the pianist returns to frame 1.3 s before he returns to the music at 57.19, so the picture develops under the hold (sec 3) and the ride is a picture change with no cut on it (sec 4: the moving camera is a second editor)"
+  },
+  {
+   "id": "s028",
+   "source": "a7iv_kit",
+   "in": 91015,
+   "out": 91110,
+   "note": "3.96 s, SHORT - the acceleration INTO the section change. Cut 38.4 ms early at 56.97, 0.28 s from the second-biggest RMS accent in the window (57.25, +13.9 dB) and on the phrase boundaries at 57.38/57.94, with fill 57.94 on them. The drum solo's last big statement, fill 59.02 (1.36 s, 62 hits), lands inside the shot. sec 3: shots shorten into the turn - 10.14 s, then 3.96 s - and what follows is the release"
+  },
+  {
+   "id": "s029",
+   "source": "fx6_wide",
+   "in": 59840,
+   "out": 60088,
+   "note": "10.34 s, LONG - the release, and the piece's centre. Cut 33.1 ms early on the accent at 61.05 (+9.1 dB) onto W2b (piano, bass, kit edge), which leaves the A7IV 1.96 s before the sax player crosses its near field (veto 62.90-66.60, occlusion_mid.json - the one true veto in this window) and settles 4.3 s before the FX6's 65.25-67.08 move. The camera then pans right and FINDS THE SAX PLAYER at his mic: the band's return is revealed by the camera's own move with no cut on it, and the front change drums->other at 66.24, the phrase boundary at 66.68 and the SONG'S STRUCTURAL PEAK at 66.84 (-6.9 LUFS, +12.91 dB prominence, the loudest 3 s anywhere in Taurus People) all land inside this one shot. sec 3: release into stillness after the section change"
+  },
+  {
+   "id": "s030",
+   "source": "a7iv_kit",
+   "in": 91358,
+   "out": 91437,
+   "note": "3.29 s, SHORT. Cut 36.5 ms early on the accent at 71.35 (+13.2 dB, the biggest in the back half), with fill 70.86 resolving into it. The window's biggest fill - 73.36, 2.90 s, 109 hits - plays inside the shot on the near-field kit (sec 5: arrive at the fill's start and ride it)"
+  },
+  {
+   "id": "s031",
+   "source": "fx6_wide",
+   "in": 60167,
+   "out": 60315,
+   "note": "6.17 s. Cut 26.5 ms early on the accent at 74.65 (+9.0 dB), back to the sax at his mic, and the shot RIDES the 75.92-77.25 and 78.42-78.92 reframes out to W4 - the widest framing in the window and the only picture in the piece that holds all four players at once. The ensemble ride-out arrives as the picture opens, with no cut on it, and fill 77.96 (2.24 s, 88 hits) plays inside. sec 4: the moving camera's reframings substitute for cuts"
+  },
+  {
+   "id": "s032",
+   "source": "a7iv_kit",
+   "in": 91585,
+   "out": 91672,
+   "note": "3.63 s, SHORT. Cut 29.7 ms early on phrase boundary 80.76 (conf 0.732) with fill 80.76 (1.68 s, 67 hits) on it, into the densest drumming anywhere in the window - onset density runs 9.06 to 9.33 per second across this plateau. Energy peak 83.34 (+2.75 dB) plays inside the shot"
+  },
+  {
+   "id": "s033",
+   "source": "fx6_wide",
+   "in": 60402,
+   "out": 60643,
+   "note": "10.27 s, LONG - mid-P3R2's s14, EXTENDED across the piece boundary. The four-player wide now also carries the plateau's opening peak (256.02, +4.17 dB at 10.0 onsets/second) and the 2.76 s / 96-hit fill at 256.12, and it RIDES the FX6's 258.08-260.42 reframe so the picture settles inside the hold with no cut in the move. Out on phrase 261.12 (conf 0.737, downbeat), 0.70 s after the camera lands. Original note: 5.63 s. Cut 39.0 ms early on phrase boundary 84.40 (conf 0.663), which returns the piece to the four-player wide EARLY on purpose: fill 85.26 and the accents at 85.05 (+10.0 dB) and 85.85 (+10.7 dB) land inside the shot rather than being jabbed at, and the window's last peak (89.34, +4.17 dB, 10.0 onsets/s) and closing fill 89.44 (2.76 s, 96 hits) play on the ensemble picture. The window closes on the phrase boundary at 90.00 the recon snapped the span to"
+  },
+  {
+   "id": "s034",
+   "source": "a7iv_kit",
+   "in": 91913,
+   "out": 92041,
+   "note": "5.32 s. Phrase 261.12 (conf 0.737, downbeat) in. THE 3.66 s / 115-HIT FILL AT 261.94 - the biggest drum event in the first third of the span - starts 0.82 s inside the shot and rides it whole (sec 5: arrive around the start of the fill, ride it). Peak 262.52 (+3.06) inside. The A7IV in span B is not a kit close-up: the sax player stands at frame left PLAYING with the drummer in the near field and the bassist behind (occl_full_frames/sheet_ba7_a.jpg), so this angle holds the soloist too (sec 4: an angle's role is what its framing holds, not its name)."
+  },
+  {
+   "id": "s035",
+   "source": "fx6_wide",
+   "in": 60771,
+   "out": 60831,
+   "note": "[R2 2.50 s on fx6_wide; was 12.43 s in R1] 12.48 s, LONG. Phrase 266.44 (0.657, downbeat) with fill 267.00 in. The FX6 is settled from 260.42 and holds the whole quartet in one frame. Peak 276.02 (+3.32, the leg's biggest swell) plays INSIDE the shot, and so do fills 271.78 and 275.60 and phrases 272.88, 276.72 and 277.54: the plateau is one arc, not a cue list, and this is the first of the three long shots that make the fast zone at d328 legible when it arrives."
+  },
+  {
+   "id": "s036",
+   "source": "a7iv_kit",
+   "in": 92101,
+   "out": 92339,
+   "note": "R2 gearbox: plateau: a 2.5 s jab so the post-arrival hold cannot park"
+  },
+  {
+   "id": "s037",
+   "source": "fx6_wide",
+   "in": 61069,
+   "out": 61275,
+   "note": "[R2 8.59 s on fx6_wide; was a7iv_kit in R1] 8.58 s, LONG. Phrase 278.92 (0.765, downbeat) in. Fill 282.80 and peak 285.02 (+2.88) inside. Out on phrase 287.50 - conf 0.834, rest 0.193, held 8.79, the strongest boundary of the leg."
+  },
+  {
+   "id": "s038",
+   "source": "a7iv_kit",
+   "in": 92545,
+   "out": 92652,
+   "note": "[R2 4.46 s on a7iv_kit; was 14.56 s, was fx6_wide in R1] 14.50 s, THE LONGEST SHOT OF THE SAX SOLO. Phrase 287.50 in. The 2.78 s / 96-hit fill at 288.62, phrase 291.94 (conf 0.845), THE START OF THE SONG'S LONGEST BUILD at d294.52 (+2.98 dB over 33.5 s, arc_legs), phrase 295.00 and peak 301.52 all play inside ONE shot. Where a long climb begins, the cutting stops. RECEIPT: the human deliverable holds 21.02 s and 13.10 s across these same seconds (252.38-273.40 and 286.16-299.26) and does not cut at all between 303.47 and 320.86 - his three longest shots of the second half are all in this stretch (human_cuts_taurus.json)."
+  },
+  {
+   "id": "s039",
+   "source": "fx6_wide",
+   "in": 61382,
+   "out": 61624,
+   "note": "R2 gearbox: plateau: breaks R1's 14.6 s park before the build"
+  },
+  {
+   "id": "s040",
+   "source": "a7iv_kit",
+   "in": 92894,
+   "out": 93013,
+   "note": "5.00 s. Phrase 302.00 (0.825, downbeat) in; phrases 303.68 and 305.36 (held 6.0) inside. Out ON peak 307.02 (+3.04 dB) with phrase 307.00 on the same frame."
+  },
+  {
+   "id": "s041",
+   "source": "fx6_wide",
+   "in": 61743,
+   "out": 61959,
+   "note": "9.02 s. Cut ON the peak - and THE RIDE. full_motion.json puts the FX6's biggest reframe of the whole song at 308.42-313.08 (+28 px left, 4.67 s): the shot is settled 1.42 s before it starts, and the camera then walks the PIANIST into frame - the quartet wide becomes a piano/bass/sax three-shot ON SCREEN with no cut spent on it (sec 4: the moving camera is a second editor). Fill 313.06 and phrases 311.96, 312.52 and 313.62 play under the move; out ON d316.02, which carries 11.33 onsets/second - the densest drumming anywhere in the song."
+  },
+  {
+   "id": "s042",
+   "source": "a7iv_kit",
+   "in": 93229,
+   "out": 93337,
+   "note": "[R2 4.50 s on a7iv_kit; was 6.46 s in R1] 6.46 s. Cut on the density peak, onto the near-field kit, because at this instant the drumming IS what is happening. Phrases 316.38 and 316.92, fills 317.52 and 320.52 and the 1.66 s / 70-hit fill at 321.10 all inside; out on phrase 322.48 (0.754, rest 0.29)."
+  },
+  {
+   "id": "s043",
+   "source": "fx6_wide",
+   "in": 62067,
+   "out": 62114,
+   "note": "R2 gearbox: build: first of the accent pair tightening into the summit"
+  },
+  {
+   "id": "s044",
+   "source": "a7iv_kit",
+   "in": 93384,
+   "out": 93426,
+   "note": "[R2 1.75 s on a7iv_kit; was 5.51 s, was fx6_wide in R1] 5.54 s. Phrase 322.48 in; the build's last five seconds on the band picture."
+  },
+  {
+   "id": "s045",
+   "source": "fx6_wide",
+   "in": 62156,
+   "out": 62246,
+   "note": "R2 gearbox: build: second of the pair"
+  },
+  {
+   "id": "s046",
+   "source": "a7iv_kit",
+   "in": 93516,
+   "out": 93688,
+   "note": "7.16 s. CUT ON THE SUMMIT of the song's longest build - energy peak 328.02, +4.01 dB prominence, -9.24 LUFS, the top of a 33.5 s climb. The summit is taken TIGHT, on the sax-and-drummer two-shot: that is a different gesture from the song's peak at d233.5 (revealed by a camera move, no cut) and from its second summit at d400 (a cut ON the peak onto the widest picture there is). The -2.53 dB fall that follows is held through inside this shot, and the fast zone starts on the far side of it."
+  },
+  {
+   "id": "s047",
+   "source": "fx6_wide",
+   "in": 62418,
+   "out": 62466,
+   "note": "1.96 s, A BURST. Phrase 335.18 (rest 0.323) in; peak 337.02 lands on the out frame with phrase 337.14 (0.796) on it. Two seconds of the band, and the rate has changed: from here to d381 the cut runs one shot per 3.8 s against one per 8.6 s across the plateau behind it. RECEIPT: the human deliverable does the same thing in the same place - after holding 17.39 s to 320.86 he cuts at 322.49 and 324.20, two shots of 1.63 and 1.71 s, and then stays between 2.3 and 5.3 s all the way to 373.08."
+  },
+  {
+   "id": "s048",
+   "source": "a7iv_kit",
+   "in": 93736,
+   "out": 93821,
+   "note": "3.58 s. Phrase 337.14 in; the 1.12 s / 43-hit fill at 339.60 inside."
+  },
+  {
+   "id": "s049",
+   "source": "fx6_wide",
+   "in": 62551,
+   "out": 62642,
+   "note": "3.80 s. Phrase 340.72 (0.836, downbeat, rest 0.433) in; out ON the sag's own swell (344.52, +2.33)."
+  },
+  {
+   "id": "s050",
+   "source": "a7iv_kit",
+   "in": 93912,
+   "out": 93988,
+   "note": "3.14 s. Cut ON the swell; fills 345.72 and 346.82 inside."
+  },
+  {
+   "id": "s051",
+   "source": "fx6_wide",
+   "in": 62718,
+   "out": 62778,
+   "note": "2.46 s. Fill 347.66 in; phrase 349.30 (0.813, rest 0.073) inside."
+  },
+  {
+   "id": "s052",
+   "source": "a7iv_kit",
+   "in": 94048,
+   "out": 94152,
+   "note": "4.38 s. Phrase 350.12 (0.780) in; phrases 351.24, 352.06, 352.88 and 353.94 and fill 352.60 all inside."
+  },
+  {
+   "id": "s053",
+   "source": "fx6_wide",
+   "in": 62882,
+   "out": 62921,
+   "note": "1.68 s, THE SHORTEST SHOT IN THE SONG. Cut ON peak 354.52 (+3.29, -9.78 LUFS) with phrase 354.50 (0.802) on the same frame. The 1.38 s / 64-hit fill at 355.34 and phrase 355.62 (0.830, rest 0.453) both play inside 1.7 seconds of the band - a glance, not a shot, and the fast zone's second burst."
+  },
+  {
+   "id": "s054",
+   "source": "a7iv_kit",
+   "in": 94191,
+   "out": 94283,
+   "note": "3.84 s. Phrase 356.18 (0.735) in; phrases 357.00, 358.40 (held 8.4) and 359.22 inside."
+  },
+  {
+   "id": "s055",
+   "source": "fx6_wide",
+   "in": 63013,
+   "out": 63051,
+   "note": "[R2 1.58 s on fx6_wide; was 6.17 s in R1] 6.10 s. CUT ON THE CRASH: peak 360.02 is -9.49 LUFS at only 6.33 onsets/second - a struck accent rather than a flurry, and the top of the d347.5-360.02 climb - so it is caught on the frame instead of arrived at late. THE SECOND RIDE: the FX6 walks right twice under the hold (361.75-363.58 and 364.25-365.75, -18 px total) and the DRUMMER comes back into the wide with no cut on it; the shot leaves 0.37 s after the move lands. This is the one shot in the fast zone that is allowed to be long, and the camera is why."
+  },
+  {
+   "id": "s056",
+   "source": "a7iv_kit",
+   "in": 94321,
+   "out": 94509,
+   "note": "R2 gearbox: fast: a 1.6 s accent, and the shot after it becomes a 7.8 s hold"
+  },
+  {
+   "id": "s057",
+   "source": "fx6_wide",
+   "in": 63239,
+   "out": 63327,
+   "note": "3.58 s. Phrase 369.50 in - and the shot LEAVES the wide at the instant the camera starts its last walk right (373.08-377.58), so the move happens off screen (sec 4: wait out a pan, never cut into one; the ending piece's own s06 is the same move)."
+  },
+  {
+   "id": "s058",
+   "source": "a7iv_kit",
+   "in": 94597,
+   "out": 94709,
+   "note": "4.70 s. THE BIGGEST FILL IN SPAN B (375.80, 3.64 s, 118 hits) and the span's STRONGEST PHRASE BOUNDARY (377.24, conf 0.874, downbeat, rest 0.413) both play here, on the near-field kit, which is where a 118-hit fill belongs. Peak 374.52 - another low-density struck accent - lands 1.44 s in."
+  },
+  {
+   "id": "s059",
+   "source": "fx6_wide",
+   "in": 63439,
+   "out": 63517,
+   "note": "3.24 s. The wide comes back 0.20 s after its reframe settles, and it is a NEW PICTURE: the walk that ran off screen has opened it back onto the full quartet with the drummer in frame, which is the framing that carries the rest of the song. Out ON peak 381.02 - +5.04 dB, the biggest prominence anywhere in the span."
+  },
+  {
+   "id": "s060",
+   "source": "a7iv_kit",
+   "in": 94787,
+   "out": 94949,
+   "note": "6.72 s. Cut ON the +5.04 dB peak, to the near-field kit - and then the song's last real dip (-3.58 dB into d386) is HELD through: fill 382.16 and phrases 383.84 and 384.96 pass with no cut, because nothing is arriving and sec 3 says holding beats shrinking over decaying audio. The fast zone is over, and this is the shot that says so."
+  },
+  {
+   "id": "s061",
+   "source": "fx6_wide",
+   "in": 63679,
+   "out": 63760,
+   "note": "3.38 s. Phrase 387.74 in: the +3.83 dB climb to the song's second-loudest instant has started, and this is the last short shot before it."
+  },
+  {
+   "id": "s062",
+   "source": "a7iv_kit",
+   "in": 95030,
+   "out": 95193,
+   "note": "[R2 6.80 s on a7iv_kit; was 8.84 s in R1] 8.92 s. THE CUTTING STOPS. Phrase 391.12 (rest 0.251) in, and then the whole top of the climb plays in one shot on the sax-and-drummer two-shot: fills 392.22, 394.50 and 397.42 and phrases 391.92, 395.76 (0.815), 397.42, 397.96 (conf 0.854, downbeat - the span's second-strongest) and 399.04 (0.802) all pass without a cut. Against a local mean of 3.8 s this shot is two and a half times the rate around it, so the deceleration is the thing the viewer feels arriving. RECEIPT: the human deliverable holds 13.76 s across 385.34-399.11 and cuts 0.93 s before the peak; this cut lands on it."
+  },
+  {
+   "id": "s063",
+   "source": "fx6_wide",
+   "in": 63923,
+   "out": 63972,
+   "note": "R2 gearbox: summit: tightening onto the summit's arrival"
+  },
+  {
+   "id": "s064",
+   "source": "a7iv_kit",
+   "in": 95242,
+   "out": 95330,
+   "note": "[R2 3.67 s on a7iv_kit; was 14.43 s, was fx6_wide in R1] 14.35 s, THE LONGEST PICTURE IN THE SONG OUTSIDE THE CODA. GESTURE 2 LANDS: the cut sits ON energy peak 400.02 (-8.78 LUFS, the song's second-loudest instant after the return at d233.5) with phrase 400.04 (downbeat) and a fill on the same frame, and it lands on the WIDEST picture the rig has - the whole quartet - which is the opposite of the tight landing the d328 summit got and of the no-cut camera reveal the d233 return got. Then the release: the energy falls -2.17 dB over the next seventeen seconds and this one shot carries all of it. This is ending-R3's s01 entered earlier; its own note follows. open on the whole quartet in one frame. This is the FX6's first plateau (W1): the drummer is entire at the right and the pianist is outside the frame - the piece starts inside the tune's last full-energy stretch, so the establishing picture is the band"
+  },
+  {
+   "id": "s065",
+   "source": "fx6_wide",
+   "in": 64060,
+   "out": 64152,
+   "note": "R2 gearbox: summit: breaks R1's 14.4 s shot -- the flatline the judges named"
+  },
+  {
+   "id": "s066",
+   "source": "a7iv_kit",
+   "in": 95422,
+   "out": 95588,
+   "note": "R2 gearbox: summit: same shot, second break"
+  },
+  {
+   "id": "s067",
+   "source": "fx6_wide",
+   "in": 64318,
+   "out": 64420,
+   "note": "[R2 4.25 s on fx6_wide; was a7iv_kit in R1] drum fill 6.59 (1.88 s, 81 hits), the first substantial fill of the piece - arrive on the near-field kit at the fill's START (sec 5), and the 9.57 fill lands inside the shot"
+  },
+  {
+   "id": "s068",
+   "source": "a7iv_kit",
+   "in": 95690,
+   "out": 95905,
+   "note": "[R2 8.97 s on a7iv_kit; was fx6_wide in R1] fill 10.89 - the highest-confidence fill in the window (0.630) - with a phrase boundary on it (score 1.03). Back to the whole quartet for the tune's loudest stretch: THIS framing has the drummer entire, so nothing is given up by leaving the kit angle"
+  },
+  {
+   "id": "s069",
+   "source": "fx6_wide",
+   "in": 64635,
+   "out": 64731,
+   "note": "[R2 4.00 s on fx6_wide; was a7iv_kit in R1] fill 20.01 (2.26 s) with a phrase boundary on the same frame (score 1.170, agrees with the +1.78 dB peak at 19.85) - arrive at the fill's start. The wide it leaves has just held, inside one shot, the loudest second in the entire 90 s (13.85, -9.38 LUFS), the 3.3 s / 126-hit fill at 15.63 whole, that fill's resolution at 18.93, and the first half's strongest downbeat phrase (16.73, conf 0.817)"
+  },
+  {
+   "id": "s070",
+   "source": "a7iv_kit",
+   "in": 96001,
+   "out": 96040,
+   "note": "[R2 1.63 s on a7iv_kit; was 13.30 s, was fx6_wide in R1] energy peak 23.85 (+3.42 dB, the second-biggest prominence in the window) with a phrase boundary at 23.91. THE RIDE: the cut lands 0.84 s before the FX6 starts its 24.75-28.75 reframe, so the shot is settled when the camera moves and then WALKS LEFT off the drummer onto the piano - W1 becomes W2 on screen, no cut - under the window's biggest drum event (fill 25.01, 3.86 s, 118 hits). sec 4: the moving camera is a second editor. The shot then holds the quiet pocket (27.5-31.5, rms -17.6 to -19.2) whole, which is where a coverage pass bursts"
+  },
+  {
+   "id": "s071",
+   "source": "fx6_wide",
+   "in": 64770,
+   "out": 64876,
+   "note": "R2 gearbox: summit: a 1.6 s accent INSIDE a loud-tercile run -- R2's first pass put this burst at 436-441, which measures mid, so the accents moved to where the music actually peaks"
+  },
+  {
+   "id": "s072",
+   "source": "a7iv_kit",
+   "in": 96146,
+   "out": 96239,
+   "note": "R2 gearbox: summit: burst"
+  },
+  {
+   "id": "s073",
+   "source": "fx6_wide",
+   "in": 64969,
+   "out": 65050,
+   "note": "R2 gearbox: summit: burst closes"
+  },
+  {
+   "id": "s074",
+   "source": "a7iv_kit",
+   "in": 96320,
+   "out": 96458,
+   "note": "the strongest downbeat phrase boundary of the middle of the piece (conf 0.803, score 1.153) - and it lands 0.02 s before the FX6 begins its second reframe run (37.25-41.08), so the piece leaves the wide at the instant the camera starts to move again and the move happens off screen. sec 4: wait out a pan, never cut into one"
+  },
+  {
+   "id": "s075",
+   "source": "fx6_wide",
+   "in": 65188,
+   "out": 65338,
+   "note": "fill 43.07 with a phrase boundary on it (score 1.207), 0.72 s after the +2.64 dB peak at 42.35 and 1.99 s after the camera settles. W3 arrives as a picture the piece has NOT shown: the pianist is now in frame at the left, and this is the framing that will carry the ending. sec 4: a scale change is a picture worth more than a framing return"
+  },
+  {
+   "id": "s076",
+   "source": "a7iv_kit",
+   "in": 96608,
+   "out": 96674,
+   "note": "[R2 2.75 s on a7iv_kit; was 4.17 s in R1] drum fill 49.23 (1.68 s) - arrive at its start and ride it into the +2.99 dB peak at 49.85 (sec 5). The kit angle is the near-field picture of the drummer, which is what makes the 52.03 and 53.47 fills worth this shot"
+  },
+  {
+   "id": "s077",
+   "source": "fx6_wide",
+   "in": 65404,
+   "out": 65438,
+   "note": "R2 gearbox: summit: the second loud-tercile accent, 1.4 s inside the sustained finale"
+  },
+  {
+   "id": "s078",
+   "source": "a7iv_kit",
+   "in": 96708,
+   "out": 96764,
+   "note": "[R2 2.34 s on a7iv_kit; was 8.43 s, was fx6_wide in R1] phrase boundary 53.77 with the 53.47 fill (1.46 s) resolving into it - back to the band for the sag before the last build. The wide then holds 57.5-61.5, the thinnest run of the second half (rms -19.4 to -21.9), without a cut in it: sparse passages hold longer (sec 3)"
+  },
+  {
+   "id": "s079",
+   "source": "fx6_wide",
+   "in": 65494,
+   "out": 65640,
+   "note": "R2 gearbox: summit: breaks the last long shot before the ending"
+  },
+  {
+   "id": "s080",
+   "source": "a7iv_kit",
+   "in": 96910,
+   "out": 97029,
+   "note": "THE STRONGEST PHRASE BOUNDARY IN THE WINDOW: conf 0.846, downbeat, 0.11 s rest, score 1.396. The kit takes the 0.461 s rest at 63.55 - the longest rest in the coda approach - and the +1.88 dB peak at 65.35, and it is already there when the 66.41 fill starts"
+  },
+  {
+   "id": "s081",
+   "source": "fx6_wide",
+   "in": 65759,
+   "out": 65904,
+   "note": "SOLO CHANGE 66.97 (downbeat, timbre step inside the melodic stem) with its own phrase boundary and the 66.41 fill (2.22 s) under it. The front changes, so the angle that holds the band takes it (sec 4: follow the audience's gaze at a structure change). The last build runs inside this shot - onset density climbs 6.0 -> 8.7/s - and so does the grid's LAST BEAT at 71.19, after which the pulse stops being measurable at all and the coda is free"
+  },
+  {
+   "id": "s082",
+   "source": "a7iv_kit",
+   "in": 97174,
+   "out": 97252,
+   "note": "THE LAST CLIMAX: energy peak +6.46 dB, the biggest-prominence event anywhere in the 90 s, with onset density peaking 9.7-10.3/s over the three seconds after it. The cut goes to the near-field kit because at this instant the drums are what is happening - and it is a VISIT, not a destination: 3.25 s, the shortest shot in the piece, the acceleration half of sec 3's accelerate-and-release pair. This is the last time the ending leaves the band"
+  },
+  {
+   "id": "s083",
+   "source": "fx6_wide",
+   "in": 65982,
+   "out": 66311,
+   "note": "phrase boundary 76.08 (conf 0.689, held ratio 3.0) at the TOP OF THE DECAY - rms -17.9 here, falling to -27.2 by 80.4 - and it is the LAST CUT IN THE PIECE. The release, and the return that the ending is built around: from here the widest framing the rig has (piano, bass, sax and drummer all in one frame) carries everything left. 7.80 s at full opacity, and they are working seconds - the decay steepening, the 80.35 trough, the last statement coming back at 80.85, the near-gap at 82.72 (the quietest 30 ms in the window, -40.41 dB), and the three-hit final figure at 82.96 / 83.17 / 83.40, the last of them the last note of the set (+15.66 dB lift, sample peak 1.106). Then applause, and the dissolve from 83.917. sec 5b: the cadence, the applause and the fade all belong to the ensemble - and sec 3: into a free coda the cutting decelerates, so the coda's two shots run 3.25 and 13.72 s and this one is the longest in the cut. tail: dissolve_to_black 142 frames (5.923 s) beginning at rel 2012 = SYNC 183745 = win-t 83.917, which is the finished deliverable's own dissolve_start frame; audio fade 125 frames (5.213 s) ending with the mix. Picture ends 4 frames before the mix does, which is the deliverable's 0.167 s black tail. The FX6 walks back right 8 px at 85.42 under the dissolve, so the last image opens out toward the kit as it goes to black"
+  }
+ ]
+}

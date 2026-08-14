@@ -1,0 +1,608 @@
+{
+  "beats_file": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\analysis\\Zinc-Set-2-Reaper-v4-62537c590a14-beats.json",
+  "count": 11130,
+  "duration_seconds": 4450.5,
+  "reported_tempo_bpm": 214.29,
+  "reported_meter": 1,
+  "gap_seconds": {
+    "median": 0.28,
+    "mean": 0.3982,
+    "p05": 0.16,
+    "p95": 0.66,
+    "min": 0.08,
+    "max": 100.36
+  },
+  "implied_bpm": {
+    "median": 214.29,
+    "p05": 90.91,
+    "p95": 375.0
+  },
+  "steady_share_overall": 0.7165,
+  "gaps_over_2s": 27,
+  "largest_gaps": [
+    {
+      "t": 1269.96,
+      "gap_s": 100.36
+    },
+    {
+      "t": 23.12,
+      "gap_s": 87.26
+    },
+    {
+      "t": 3501.4,
+      "gap_s": 70.18
+    },
+    {
+      "t": 2656.4,
+      "gap_s": 66.34
+    },
+    {
+      "t": 4047.34,
+      "gap_s": 37.64
+    },
+    {
+      "t": 2635.62,
+      "gap_s": 20.78
+    },
+    {
+      "t": 1933.68,
+      "gap_s": 19.26
+    },
+    {
+      "t": 1900.84,
+      "gap_s": 13.32
+    },
+    {
+      "t": 1952.94,
+      "gap_s": 12.9
+    },
+    {
+      "t": 1914.16,
+      "gap_s": 7.56
+    },
+    {
+      "t": 1253.6,
+      "gap_s": 7.46
+    },
+    {
+      "t": 1262.9,
+      "gap_s": 7.06
+    },
+    {
+      "t": 4399.74,
+      "gap_s": 6.8
+    },
+    {
+      "t": 1894.66,
+      "gap_s": 6.18
+    },
+    {
+      "t": 1982.64,
+      "gap_s": 4.62
+    }
+  ],
+  "per_minute": [
+    {
+      "t": 0.0,
+      "beats": 49,
+      "median_gap_s": 0.44,
+      "bpm": 136.4,
+      "steady_share": 0.898
+    },
+    {
+      "t": 60.0,
+      "beats": 20,
+      "median_gap_s": 0.54,
+      "bpm": 111.1,
+      "steady_share": 0.85
+    },
+    {
+      "t": 120.0,
+      "beats": 158,
+      "median_gap_s": 0.3,
+      "bpm": 200.0,
+      "steady_share": 0.899
+    },
+    {
+      "t": 180.0,
+      "beats": 115,
+      "median_gap_s": 0.58,
+      "bpm": 103.4,
+      "steady_share": 0.913
+    },
+    {
+      "t": 240.0,
+      "beats": 114,
+      "median_gap_s": 0.57,
+      "bpm": 105.3,
+      "steady_share": 0.895
+    },
+    {
+      "t": 300.0,
+      "beats": 198,
+      "median_gap_s": 0.28,
+      "bpm": 214.3,
+      "steady_share": 0.884
+    },
+    {
+      "t": 360.0,
+      "beats": 175,
+      "median_gap_s": 0.28,
+      "bpm": 214.3,
+      "steady_share": 0.743
+    },
+    {
+      "t": 420.0,
+      "beats": 228,
+      "median_gap_s": 0.28,
+      "bpm": 214.3,
+      "steady_share": 0.548
+    },
+    {
+      "t": 480.0,
+      "beats": 122,
+      "median_gap_s": 0.54,
+      "bpm": 111.1,
+      "steady_share": 0.803
+    },
+    {
+      "t": 540.0,
+      "beats": 177,
+      "median_gap_s": 0.28,
+      "bpm": 214.3,
+      "steady_share": 0.514
+    },
+    {
+      "t": 600.0,
+      "beats": 217,
+      "median_gap_s": 0.28,
+      "bpm": 214.3,
+      "steady_share": 0.995
+    },
+    {
+      "t": 660.0,
+      "beats": 215,
+      "median_gap_s": 0.28,
+      "bpm": 214.3,
+      "steady_share": 0.995
+    },
+    {
+      "t": 720.0,
+      "beats": 220,
+      "median_gap_s": 0.28,
+      "bpm": 214.3,
+      "steady_share": 0.905
+    },
+    {
+      "t": 780.0,
+      "beats": 217,
+      "median_gap_s": 0.28,
+      "bpm": 214.3,
+      "steady_share": 0.825
+    },
+    {
+      "t": 840.0,
+      "beats": 226,
+      "median_gap_s": 0.28,
+      "bpm": 214.3,
+      "steady_share": 0.845
+    },
+    {
+      "t": 900.0,
+      "beats": 190,
+      "median_gap_s": 0.28,
+      "bpm": 214.3,
+      "steady_share": 0.568
+    },
+    {
+      "t": 960.0,
+      "beats": 169,
+      "median_gap_s": 0.4,
+      "bpm": 150.0,
+      "steady_share": 0.456
+    },
+    {
+      "t": 1020.0,
+      "beats": 232,
+      "median_gap_s": 0.26,
+      "bpm": 230.8,
+      "steady_share": 0.461
+    },
+    {
+      "t": 1080.0,
+      "beats": 219,
+      "median_gap_s": 0.28,
+      "bpm": 214.3,
+      "steady_share": 0.224
+    },
+    {
+      "t": 1140.0,
+      "beats": 202,
+      "median_gap_s": 0.28,
+      "bpm": 214.3,
+      "steady_share": 0.366
+    },
+    {
+      "t": 1200.0,
+      "beats": 176,
+      "median_gap_s": 0.26,
+      "bpm": 230.8,
+      "steady_share": 0.307
+    },
+    {
+      "t": 1260.0,
+      "beats": 4,
+      "median_gap_s": 4.17,
+      "bpm": 14.4,
+      "steady_share": 0.25
+    },
+    {
+      "t": 1320.0,
+      "beats": 14,
+      "median_gap_s": 0.47,
+      "bpm": 127.7,
+      "steady_share": 0.643
+    },
+    {
+      "t": 1380.0,
+      "beats": 210,
+      "median_gap_s": 0.24,
+      "bpm": 250.0,
+      "steady_share": 0.771
+    },
+    {
+      "t": 1440.0,
+      "beats": 256,
+      "median_gap_s": 0.24,
+      "bpm": 250.0,
+      "steady_share": 0.926
+    },
+    {
+      "t": 1500.0,
+      "beats": 253,
+      "median_gap_s": 0.24,
+      "bpm": 250.0,
+      "steady_share": 0.957
+    },
+    {
+      "t": 1560.0,
+      "beats": 235,
+      "median_gap_s": 0.24,
+      "bpm": 250.0,
+      "steady_share": 0.817
+    },
+    {
+      "t": 1620.0,
+      "beats": 173,
+      "median_gap_s": 0.36,
+      "bpm": 166.7,
+      "steady_share": 0.468
+    },
+    {
+      "t": 1680.0,
+      "beats": 206,
+      "median_gap_s": 0.24,
+      "bpm": 250.0,
+      "steady_share": 0.519
+    },
+    {
+      "t": 1740.0,
+      "beats": 171,
+      "median_gap_s": 0.28,
+      "bpm": 214.3,
+      "steady_share": 0.579
+    },
+    {
+      "t": 1800.0,
+      "beats": 154,
+      "median_gap_s": 0.41,
+      "bpm": 146.3,
+      "steady_share": 0.526
+    },
+    {
+      "t": 1860.0,
+      "beats": 74,
+      "median_gap_s": 0.5,
+      "bpm": 120.0,
+      "steady_share": 0.824
+    },
+    {
+      "t": 1920.0,
+      "beats": 26,
+      "median_gap_s": 0.72,
+      "bpm": 83.3,
+      "steady_share": 0.231
+    },
+    {
+      "t": 1980.0,
+      "beats": 83,
+      "median_gap_s": 0.62,
+      "bpm": 96.8,
+      "steady_share": 0.783
+    },
+    {
+      "t": 2040.0,
+      "beats": 89,
+      "median_gap_s": 0.68,
+      "bpm": 88.2,
+      "steady_share": 0.899
+    },
+    {
+      "t": 2100.0,
+      "beats": 84,
+      "median_gap_s": 0.72,
+      "bpm": 83.3,
+      "steady_share": 0.845
+    },
+    {
+      "t": 2160.0,
+      "beats": 77,
+      "median_gap_s": 0.78,
+      "bpm": 76.9,
+      "steady_share": 0.948
+    },
+    {
+      "t": 2220.0,
+      "beats": 75,
+      "median_gap_s": 0.86,
+      "bpm": 69.8,
+      "steady_share": 0.813
+    },
+    {
+      "t": 2280.0,
+      "beats": 78,
+      "median_gap_s": 0.75,
+      "bpm": 80.0,
+      "steady_share": 0.949
+    },
+    {
+      "t": 2340.0,
+      "beats": 113,
+      "median_gap_s": 0.54,
+      "bpm": 111.1,
+      "steady_share": 0.991
+    },
+    {
+      "t": 2400.0,
+      "beats": 111,
+      "median_gap_s": 0.52,
+      "bpm": 115.4,
+      "steady_share": 0.757
+    },
+    {
+      "t": 2460.0,
+      "beats": 113,
+      "median_gap_s": 0.54,
+      "bpm": 111.1,
+      "steady_share": 0.513
+    },
+    {
+      "t": 2520.0,
+      "beats": 103,
+      "median_gap_s": 0.54,
+      "bpm": 111.1,
+      "steady_share": 0.592
+    },
+    {
+      "t": 2580.0,
+      "beats": 80,
+      "median_gap_s": 0.64,
+      "bpm": 93.8,
+      "steady_share": 0.6
+    },
+    {
+      "t": 2640.0,
+      "beats": 1,
+      "median_gap_s": 66.34,
+      "bpm": 0.9,
+      "steady_share": 0.0
+    },
+    {
+      "t": 2700.0,
+      "beats": 71,
+      "median_gap_s": 0.46,
+      "bpm": 130.4,
+      "steady_share": 0.845
+    },
+    {
+      "t": 2760.0,
+      "beats": 133,
+      "median_gap_s": 0.44,
+      "bpm": 136.4,
+      "steady_share": 1.0
+    },
+    {
+      "t": 2820.0,
+      "beats": 168,
+      "median_gap_s": 0.44,
+      "bpm": 136.4,
+      "steady_share": 0.798
+    },
+    {
+      "t": 2880.0,
+      "beats": 262,
+      "median_gap_s": 0.22,
+      "bpm": 272.7,
+      "steady_share": 0.893
+    },
+    {
+      "t": 2940.0,
+      "beats": 235,
+      "median_gap_s": 0.24,
+      "bpm": 250.0,
+      "steady_share": 0.783
+    },
+    {
+      "t": 3000.0,
+      "beats": 200,
+      "median_gap_s": 0.24,
+      "bpm": 250.0,
+      "steady_share": 0.81
+    },
+    {
+      "t": 3060.0,
+      "beats": 178,
+      "median_gap_s": 0.37,
+      "bpm": 162.2,
+      "steady_share": 0.404
+    },
+    {
+      "t": 3120.0,
+      "beats": 175,
+      "median_gap_s": 0.24,
+      "bpm": 250.0,
+      "steady_share": 0.646
+    },
+    {
+      "t": 3180.0,
+      "beats": 226,
+      "median_gap_s": 0.24,
+      "bpm": 250.0,
+      "steady_share": 0.5
+    },
+    {
+      "t": 3240.0,
+      "beats": 206,
+      "median_gap_s": 0.24,
+      "bpm": 250.0,
+      "steady_share": 0.602
+    },
+    {
+      "t": 3300.0,
+      "beats": 166,
+      "median_gap_s": 0.44,
+      "bpm": 136.4,
+      "steady_share": 0.548
+    },
+    {
+      "t": 3360.0,
+      "beats": 192,
+      "median_gap_s": 0.26,
+      "bpm": 230.8,
+      "steady_share": 0.427
+    },
+    {
+      "t": 3420.0,
+      "beats": 176,
+      "median_gap_s": 0.4,
+      "bpm": 150.0,
+      "steady_share": 0.381
+    },
+    {
+      "t": 3480.0,
+      "beats": 47,
+      "median_gap_s": 0.46,
+      "bpm": 130.4,
+      "steady_share": 0.979
+    },
+    {
+      "t": 3540.0,
+      "beats": 51,
+      "median_gap_s": 0.56,
+      "bpm": 107.1,
+      "steady_share": 1.0
+    },
+    {
+      "t": 3600.0,
+      "beats": 216,
+      "median_gap_s": 0.28,
+      "bpm": 214.3,
+      "steady_share": 0.801
+    },
+    {
+      "t": 3660.0,
+      "beats": 218,
+      "median_gap_s": 0.28,
+      "bpm": 214.3,
+      "steady_share": 0.991
+    },
+    {
+      "t": 3720.0,
+      "beats": 217,
+      "median_gap_s": 0.28,
+      "bpm": 214.3,
+      "steady_share": 0.968
+    },
+    {
+      "t": 3780.0,
+      "beats": 186,
+      "median_gap_s": 0.28,
+      "bpm": 214.3,
+      "steady_share": 0.742
+    },
+    {
+      "t": 3840.0,
+      "beats": 213,
+      "median_gap_s": 0.28,
+      "bpm": 214.3,
+      "steady_share": 0.704
+    },
+    {
+      "t": 3900.0,
+      "beats": 178,
+      "median_gap_s": 0.28,
+      "bpm": 214.3,
+      "steady_share": 0.736
+    },
+    {
+      "t": 3960.0,
+      "beats": 177,
+      "median_gap_s": 0.28,
+      "bpm": 214.3,
+      "steady_share": 0.633
+    },
+    {
+      "t": 4020.0,
+      "beats": 80,
+      "median_gap_s": 0.29,
+      "bpm": 206.9,
+      "steady_share": 0.625
+    },
+    {
+      "t": 4080.0,
+      "beats": 109,
+      "median_gap_s": 0.54,
+      "bpm": 111.1,
+      "steady_share": 0.789
+    },
+    {
+      "t": 4140.0,
+      "beats": 120,
+      "median_gap_s": 0.52,
+      "bpm": 115.4,
+      "steady_share": 0.825
+    },
+    {
+      "t": 4200.0,
+      "beats": 134,
+      "median_gap_s": 0.52,
+      "bpm": 115.4,
+      "steady_share": 0.881
+    },
+    {
+      "t": 4260.0,
+      "beats": 156,
+      "median_gap_s": 0.39,
+      "bpm": 153.8,
+      "steady_share": 0.667
+    },
+    {
+      "t": 4320.0,
+      "beats": 148,
+      "median_gap_s": 0.5,
+      "bpm": 120.0,
+      "steady_share": 0.682
+    },
+    {
+      "t": 4380.0,
+      "beats": 69,
+      "median_gap_s": 0.52,
+      "bpm": 115.4,
+      "steady_share": 0.841
+    },
+    {
+      "t": 4440.0,
+      "beats": 0
+    }
+  ]
+}

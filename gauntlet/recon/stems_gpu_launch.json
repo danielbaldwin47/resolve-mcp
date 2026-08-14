@@ -1,0 +1,17 @@
+{
+  "clip": "Zinc Set 2 Reaper v4.wav",
+  "state": "running",
+  "launcher_pid": 17020,
+  "separator": "C:\\Users\\Daniel\\.venvs\\audio-separator-gpu\\Scripts\\audio-separator.exe",
+  "config_separator": "C:\\Users\\Daniel\\.venvs\\audio-separator-gpu\\Scripts\\audio-separator.exe",
+  "job_id": "separate_stems-87ae86e85665",
+  "cached": false,
+  "record": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\jobs\\separate_stems-87ae86e85665.json",
+  "worker_log": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\jobs\\separate_stems-87ae86e85665.worker.log",
+  "detached": true,
+  "worker_pid": 19504,
+  "step": "separating in a detached worker (pid 19504)",
+  "progress": 0.02,
+  "audio": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\audio\\Zinc-Set-2-Reaper-v4.wav-8833f33949fe.wav",
+  "stems_dir": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\stems"
+}

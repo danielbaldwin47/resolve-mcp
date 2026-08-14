@@ -1,0 +1,429 @@
+{
+ "cuts": [
+  {
+   "target": 2.02,
+   "onset": 2.068,
+   "cut_frame_rel": 49,
+   "cut_t": 2.044,
+   "early_ms": 24.3,
+   "sync_frame": 176004,
+   "from": "a7iv",
+   "to": "fx6",
+   "shot_seconds": 2.04,
+   "accent_gap_s": 0.31,
+   "why": "SOLO CHANGE drums->bass on a downbeat, with the 2.02 fill resolving into it. The piece opens on the outgoing front (the kit) for 2.0 s and hands over on the change itself: the band picture W1 has the bassist centre and the pianist at the keys, so the new front is already on screen when it arrives (sec 4, follow the audience's gaze)"
+  },
+  {
+   "target": 12.86,
+   "onset": 12.884,
+   "cut_frame_rel": 308,
+   "cut_t": 12.846,
+   "early_ms": 37.8,
+   "sync_frame": 176263,
+   "from": "fx6",
+   "to": "a7iv",
+   "shot_seconds": 10.8,
+   "accent_gap_s": 0.1,
+   "why": "ENERGY PEAK 12.84 (+5.31 dB, the biggest event of the first third) carrying the window's highest-confidence fill (12.86, conf 0.628) and the second-biggest RMS accent of the first half (12.95, +9.0 dB over its floor). Arrives on the kit 1.94 s BEFORE the front changes bass->drums at 14.80 - the burst at the transition starts here"
+  },
+  {
+   "target": 15.15,
+   "onset": 15.284,
+   "cut_frame_rel": 366,
+   "cut_t": 15.265,
+   "early_ms": 18.8,
+   "sync_frame": 176321,
+   "from": "a7iv",
+   "to": "fx6",
+   "shot_seconds": 2.42,
+   "accent_gap_s": 0.12,
+   "why": "ACCENT 15.15 (+4.9 dB): the bass and piano answer the drummer's entrance. This is the trade being cut as an exchange rather than sat through - sec 4, the exchange is the content, so cut between them"
+  },
+  {
+   "target": 18.55,
+   "onset": 18.964,
+   "cut_frame_rel": 454,
+   "cut_t": 18.936,
+   "early_ms": 28.4,
+   "sync_frame": 176409,
+   "from": "fx6",
+   "to": "a7iv",
+   "shot_seconds": 3.67,
+   "accent_gap_s": 0.39,
+   "why": "arrive 0.43 s AHEAD of fill 18.98 (31 hits) so the fill lands inside the shot, and the 19.34-30.84 build leg (+2.99 dB) starts inside it too: the drummer begins to climb and the near-field kit is the picture that shows it (sec 5, arrive around the fill's start)"
+  },
+  {
+   "target": 22.05,
+   "onset": 22.047,
+   "cut_frame_rel": 528,
+   "cut_t": 22.022,
+   "early_ms": 25.0,
+   "sync_frame": 176483,
+   "from": "a7iv",
+   "to": "fx6",
+   "shot_seconds": 3.09,
+   "accent_gap_s": 0.03,
+   "why": "ACCENT 22.05: the trade resolves and the piece settles onto the picture that holds all three players - the LONG mode begins"
+  },
+  {
+   "target": 37.62,
+   "onset": 37.609,
+   "cut_frame_rel": 901,
+   "cut_t": 37.579,
+   "early_ms": 29.8,
+   "sync_frame": 176856,
+   "from": "fx6",
+   "to": "a7iv",
+   "shot_seconds": 15.56,
+   "accent_gap_s": 0.33,
+   "why": "PHRASE BOUNDARY 37.62 (conf 0.764): the piano's phrase ends and it rests 12.352 s, the longest rest in the window. With the piano out the music is bass and drums, which is exactly what the A7IV four-shot holds (drummer near field, bassist beyond the kit)"
+  },
+  {
+   "target": 46.87,
+   "onset": 46.868,
+   "cut_frame_rel": 1123,
+   "cut_t": 46.838,
+   "early_ms": 29.5,
+   "sync_frame": 177078,
+   "from": "a7iv",
+   "to": "fx6",
+   "shot_seconds": 9.26,
+   "accent_gap_s": 0.41,
+   "why": "ENERGY PEAK 46.84 (+6.18 dB, the duo's climax) - and the cut reveals a NEW picture: while we were on the kit the FX6 walked left (41.25-46.75) off the piano onto a bass-and-drums two-shot, so the reframe arrives as a picture instead of as a move the viewer sat through (sec 4, a scale change is worth more than a framing return)"
+  },
+  {
+   "target": 57.25,
+   "onset": 57.012,
+   "cut_frame_rel": 1366,
+   "cut_t": 56.974,
+   "early_ms": 38.4,
+   "sync_frame": 177321,
+   "from": "fx6",
+   "to": "a7iv",
+   "shot_seconds": 10.14,
+   "accent_gap_s": 0.28,
+   "why": "ACCENT 57.25 (+13.9 dB, the second-biggest in the window) on the phrase boundaries 57.38/57.94 with fill 57.94 on them; the drum solo's last big statement, fill 59.02 (1.36 s, 62 hits), lands inside the shot. This is the acceleration INTO the section change - 10.4 s, then 3.8 s (sec 3)"
+  },
+  {
+   "target": 61.05,
+   "onset": 60.969,
+   "cut_frame_rel": 1461,
+   "cut_t": 60.936,
+   "early_ms": 33.1,
+   "sync_frame": 177416,
+   "from": "a7iv",
+   "to": "fx6",
+   "shot_seconds": 3.96,
+   "accent_gap_s": 0.11,
+   "why": "ACCENT 61.05 (+9.1 dB). Leaves the A7IV 1.85 s before the sax player crosses its near field (veto 62.90-66.60) and settles on W2b 4.2 s before the camera's 65.25-67.08 pan, which it then RIDES: the camera finds the sax at his mic, and the front change drums->other (66.24), the phrase boundary 66.68 and the song's structural peak 66.84 (-6.9 LUFS, +12.91 dB) all land inside this one shot. Release into stillness (sec 3)"
+  },
+  {
+   "target": 71.35,
+   "onset": 71.316,
+   "cut_frame_rel": 1709,
+   "cut_t": 71.28,
+   "early_ms": 36.5,
+   "sync_frame": 177664,
+   "from": "fx6",
+   "to": "a7iv",
+   "shot_seconds": 10.34,
+   "accent_gap_s": 0.07,
+   "why": "ACCENT 71.35 (+13.2 dB, the biggest in the back half) with fill 70.86 resolving into it; the window's biggest fill, 73.36 (2.90 s, 109 hits), plays inside the shot on the near-field kit"
+  },
+  {
+   "target": 74.65,
+   "onset": 74.601,
+   "cut_frame_rel": 1788,
+   "cut_t": 74.575,
+   "early_ms": 26.5,
+   "sync_frame": 177743,
+   "from": "a7iv",
+   "to": "fx6",
+   "shot_seconds": 3.29,
+   "accent_gap_s": 0.08,
+   "why": "ACCENT 74.65 (+9.0 dB): back to the sax at his mic, and the shot rides the 75.92-77.25 and 78.42-78.92 reframes out to W4 - the widest framing in the window and the only picture that holds all four players. The ensemble ride-out arrives as the picture opens, with no cut on it (sec 4, the moving camera is a second editor)"
+  },
+  {
+   "target": 80.76,
+   "onset": 80.777,
+   "cut_frame_rel": 1936,
+   "cut_t": 80.747,
+   "early_ms": 29.7,
+   "sync_frame": 177891,
+   "from": "fx6",
+   "to": "a7iv",
+   "shot_seconds": 6.17,
+   "accent_gap_s": 0.3,
+   "why": "PHRASE BOUNDARY 80.76 (conf 0.732) with fill 80.76 (1.68 s, 67 hits) on it, into the densest drumming anywhere in the window (onset density 9.06 -> 9.33/s); energy peak 83.34 plays inside the shot"
+  },
+  {
+   "target": 84.4,
+   "onset": 84.415,
+   "cut_frame_rel": 2023,
+   "cut_t": 84.376,
+   "early_ms": 39.0,
+   "sync_frame": 177978,
+   "from": "a7iv",
+   "to": "fx6",
+   "shot_seconds": 3.63,
+   "accent_gap_s": 0.67,
+   "why": "PHRASE BOUNDARY 84.40 (conf 0.663): the close returns to the four-player wide EARLY, so fill 85.26 and the accents at 85.05/85.85 land inside the shot rather than being jabbed at, and the window's last peak (89.34, +4.17 dB, 10.0 onsets/s) and closing fill 89.44 (2.76 s, 96 hits) play on the ensemble picture"
+  }
+ ],
+ "segments": [
+  {
+   "angle": "a7iv",
+   "in_rel": 0,
+   "out_rel": 49,
+   "in_t": 0.0,
+   "out_t": 2.044,
+   "seconds": 2.04,
+   "sync": [
+    175955,
+    176004
+   ]
+  },
+  {
+   "angle": "fx6",
+   "in_rel": 49,
+   "out_rel": 308,
+   "in_t": 2.044,
+   "out_t": 12.846,
+   "seconds": 10.8,
+   "sync": [
+    176004,
+    176263
+   ]
+  },
+  {
+   "angle": "a7iv",
+   "in_rel": 308,
+   "out_rel": 366,
+   "in_t": 12.846,
+   "out_t": 15.265,
+   "seconds": 2.42,
+   "sync": [
+    176263,
+    176321
+   ]
+  },
+  {
+   "angle": "fx6",
+   "in_rel": 366,
+   "out_rel": 454,
+   "in_t": 15.265,
+   "out_t": 18.936,
+   "seconds": 3.67,
+   "sync": [
+    176321,
+    176409
+   ]
+  },
+  {
+   "angle": "a7iv",
+   "in_rel": 454,
+   "out_rel": 528,
+   "in_t": 18.936,
+   "out_t": 22.022,
+   "seconds": 3.09,
+   "sync": [
+    176409,
+    176483
+   ]
+  },
+  {
+   "angle": "fx6",
+   "in_rel": 528,
+   "out_rel": 901,
+   "in_t": 22.022,
+   "out_t": 37.579,
+   "seconds": 15.56,
+   "sync": [
+    176483,
+    176856
+   ]
+  },
+  {
+   "angle": "a7iv",
+   "in_rel": 901,
+   "out_rel": 1123,
+   "in_t": 37.579,
+   "out_t": 46.838,
+   "seconds": 9.26,
+   "sync": [
+    176856,
+    177078
+   ]
+  },
+  {
+   "angle": "fx6",
+   "in_rel": 1123,
+   "out_rel": 1366,
+   "in_t": 46.838,
+   "out_t": 56.974,
+   "seconds": 10.14,
+   "sync": [
+    177078,
+    177321
+   ]
+  },
+  {
+   "angle": "a7iv",
+   "in_rel": 1366,
+   "out_rel": 1461,
+   "in_t": 56.974,
+   "out_t": 60.936,
+   "seconds": 3.96,
+   "sync": [
+    177321,
+    177416
+   ]
+  },
+  {
+   "angle": "fx6",
+   "in_rel": 1461,
+   "out_rel": 1709,
+   "in_t": 60.936,
+   "out_t": 71.28,
+   "seconds": 10.34,
+   "sync": [
+    177416,
+    177664
+   ]
+  },
+  {
+   "angle": "a7iv",
+   "in_rel": 1709,
+   "out_rel": 1788,
+   "in_t": 71.28,
+   "out_t": 74.575,
+   "seconds": 3.29,
+   "sync": [
+    177664,
+    177743
+   ]
+  },
+  {
+   "angle": "fx6",
+   "in_rel": 1788,
+   "out_rel": 1936,
+   "in_t": 74.575,
+   "out_t": 80.747,
+   "seconds": 6.17,
+   "sync": [
+    177743,
+    177891
+   ]
+  },
+  {
+   "angle": "a7iv",
+   "in_rel": 1936,
+   "out_rel": 2023,
+   "in_t": 80.747,
+   "out_t": 84.376,
+   "seconds": 3.63,
+   "sync": [
+    177891,
+    177978
+   ]
+  },
+  {
+   "angle": "fx6",
+   "in_rel": 2023,
+   "out_rel": 2158,
+   "in_t": 84.376,
+   "out_t": 90.007,
+   "seconds": 5.63,
+   "sync": [
+    177978,
+    178113
+   ]
+  }
+ ],
+ "durations": [
+  2.04,
+  10.8,
+  2.42,
+  3.67,
+  3.09,
+  15.56,
+  9.26,
+  10.14,
+  3.96,
+  10.34,
+  3.29,
+  6.17,
+  3.63,
+  5.63
+ ],
+ "n_shots": 14,
+ "n_cuts": 13,
+ "histogram": {
+  "<2": 0,
+  "2-4": 7,
+  "4-8": 2,
+  "8-15": 4,
+  "15-30": 1,
+  ">30": 0
+ },
+ "one_bin": 0.5,
+ "fullest_bin": "2-4",
+ "cv": 0.614,
+ "median": 4.79,
+ "mean": 6.43,
+ "min": 2.04,
+ "max": 15.56,
+ "human_histogram": {
+  "<2": 0,
+  "2-4": 6,
+  "4-8": 3,
+  "8-15": 3,
+  "15-30": 2,
+  ">30": 0
+ },
+ "human_cv": 0.746,
+ "human_durations": [
+  2.253,
+  13.054,
+  2.586,
+  17.017,
+  3.295,
+  5.839,
+  10.302,
+  3.587,
+  2.795,
+  11.219,
+  5.047,
+  7.591,
+  2.544,
+  21.021
+ ],
+ "human_share_pct": {
+  "FX6": 73,
+  "A7IV": 27
+ },
+ "share_seconds": {
+  "fx6": 62.31,
+  "a7iv": 27.69
+ },
+ "share_pct": {
+  "fx6": 69.2,
+  "a7iv": 30.8
+ },
+ "early_ms": {
+  "min": 18.8,
+  "max": 39.0,
+  "median": 29.7
+ },
+ "accent_gap_s": {
+  "mean": 0.246,
+  "median": 0.28,
+  "max": 0.67,
+  "within_0_5": 12
+ },
+ "veto_violations": [],
+ "locked_ceiling_violations": [],
+ "pan_arrival_violations": [],
+ "short_return_violations": [],
+ "total_seconds": 90.0
+}

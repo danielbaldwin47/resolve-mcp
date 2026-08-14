@@ -1,0 +1,65 @@
+{
+ "ref": "master mix",
+ "window_t": [
+  60.0,
+  92.0
+ ],
+ "A7IV": [
+  {
+   "stream": 0,
+   "rms_db": -15.3,
+   "lag_s": 0.02,
+   "corr": 0.902
+  }
+ ],
+ "FX6": [
+  {
+   "stream": 0,
+   "rms_db": -240.0,
+   "lag_s": -3.0,
+   "corr": 0.0
+  },
+  {
+   "stream": 1,
+   "rms_db": -240.0,
+   "lag_s": -3.0,
+   "corr": 0.0
+  },
+  {
+   "stream": 2,
+   "rms_db": -17.9,
+   "lag_s": 0.02,
+   "corr": 0.652
+  },
+  {
+   "stream": 3,
+   "rms_db": -240.0,
+   "lag_s": -3.0,
+   "corr": 0.0
+  },
+  {
+   "stream": 4,
+   "rms_db": -240.0,
+   "lag_s": -3.0,
+   "corr": 0.0
+  },
+  {
+   "stream": 5,
+   "rms_db": -240.0,
+   "lag_s": -3.0,
+   "corr": 0.0
+  },
+  {
+   "stream": 6,
+   "rms_db": -240.0,
+   "lag_s": -3.0,
+   "corr": 0.0
+  },
+  {
+   "stream": 7,
+   "rms_db": -240.0,
+   "lag_s": -3.0,
+   "corr": 0.0
+  }
+ ]
+}

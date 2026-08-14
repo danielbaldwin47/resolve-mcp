@@ -1,0 +1,103 @@
+{
+  "mix": "P:\\Client Work\\Ryan Devlin\\2026-06-17_Zinc Bar\\Audio\\Reaper\\Zinc Set 2 Reaper v4.wav",
+  "sample_rate": 2000,
+  "cuts": {
+    "6-17 - Zinc Set 2 - Hardest Part.mp4": {
+      "file": "S:\\Deliverables\\Ryan Devlin\\6-17-26 Zinc Bar\\Full Videos\\6-17 - Zinc Set 2 - Hardest Part.mp4",
+      "duration_s": 534.165333,
+      "head_probe": {
+        "cut_offset_s": 5.0,
+        "mix_t_s": 1378.8725,
+        "score": 0.9999,
+        "implied_start_s": 1373.8725
+      },
+      "tail_probe": {
+        "cut_offset_s": 474.165,
+        "mix_t_s": 1848.0375,
+        "score": 0.9999,
+        "implied_start_s": 1373.8722
+      },
+      "drift_s": -0.0003,
+      "start_s": 1373.8725,
+      "end_s": 1908.0378
+    },
+    "6-17 - Zinc Set 2 - Maitland Boulevard.mp4": {
+      "file": "S:\\Deliverables\\Ryan Devlin\\6-17-26 Zinc Bar\\Full Videos\\6-17 - Zinc Set 2 - Maitland Boulevard.mp4",
+      "duration_s": 1173.184,
+      "head_probe": {
+        "cut_offset_s": 5.0,
+        "mix_t_s": 112.4405,
+        "score": 0.8899,
+        "implied_start_s": 107.4405
+      },
+      "tail_probe": {
+        "cut_offset_s": 1113.184,
+        "mix_t_s": 1220.6245,
+        "score": 0.9133,
+        "implied_start_s": 107.4405
+      },
+      "drift_s": 0.0,
+      "start_s": 107.4405,
+      "end_s": 1280.6245
+    },
+    "6-17 - Zinc Set 2 - Sambra.mp4": {
+      "file": "S:\\Deliverables\\Ryan Devlin\\6-17-26 Zinc Bar\\Full Videos\\6-17 - Zinc Set 2 - Sambra.mp4",
+      "duration_s": 784.298667,
+      "head_probe": {
+        "cut_offset_s": 5.0,
+        "mix_t_s": 2730.014,
+        "score": 0.9936,
+        "implied_start_s": 2725.014
+      },
+      "tail_probe": {
+        "cut_offset_s": 724.299,
+        "mix_t_s": 3449.313,
+        "score": 0.9958,
+        "implied_start_s": 2725.0143
+      },
+      "drift_s": 0.0003,
+      "start_s": 2725.014,
+      "end_s": 3509.3127
+    },
+    "6-17 - Zinc Set 2 - Soultrane.mp4": {
+      "file": "S:\\Deliverables\\Ryan Devlin\\6-17-26 Zinc Bar\\Full Videos\\6-17 - Zinc Set 2 - Soultrane.mp4",
+      "duration_s": 761.28,
+      "head_probe": {
+        "cut_offset_s": 5.0,
+        "mix_t_s": 1925.1265,
+        "score": 0.9867,
+        "implied_start_s": 1920.1265
+      },
+      "tail_probe": {
+        "cut_offset_s": 701.28,
+        "mix_t_s": 2621.4065,
+        "score": 0.9924,
+        "implied_start_s": 1920.1265
+      },
+      "drift_s": 0.0,
+      "start_s": 1920.1265,
+      "end_s": 2681.4065
+    },
+    "6-17 - Zinc Set 2 - Taurus People.mp4": {
+      "file": "S:\\Deliverables\\Ryan Devlin\\6-17-26 Zinc Bar\\Full Videos\\6-17 - Zinc Set 2 - Taurus People.mp4",
+      "duration_s": 497.664,
+      "head_probe": {
+        "cut_offset_s": 5.0,
+        "mix_t_s": 3573.4815,
+        "score": 0.9516,
+        "implied_start_s": 3568.4815
+      },
+      "tail_probe": {
+        "cut_offset_s": 437.664,
+        "mix_t_s": 4006.1455,
+        "score": 0.9615,
+        "implied_start_s": 3568.4815
+      },
+      "drift_s": 0.0,
+      "start_s": 3568.4815,
+      "end_s": 4066.1455
+    }
+  },
+  "errors": [],
+  "mix_seconds": 4450.5
+}

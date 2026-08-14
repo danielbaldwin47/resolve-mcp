@@ -1,0 +1,162 @@
+{
+ "rows": [
+  {
+   "window_t": 0.41,
+   "seconds": 2.253,
+   "sync": 175965,
+   "scores": {
+    "FX6": -0.01,
+    "A7IV": 0.935
+   },
+   "angle": "A7IV",
+   "margin": 0.945
+  },
+  {
+   "window_t": 7.35,
+   "seconds": 13.054,
+   "sync": 176131,
+   "scores": {
+    "FX6": 0.942,
+    "A7IV": -0.122
+   },
+   "angle": "FX6",
+   "margin": 1.064
+  },
+  {
+   "window_t": 15.17,
+   "seconds": 2.586,
+   "sync": 176319,
+   "scores": {
+    "FX6": -0.043,
+    "A7IV": 0.935
+   },
+   "angle": "A7IV",
+   "margin": 0.978
+  },
+  {
+   "window_t": 24.97,
+   "seconds": 17.017,
+   "sync": 176554,
+   "scores": {
+    "FX6": 0.943,
+    "A7IV": -0.107
+   },
+   "angle": "FX6",
+   "margin": 1.049
+  },
+  {
+   "window_t": 35.13,
+   "seconds": 3.295,
+   "sync": 176797,
+   "scores": {
+    "FX6": -0.038,
+    "A7IV": 0.937
+   },
+   "angle": "A7IV",
+   "margin": 0.975
+  },
+  {
+   "window_t": 39.69,
+   "seconds": 5.839,
+   "sync": 176907,
+   "scores": {
+    "FX6": 0.941,
+    "A7IV": -0.08
+   },
+   "angle": "FX6",
+   "margin": 1.021
+  },
+  {
+   "window_t": 47.76,
+   "seconds": 10.302,
+   "sync": 177100,
+   "scores": {
+    "FX6": 0.184,
+    "A7IV": 0.943
+   },
+   "angle": "A7IV",
+   "margin": 0.758
+  },
+  {
+   "window_t": 54.71,
+   "seconds": 3.587,
+   "sync": 177267,
+   "scores": {
+    "FX6": 0.939,
+    "A7IV": 0.059
+   },
+   "angle": "FX6",
+   "margin": 0.88
+  },
+  {
+   "window_t": 57.9,
+   "seconds": 2.795,
+   "sync": 177343,
+   "scores": {
+    "FX6": 0.17,
+    "A7IV": 0.941
+   },
+   "angle": "A7IV",
+   "margin": 0.771
+  },
+  {
+   "window_t": 64.91,
+   "seconds": 11.219,
+   "sync": 177511,
+   "scores": {
+    "FX6": 0.939,
+    "A7IV": 0.108
+   },
+   "angle": "FX6",
+   "margin": 0.831
+  },
+  {
+   "window_t": 73.04,
+   "seconds": 5.047,
+   "sync": 177706,
+   "scores": {
+    "FX6": 0.017,
+    "A7IV": 0.932
+   },
+   "angle": "A7IV",
+   "margin": 0.915
+  },
+  {
+   "window_t": 79.36,
+   "seconds": 7.591,
+   "sync": 177858,
+   "scores": {
+    "FX6": 0.928,
+    "A7IV": -0.063
+   },
+   "angle": "FX6",
+   "margin": 0.991
+  },
+  {
+   "window_t": 84.43,
+   "seconds": 2.544,
+   "sync": 177979,
+   "scores": {
+    "FX6": -0.018,
+    "A7IV": 0.938
+   },
+   "angle": "A7IV",
+   "margin": 0.956
+  },
+  {
+   "window_t": 87.85,
+   "seconds": 21.021,
+   "sync": 178061,
+   "scores": {
+    "FX6": 0.929,
+    "A7IV": 0.002
+   },
+   "angle": "FX6",
+   "margin": 0.927
+  }
+ ],
+ "share_seconds": {
+  "FX6": 79.328,
+  "A7IV": 28.822000000000003
+ }
+}

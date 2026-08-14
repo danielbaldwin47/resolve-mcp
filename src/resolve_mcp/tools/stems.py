@@ -22,6 +22,7 @@ def separate_stems(
     bin: str | None = None,  # noqa: A002 - "bin" is the Resolve term the agent uses
     refresh: bool = False,
     split_wind: bool = False,
+    detach: bool = True,
 ) -> dict[str, Any]:
     """Split audio into stems on the GPU, in two passes or three, as a background job.
 
@@ -37,11 +38,20 @@ def separate_stems(
     "other" is already the winds, and the pass costs time to recover nothing. Turning it on
     for audio already separated re-runs the earlier passes too.
 
+    The separation runs in a process of its own and keeps running if this server exits, so a
+    half-hour pass on a full set is not lost with the session that started it; get_job reads
+    the same either way. Pass detach=false to keep it on a thread here — only useful when you
+    want the job to die with the server. The export that comes first cannot be detached (it
+    drives Resolve), so a server that dies during that part still loses the job.
+
     scope=timeline exports and separates the timeline mix (the only route that captures
     Resolve's own summing of the tracks); scope=clip reads one media pool clip's file
     directly, which is faster but does not see any level or mapping the director set. Both
     are cached by content and parameters, so a rerun on unchanged media is instant; pass
     refresh=true when you changed something no reading can see, such as a clip's level.
+    Asking again while a separation of the same audio is still running is safe: the second
+    job waits for the first and returns the stems it wrote rather than failing or separating
+    the same audio twice, so it reports "waiting" for as long as the first one takes.
     """
     return {
         "job": stems.separate_stems(
@@ -52,6 +62,7 @@ def separate_stems(
             bin=bin,
             refresh=refresh,
             split_wind=split_wind,
+            detach=detach,
         )
     }
 

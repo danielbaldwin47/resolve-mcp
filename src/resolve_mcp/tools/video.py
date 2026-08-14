@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..resolve.connection import get_connection
-from ..video import frames, scenes
+from ..video import frames, occlusion, scenes
 from .envelope import tool
 
 
@@ -73,6 +73,47 @@ def detect_scene_cuts(
     )
 
 
-TOOLS: tuple[Any, ...] = (grab_frames, detect_scene_cuts)
+@tool
+def analyze_occlusion(
+    clip: str,
+    bin: str | None = None,  # noqa: A002 - the agent-facing word for a media pool folder
+    start: Any = None,
+    end: Any = None,
+    sample_fps: float = occlusion.DEFAULT_SAMPLE_FPS,
+    threshold: float = occlusion.DEFAULT_THRESHOLD,
+    refresh: bool = False,
+) -> dict[str, Any]:
+    """Start a job scoring how much of an angle is blocked by something in the near field.
 
-__all__ = ["TOOLS", "detect_scene_cuts", "grab_frames"]
+    The question before you cut to a camera: is anyone's head, hat, phone or back in the way?
+    Returns a job_id to poll with get_job. Run it over the range of a song on every angle you
+    are considering, then keep your cuts out of the windows it reports.
+
+    start and end are the clip's own frame numbers, dual time as everywhere — start=85653 or
+    start={"seconds": 3572.1, "snap": "floor"} — and default to the whole clip. inspect_clip
+    reports the bounds they sit inside. Frames are sampled about once a second and scored 0-1
+    on near-field blocking: a large, dark or textureless blob anchored to the bottom or side
+    of frame, scored above what this shot covers when nothing is in the way, and scored higher
+    when it wipes in mid-shot.
+
+    Inline you get the worst windows — in, out, duration, peak and mean score — plus how many
+    samples were blocked and the run's baseline. path is the JSON with the whole per-sample
+    curve; read it when you need to justify or dispute a window. A score near the threshold is
+    a partial block, so grab_frames the peak and look before you write the angle off.
+    """
+    connection = get_connection()
+    return occlusion.analyze_occlusion(
+        connection,
+        clip,
+        bin=bin,
+        start=start,
+        end=end,
+        sample_fps=sample_fps,
+        threshold=threshold,
+        refresh=refresh,
+    )
+
+
+TOOLS: tuple[Any, ...] = (grab_frames, detect_scene_cuts, analyze_occlusion)
+
+__all__ = ["TOOLS", "analyze_occlusion", "detect_scene_cuts", "grab_frames"]

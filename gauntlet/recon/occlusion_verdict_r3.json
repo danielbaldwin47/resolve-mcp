@@ -1,0 +1,68 @@
+{
+  "kind": "occlusion_adjudication",
+  "round": 3,
+  "piece": "Taurus People opening (mix 3568.48-3658.48 s, Zinc SYNC 171959-174117)",
+  "method": "Every window analyze_occlusion flagged inside the piece was judged by eye on 2-3 frames pulled from the source through grab_frames (clip frames = base + t*23.976; FX6 base 54383, A7IV base 85653). A window is a VETO only when an audience head/hat/back sits in the foreground third (styles/concert.md sec 4); a small dark head low in the corner between the lens and an empty part of the room is background, which that same bullet names as the exception.",
+  "scripts": ["occl_grabs_r3.py", "occl_grabs_r3b.py"],
+  "windows": [
+    {
+      "angle": "FX6",
+      "window_s": [11.97, 18.94],
+      "tool_peak": 1.0,
+      "verdict": "CONFIRMED - true near-field blocking",
+      "evidence": [
+        "t=13.5 s: a black, motion-blurred audience head and shoulder fills the lower-left foreground third; the pianist is behind it.",
+        "t=16.5 s: same head, now covering the piano and the left third of the stage."
+      ],
+      "action": "FX6 kept off screen 10.64-20.48 s; A7IV carries the whole window. Round 2 ran FX6 14.98-22.72 straight through it and two judges named it."
+    },
+    {
+      "angle": "A7IV",
+      "window_s": [41.96, 42.92],
+      "tool_peak": 0.604,
+      "verdict": "CONFIRMED - true near-field blocking",
+      "evidence": [
+        "t=42.5 s (occlusion_frames/a7iv_42.5s_flagged.jpg): an out-of-focus head and shoulder fills the right half of frame and runs off the bottom and right edges."
+      ],
+      "action": "A7IV kept off screen 36.08-44.34 s; the FX6 release shot covers it. Round 2 held A7IV 38.24-48.02 across it."
+    },
+    {
+      "angle": "FX6",
+      "window_s": [42.96, 49.92],
+      "tool_peak": 0.594,
+      "verdict": "OVERRIDDEN - false positive",
+      "evidence": [
+        "t=41.5 / 43.5 / 44.3 s: clean piano-and-bass two-shot, bassist prominent, nothing in the near field.",
+        "t=44.5 / 47.5 s: same, the frame settled."
+      ],
+      "action": "FX6 used 36.08-44.34 and 54.27-61.52. What the scan is scoring here is a small dark head at the extreme bottom-right corner plus the black piano body in the left foreground."
+    },
+    {
+      "angle": "FX6",
+      "window_s": [52.97, 53.93],
+      "tool_peak": 0.682,
+      "verdict": "OVERRIDDEN - false positive",
+      "evidence": ["t=53.5 s: clean piano-and-bass two-shot; the only head in frame is the same bottom-right corner one, low and background."],
+      "action": "no constraint applied."
+    },
+    {
+      "angle": "FX6",
+      "window_s": [55.97, 60.94],
+      "tool_peak": 0.624,
+      "verdict": "OVERRIDDEN - false positive",
+      "evidence": ["t=57.5 s and t=59.5 s: clean piano-and-bass two-shot, unchanged from the unflagged seconds either side."],
+      "action": "FX6 used 54.27-61.52 across it."
+    },
+    {
+      "angle": "FX6",
+      "window_s": [66.98, 89.92],
+      "tool_peak": 0.582,
+      "verdict": "OVERRIDDEN - false positive, and the biggest one: 23 s, a quarter of the piece",
+      "evidence": [
+        "t=68.5 / 73.0 / 78.0 / 83.0 / 88.0 s: all five are the same clean piano-and-bass two-shot. Nothing enters the foreground third at any of them."
+      ],
+      "action": "FX6 used 66.82-71.78, 75.83-79.66 and 82.54-90.01. Treating this window as a veto would have handed the last 23 s to one locked angle."
+    }
+  ],
+  "tuning_ledger_note": "Two signals appear to drive the false positives, and both are static across the whole take: (1) a small dark audience head parked in the extreme bottom-right corner of the FX6 frame - low, tiny, and between the lens and an empty part of the room, which concert.md sec 4 explicitly calls background rather than obstruction; (2) the black body and raised lid of the piano occupying the left foreground of the same frame - dark, near, and never moving. A true blocking in this piece (FX6 11.97-18.94, A7IV 41.96-42.92) differs in three readable ways: it scores near 1.0 rather than 0.58-0.68, it MOVES (frame-to-frame change inside the flagged region), and it covers a subject the shot is about. Candidate fixes for the detector: require motion or novelty against the take's own baseline before flagging, weight the foreground third by distance from the frame edge, and report a separate score for regions that persist unchanged across the whole clip. Also worth noting the scan's precision here: 2 of 6 windows were real, and both real ones were the ones the critics had already seen."
+}
