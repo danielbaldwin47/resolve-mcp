@@ -30,6 +30,7 @@ from resolve_mcp.audio.stems import (
     KIND,
     MIX_PASS,
     OTHER_PASS,
+    OTHER_SOURCE,
     SEPARATED,
     SEPARATION,
     WIND_FLOOR,
@@ -283,18 +284,18 @@ def test_a_wind_model_that_leaves_a_half_out_fails_naming_it(attach: Attach) -> 
 def test_the_flag_keys_the_job_while_the_model_keys_the_stems(
     attach: Attach,
     separating: FakeSeparator,
-    splitting: FakeSeparator,
 ) -> None:
     """Both halves of where the third pass lives in the two keys.
 
     The flag is a job param, or the run that asks for the wind pass is handed the cached
     two-pass answer and never runs anything. It is *not* a stems-key param, or turning it on
-    would separate the same audio into a second directory and orphan the first.
+    would separate the same audio into a second directory and orphan the first — so the
+    second run here reaches the first run's directory and owes it one pass.
     """
     attach(studio(timeline=with_a_mix(FakeTimeline("sunset-set v3", "59.94"))))
     two = wait_for(separate_stems(get_connection(), runner=separating)["job_id"])
 
-    three = separate_stems(get_connection(), runner=splitting, split_wind=True)
+    three = separate_stems(get_connection(), runner=FakeSeparator(WIND_STEMS), split_wind=True)
 
     assert three["cached"] is False
     record = wait_for(three["job_id"])
@@ -306,20 +307,68 @@ def test_the_flag_keys_the_job_while_the_model_keys_the_stems(
     assert separation_params()["wind_stems"] == list(WIND_STEMS)
 
 
-def test_a_two_pass_result_on_disk_does_not_read_as_complete_when_the_wind_pass_is_on(
+def test_a_wind_split_on_stems_already_on_disk_runs_only_the_missing_pass(
     tmp_path: Path,
     separating: FakeSeparator,
+) -> None:
+    """#192: the pass a directory is missing is the only work that run owes.
+
+    The count is the assertion. What the third pass costs is the whole reason it is opt-in, and
+    the bug was that asking for it charged for the first two as well.
+    """
+    audio = _acquired(tmp_path)
+    two = multi_pass(audio, _params(), _ignored, runner=separating)
+    wind = FakeSeparator(WIND_STEMS)
+
+    output = multi_pass(audio, _params(), _ignored, runner=wind, split_wind=True)
+
+    assert len(wind.calls) == 1
+    assert _flag(wind.calls[0], "--model_filename") == get_config().wind_model
+    assert wind.calls[0][1] == two.result["stems"][OTHER_SOURCE]
+    assert set(output.result[OTHER_PASS]) == set(WIND_KEYS.values())
+    assert output.result["stems"] == two.result["stems"]
+    assert output.result["drums"] == two.result["drums"]
+    # Something ran, so this is not the reuse that reports no separator environment (#202).
+    assert output.result["reused"] is False
+
+
+def test_a_directory_whose_drum_pass_is_gone_redoes_that_pass_alone(
+    tmp_path: Path,
     splitting: FakeSeparator,
 ) -> None:
-    """A directory missing the pass this run wants is partial, and partial is redone whole."""
+    """The same rule, one pass earlier: what is on disk in full is not separated again."""
     audio = _acquired(tmp_path)
-    multi_pass(audio, _params(), _ignored, runner=separating)
+    first = multi_pass(audio, _params(), _ignored, runner=splitting, split_wind=True)
+    for stem in (Path(first.result["directory"]) / DRUM_PASS).glob("*.wav"):
+        stem.unlink()
+    again = FakeSeparator(SIX_DRUM_STEMS)
 
-    output = multi_pass(audio, _params(), _ignored, runner=splitting, split_wind=True)
+    output = multi_pass(audio, _params(), _ignored, runner=again, split_wind=True)
 
-    assert output.result["reused"] is False
-    assert len(splitting.calls) == 3
-    assert set(output.result[OTHER_PASS]) == set(WIND_KEYS.values())
+    assert len(again.calls) == 1
+    assert _flag(again.calls[0], "--model_filename") == get_config().drum_model
+    assert output.result[OTHER_PASS] == first.result[OTHER_PASS]
+
+
+def test_a_directory_missing_its_first_pass_is_redone_whole(
+    tmp_path: Path,
+    splitting: FakeSeparator,
+) -> None:
+    """Only a pass whose own input is on disk can be skipped.
+
+    The later two are cut from files the first pass wrote, so a mix pass that has to run again
+    makes both of them provisional: reusing them would decompose one separation's drums beside
+    another's, in a directory whose name promises they came from the same run.
+    """
+    audio = _acquired(tmp_path)
+    first = multi_pass(audio, _params(), _ignored, runner=splitting, split_wind=True)
+    for stem in (Path(first.result["directory"]) / MIX_PASS).glob("*.wav"):
+        stem.unlink()
+    again = FakeSeparator(FOUR_STEMS, SIX_DRUM_STEMS, WIND_STEMS)
+
+    multi_pass(audio, _params(), _ignored, runner=again, split_wind=True)
+
+    assert len(again.calls) == 3
 
 
 def test_a_two_pass_result_on_disk_is_complete_when_the_wind_pass_is_off(
@@ -533,13 +582,16 @@ def test_the_stems_a_job_owns_are_what_its_cache_entry_verifies(
     first = wait_for(separate_stems(get_connection(), runner=separating)["job_id"])
     assert first.result is not None
     Path(first.result["drums"]["kick"]).unlink()
+    redoing = FakeSeparator(SIX_DRUM_STEMS)
 
-    again = wait_for(separate_stems(get_connection(), runner=separating)["job_id"])
+    again = wait_for(separate_stems(get_connection(), runner=redoing)["job_id"])
 
     assert again.cached is False
     assert again.state == "completed", again.error
     assert again.result is not None
     assert Path(again.result["drums"]["kick"]).exists()
+    # The pass the missing stem belongs to, and no other: the mix is still whole (#192).
+    assert len(redoing.calls) == 1
 
 
 # --- failures ----------------------------------------------------------------------------
@@ -727,7 +779,7 @@ def test_a_byte_the_consoles_codepage_cannot_decode_does_not_kill_the_run() -> N
     """
     seen: list[str] = []
 
-    returncode = separator._run(_emitting(b"separating four stems (1%): \x8f"), seen.append)
+    returncode = separator.run(_emitting(b"separating four stems (1%): \x8f"), seen.append)
 
     assert returncode == 0
     assert seen == ["separating four stems (1%): �\n"]
@@ -738,7 +790,7 @@ def test_the_output_is_read_as_utf_8_whatever_the_console_is() -> None:
     """The bar audio-separator draws is UTF-8; decoded as cp1252 it comes back as mojibake."""
     seen: list[str] = []
 
-    separator._run(_emitting("100%|██████| 4/4 café".encode()), seen.append)
+    separator.run(_emitting("100%|██████| 4/4 café".encode()), seen.append)
 
     assert seen == ["100%|██████| 4/4 café\n"]
 

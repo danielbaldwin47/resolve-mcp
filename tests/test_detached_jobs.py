@@ -229,7 +229,7 @@ def test_a_handed_off_job_stays_running_and_names_the_process_that_has_it() -> N
     assert (landed.state, landed.detached, landed.pid) == (store.RUNNING, True, pid)
     assert str(pid) in landed.step
     assert spawn.calls[0][0] == detached.command(record.job_id)
-    assert spawn.calls[0][1] == detached.worker_log(record.job_id, get_config())
+    assert spawn.calls[0][1] == store.worker_log(record.job_id, get_config())
 
 
 def test_a_worker_that_hands_off_neither_finishes_the_job_nor_caches_a_result(
@@ -515,6 +515,63 @@ def test_a_detached_job_whose_worker_is_gone_is_failed_and_says_so() -> None:
     assert str(pid) in failed.error["cause"]
     assert failed.error["detail"]["step"] == "separating four stems (50%)"
     assert store.load(record.job_id).state == store.FAILED  # written back, judged once
+
+
+def test_a_dead_workers_own_output_arrives_on_the_record_that_says_it_died() -> None:
+    """#192: a detached worker's log is the only witness to how it died, so it is folded in.
+
+    The child has no console and nothing reading its pipes: everything the pass printed —
+    the separator's own complaint included — is in that file and nowhere else. A failure that
+    named only the pid left a crash halfway through a pass to be diagnosed from the half of
+    the stems that made it to disk.
+    """
+    pid = _a_pid_that_has_exited()
+    record = _running_under_a_dead_server(pid, step="splitting the winds (50%)")
+    log_file = store.worker_log(record.job_id, get_config())
+    log_file.write_text(
+        "loading 17_HP-Wind_Inst-UVR\nCUDA error: out of memory\n", encoding="utf-8"
+    )
+
+    failed = store.load(record.job_id)
+
+    assert failed.state == store.FAILED
+    assert failed.error is not None
+    assert "CUDA error: out of memory" in failed.error["detail"]["output"]
+    assert failed.error["detail"]["worker_log"] == str(log_file)
+
+
+def test_a_worker_that_died_before_it_printed_anything_still_names_where_it_would_have() -> None:
+    """No log is not a failure to report — the path is the answer to "where would it be"."""
+    record = _running_under_a_dead_server(_a_pid_that_has_exited())
+
+    failed = store.load(record.job_id)
+
+    assert failed.state == store.FAILED
+    assert failed.error is not None
+    assert failed.error["detail"]["output"] is None
+    assert failed.error["detail"]["worker_log"].endswith(".worker.log")
+
+
+def test_only_the_end_of_a_long_worker_log_travels_on_the_record() -> None:
+    """A separation prints a progress bar for half an hour, and a record is read into context.
+
+    The whole file stays on disk under the path beside it — what goes on the record is the end,
+    which is where a crash writes.
+    """
+    pid = _a_pid_that_has_exited()
+    record = _running_under_a_dead_server(pid)
+    chatter = "\n".join(f"separating {index}%" for index in range(5000))
+    store.worker_log(record.job_id, get_config()).write_text(
+        f"{chatter}\nAccess violation\n", encoding="utf-8"
+    )
+
+    failed = store.load(record.job_id)
+
+    assert failed.error is not None
+    output = failed.error["detail"]["output"]
+    assert "Access violation" in output
+    assert "separating 0%" not in output
+    assert len(output.splitlines()) == store.WORKER_TAIL_LINES
 
 
 def test_a_worker_that_has_said_nothing_far_longer_than_any_job_takes_is_not_believed() -> None:
@@ -1003,7 +1060,7 @@ def test_a_real_detached_worker_finds_the_record_and_closes_it() -> None:
     assert finished.pid is not None
     assert finished.pid != os.getpid()
     assert finished.session != store.SESSION
-    assert detached.worker_log(record.job_id, get_config()).exists()
+    assert store.worker_log(record.job_id, get_config()).exists()
 
 
 # --- the separation itself -----------------------------------------------------------------
@@ -1730,7 +1787,7 @@ def _why_the_worker_did_not_finish(record: JobRecord) -> str:
     import error, a cache directory it could not write. That is all in the log file the
     launcher opened for it.
     """
-    log_file = detached.worker_log(record.job_id, get_config())
+    log_file = store.worker_log(record.job_id, get_config())
     output = log_file.read_text(encoding="utf-8") if log_file.exists() else "(no worker log)"
     return f"job {record.job_id} is {record.state} at step {record.step!r}; worker log:\n{output}"
 

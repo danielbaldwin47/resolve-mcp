@@ -104,6 +104,20 @@ them, because closing a live separation is a worse failure than a dead record re
 for an afternoon. See ``_recovered_detached``.
 """
 
+WORKER_TAIL_LINES = 200
+"""Lines of a dead worker's own output kept on the record.
+
+Enough that a traceback survives the progress bar printed under it, and few enough that a
+record an agent reads into its context does not arrive as half an hour of percentages.
+"""
+
+WORKER_TAIL_BYTES = 64 * 1024
+"""How far back from the end those lines are looked for, so the whole file is never read.
+
+A separation's log is a bar redrawn for half an hour; the tail is all that is ever wanted, and
+seeking to it costs the same whether the file is a kilobyte or a hundred megabytes.
+"""
+
 _sequence = itertools.count()
 """Breaks ties in "newest first": the Windows clock is coarser than two starts in a row."""
 
@@ -161,6 +175,42 @@ def _job_id(kind: str) -> str:
 
 def _path(job_id: str, config: Config) -> Path:
     return config.job_dir / f"{job_id}.json"
+
+
+def worker_log(job_id: str, config: Config) -> Path:
+    """Where a detached worker's own output lands: beside the record, never inside it.
+
+    Named here rather than in ``detached``, which is what opens it, because this module is
+    what reads it back: a worker that dies mid-pass never writes its own failure, and
+    ``_interrupted`` is where the last thing it said is put on the record. ``detached``
+    borrows the name from here so the two can never drift apart.
+    """
+    return config.job_dir / f"{job_id}.worker.log"
+
+
+def worker_tail(job_id: str, config: Config) -> str | None:
+    """The end of what that worker printed, or ``None`` when it printed nothing readable.
+
+    Blank lines are dropped and the rest is capped at ``WORKER_TAIL_LINES``, read from the
+    last ``WORKER_TAIL_BYTES`` of the file. Decoded with ``replace`` for two reasons: the seek
+    lands mid-character whenever the file is long, and the output being salvaged is a progress
+    bar with a crash at the end of it — no byte in one is worth losing the crash over.
+
+    Unreadable is ``None`` rather than a raise. This runs while a job is being failed, and a
+    log that cannot be opened must not turn "the worker died" into an error about a log file.
+    """
+    path = worker_log(job_id, config)
+    try:
+        size = path.stat().st_size
+        with path.open("rb") as handle:
+            if size > WORKER_TAIL_BYTES:
+                handle.seek(size - WORKER_TAIL_BYTES)
+            raw = handle.read()
+    except OSError as exc:
+        log.info("No worker output to read at %s (%s)", path, exc)
+        return None
+    lines = [one for one in raw.decode("utf-8", "replace").splitlines() if one.strip()]
+    return "\n".join(lines[-WORKER_TAIL_LINES:]) or None
 
 
 def new_job(
@@ -894,7 +944,14 @@ def _age(stamp: str) -> float | None:
 
 
 def _interrupted(record: JobRecord, cause: str, config: Config) -> JobRecord:
-    """Close a job nothing is running any more, under this session, saying why."""
+    """Close a job nothing is running any more, under this session, saying why.
+
+    Every route here is a detached job whose worker is gone, and a process that is gone cannot
+    write its own failure onto the record — so what it printed before it went is the only
+    account of it there will ever be, and it is folded in here rather than left in a file
+    beside the record for somebody to think of looking in (#192). The path goes on too: the
+    tail is the end of the story, and the whole of it stays where it was written.
+    """
     interrupted = JobInterruptedError(
         cause=cause,
         detail={
@@ -902,6 +959,8 @@ def _interrupted(record: JobRecord, cause: str, config: Config) -> JobRecord:
             "pid": record.pid,
             "progress": record.progress,
             "step": record.step,
+            "worker_log": str(worker_log(record.job_id, config)),
+            "output": worker_tail(record.job_id, config),
         },
     )
     record.session = SESSION
