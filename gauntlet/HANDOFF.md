@@ -97,7 +97,8 @@ filed via `/to-tickets` (user skill; if absent post-compact, ask or use
    in/out + straddle check; per-cut visual delta + 30°-rule; stability
    score. (Motion classes, boundary strips, audio classing, beat offsets
    are done — scope tickets to the remainder.)
-4. G6: angle sidecar A7IV zero off-by-one (86306 measured vs 86307) — trivial.
+4. ~~G6: angle sidecar A7IV zero off-by-one (86306 measured vs 86307)~~ —
+   done, #185 (sidecar item source in 31269 → 31270).
 5. G7: four dormant build-path risks (startFrame rebase; fail-open E5 on
    bounds-less clips; _append length unchecked; _verify no readback).
 6. G13: built timelines inherit project 4K default; every round manually

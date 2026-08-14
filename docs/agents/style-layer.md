@@ -99,12 +99,26 @@ director confirmed this reading on 2026-08-07** — sidecars stay in the repo.
 }
 ```
 
-- **`role`** is the only key `correlate_timeline` consumes, and it is what
-  cross-project claims group on — so keep the vocabulary small and reuse it
-  across projects. `<subject>-<character>` is the default shape.
+- **`role`** is what cross-project claims group on — so keep the vocabulary
+  small and reuse it across projects. `<subject>-<character>` is the default
+  shape.
 - **`subject`** and **`character`** are the two axes kept apart, because
   "the drummer" and "a moving shot" are different facts about the same camera
-  and the profile makes claims about each.
+  and the profile makes claims about each. `subject` is also the second key
+  `correlate_timeline` consumes (#181): with a solo map it answers whether a
+  shot is on the player out front, on the ensemble, on a player who was not
+  soloing, or on neither (an audience camera, a room shot). It is read from
+  `subject` where an entry names one and otherwise from the subject half of a
+  `<subject>-<character>` role — a one-word role is a *character* and labels no
+  subject. `ensemble` is the whole band; `soloist` is a camera pointed at
+  whoever is out front, whose shots are on the soloist by construction rather
+  than by measurement — the reading says which of the two it was, and how many
+  of a cut's soloist seconds came from a camera taken at its word.
+- **`voice`** — optional, and only where this sidecar's subjects and the solo
+  map's stems are different words for the same player: `{"subject": "mike",
+  "voice": "wind"}`. The join uses it; a subject the solo map never names reads
+  as neither a player nor the band, which is right for an audience camera and
+  wrong for a horn player nobody aliased.
 - **`confidence`** and **`evidence`** are why a claim resting on this angle is
   thin or not: a `low` here is a reason a corpus claim downgrades.
 - **`confirmed_by_director`** — `false` until confirmed, then the date it was
@@ -169,7 +183,9 @@ one project: on the Judson's show `Angle 10` is the drummer on one tune and the
 roaming camera on another. Label every timeline separately.
 
 An entry with no `role` is dropped by `correlate_timeline` rather than refused,
-so a half-labelled project still measures — its shots land under `unlabelled`.
+so a half-labelled project still measures — its shots land under `unlabelled`,
+in the role shares and in the on-soloist track alike, and the track counts that
+screen time apart from its shares rather than in them.
 
 Pass a sidecar by lifting its `angles` object straight through; the tool takes
 labels, never a path:

@@ -98,16 +98,46 @@ Round 1 critic, verbatim needs; each is server measurement work:
    cannot resolve musicality).
 5. Audio class track (applause/speech/music/silence at 1 s resolution).
 6. Per-shot subject labeling × who-is-soloing track — the core concert
-   question.
+   question. **Fixed in #181** (`analysis/subject.py`): the sidecar's subject
+   read as player/ensemble/other and joined to the solo windows in seconds, so
+   `correlate_timeline` carries `subject`/`subject_kind`/`on_soloist` per shot
+   and an `on_soloist` share inline, and `ab_pack.py` carries the same track
+   into a pack (`--a-subjects`/`--b-subjects`, both or neither). Authored, not
+   detected: no pixel here knows a drummer from a horn player, so the answer is
+   only as good as the sidecar — a camera that roams the band is labelled by
+   habit rather than by shot, and `unlabelled_seconds` is what says how much of
+   the cut no label reached. Measured live on the two closed Taurus pieces
+   (`recon/subject_track.py`, receipt beside it): the R3 opening is 52% on the
+   ensemble, 48% on a non-soloing player, 0% on the soloist over 81.5 s of
+   labelled screen time; the P4 R2 capstone is 53% / 42% / 5% over 489 s. The
+   0% is real rather than a hole — this rig's only player camera is the drum
+   cam, and the solo map has nobody drumming out front in the opening. Spot
+   check against frames of both cameras: the FX6 wide holds the whole band
+   (`ensemble`) and the A7IV holds the drummer (`drums`, a player), the two
+   labels 15 of the opening's 17 shots carry; the other two are title cards,
+   which is what `unlabelled_seconds` counts. Two things the reading refuses to
+   round off: a camera on neither a player nor the band (audience, room) has its
+   own `elsewhere` line rather than counting as a player nobody was watching,
+   and `soloist_seconds_by_follow_camera` says how much of the soloist share
+   came from a camera whose sidecar label asserts it follows the front rather
+   than from a subject the solo map matched. Pack side verified on the same two
+   cuts (`recon/subject_pack.py`): the pack's share equals correlate's exactly,
+   nothing but the four subject columns crosses into the pack, and a span that
+   cuts through shots counts the part inside where the front held through it.
 7. Per-shot sharpness, clipped-highlight %, exposure variance.
 8. Super/graphic presence detection with in/out timecodes + straddle check.
 9. Head/tail treatment: fade-in vs dropped frames, audio floor handling.
 10. Audio feel across cuts (balance/room-tone jumps) beyond RMS level.
 
-## G6 — angle sidecar A7IV zero off by one (open, trivial)
+## G6 — angle sidecar A7IV zero off by one (closed)
 
-Builder measured A7IV record zero 86306 live; sidecar says 86307.
-Correct the sidecar datum.
+Builder measured A7IV record zero 86306 live; sidecar said 86307.
+Fixed 2026-08-14 (#185): the second A7IV item in
+`styles/angles/mcp-tests-zinc.json` carried source in 31269 against record
+117576; it is 31270, and the entry now records why (live `GetLeftOffset`,
+frame proof, and the entry's own duration arithmetic). No test fixture
+encoded the old datum, and the cut files under `projects/mcp-tests-zinc/`
+were already on 86306.
 
 ## G8 — song-opening title card convention absent from our workflow (open)
 
@@ -266,6 +296,28 @@ transitions. Fixes in flight: style (bimodal spread; break the
 alternation; accents matter at 0.5–1 s scale, not just onsets at 30 ms)
 + server (correlate report gains a shot_rhythm block with a
 reads_metronomic heuristic as a builder self-review gate).
+
+## G18 — the quiet floor reads locked-off even when its gear is right (in-work)
+
+P4R2's remaining flank, carried out of a round we won 3–0 (STATE.md).
+Ours holds the quiet passage (derived d38–195) at 6.88 cuts/min — the
+0.74× gear the arc table asks for, hit — and still parks: shot-length
+CV 0.597 against the human's 0.783 over the same passage, and the
+trough at 79–157 s is five holds (17.1|12.9|10.3|20.7|14.4) with one
+2.5 s flash punched through them. What makes this its own gap rather
+than G17's is scale: G17 is the whole cut reading metronomic, this is
+one passage parking while the cut around it varies enough to hide it.
+On this pair the orphan correction does **not** change the verdict —
+ours fails on the raw spread too (0.597, and 0.564 without the flash),
+so the flash is named rather than decisive. It is dropped because a
+spread a lone flash holds up is not a spread a viewer sees, not because
+it flipped this reading. Fixed both sides (#190): style (quiet passages
+keep their spread with no orphan flashes; what raises it is unequal
+holds, a reframe or push-in where the footage has one, a scale change)
++ server (`gears.quiet_floor` finds the passages off a smoothed level
+curve and reports `cv_less_orphans` / `reads_locked`, a blocker in
+`docs/agents/concert.md`). **Open until a full-song build passes it** —
+the measurement and the rule exist, the proving round does not.
 
 ## Round record
 

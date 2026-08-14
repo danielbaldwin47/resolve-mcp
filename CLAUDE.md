@@ -130,7 +130,14 @@ One rule: nothing enters the session unless the session is about to act on
 it. Noisy commands (`pytest`, `mypy`, `ruff`) redirect to a scratch file and
 the decisive line comes back via the Grep tool. Two plain calls — the
 worktree guard refuses compound commands (`;`-chains, `$(...)`, env-var
-paths), so the redirect is one bare command to a gitignored repo-local log:
+paths), and Claude Code (≥2.1.232) forces a manual approval prompt on any
+compound that pairs a directory change with output redirection — `cd`
+under Git Bash, `Set-Location` under PowerShell, so switching shells is no
+way out. The guard fires before it reads the target: an absolute log path
+does not clear it, an allow-rule does not either, and auto mode is
+explicitly barred from deciding. So the redirect is one bare command, run
+from the session's own cwd — a worktree session already starts in its
+worktree — to a gitignored repo-local log:
 
     uv run pytest -m 'not live' > pytest.scratch.log 2>&1
 
