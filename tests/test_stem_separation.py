@@ -846,6 +846,21 @@ def test_a_separator_too_old_to_answer_still_reports_rather_than_failing() -> No
     assert "warning" in report
 
 
+def test_a_parsed_build_is_believed_even_when_the_probe_exits_nonzero() -> None:
+    """A CLI can print its env_info and still exit non-zero (a stray warning at teardown).
+    The build was seen — reporting it as *unknown* would swallow the +cpu warning AC 6
+    exists for, on exactly the runs where it matters."""
+
+    def grumbling(argv: Sequence[str], on_line: separator.Lines) -> int:
+        on_line("2026-01-01 00:00:00,000 - INFO - separator - PyTorch Version: 2.13.0+cpu")
+        return 1
+
+    report = separator.environment(runner=grumbling)
+
+    assert report["torch"] == "2.13.0+cpu"
+    assert "CPU build" in report["warning"]
+
+
 def test_a_missing_separator_fails_the_probe_by_name() -> None:
     with pytest.raises(SeparatorUnavailableError):
         separator.environment(runner=_absent)

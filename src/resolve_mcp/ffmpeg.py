@@ -15,6 +15,7 @@ one, and the agent needs the fix that belongs to what it asked for.
 
 from __future__ import annotations
 
+import logging
 import subprocess
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -22,6 +23,8 @@ from typing import Any, NamedTuple
 
 from .config import Config, get_config
 from .errors import FfmpegUnavailableError, ResolveMcpError
+
+log = logging.getLogger(__name__)
 
 STDERR_TAIL = 800
 """How much of ffmpeg's own complaint travels back in a failure — the end, where it says why."""
@@ -84,10 +87,19 @@ def hwaccels(config: Config | None = None, runner: Runner | None = None) -> froz
         return cached
 
     finished = invoke(hwaccels_command(config.ffmpeg), runner=runner, config=config)
-    lines = (line.strip() for line in finished.stdout.splitlines())
-    found = frozenset(
-        line for line in lines if line and ":" not in line and finished.returncode == 0
-    )
+    if finished.returncode != 0:
+        # Logged here as well as in the per-route reason: the failure is cached for the
+        # whole process, and the probe moment is the only place its exit code is visible.
+        log.warning(
+            "The hardware-decode probe failed (%s -hwaccels exited %d); "
+            "treating this box as having no hardware decode support",
+            config.ffmpeg,
+            finished.returncode,
+        )
+        found = frozenset[str]()
+    else:
+        lines = (line.strip() for line in finished.stdout.splitlines())
+        found = frozenset(line for line in lines if line and ":" not in line)
     _hwaccel_probes[config.ffmpeg] = found
     return found
 

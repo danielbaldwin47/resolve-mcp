@@ -265,7 +265,9 @@ module, not the package, and never the whole package at once:
 - `fixtures.py` — `write_wav`/`write_clicks`/`write_hits`/`write_tones`
   (a melodic stem: pitched notes of a known length with known gaps)/
   `write_sections`/
-  `write_jpeg`, `ffmpeg_absent`, `ffmpeg_refusing`; and the headers stdlib
+  `write_jpeg`, `ffmpeg_absent`, `ffmpeg_refusing`, `hwaccel_probe_reply`
+  (answers the `-hwaccels` capability probe so fake runners survive it);
+  and the headers stdlib
   `wave` cannot write, built by hand — `write_float_wav`,
   `write_extensible_pcm_wav`, `write_tagged_wav`
 - `builders.py` — `studio()`, `sync_reference()`, `with_a_mix()`

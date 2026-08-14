@@ -16,12 +16,18 @@ says so in the log and the job record.**
 | Video post-decode filters (scale, select, JPEG encode) | same commands | CPU (ffmpeg filters) | not worth it | n/a — decode dominates; the scale runs on frames already in RAM, which is the shape the numpy consumers need |
 | Audio extraction | `audio/ffmpeg`, `analysis/decode` | CPU | none applicable | n/a — audio demux/PCM decode, no video stream decoded |
 | Occlusion arithmetic | `video/blocking` (numpy/scipy) | CPU | none wired | n/a — milliseconds per scan; decode dominates |
-| DSP analysis (energy, silence, drums, fills, melody, phrases, solos) | `analysis/*` (numpy) | CPU | none wired | n/a — pure numpy, no torch involved |
+| DSP analysis (energy, silence, drums, fills, melody, phrases, solos, correlate) | `analysis/*` (numpy) | CPU | none wired | n/a — pure numpy, no torch involved |
 | Beat grid | `analysis/beats` (beat_this, torch) | **CPU by policy** — see below | exists upstream (CUDA torch) | `device.announce("beat_this")` at inference; `torch` note in the music/structure job results |
 | Applause curve | `analysis/applause` (PANNs, torch) | **CPU by policy** — same decision | exists upstream | `device.announce("PANNs")`; same `torch` note |
 | Transcription | `analysis/whisper` (faster-whisper/CTranslate2) | **CUDA** (`whisper_device=auto`, runtime shipped by the analysis extra, #128) | yes — already wired | resolved device logged after model load; `auto`→CPU resolve is a WARNING |
 | Stem separation | `audio/separator` (external CLI, its own torch) | whatever the PATH install has — **found `2.13.0+cpu` on the live box, 2026-08-14** | yes — CUDA torch in the separator's env | `--env_info` probed before every fresh separation; build in the log + job record; `+cpu` build is a WARNING |
 | Rendering | `resolve/render`, `deliver` | Resolve's own GPU pipeline | Resolve's business | out of scope — Resolve manages its own devices |
+
+Deliberately out of scope: the gauntlet A/B pack's decodes
+(`gauntlet/tools/ab_pack.py`) run bare software ffmpeg — a dev-only
+evaluation tool, not a server compute path, and its runs are attended.
+`video/framing.py` (#184) is not on this branch; when it lands it takes
+its own row here.
 
 ## ffmpeg hardware decode (`ffmpeg_hwaccel`)
 

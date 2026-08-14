@@ -128,11 +128,9 @@ def _decoded(
             "profile, so the frames were decoded in software",
             source,
         )
-        report = {
-            "device": "cpu",
-            "reason": "ffmpeg fell back internally: the hardware decoder lacks this "
-            "codec profile",
-        }
+        report = Decode(
+            (), "cpu", "ffmpeg fell back internally: the hardware decoder lacks this codec profile"
+        ).report()
     elif finished.returncode != 0 and choice.flags and config.ffmpeg_hwaccel != "cuda":
         log.warning(
             "Hardware decode of %s failed (exit %d); retrying in software",
@@ -140,7 +138,7 @@ def _decoded(
             finished.returncode,
         )
         finished = invoke(build(()), runner=runner, config=config)
-        report = {"device": "cpu", "reason": "hardware decode failed; retried in software"}
+        report = Decode((), "cpu", "hardware decode failed; retried in software").report()
     return finished, report
 
 

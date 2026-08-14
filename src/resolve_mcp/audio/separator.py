@@ -127,7 +127,11 @@ def environment(
         "executable": config.audio_separator,
         "torch": found.group(1) if found else None,
     }
-    if found is None or returncode != 0:
+    if returncode != 0:
+        log.info("audio-separator --env_info exited %d; reading what it printed", returncode)
+    # A parsed build is believed even off a non-zero exit — the +cpu warning matters most
+    # on exactly the runs where the CLI also grumbled about something else.
+    if found is None:
         report["warning"] = (
             "The separator did not report its torch build (--env_info), so whether this "
             "separation runs on the GPU is unknown."

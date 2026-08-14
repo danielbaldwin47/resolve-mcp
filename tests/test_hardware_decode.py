@@ -170,7 +170,7 @@ def test_a_grab_on_a_cuda_box_decodes_with_the_flag_and_reports_the_device(
     assert written.decode == {"device": "cuda", "reason": None}
 
 
-def test_a_grab_on_a_boxwithout_cuda_reports_the_cpu_and_the_reason(tmp_path: Path) -> None:
+def test_a_grab_on_a_box_without_cuda_reports_the_cpu_and_the_reason(tmp_path: Path) -> None:
     def runner(argv: Sequence[str]) -> Completed:
         probed = hwaccel_probe_reply(argv, ())
         if probed is not None:
