@@ -10,7 +10,6 @@ from typing import Any
 
 from ..analysis import (
     applause,
-    bars,
     correlate,
     fills,
     music,
@@ -22,6 +21,7 @@ from ..analysis import (
     transcript,
     whisper,
 )
+from ..analysis import bars as bars_module  # `bars` is a tool argument on correlate_timeline
 from ..resolve.connection import get_connection
 from .envelope import tool
 
@@ -338,10 +338,10 @@ def detect_phrases(
 def detect_bars(
     audio: str,
     stems: str | None = None,
-    stem: str = bars.DEFAULT_STEM,
+    stem: str = bars_module.DEFAULT_STEM,
     start_seconds: float | None = None,
     end_seconds: float | None = None,
-    minimum_confidence: float = bars.DEFAULT_MINIMUM_CONFIDENCE,
+    minimum_confidence: float = bars_module.DEFAULT_MINIMUM_CONFIDENCE,
     refresh: bool = False,
 ) -> dict[str, Any]:
     """Find where the bar starts, when the beat model would not say. Returns a job to poll.
@@ -384,7 +384,7 @@ def detect_bars(
     the beat there is. refresh redoes work the cache would answer for.
     """
     return {
-        "job": bars.detect_bars(
+        "job": bars_module.detect_bars(
             audio,
             stems=stems,
             stem=stem,

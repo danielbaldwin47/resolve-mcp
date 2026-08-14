@@ -95,6 +95,48 @@ def collected(directory: Path) -> dict[str, Path]:
     return {}
 
 
+def stem_named(
+    stems: Mapping[str, str | Path] | str | Path,
+    wanted: str,
+    purpose: str,
+    absent: str,
+) -> Path:
+    """One stem out of a separation's directory or a mapping of named paths, or the refusal.
+
+    Both detectors that read a stem ask this the same way — a directory the job reported, or
+    the paths already lifted out of it — and both refuse the same two ways: the stem is not
+    among them, or it is named and gone. Those refusals were duplicated word for word before
+    #180 added the second caller, which is how a fix line gets corrected in one of them.
+
+    ``purpose`` and ``absent`` are what genuinely differ, and they differ because the advice
+    does: a phrase job cannot run without its stem and a bar job falls back to the master mix,
+    so a reader who got this error should not have to translate. The missing-file fix is the
+    same for both — the cache drops an entry whose files went missing, whoever asked.
+    """
+    if isinstance(stems, str | Path):
+        found = collected(Path(stems))
+    else:
+        found = {str(label): Path(path) for label, path in stems.items()}
+
+    chosen = found.get(wanted)
+    if chosen is None:
+        raise InvalidRequestError(
+            cause=f"There is no {wanted} stem {purpose}.",
+            fix=absent,
+            detail={"wanted": wanted, "found": sorted(found)},
+        )
+    if not chosen.is_file():
+        raise InvalidRequestError(
+            cause=f"The {wanted} stem is not on disk: {chosen}.",
+            fix=(
+                "Run separate_stems again — the cache drops an entry whose files went missing, "
+                "so asking for them redoes the separation."
+            ),
+            detail={"stem": str(chosen)},
+        )
+    return chosen
+
+
 def identity(source: Path, config: Config) -> dict[str, Any]:
     """Hash what this server wrote; fingerprint what the director handed over.
 

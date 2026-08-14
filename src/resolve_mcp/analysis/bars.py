@@ -39,6 +39,7 @@ strongest witness to the tactus there is, and the drums are brushes, which is th
 
 from __future__ import annotations
 
+import math
 import statistics
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
@@ -60,6 +61,8 @@ log = get_logger("analysis")
 KIND = "detect_bars"
 BARS = "bars"
 PLACES = 3
+BPM_PLACES = 2
+"""Tempo carries two decimals, everything else three — ``beats.gist``'s precision for a bpm."""
 
 TACTUS_LOW_BPM = 60.0
 TACTUS_HIGH_BPM = 200.0
@@ -98,6 +101,21 @@ FOLD_MARGIN = 0.15
 Below this the fold is on tempo alone — legitimate, since a pulse outside the tapping range
 cannot be the beat whatever the accents say, but a weaker claim, and ``reason`` says which
 of the two happened.
+
+A floor, not the whole test: see ``_accent_floor``. On a short span this number is *under*
+what noise scores, and a threshold below the noise floor is not a threshold.
+"""
+
+NOISE_SIGMAS = 3.0
+"""How far above what noise would give a contrast has to sit to count as evidence.
+
+A z-scored contrast between two halves of a reading has a standard error of roughly
+``sqrt(1/n + 1/m)`` even when there is nothing there — 0.18 over a 128-beat fixture, which is
+*above* ``FOLD_MARGIN``, and 0.02 over a seventy-four-minute set, which is far below it. A
+fixed threshold therefore means two different things at the two ends of that range: on the
+long span it is a real bar, and on the short one it admits pure noise. Three standard errors
+is the usual place to put "this is not chance", and taking the larger of the two floors keeps
+both ends honest.
 """
 
 FULL_CONTRAST = 1.0
@@ -134,7 +152,18 @@ disagreement away, which is the failure being checked for.
 """
 
 DEFAULT_MINIMUM_CONFIDENCE = 0.3
+"""Below this the reading is refused rather than written. See ``_confidence`` for the parts."""
+
 DEFAULT_STEM = "bass"
+"""The stem asked for when a separation is passed and no stem is named.
+
+The bass, because on this idiom it is the one instrument that states the pulse on every beat
+of it: a walking line plays a note per quarter whether the drummer is on brushes or the room
+swallowed the kit. It is a witness to the *tactus* far more than to the bar — where the root
+falls is a harmonic question this reading does not ask — which is why it is a default and not
+a requirement.
+"""
+
 ACCENT_WINDOW_SECONDS = 0.12
 """How much audio after a beat is read as that beat's accent.
 
@@ -169,6 +198,15 @@ whole tune. Either it holds nearly throughout, or the map is inferred from scrat
 MODEL = "model"
 INFERRED = "inferred"
 REFUSED = "refused"
+
+GIVEN = "given"
+ACCENT = "accent"
+TEMPO = "tempo"
+"""Why the pulse is what it is: the grid as handed over, the accents, or the rate alone.
+
+``MODEL`` is a fourth: a map taken from the model's own downbeats never consulted the fold,
+and reporting ``given`` there would read as a fold verdict on a fold that never ran.
+"""
 
 
 class Tactus(NamedTuple):
@@ -233,9 +271,9 @@ def tactus(times: Sequence[float], salience: Sequence[float]) -> Tactus:
     everything = tuple(range(len(times)))
     given = _bpm(times)
     if len(times) < MINIMUM_BEATS or given is None:
-        return Tactus(1, 0, everything, 0.0, "given")
+        return Tactus(1, 0, everything, 0.0, GIVEN)
     if TACTUS_LOW_BPM <= given <= TACTUS_HIGH_BPM:
-        return Tactus(1, 0, everything, 0.0, "given")
+        return Tactus(1, 0, everything, 0.0, GIVEN)
 
     scored: list[Tactus] = []
     for fold in FOLD_CANDIDATES:
@@ -247,10 +285,21 @@ def tactus(times: Sequence[float], salience: Sequence[float]) -> Tactus:
             if rate is None or not TACTUS_LOW_BPM <= rate <= TACTUS_HIGH_BPM:
                 continue
             found = _contrast(salience, picked)
-            reason = "accent" if found >= FOLD_MARGIN else "tempo"
+            floor = _accent_floor(len(picked), len(times) - len(picked))
+            reason = ACCENT if found >= floor else TEMPO
             scored.append(Tactus(fold, phase, picked, found, reason))
     if not scored:
-        return Tactus(1, 0, everything, 0.0, "given")
+        return Tactus(1, 0, everything, 0.0, GIVEN)
+    # Nothing clearing the margin means the accents did not choose, and where more than one
+    # fold lands in the tapping range the *rate* has not chosen either — so ordering those
+    # candidates by a contrast of 0.01 against 0.05 would be picking the pulse out of noise
+    # and reporting it as a reading. The least aggressive fold wins instead: halving a grid
+    # is the smaller claim than thirding it, and a deterministic prior beats a coin flip
+    # dressed as evidence. This is the octave error every tempo tracker has, answered the
+    # way the rest of this module answers a question it cannot settle — by assuming least
+    # and saying so in ``reason``.
+    if all(one.reason == TEMPO for one in scored):
+        return min(scored, key=lambda one: (one.fold, one.phase))
     # Ties go to the smallest fold: two candidates the accents cannot separate are the same
     # claim, and the one that throws away fewer beats is the one that assumed less.
     return max(scored, key=lambda one: (round(one.contrast, 6), -one.fold))
@@ -314,13 +363,26 @@ def agreement(salience: Sequence[float], read: Barring) -> float | None:
     ) / len(checked)
 
 
+def _accent_floor(inside: int, outside: int) -> float:
+    """The contrast a reading has to beat here before it is evidence rather than arithmetic.
+
+    ``FOLD_MARGIN`` is how much of a lean is musically worth acting on; this is how much of a
+    lean a reading with nothing in it produces anyway, at *these* sample sizes. The larger of
+    the two is the real threshold, and which one dominates flips with the length of the span:
+    a fixture of a hundred beats is all noise floor and a set of ten thousand is all margin.
+    """
+    if inside <= 0 or outside <= 0:
+        return FOLD_MARGIN
+    return max(FOLD_MARGIN, NOISE_SIGMAS * math.sqrt(1.0 / inside + 1.0 / outside))
+
+
 def _contrast(salience: Sequence[float], chosen: Sequence[int]) -> float:
     """How far the chosen beats sit above the rest, in standard deviations of the whole.
 
     Zero when nothing is excluded and zero when the reading is flat: both are "this says
     nothing", and inventing a number for either is how a refusal turns into a verdict.
     """
-    picked = {one for one in chosen}
+    picked = set(chosen)
     inside = [value for index, value in enumerate(salience) if index in picked]
     outside = [value for index, value in enumerate(salience) if index not in picked]
     if not inside or not outside:
@@ -394,15 +456,24 @@ def mapped(
     _parallel(grid, salience)
     salience = levelled(salience)
     reasons = _reading(grid)
-    empty = Tactus(1, 0, tuple(range(len(grid))), 0.0, "given")
+    whole = tuple(range(len(grid)))
     if not grid:
-        return BarMap((), None, REFUSED, 0.0, empty, reasons)
+        return BarMap((), None, REFUSED, 0.0, Tactus(1, 0, whole, 0.0, GIVEN), reasons)
 
     found = committed(grid)
     if found is not None:
-        bars = _from_model(grid)
         reasons = {**reasons, "meter_source": MODEL}
-        return BarMap(bars, found, MODEL, _held(grid, found), empty, reasons)
+        # The fold was never consulted, so its reason must not read as a fold verdict: this
+        # pulse is the grid's own beats because the model's own downbeats number them.
+        pulse = Tactus(1, 0, whole, 0.0, MODEL)
+        sure = _held(grid, found)
+        # The floor gates this path too. A model that held its meter for four bars in five is
+        # a real reading and a weak one, and a caller who said 0.9 asked not to be handed it —
+        # "taken at the model's word" is about where the barring came from, not about being
+        # exempt from the question every other map answers.
+        if sure < minimum_confidence:
+            return BarMap((), None, REFUSED, sure, pulse, reasons)
+        return BarMap(_from_model(grid), found, MODEL, sure, pulse, reasons)
 
     pulse = tactus([float(row["t"]) for row in grid], salience)
     pulsed = [salience[one] for one in pulse.beats]
@@ -541,7 +612,13 @@ def _bpm(times: Sequence[float]) -> float | None:
 
 
 def _rounded(value: float | None) -> float | None:
-    return round(value, 2) if value is not None else None
+    """A tempo, at the precision ``beats.gist`` already reports one — not ``PLACES``.
+
+    Two decimals rather than three because that is what every other bpm in this stack says,
+    and a reader comparing this module's tempo against the grid's should not have to notice
+    that one of them carries a digit the other does not.
+    """
+    return round(value, BPM_PLACES) if value is not None else None
 
 
 def _clamp(value: float) -> float:
@@ -739,33 +816,19 @@ def _readable(audio: str | Path) -> Path:
 def _stem(stems: Mapping[str, str | Path] | str | Path, wanted: str) -> Path:
     """The stem the accents are read off, from a separation's directory or from named paths.
 
-    Optional, unlike the phrase job's: the master mix answers this question adequately when
-    the drums are loud, and only a capture where they are not — brushes, a quiet room — needs
-    the bass line to hear the pulse at all.
+    Optional, unlike the phrase job's, and the fix says so: the master mix answers this
+    question adequately when the drums are loud, and only a capture where they are not —
+    brushes, a quiet room — needs the bass line to hear the pulse at all.
     """
-    found = halves.collected(Path(stems)) if isinstance(stems, str | Path) else {
-        str(label): Path(path) for label, path in stems.items()
-    }
-    chosen = found.get(wanted)
-    if chosen is None:
-        raise InvalidRequestError(
-            cause=f"There is no {wanted} stem to read the accents off.",
-            fix=(
-                "Pass the directory a separate_stems job reported, name one of the stems that "
-                "is there with the stem argument, or leave stems off and the master mix is read."
-            ),
-            detail={"wanted": wanted, "found": sorted(found)},
-        )
-    if not chosen.is_file():
-        raise InvalidRequestError(
-            cause=f"The {wanted} stem is not on disk: {chosen}.",
-            fix=(
-                "Run separate_stems again — the cache drops an entry whose files went missing, "
-                "so asking for them redoes the separation."
-            ),
-            detail={"stem": str(chosen)},
-        )
-    return chosen
+    return halves.stem_named(
+        stems,
+        wanted,
+        "to read the accents off",
+        (
+            "Pass the directory a separate_stems job reported, name one of the stems that "
+            "is there with the stem argument, or leave stems off and the master mix is read."
+        ),
+    )
 
 
 def _key(

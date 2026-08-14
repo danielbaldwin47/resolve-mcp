@@ -91,15 +91,20 @@ that the grid is a live band's grid, so it moves.
 
   **On the anchor it refuses, and that is the current state of this claim.**
   Run over the Zinc mix and over its bass stem, on the Taurus span and on the
-  whole set, agreement across four-bar windows came back 0.06–0.18 — adjacent
-  windows of one tune at one tempo reach different meters and phases 85–95% of
+  whole set, agreement across four-bar windows came back 0.10–0.17 — adjacent
+  windows of one tune at one tempo reach different meters and phases 83–90% of
   the time — so no map is written and nothing here can be claimed in bars yet.
   RMS at the beat is the wrong witness on this idiom: brushes do not mark the
   one and a walking bass plays every quarter alike. What the pass *did* recover
-  is the tempo — 107 bpm off a grid reporting 214, which is the tune's real
-  tempo and the number the grid alone could not give.
-  `[measured — 1 project, n=2 witnesses × 2 spans, concert]`
+  is the tempo — all four readings fold to 107.14 bpm off a grid reporting
+  214.29, which is the tune's real tempo and the number the grid alone could not
+  give.
+  `[measured — 1 project, 4 readings (2 witnesses × 2 spans), concert]`
   (`gauntlet/recon/g2_bar_map.json`, 2026-08-14)
+
+  One project and one mix: thin by the standards of every other number in this
+  section, and enough only because the two things it says are a refusal and a
+  tempo. Neither generalises to another room until it is run there.
 
   The bar-position claim itself therefore stays `[believed, unverified]` until a
   witness that is not loudness produces a map — downbeat tracking proper, or the

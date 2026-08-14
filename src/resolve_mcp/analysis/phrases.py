@@ -53,7 +53,6 @@ from typing import Any, NamedTuple
 from ..audio import wav
 from ..audio.stems import FOUR_STEMS
 from ..config import Config, get_config
-from ..errors import InvalidRequestError
 from ..jobs import cache
 from ..jobs.runner import JobOutput, Progress, start_job
 from ..logging_config import get_logger
@@ -450,31 +449,16 @@ def _stem(stems: Mapping[str, str | Path] | str | Path, wanted: str) -> Path:
     One stem and not the kit: a phrase belongs to a player, and mixing two stems back together
     to look for it would undo exactly what separation was for.
     """
-    if isinstance(stems, str | Path):
-        found = halves.collected(Path(stems))
-    else:
-        found = {str(label): Path(path) for label, path in stems.items()}
-
-    chosen = found.get(wanted)
-    if chosen is None:
-        raise InvalidRequestError(
-            cause=f"There is no {wanted} stem to read the line off.",
-            fix=(
-                "Pass the directory a separate_stems job reported — its first pass writes "
-                f"{', '.join(FOUR_STEMS)} — or name one of the stems that is there with the "
-                "stem argument."
-            ),
-            detail={"wanted": wanted, "found": sorted(found)},
-        )
-    if not chosen.is_file():
-        raise InvalidRequestError(
-            cause=f"The {wanted} stem is not on disk: {chosen}.",
-            fix=(
-                "Run separate_stems again — the cache drops an entry whose files went missing, "
-                "so asking for them redoes the separation."
-            ),
-            detail={"stem": str(chosen)},
-        )
+    chosen = halves.stem_named(
+        stems,
+        wanted,
+        "to read the line off",
+        (
+            "Pass the directory a separate_stems job reported — its first pass writes "
+            f"{', '.join(FOUR_STEMS)} — or name one of the stems that is there with the "
+            "stem argument."
+        ),
+    )
     if wanted not in MELODY_STEMS:
         # Not refused: a director with a real horn stem should not have to argue with this.
         # But bass and drums hold a line only in the sense that everything does, and a document

@@ -136,7 +136,10 @@ pure decisions, #128),
 `decode` (WAV → numpy, no third-party decoder), `drums` (hits per stem), `energy`
 (loudness curves; `rms_curve` is the cheap level-only pass, no K-weighting and
 no onsets), `fills` (drum-fill candidates), `halves` (shared
-identify/cache/write pattern), `melody` (notes off one melodic stem —
+identify/cache/write pattern, plus `collected`/`stem_named` — where a
+separation's stems are and which one was asked for, shared by every detector
+that reads one: `phrases` off the line, `bars` off the pulse),
+`melody` (notes off one melodic stem —
 monophonic pitch + gating, model injected per ADR 0002; the reading `phrases`
 is a rule layer over, as `drums` is to `fills`), `music` (beats + energy + gist
 job), `phrases` (phrase boundaries: where the soloist stops, which is the
@@ -203,9 +206,6 @@ because the scripting API cannot cut a transition at all), `takes`
 
 `titles/` — `document` (read off disk), `schema` (verbatim, served by
 `get_titles_schema`), `validate` (9 errors + 2 warnings).
-
-`halves` also owns `collected` — where the stems of a separation are, shared by
-every detector that resolves one (`phrases` off the line, `bars` off the pulse).
 
 `tools/` — MCP tool layer, thin, grouped by workflow: `analysis`, `cut`,
 `envelope` (**shared envelope + `@tool` decorator + handle-death retry**),

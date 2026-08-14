@@ -101,6 +101,83 @@ def test_a_grid_too_fast_to_be_a_tactus_folds_on_tempo_when_the_accents_are_flat
     assert found.reason == "tempo"
 
 
+def _noise(count: int, seed: int = 1) -> list[float]:
+    """Unstructured accent values — a fixture with a short period is not noise at all.
+
+    The contrast is z-scored, so a tiny but perfectly periodic wobble still scores as strong
+    evidence. Real audio that says nothing does not repeat; this does not either.
+    """
+    values: list[float] = []
+    state = seed
+    for _ in range(count):
+        state = (state * 1_103_515_245 + 12_345) % 2**31
+        values.append(state / 2**31)
+    return values
+
+
+def _leaning(count: int, every: int, weight: float, seed: int = 1) -> tuple[float, ...]:
+    """Noise with a weak pull towards every n-th beat — evidence too thin to act on."""
+    return tuple(
+        value + (weight if index % every == 0 else 0.0)
+        for index, value in enumerate(_noise(count, seed))
+    )
+
+
+@pytest.mark.parametrize("seed", [1, 7, 42, 99, 2026])
+def test_a_fold_the_accents_cannot_settle_assumes_least_rather_than_reading_noise(
+    seed: int,
+) -> None:
+    """At 214 bpm both halving and thirding land in the tapping range, so the winner used to
+    be decided by a contrast of 0.01 against 0.05 — noise, reported as a reading, and it
+    folded the corpus mix to 107 bpm and its own bass stem to 71 (#180). Several readings
+    because one seed agreeing is not the property; every reading with nothing in it folding
+    the same way is."""
+    grid = _onset_scale()
+    times = [float(row["t"]) for row in grid]
+
+    found = bars_module.tactus(times, _leaning(len(grid), every=3, weight=0.03, seed=seed))
+
+    assert found.reason == "tempo"
+    assert (found.fold, found.phase) == (2, 0)
+
+
+def test_noise_alone_does_not_read_as_accent_evidence() -> None:
+    """The floor has to move with the span. Over a hundred-odd beats a reading with nothing
+    in it scores about 0.18 — above FOLD_MARGIN — so a fixed threshold would call noise a
+    fold here while asking far more than it needs to of a seventy-four-minute set."""
+    grid = _onset_scale()
+    times = [float(row["t"]) for row in grid]
+    reading = _noise(len(grid), seed=7)
+    # Some candidate always leans this far on a span this short, with nothing behind it.
+    loudest = max(
+        abs(bars_module._contrast(reading, tuple(range(phase, len(grid), fold))))
+        for fold in (2, 3)
+        for phase in range(fold)
+    )
+    assert loudest > bars_module.FOLD_MARGIN
+
+    found = bars_module.tactus(times, reading)
+
+    assert found.reason == "tempo"
+
+
+def test_the_floor_is_the_larger_of_the_margin_and_the_noise_it_would_beat() -> None:
+    short = bars_module._accent_floor(64, 64)
+    long_span = bars_module._accent_floor(5_000, 5_000)
+    assert short > bars_module.FOLD_MARGIN
+    assert long_span == bars_module.FOLD_MARGIN
+
+
+def test_the_same_grid_folds_the_same_way_whichever_witness_read_it() -> None:
+    """Two accent readings that both say nothing must not fold a grid two different ways —
+    the disagreement the corpus run showed between the mix and its own bass stem."""
+    grid = _onset_scale()
+    times = [float(row["t"]) for row in grid]
+    one = bars_module.tactus(times, _leaning(len(grid), every=2, weight=0.02, seed=7))
+    other = bars_module.tactus(times, _leaning(len(grid), every=3, weight=0.03, seed=99))
+    assert (one.fold, one.phase) == (other.fold, other.phase)
+
+
 def test_folding_says_which_evidence_it_used() -> None:
     grid = _onset_scale()
     found = bars_module.tactus([float(row["t"]) for row in grid], _accented(grid, every=8))
@@ -284,6 +361,24 @@ def test_a_floor_of_zero_writes_the_map_it_would_otherwise_refuse() -> None:
     assert mapped.bars
 
 
+def test_the_floor_gates_the_model_path_too() -> None:
+    """Taken at the model's word is about where the barring came from, not about being
+    exempt from the question every other map has to answer."""
+    times = _times(40, 60.0 / TEMPO)
+    # Nine bars of four and one of three: the model held its meter for most of the tune.
+    downbeats = times[:36:4] + (times[36],) + (times[39],)
+    grid = numbered(BeatGrid(beats=times, downbeats=downbeats))
+
+    lenient = bars_module.mapped(grid, [0.5] * len(grid), minimum_confidence=0.5)
+    strict = bars_module.mapped(grid, [0.5] * len(grid), minimum_confidence=0.95)
+
+    assert lenient.source == "model"
+    assert 0.5 <= lenient.confidence < 0.95
+    assert strict.source == "refused"
+    assert strict.meter is None
+    assert strict.bars == ()
+
+
 def test_a_model_grid_that_only_half_commits_falls_through_to_inference() -> None:
     times = _times(64, 60.0 / TEMPO)
     # Downbeats every four for the first half, then every beat — the shape a tracker gives
@@ -340,6 +435,16 @@ def test_the_gist_is_scalars_only_so_it_can_ride_home_in_a_job_record() -> None:
     assert summary["source"] == "inferred"
     assert summary["count"] == 8
     assert summary["stem"] == "bass"
+
+
+def test_a_model_map_reports_the_grids_own_tempo_and_no_fold_verdict() -> None:
+    """The fold never ran on this path, so nothing may read as its verdict — and the tempo
+    to report is the grid's own, because the grid's beats *are* the pulse here."""
+    grid = _committed()
+    mapped = bars_module.mapped(grid, [0.5] * len(grid))
+    summary = bars_module.gist(mapped, bars_module.DEFAULT_MINIMUM_CONFIDENCE, None)
+    assert summary["fold_reason"] == bars_module.MODEL
+    assert summary["tempo_bpm"] == summary["grid_bpm"] == pytest.approx(TEMPO, abs=0.5)
 
 
 def test_a_refused_map_still_reports_a_gist() -> None:
@@ -585,6 +690,41 @@ def test_a_stem_that_is_not_in_the_separation_is_refused(tmp_path: Path) -> None
     with pytest.raises(InvalidRequestError) as caught:
         bars_module.detect_bars(source, stems={"drums": tmp_path / "drums.wav"})
     assert caught.value.payload()["detail"]["wanted"] == "bass"
+    assert "master mix is read" in caught.value.payload()["fix"]
+
+
+def test_a_separation_directory_is_read_the_way_the_phrase_job_reads_one(tmp_path: Path) -> None:
+    """The stems arrive as a directory far more often than as named paths — it is what
+    separate_stems reports — so the directory branch is the one an agent actually takes."""
+    grid = _onset_scale()
+    source = _master(tmp_path, seconds=float(grid[-1]["t"]) + 1.0)
+    separation = tmp_path / "stems" / "mix"
+    separation.mkdir(parents=True)
+    bass = write_hits(separation / "concert_(Bass)_htdemucs_ft.wav", [], seconds=1.0)
+    seen: list[Path] = []
+
+    def accent(path: Path, times: Sequence[float]) -> tuple[float, ...]:
+        seen.append(path)
+        return _accented(grid, every=8)[: len(times)]
+
+    result = _result(
+        bars_module.detect_bars(
+            source,
+            stems=tmp_path / "stems",
+            detector=_detector(grid),
+            accent=accent,
+        )
+    )
+    assert result["stem"] == "bass"
+    assert seen == [bass]
+
+
+def test_a_stem_the_cache_dropped_is_refused_by_path(tmp_path: Path) -> None:
+    source = _master(tmp_path, seconds=2.0)
+    with pytest.raises(InvalidRequestError) as caught:
+        bars_module.detect_bars(source, stems={"bass": tmp_path / "gone.wav"})
+    assert "separate_stems again" in caught.value.payload()["fix"]
+    assert caught.value.payload()["detail"]["stem"].endswith("gone.wav")
 
 
 # --- the tool ----------------------------------------------------------------------------

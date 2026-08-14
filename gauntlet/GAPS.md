@@ -35,13 +35,25 @@ grids that gate refuses whole. Style vocabulary in `docs/agents/style-layer.md`
 **Measured, 2026-08-14** (`gauntlet/recon/g2_bar_map.json`), over the cached
 Zinc grid, both witnesses, Taurus span and whole set:
 
-- **The tempo half is fixed.** Off the mix the fold recovers 107 bpm from a grid
-  reporting 214 — the tune's real tempo, and the number G2 said nothing could
-  reach. That reading now rides home in every result beside the grid's own.
+- **The tempo half is fixed.** All four readings — both witnesses, both spans —
+  fold to 107.14 bpm from a grid reporting 214.29. That reading rides home in
+  every result beside the grid's own.
+
+  It did not start out that way, and the reason is worth keeping. The first
+  version chose between halving and thirding on whichever scored higher, and
+  both land inside the tapping range at this tempo: the mix folded to 107 and
+  its own bass stem to 71, off contrasts of 0.013 against 0.053. At these sample
+  sizes that is noise deciding the tempo. Two fixes, both in `analysis/bars`:
+  the accent threshold now scales with the span (`_accent_floor` — three
+  standard errors of a contrast between two halves, which is 0.18 over a
+  hundred-beat fixture and 0.02 over this set, so one fixed number cannot serve
+  both), and when no candidate clears it the *least aggressive* fold wins rather
+  than the highest-scoring one. The octave error every tempo tracker has,
+  answered by assuming least and saying so in `fold_reason`.
 - **The bar-line half is refused, and the refusal is measured.** Agreement
-  across four-bar windows is 0.06–0.18: adjacent windows of one tune at one
-  tempo reach *different* meters and phases 85–95% of the time. Confidence
-  0.06–0.10 against a floor of 0.3. Before the agreement check went in, the same
+  across four-bar windows is 0.10–0.17: adjacent windows of one tune at one
+  tempo reach *different* meters and phases 83–90% of the time. Confidence
+  0.07–0.13 against a floor of 0.3. Before the agreement check went in, the same
   spans scored 0.3–0.6 on contrast alone over sixty-second windows and every one
   of those readings disagreed with its neighbour — the check is what turned a
   coin flip into an honest refusal.
