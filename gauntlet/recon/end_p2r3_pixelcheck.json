@@ -1,0 +1,431 @@
+{
+ "render": "C:\\Users\\Daniel\\repos\\resolve-mcp\\.claude\\worktrees\\gauntlet-loop-1\\gauntlet\\renders\\taurus_ending_p2r3.mp4",
+ "ffprobe": {
+  "programs": [],
+  "stream_groups": [],
+  "streams": [
+   {
+    "index": 0,
+    "codec_name": "h264",
+    "codec_type": "video",
+    "width": 1920,
+    "height": 1080,
+    "r_frame_rate": "24000/1001",
+    "nb_frames": "2158"
+   },
+   {
+    "index": 1,
+    "codec_name": "aac",
+    "codec_type": "audio",
+    "sample_rate": "48000",
+    "channels": 2,
+    "r_frame_rate": "0/0",
+    "nb_frames": "4220"
+   },
+   {
+    "index": 2,
+    "codec_type": "data",
+    "r_frame_rate": "0/0",
+    "nb_frames": "1"
+   }
+  ],
+  "format": {
+   "duration": "90.026667",
+   "size": "404543863"
+  }
+ },
+ "scene_cuts_010": [
+  6.715,
+  10.969,
+  19.937,
+  23.941,
+  37.246,
+  43.001,
+  49.258,
+  53.428,
+  61.853,
+  66.817,
+  72.864,
+  76.118
+ ],
+ "blackdetect": [
+  [
+   "89.130708",
+   "89.964875"
+  ]
+ ],
+ "authored_item_starts": [
+  0.0,
+  6.715,
+  10.969,
+  19.937,
+  23.941,
+  37.246,
+  43.001,
+  49.258,
+  53.428,
+  61.853,
+  66.817,
+  72.864,
+  76.118
+ ],
+ "items": 13,
+ "authored_hard_cuts": 12,
+ "boundary_pairs": [
+  {
+   "authored": 6.715,
+   "detected": 6.715,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 10.969,
+   "detected": 10.969,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 19.937,
+   "detected": 19.937,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 23.941,
+   "detected": 23.941,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 37.246,
+   "detected": 37.246,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 43.001,
+   "detected": 43.001,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 49.258,
+   "detected": 49.258,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 53.428,
+   "detected": 53.428,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 61.853,
+   "detected": 61.853,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 66.817,
+   "detected": 66.817,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 72.864,
+   "detected": 72.864,
+   "delta_ms": 0.0
+  },
+  {
+   "authored": 76.118,
+   "detected": 76.118,
+   "delta_ms": 0.0
+  }
+ ],
+ "worst_boundary_delta_ms": 0.0,
+ "every_cut_detected": true,
+ "no_extra_scene_cuts": true,
+ "final_stretch": {
+  "last_authored_cut_s": 76.118,
+  "detected_cuts_after_it": [],
+  "seconds_of_one_picture_to_end": 13.889,
+  "lead_before_near_gap_s": 6.602,
+  "lead_before_cadence_s": 7.282,
+  "one_picture_carries_the_ending": true
+ },
+ "tail": {
+  "passes": {
+   "luma_ramps_not_steps": true,
+   "ramp_spans_the_dissolve": true,
+   "ramp_is_monotone": true,
+   "lands_on_black": true,
+   "audio_falls_progressively": true,
+   "audio_ends_near_silence": true
+  },
+  "all_passed": true,
+  "dissolve_starts_s": 83.917,
+  "picture_ends_s": 89.84,
+  "audio_fade_starts_s": 84.793,
+  "steady_luma": 57.755,
+  "ramp_samples": 47,
+  "intermediate_samples": 42,
+  "intermediate_span_s": 5.125,
+  "luma_at_last_picture_frame": 0.0,
+  "luma_ramp_yavg": [
+   [
+    84.0,
+    54.7
+   ],
+   [
+    84.12,
+    53.8
+   ],
+   [
+    84.25,
+    53.1
+   ],
+   [
+    84.38,
+    52.3
+   ],
+   [
+    84.5,
+    51.5
+   ],
+   [
+    84.62,
+    50.9
+   ],
+   [
+    84.75,
+    50.3
+   ],
+   [
+    84.88,
+    49.3
+   ],
+   [
+    85.0,
+    48.4
+   ],
+   [
+    85.12,
+    47.6
+   ],
+   [
+    85.25,
+    46.7
+   ],
+   [
+    85.38,
+    45.9
+   ],
+   [
+    85.5,
+    44.9
+   ],
+   [
+    85.62,
+    44.1
+   ],
+   [
+    85.75,
+    43.3
+   ],
+   [
+    85.88,
+    42.5
+   ],
+   [
+    86.0,
+    41.6
+   ],
+   [
+    86.12,
+    40.7
+   ],
+   [
+    86.25,
+    39.7
+   ],
+   [
+    86.38,
+    38.6
+   ],
+   [
+    86.5,
+    37.7
+   ],
+   [
+    86.62,
+    36.9
+   ],
+   [
+    86.75,
+    36.0
+   ],
+   [
+    86.88,
+    35.1
+   ],
+   [
+    87.0,
+    34.2
+   ],
+   [
+    87.12,
+    33.3
+   ],
+   [
+    87.25,
+    32.4
+   ],
+   [
+    87.38,
+    31.7
+   ],
+   [
+    87.5,
+    30.9
+   ],
+   [
+    87.62,
+    30.2
+   ],
+   [
+    87.75,
+    29.4
+   ],
+   [
+    87.88,
+    28.6
+   ],
+   [
+    88.0,
+    27.9
+   ],
+   [
+    88.12,
+    27.0
+   ],
+   [
+    88.25,
+    26.1
+   ],
+   [
+    88.38,
+    25.3
+   ],
+   [
+    88.5,
+    24.4
+   ],
+   [
+    88.62,
+    23.6
+   ],
+   [
+    88.75,
+    22.8
+   ],
+   [
+    88.88,
+    21.9
+   ],
+   [
+    89.0,
+    21.2
+   ],
+   [
+    89.12,
+    20.3
+   ],
+   [
+    89.25,
+    19.5
+   ],
+   [
+    89.38,
+    18.6
+   ],
+   [
+    89.5,
+    17.7
+   ],
+   [
+    89.62,
+    17.2
+   ],
+   [
+    89.75,
+    16.0
+   ],
+   [
+    89.88,
+    16.0
+   ]
+  ],
+  "rms_ladder_db": [
+   [
+    84,
+    -33.2
+   ],
+   [
+    85,
+    -36.78
+   ],
+   [
+    86,
+    -38.87
+   ],
+   [
+    87,
+    -40.47
+   ],
+   [
+    88,
+    -47.8
+   ],
+   [
+    89,
+    -56.06
+   ],
+   [
+    90,
+    -59.2
+   ]
+  ],
+  "rms_last_sample_db": -59.2,
+  "body_rms_mean_db": -16.33,
+  "tail_rms_mean_db": -55.59,
+  "rms_fell_db": 39.27
+ },
+ "grabs": [
+  {
+   "t": 76.6,
+   "tag": "after_last_cut",
+   "path": "C:\\Users\\Daniel\\repos\\resolve-mcp\\.claude\\worktrees\\gauntlet-loop-1\\gauntlet\\recon\\end_p2r3_grabs\\RENDER_after_last_cut_076.60.jpg"
+  },
+  {
+   "t": 80.5,
+   "tag": "decay_trough",
+   "path": "C:\\Users\\Daniel\\repos\\resolve-mcp\\.claude\\worktrees\\gauntlet-loop-1\\gauntlet\\recon\\end_p2r3_grabs\\RENDER_decay_trough_080.50.jpg"
+  },
+  {
+   "t": 82.8,
+   "tag": "near_gap",
+   "path": "C:\\Users\\Daniel\\repos\\resolve-mcp\\.claude\\worktrees\\gauntlet-loop-1\\gauntlet\\recon\\end_p2r3_grabs\\RENDER_near_gap_082.80.jpg"
+  },
+  {
+   "t": 83.4,
+   "tag": "last_note",
+   "path": "C:\\Users\\Daniel\\repos\\resolve-mcp\\.claude\\worktrees\\gauntlet-loop-1\\gauntlet\\recon\\end_p2r3_grabs\\RENDER_last_note_083.40.jpg"
+  },
+  {
+   "t": 83.88,
+   "tag": "pre_dissolve",
+   "path": "C:\\Users\\Daniel\\repos\\resolve-mcp\\.claude\\worktrees\\gauntlet-loop-1\\gauntlet\\recon\\end_p2r3_grabs\\RENDER_pre_dissolve_083.88.jpg"
+  },
+  {
+   "t": 86.5,
+   "tag": "mid_dissolve",
+   "path": "C:\\Users\\Daniel\\repos\\resolve-mcp\\.claude\\worktrees\\gauntlet-loop-1\\gauntlet\\recon\\end_p2r3_grabs\\RENDER_mid_dissolve_086.50.jpg"
+  },
+  {
+   "t": 88.6,
+   "tag": "late_dissolve",
+   "path": "C:\\Users\\Daniel\\repos\\resolve-mcp\\.claude\\worktrees\\gauntlet-loop-1\\gauntlet\\recon\\end_p2r3_grabs\\RENDER_late_dissolve_088.60.jpg"
+  }
+ ]
+}

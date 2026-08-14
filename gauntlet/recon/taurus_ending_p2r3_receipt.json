@@ -1,0 +1,358 @@
+{
+ "kind": "taurus_ending_p2_round3_receipt",
+ "piece": "Taurus People - ENDING (last 90 s of the set)",
+ "window": {
+  "mix_seconds": [
+   3976.15,
+   4066.15
+  ],
+  "sync_frames": [
+   181733,
+   183891
+  ],
+  "fps": 23.976
+ },
+ "changed_from_round_2": "one deletion and nothing else: round 2's 13th cut (82.71 s, to the A7IV kit) is gone, so the wide the piece returns to at 76.12 carries the near-gap, the cadence, the applause and the whole dissolve. Every other cut is frame-identical.",
+ "timeline": {
+  "name": "Taurus People Ending P2 R3 v1",
+  "base_name": "Taurus People Ending P2 R3",
+  "version": 1,
+  "current": true,
+  "fps": 23.976,
+  "start": {
+   "frames": 86400,
+   "seconds": 3603.604,
+   "timecode": "01:00:00:00",
+   "fps": 23.976
+  },
+  "end": {
+   "frames": 88558,
+   "seconds": 3693.61,
+   "timecode": "01:01:29:22",
+   "fps": 23.976
+  },
+  "duration": {
+   "frames": 2158,
+   "seconds": 90.007,
+   "timecode": "00:01:29:22",
+   "fps": 23.976
+  },
+  "tracks": {
+   "video": 1,
+   "audio": 1,
+   "subtitle": 0
+  }
+ },
+ "render": "C:\\Users\\Daniel\\repos\\resolve-mcp\\.claude\\worktrees\\gauntlet-loop-1\\gauntlet\\renders\\taurus_ending_p2r3.mp4",
+ "cut_file": "C:\\Users\\Daniel\\repos\\resolve-mcp\\.claude\\worktrees\\gauntlet-loop-1\\projects\\mcp-tests-zinc\\taurus-people-ending-r3.cut.json",
+ "hard_cuts": 12,
+ "shots": [
+  {
+   "id": "s01",
+   "source": "fx6_wide",
+   "start_s": 0.0,
+   "end_s": 6.715,
+   "seconds": 6.715,
+   "note": "open on the whole quartet in one frame. This is the FX6's first plateau (W1): the drummer is entire at the right and the pianist is outside the frame - the piece starts inside the tune's last full-energy stretch, so the establishing picture is the band"
+  },
+  {
+   "id": "s02",
+   "source": "a7iv_kit",
+   "start_s": 6.715,
+   "end_s": 10.969,
+   "seconds": 4.254,
+   "note": "drum fill 6.59 (1.88 s, 81 hits), the first substantial fill of the piece - arrive on the near-field kit at the fill's START (sec 5), and the 9.57 fill lands inside the shot"
+  },
+  {
+   "id": "s03",
+   "source": "fx6_wide",
+   "start_s": 10.969,
+   "end_s": 19.937,
+   "seconds": 8.967,
+   "note": "fill 10.89 - the highest-confidence fill in the window (0.630) - with a phrase boundary on it (score 1.03). Back to the whole quartet for the tune's loudest stretch: THIS framing has the drummer entire, so nothing is given up by leaving the kit angle"
+  },
+  {
+   "id": "s04",
+   "source": "a7iv_kit",
+   "start_s": 19.937,
+   "end_s": 23.941,
+   "seconds": 4.004,
+   "note": "fill 20.01 (2.26 s) with a phrase boundary on the same frame (score 1.170, agrees with the +1.78 dB peak at 19.85) - arrive at the fill's start. The wide it leaves has just held, inside one shot, the loudest second in the entire 90 s (13.85, -9.38 LUFS), the 3.3 s / 126-hit fill at 15.63 whole, that fill's resolution at 18.93, and the first half's strongest downbeat phrase (16.73, conf 0.817)"
+  },
+  {
+   "id": "s05",
+   "source": "fx6_wide",
+   "start_s": 23.941,
+   "end_s": 37.246,
+   "seconds": 13.305,
+   "note": "energy peak 23.85 (+3.42 dB, the second-biggest prominence in the window) with a phrase boundary at 23.91. THE RIDE: the cut lands 0.84 s before the FX6 starts its 24.75-28.75 reframe, so the shot is settled when the camera moves and then WALKS LEFT off the drummer onto the piano - W1 becomes W2 on screen, no cut - under the window's biggest drum event (fill 25.01, 3.86 s, 118 hits). sec 4: the moving camera is a second editor. The shot then holds the quiet pocket (27.5-31.5, rms -17.6 to -19.2) whole, which is where a coverage pass bursts"
+  },
+  {
+   "id": "s06",
+   "source": "a7iv_kit",
+   "start_s": 37.246,
+   "end_s": 43.001,
+   "seconds": 5.756,
+   "note": "the strongest downbeat phrase boundary of the middle of the piece (conf 0.803, score 1.153) - and it lands 0.02 s before the FX6 begins its second reframe run (37.25-41.08), so the piece leaves the wide at the instant the camera starts to move again and the move happens off screen. sec 4: wait out a pan, never cut into one"
+  },
+  {
+   "id": "s07",
+   "source": "fx6_wide",
+   "start_s": 43.001,
+   "end_s": 49.258,
+   "seconds": 6.256,
+   "note": "fill 43.07 with a phrase boundary on it (score 1.207), 0.72 s after the +2.64 dB peak at 42.35 and 1.99 s after the camera settles. W3 arrives as a picture the piece has NOT shown: the pianist is now in frame at the left, and this is the framing that will carry the ending. sec 4: a scale change is a picture worth more than a framing return"
+  },
+  {
+   "id": "s08",
+   "source": "a7iv_kit",
+   "start_s": 49.258,
+   "end_s": 53.428,
+   "seconds": 4.171,
+   "note": "drum fill 49.23 (1.68 s) - arrive at its start and ride it into the +2.99 dB peak at 49.85 (sec 5). The kit angle is the near-field picture of the drummer, which is what makes the 52.03 and 53.47 fills worth this shot"
+  },
+  {
+   "id": "s09",
+   "source": "fx6_wide",
+   "start_s": 53.428,
+   "end_s": 61.853,
+   "seconds": 8.425,
+   "note": "phrase boundary 53.77 with the 53.47 fill (1.46 s) resolving into it - back to the band for the sag before the last build. The wide then holds 57.5-61.5, the thinnest run of the second half (rms -19.4 to -21.9), without a cut in it: sparse passages hold longer (sec 3)"
+  },
+  {
+   "id": "s10",
+   "source": "a7iv_kit",
+   "start_s": 61.853,
+   "end_s": 66.817,
+   "seconds": 4.963,
+   "note": "THE STRONGEST PHRASE BOUNDARY IN THE WINDOW: conf 0.846, downbeat, 0.11 s rest, score 1.396. The kit takes the 0.461 s rest at 63.55 - the longest rest in the coda approach - and the +1.88 dB peak at 65.35, and it is already there when the 66.41 fill starts"
+  },
+  {
+   "id": "s11",
+   "source": "fx6_wide",
+   "start_s": 66.817,
+   "end_s": 72.864,
+   "seconds": 6.048,
+   "note": "SOLO CHANGE 66.97 (downbeat, timbre step inside the melodic stem) with its own phrase boundary and the 66.41 fill (2.22 s) under it. The front changes, so the angle that holds the band takes it (sec 4: follow the audience's gaze at a structure change). The last build runs inside this shot - onset density climbs 6.0 -> 8.7/s - and so does the grid's LAST BEAT at 71.19, after which the pulse stops being measurable at all and the coda is free"
+  },
+  {
+   "id": "s12",
+   "source": "a7iv_kit",
+   "start_s": 72.864,
+   "end_s": 76.118,
+   "seconds": 3.253,
+   "note": "THE LAST CLIMAX: energy peak +6.46 dB, the biggest-prominence event anywhere in the 90 s, with onset density peaking 9.7-10.3/s over the three seconds after it. The cut goes to the near-field kit because at this instant the drums are what is happening - and it is a VISIT, not a destination: 3.25 s, the shortest shot in the piece, the acceleration half of sec 3's accelerate-and-release pair. This is the last time the ending leaves the band"
+  },
+  {
+   "id": "s13",
+   "source": "fx6_wide",
+   "start_s": 76.118,
+   "end_s": 89.84,
+   "seconds": 13.722,
+   "note": "phrase boundary 76.08 (conf 0.689, held ratio 3.0) at the TOP OF THE DECAY - rms -17.9 here, falling to -27.2 by 80.4 - and it is the LAST CUT IN THE PIECE. The release, and the return that the ending is built around: from here the widest framing the rig has (piano, bass, sax and drummer all in one frame) carries everything left. 7.80 s at full opacity, and they are working seconds - the decay steepening, the 80.35 trough, the last statement coming back at 80.85, the near-gap at 82.72 (the quietest 30 ms in the window, -40.41 dB), and the three-hit final figure at 82.96 / 83.17 / 83.40, the last of them the last note of the set (+15.66 dB lift, sample peak 1.106). Then applause, and the dissolve from 83.917. sec 5b: the cadence, the applause and the fade all belong to the ensemble - and sec 3: into a free coda the cutting decelerates, so the coda's two shots run 3.25 and 13.72 s and this one is the longest in the cut. tail: dissolve_to_black 142 frames (5.923 s) beginning at rel 2012 = SYNC 183745 = win-t 83.917, which is the finished deliverable's own dissolve_start frame; audio fade 125 frames (5.213 s) ending with the mix. Picture ends 4 frames before the mix does, which is the deliverable's 0.167 s black tail. The FX6 walks back right 8 px at 85.42 under the dissolve, so the last image opens out toward the kit as it goes to black"
+  }
+ ],
+ "tail_device": {
+  "type": "dissolve_to_black",
+  "duration_frames": 142,
+  "audio_fade_frames": 125,
+  "build_confirmed": {
+   "type": "dissolve_to_black",
+   "duration_frames": 142,
+   "audio_fade_frames": 125,
+   "video_tracks": [
+    "Video 1"
+   ],
+   "audio_tracks": [
+    "Audio 1"
+   ],
+   "route": "otio_round_trip",
+   "document": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\interchange\\Taurus-People-Ending-P2-R3-v1-tail-staging-20260813-213522 (tail).otio",
+   "confirmed": [
+    {
+     "track": "Video 1",
+     "kind": "Video",
+     "name": "Cross Dissolve",
+     "in_offset": 142
+    },
+    {
+     "track": "Audio 1",
+     "kind": "Audio",
+     "name": "Cross Fade 0 dB",
+     "in_offset": 125
+    }
+   ]
+  }
+ },
+ "correlate": {
+  "gated": 12,
+  "stranded": 0,
+  "outside_grid": 0,
+  "transient_offsets": {
+   "measured": 12,
+   "mean_abs": 0.03,
+   "median_abs": 0.032,
+   "max_abs": 0.041,
+   "early": 4,
+   "late": 8,
+   "on": 0
+  },
+  "shot_seconds": {
+   "mean": 6.911,
+   "median": 6.048,
+   "min": 3.253,
+   "max": 13.722
+  },
+  "roles": {
+   "ensemble-wide": {
+    "cuts": 7,
+    "seconds": 63.438,
+    "share": 0.706
+   },
+   "drums-tight": {
+    "cuts": 6,
+    "seconds": 26.401,
+    "share": 0.294
+   }
+  },
+  "visible": {
+   "mode": "visible",
+   "video_tracks": 1,
+   "measured": [
+    1
+   ],
+   "skipped": [],
+   "enabled_known": true,
+   "black": 0
+  }
+ },
+ "pixel_check": {
+  "duration_s": "90.026667",
+  "resolution": [
+   1920,
+   1080
+  ],
+  "scene_cuts_010": [
+   6.715,
+   10.969,
+   19.937,
+   23.941,
+   37.246,
+   43.001,
+   49.258,
+   53.428,
+   61.853,
+   66.817,
+   72.864,
+   76.118
+  ],
+  "every_cut_detected": true,
+  "no_extra_scene_cuts": true,
+  "worst_boundary_delta_ms": 0.0,
+  "blackdetect": [
+   [
+    "89.130708",
+    "89.964875"
+   ]
+  ],
+  "final_stretch": {
+   "last_authored_cut_s": 76.118,
+   "detected_cuts_after_it": [],
+   "seconds_of_one_picture_to_end": 13.889,
+   "lead_before_near_gap_s": 6.602,
+   "lead_before_cadence_s": 7.282,
+   "one_picture_carries_the_ending": true
+  }
+ },
+ "tail_proof": {
+  "passes": {
+   "luma_ramps_not_steps": true,
+   "ramp_spans_the_dissolve": true,
+   "ramp_is_monotone": true,
+   "lands_on_black": true,
+   "audio_falls_progressively": true,
+   "audio_ends_near_silence": true
+  },
+  "all_passed": true,
+  "dissolve_starts_s": 83.917,
+  "picture_ends_s": 89.84,
+  "steady_luma": 57.755,
+  "intermediate_samples": 42,
+  "intermediate_span_s": 5.125,
+  "rms_ladder_db": [
+   [
+    84,
+    -33.2
+   ],
+   [
+    85,
+    -36.78
+   ],
+   [
+    86,
+    -38.87
+   ],
+   [
+    87,
+    -40.47
+   ],
+   [
+    88,
+    -47.8
+   ],
+   [
+    89,
+    -56.06
+   ],
+   [
+    90,
+    -59.2
+   ]
+  ],
+  "rms_fell_db": 39.27
+ },
+ "grabs": [
+  {
+   "t": 76.6,
+   "tag": "after_last_cut",
+   "path": "C:\\Users\\Daniel\\repos\\resolve-mcp\\.claude\\worktrees\\gauntlet-loop-1\\gauntlet\\recon\\end_p2r3_grabs\\RENDER_after_last_cut_076.60.jpg"
+  },
+  {
+   "t": 80.5,
+   "tag": "decay_trough",
+   "path": "C:\\Users\\Daniel\\repos\\resolve-mcp\\.claude\\worktrees\\gauntlet-loop-1\\gauntlet\\recon\\end_p2r3_grabs\\RENDER_decay_trough_080.50.jpg"
+  },
+  {
+   "t": 82.8,
+   "tag": "near_gap",
+   "path": "C:\\Users\\Daniel\\repos\\resolve-mcp\\.claude\\worktrees\\gauntlet-loop-1\\gauntlet\\recon\\end_p2r3_grabs\\RENDER_near_gap_082.80.jpg"
+  },
+  {
+   "t": 83.4,
+   "tag": "last_note",
+   "path": "C:\\Users\\Daniel\\repos\\resolve-mcp\\.claude\\worktrees\\gauntlet-loop-1\\gauntlet\\recon\\end_p2r3_grabs\\RENDER_last_note_083.40.jpg"
+  },
+  {
+   "t": 83.88,
+   "tag": "pre_dissolve",
+   "path": "C:\\Users\\Daniel\\repos\\resolve-mcp\\.claude\\worktrees\\gauntlet-loop-1\\gauntlet\\recon\\end_p2r3_grabs\\RENDER_pre_dissolve_083.88.jpg"
+  },
+  {
+   "t": 86.5,
+   "tag": "mid_dissolve",
+   "path": "C:\\Users\\Daniel\\repos\\resolve-mcp\\.claude\\worktrees\\gauntlet-loop-1\\gauntlet\\recon\\end_p2r3_grabs\\RENDER_mid_dissolve_086.50.jpg"
+  },
+  {
+   "t": 88.6,
+   "tag": "late_dissolve",
+   "path": "C:\\Users\\Daniel\\repos\\resolve-mcp\\.claude\\worktrees\\gauntlet-loop-1\\gauntlet\\recon\\end_p2r3_grabs\\RENDER_late_dissolve_088.60.jpg"
+  }
+ ],
+ "style_claims_answered": [
+  "concert.md 5b - the set's last image belongs to the ensemble (unanimous 3/3)",
+  "concert.md 5b - not a licence to park: arrive at the wide late, do not wait on it",
+  "concert.md 3 - into a free coda the cutting decelerates",
+  "concert.md 4 - the home angle holds roughly three-quarters of the cut",
+  "concert.md 1 - cuts land 17-41 ms from a transient and never on one"
+ ]
+}

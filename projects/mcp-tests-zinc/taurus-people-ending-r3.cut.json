@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "timeline": {
-    "name": "Taurus People Ending P2",
+    "name": "Taurus People Ending P2 R3",
     "fps": 23.976
   },
   "sources": {
@@ -79,14 +79,14 @@
       "source": "fx6_wide",
       "in": 65188,
       "out": 65338,
-      "note": "fill 43.07 with a phrase boundary on it (score 1.207), 0.72 s after the +2.64 dB peak at 42.35 and 1.99 s after the camera settles. W3 arrives as a picture the piece has NOT shown: the pianist is now fully in frame at the left and the drummer is out of it altogether. sec 4: a scale change is a picture worth more than a framing return"
+      "note": "fill 43.07 with a phrase boundary on it (score 1.207), 0.72 s after the +2.64 dB peak at 42.35 and 1.99 s after the camera settles. W3 arrives as a picture the piece has NOT shown: the pianist is now in frame at the left, and this is the framing that will carry the ending. sec 4: a scale change is a picture worth more than a framing return"
     },
     {
       "id": "s08",
       "source": "a7iv_kit",
       "in": 96608,
       "out": 96708,
-      "note": "drum fill 49.23 (1.68 s) - arrive at its start and ride it into the +2.99 dB peak at 49.85 (sec 5). From here the A7IV is the ONLY angle with the drummer in it, which is what makes the 52.03 and 53.47 fills worth this shot"
+      "note": "drum fill 49.23 (1.68 s) - arrive at its start and ride it into the +2.99 dB peak at 49.85 (sec 5). The kit angle is the near-field picture of the drummer, which is what makes the 52.03 and 53.47 fills worth this shot"
     },
     {
       "id": "s09",
@@ -107,28 +107,21 @@
       "source": "fx6_wide",
       "in": 65759,
       "out": 65904,
-      "note": "SOLO CHANGE 66.97 (downbeat, timbre step inside the melodic stem) with its own phrase boundary and the 66.41 fill (2.22 s) under it. The front changes, so the angle that holds the band takes it (sec 4: follow the audience's gaze at a structure change). The last build runs inside this shot - onset density climbs 6.0 -> 8.7/s - and so does the grid's LAST BEAT at 71.19, after which the pulse stops being measurable at all"
+      "note": "SOLO CHANGE 66.97 (downbeat, timbre step inside the melodic stem) with its own phrase boundary and the 66.41 fill (2.22 s) under it. The front changes, so the angle that holds the band takes it (sec 4: follow the audience's gaze at a structure change). The last build runs inside this shot - onset density climbs 6.0 -> 8.7/s - and so does the grid's LAST BEAT at 71.19, after which the pulse stops being measurable at all and the coda is free"
     },
     {
       "id": "s12",
       "source": "a7iv_kit",
       "in": 97174,
       "out": 97252,
-      "note": "THE LAST CLIMAX: energy peak +6.46 dB, the biggest-prominence event anywhere in the 90 s, with onset density peaking 9.7-10.3/s over the three seconds after it. The cut goes to the only picture with the drummer in the near field, because at this instant the drums are what is happening"
+      "note": "THE LAST CLIMAX: energy peak +6.46 dB, the biggest-prominence event anywhere in the 90 s, with onset density peaking 9.7-10.3/s over the three seconds after it. The cut goes to the near-field kit because at this instant the drums are what is happening - and it is a VISIT, not a destination: 3.25 s, the shortest shot in the piece, the acceleration half of sec 3's accelerate-and-release pair. This is the last time the ending leaves the band"
     },
     {
       "id": "s13",
       "source": "fx6_wide",
       "in": 65982,
-      "out": 66140,
-      "note": "phrase boundary 76.08 at the TOP OF THE DECAY (rms -17.4 here, falling to -34.2 by 82.5). RELEASE: the accelerate-and-release pair (sec 3) - the climax was the acceleration, this is the hold after it. Over decaying audio the 3/3 panel says hold rather than shrink, so this shot GROWS on the one before it and swallows the diminuendo steps at 80.0, 81.5 and 82.5 rather than cutting on them"
-    },
-    {
-      "id": "s14",
-      "source": "a7iv_kit",
-      "in": 97410,
-      "out": 97581,
-      "note": "THE NEAR-GAP: 82.72 is the quietest 30 ms in the window (-40.41 dB, 34 dB under the last note). The picture changes IN THE SILENCE and the three-hit final figure - 82.96 / 83.17 / 83.40, the last of them the last note of the set (+15.66 dB lift, sample peak 1.106) - lands on the tightest picture the piece has, with the drummer's stick up in the near field. The band is on screen and playing for the final punch; the dissolve does not start until 83.905, 0.52 s later and 0.4 s after the applause has taken over. tail: dissolve_to_black 142 frames (5.923 s) beginning at rel 2012 = SYNC 183745 = win-t 83.905, which is the finished deliverable's own dissolve_start frame; audio fade 125 frames (5.213 s) ending with the mix. Picture ends 4 frames before the mix does, which is the deliverable's 0.167 s black tail"
+      "out": 66311,
+      "note": "phrase boundary 76.08 (conf 0.689, held ratio 3.0) at the TOP OF THE DECAY - rms -17.9 here, falling to -27.2 by 80.4 - and it is the LAST CUT IN THE PIECE. The release, and the return that the ending is built around: from here the widest framing the rig has (piano, bass, sax and drummer all in one frame) carries everything left. 7.80 s at full opacity, and they are working seconds - the decay steepening, the 80.35 trough, the last statement coming back at 80.85, the near-gap at 82.72 (the quietest 30 ms in the window, -40.41 dB), and the three-hit final figure at 82.96 / 83.17 / 83.40, the last of them the last note of the set (+15.66 dB lift, sample peak 1.106). Then applause, and the dissolve from 83.917. sec 5b: the cadence, the applause and the fade all belong to the ensemble - and sec 3: into a free coda the cutting decelerates, so the coda's two shots run 3.25 and 13.72 s and this one is the longest in the cut. tail: dissolve_to_black 142 frames (5.923 s) beginning at rel 2012 = SYNC 183745 = win-t 83.917, which is the finished deliverable's own dissolve_start frame; audio fade 125 frames (5.213 s) ending with the mix. Picture ends 4 frames before the mix does, which is the deliverable's 0.167 s black tail. The FX6 walks back right 8 px at 85.42 under the dissolve, so the last image opens out toward the kit as it goes to black"
     }
   ]
 }
