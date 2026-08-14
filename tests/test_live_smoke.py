@@ -26,6 +26,7 @@ import os
 import shutil
 import zlib
 from collections.abc import Iterator
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any, NamedTuple
@@ -42,6 +43,7 @@ from resolve_mcp.audio.stems import (
 )
 from resolve_mcp.config import get_config
 from resolve_mcp.errors import BinNotFoundError, FfmpegUnavailableError
+from resolve_mcp.ffmpeg import hwaccels
 from resolve_mcp.jobs import cache
 from resolve_mcp.jobs.runner import wait_for
 from resolve_mcp.naming import timestamped_name
@@ -76,6 +78,7 @@ from resolve_mcp.tools.timeline import (
 )
 from resolve_mcp.tools.titles import apply_titles, edit_title, list_titles
 from resolve_mcp.tools.video import detect_scene_cuts, grab_frames
+from resolve_mcp.video import ffmpeg as video_ffmpeg
 
 from . import otio
 from .fakes import write_wav
@@ -1196,6 +1199,30 @@ def test_a_real_frame_grab_lands_on_the_moment_resolve_numbers_it_at() -> None:
 
     again = grab_frames(footage["name"], [middle], bin=footage["bin"])
     assert again["cached"] is True, "unchanged media must be a cache hit"
+
+
+def test_nvdec_decodes_a_real_clip_on_this_box(tmp_path: Path) -> None:
+    """#202's live AC: the fakes prove the flag shaping, only a real decode proves NVDEC.
+
+    Forcing ``cuda`` disables the software retry, so a frame coming back here means the
+    hardware decoder itself produced it — an ffmpeg that ran ``-hwaccel cuda`` and quietly
+    decoded in software anyway would still pass, but that substitution is ffmpeg's
+    documented contract violation, not ours to test. A box whose ffmpeg lists no cuda
+    skips: degrading there is the design (``auto`` records the reason), not a failure.
+    """
+    try:
+        methods = hwaccels()
+    except FfmpegUnavailableError as unavailable:
+        pytest.skip(f"No ffmpeg to probe: {unavailable.cause}")
+    if "cuda" not in methods:
+        pytest.skip("this box's ffmpeg lists no cuda hwaccel")
+    source = write_hard_cut_clip(tmp_path / "resolve-mcp-nvdec.mp4")
+
+    forced = replace(get_config(), ffmpeg_hwaccel="cuda")
+    grabbed = video_ffmpeg.grab(source, tmp_path / "nvdec.jpg", 1.5, 1568, config=forced)
+
+    assert grabbed.path.exists() and grabbed.path.stat().st_size > 0
+    assert grabbed.decode == {"device": "cuda", "reason": None}
 
 
 def _sweep_scan_bin(pool: Any) -> None:

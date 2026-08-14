@@ -10,9 +10,9 @@ says so in the log and the job record.**
 
 | Path | Module(s) | Device after #202 | GPU path | Fallback reporting |
 | --- | --- | --- | --- | --- |
-| Video decode: scene scan | `video/ffmpeg.scan` → `video/scenes` | **NVDEC** via `ffmpeg_hwaccel=auto` | yes — `-hwaccel cuda` | probe logged once; `decode` block in catalog + gist; software retry is a WARNING + `reason` |
-| Video decode: occlusion sampling | `video/ffmpeg.sample` → `video/occlusion` | **NVDEC** (same setting) | yes | same `decode` block in catalog + gist |
-| Video decode: frame grabs | `video/ffmpeg.grab` → `video/frames` | **NVDEC** (same setting) | yes | `decode` in the tool payload (`null` when every frame came off the cache) |
+| Video decode: scene scan | `video/ffmpeg.scan` → `video/scenes` | **NVDEC where the profile allows** via `ffmpeg_hwaccel=auto` — this box's 4:2:2 sources decode in software, recorded (see the measurements below) | yes — `-hwaccel cuda` | probe logged once; `decode` block in catalog + gist; software retry and ffmpeg's internal fallback are each a WARNING + `reason` |
+| Video decode: occlusion sampling | `video/ffmpeg.sample` → `video/occlusion` | same as the scene scan | yes | same `decode` block in catalog + gist |
+| Video decode: frame grabs | `video/ffmpeg.grab` → `video/frames` | same as the scene scan | yes | `decode` in the tool payload (`null` when every frame came off the cache) |
 | Video post-decode filters (scale, select, JPEG encode) | same commands | CPU (ffmpeg filters) | not worth it | n/a — decode dominates; the scale runs on frames already in RAM, which is the shape the numpy consumers need |
 | Audio extraction | `audio/ffmpeg`, `analysis/decode` | CPU | none applicable | n/a — audio demux/PCM decode, no video stream decoded |
 | Occlusion arithmetic | `video/blocking` (numpy/scipy) | CPU | none wired | n/a — milliseconds per scan; decode dominates |
@@ -40,6 +40,33 @@ says so in the log and the job record.**
   refuses codecs it does not know) and the retry is a WARNING plus a
   `reason` in the record. Forcing `cuda` disables the retry: forcing is a
   claim about the box, and a wrong claim should fail loudly.
+- **ffmpeg's own internal fallback is detected off stderr.** When NVDEC
+  lacks the stream's codec profile, ffmpeg prints
+  `Failed setup for format cuda`, decodes in software and exits 0 — so the
+  exit-code retry never fires and the record would have claimed a decode
+  the card never did. `_decoded` scans stderr for that line and rewrites
+  the record to `cpu` with the reason, at a WARNING; the decode commands
+  hold their log level at `warning` or louder so the line stays visible.
+  This fires on a forced `cuda` too — the frames arrived, so failing would
+  discard good work; there, the loudness *is* the record.
+
+### Measured on the live box, 2026-08-14 (AC 3)
+
+Full-file decode to a null sink (no encode, no scale), second-of-two runs
+so the OS file cache is warm both ways. RTX 4080 SUPER (Ada), ffmpeg 8.1.2:
+
+| Stream | Software | `-hwaccel cuda` | Verdict |
+| --- | --- | --- | --- |
+| 4K HEVC 4:2:2 10-bit — real A7IV concert clip, 1.1 GB / 85 s | 17.1 s | 17.3 s | **NVDEC cannot engage**: Ada has no 4:2:2 decode (Blackwell adds it). ffmpeg fell back internally; wall clock identical; the record now says `cpu` with the reason |
+| 1080p H.264 4:2:0 High — real screen recording, 8.5 min | 10.4 s | 28.6 s | NVDEC engages and **loses 2.8×**: one decode engine (~530 fps) against a many-core software decode (~1460 fps), plus the PCIe download |
+| 4K HEVC 4:2:0 — generated, 60 s @ 60 Mbps | 13.0 s | 5.5 s | NVDEC wins 2.35× — the profile the card is built for |
+
+Why `auto` stays the default despite the mixed table: the box's real
+concert footage is all 4:2:2 (FX6 XAVC Intra H.264 4:2:2, A7IV H.265
+4:2:2 10-bit), where the flag costs nothing and the fallback is recorded;
+4K 4:2:0 — phone footage, most delivered renders — is the win case. The
+losing case is long 1080p H.264, rare in a 4K pipeline — a box that works
+mostly on those should set `RESOLVE_MCP_FFMPEG_HWACCEL=off`.
 
 ## The torch decision: beats and applause stay on the CPU
 

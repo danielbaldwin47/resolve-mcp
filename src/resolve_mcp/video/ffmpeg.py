@@ -30,6 +30,10 @@ or JPEG passes over pixels, so decoded frames have to land in RAM either way."""
 
 HWACCEL_MODES = ("auto", "cuda", "off")
 
+INTERNAL_FALLBACK = "Failed setup for format"
+"""What ffmpeg prints (at warning level, exit 0) when the hardware decoder cannot take the
+stream — e.g. NVDEC on 4:2:2 profiles — and it silently finishes the decode in software."""
+
 
 class Decode(NamedTuple):
     """The decode this box gets: which flags to pass, and the report the record carries.
@@ -112,7 +116,24 @@ def _decoded(
     choice = choose_decode(config, runner)
     finished = invoke(build(choice.flags), runner=runner, config=config)
     report = choice.report()
-    if finished.returncode != 0 and choice.flags and config.ffmpeg_hwaccel != "cuda":
+    if finished.returncode == 0 and choice.flags and INTERNAL_FALLBACK in finished.stderr:
+        # The sneakiest fallback of the three: NVDEC lacks the codec profile (this box's
+        # 4:2:2 concert footage, measured 2026-08-14), so ffmpeg warns on stderr, decodes
+        # in software and exits 0 — the frames are good, but the card never touched them.
+        # The exit-code retry below cannot see it; the stderr line is the only witness.
+        # Deliberately also reached when ``cuda`` is forced: the frames arrived, so failing
+        # would discard good work — here the loudness *is* the record.
+        log.warning(
+            "Hardware decode of %s fell back inside ffmpeg: the decoder lacks this codec "
+            "profile, so the frames were decoded in software",
+            source,
+        )
+        report = {
+            "device": "cpu",
+            "reason": "ffmpeg fell back internally: the hardware decoder lacks this "
+            "codec profile",
+        }
+    elif finished.returncode != 0 and choice.flags and config.ffmpeg_hwaccel != "cuda":
         log.warning(
             "Hardware decode of %s failed (exit %d); retrying in software",
             source,
@@ -145,7 +166,7 @@ def still_command(
         executable,
         "-nostdin",
         "-loglevel",
-        "error",
+        "warning",
         "-y",
         *decode,
         "-ss",
@@ -171,8 +192,9 @@ def scene_command(
     """Decode the whole file, keep the frames that differ from the last one, print their times.
 
     ``showinfo`` writes one line per kept frame to stderr, which is why the log level goes
-    up to info for this command alone. Nothing is encoded — the output is the null muxer, so
-    what this costs is one decode pass.
+    up to info here where the others sit at warning — the floor every decode command keeps
+    so ffmpeg's internal hwaccel fallback line stays visible (#202). Nothing is encoded —
+    the output is the null muxer, so what this costs is one decode pass.
     """
     return [
         executable,
@@ -219,7 +241,7 @@ def sample_command(
         executable,
         "-nostdin",
         "-loglevel",
-        "error",
+        "warning",
         "-y",
         *decode,
         "-ss",

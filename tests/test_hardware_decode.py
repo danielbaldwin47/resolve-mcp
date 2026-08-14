@@ -209,6 +209,53 @@ def test_a_hardware_decode_that_fails_retries_in_software_and_reports_the_fallba
     assert "retried" in written.decode["reason"]
 
 
+def test_a_decode_ffmpeg_quietly_finished_in_software_is_reported_as_the_cpu(
+    tmp_path: Path,
+) -> None:
+    """ffmpeg's own fallback is the sneakiest one: NVDEC lacks the codec profile (this
+    box's 4:2:2 concert footage, live-measured 2026-08-14), ffmpeg warns on stderr,
+    decodes in software and exits 0 — so the exit-code retry never fires and the record
+    would claim a decode the card never did. The stderr line is the only witness."""
+    calls: list[list[str]] = []
+
+    def runner(argv: Sequence[str]) -> Completed:
+        probed = hwaccel_probe_reply(argv, CUDA_BOX)
+        if probed is not None:
+            return probed
+        calls.append(list(argv))
+        write_jpeg(Path(argv[-1]), width=64, height=36)
+        return Completed(
+            0,
+            "[hevc @ 0x1] Hardware is lacking required capabilities\n"
+            "[hevc @ 0x1] Failed setup for format cuda: hwaccel initialisation returned error.",
+        )
+
+    written = video_ffmpeg.grab(tmp_path / "in.mp4", tmp_path / "out.jpg", 1.0, 1568, runner)
+
+    assert len(calls) == 1, "the frames arrived — nothing to retry"
+    assert written.decode["device"] == "cpu"
+    assert written.decode["reason"] is not None and "codec" in written.decode["reason"]
+
+
+def test_even_a_forced_cuda_decode_confesses_ffmpegs_internal_fallback(
+    tmp_path: Path,
+) -> None:
+    """Forcing fails loudly on a broken decode, but an internal fallback still exits 0
+    with good frames — discarding them helps nobody, so the loudness is the record."""
+    config = replace(get_config(), ffmpeg_hwaccel="cuda")
+
+    def runner(argv: Sequence[str]) -> Completed:
+        write_jpeg(Path(argv[-1]), width=64, height=36)
+        return Completed(0, "[hevc @ 0x1] Failed setup for format cuda: nope.")
+
+    written = video_ffmpeg.grab(
+        tmp_path / "in.mp4", tmp_path / "out.jpg", 1.0, 1568, runner, config
+    )
+
+    assert written.decode["device"] == "cpu"
+    assert written.decode["reason"]
+
+
 def test_a_forced_cuda_decode_that_fails_fails_rather_than_quietly_going_software(
     tmp_path: Path,
 ) -> None:
