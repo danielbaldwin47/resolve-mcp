@@ -61,13 +61,26 @@ Round 1 critic, verbatim needs; each is server measurement work:
 3. Per-cut visual delta (framing histogram/embedding distance across the
    boundary) + 30-degree-rule flag + match-on-action frames either side.
    **Delta and flag done** (#184): `resolve_mcp.video.framing` reads layout,
-   content and size across each boundary; the pack carries a `delta` on every
-   cut plus a `visual_delta` block per label and a method block in the
-   manifest, and `correlate_timeline(deltas=...)` joins a catalog onto the
-   timeline's own cuts. Threshold calibrated on the five human deliverables
-   (`recon/cut_delta_calib.json`). Still open from this item: match-on-action
-   frames either side — the delta says *how far* the picture stepped, not
-   whether the movement carried through the cut.
+   structure, content and size across each boundary; the pack carries a `delta`
+   on every cut plus a `visual_delta` block per label, a method block in the
+   manifest and the number captioned on each filmstrip row, and
+   `correlate_timeline(deltas=...)` joins a catalog onto the timeline's own
+   cuts. Threshold calibrated on the human deliverables
+   (`recon/cut_delta_calib.json`): 200 cuts, floor 0.44, median 0.63, flag at
+   half the floor (0.20), none of the 200 flagged. Still open from this item:
+   match-on-action frames either side — the delta says *how far* the picture
+   stepped, not whether the movement carried through the cut.
+
+   Found while calibrating: **Soultrane is cut with multi-second dissolves end
+   to end, and the scene detector reads it as zero cuts.** Measured in the
+   120-240 s window: the picture steps 0.67 across three seconds — as far as
+   any hard cut in the other four songs — while the largest single frame-pair
+   delta is 4.95 against a noise floor of 1.5, and `select='gt(scene,0.015)'`
+   finds nothing. So one of the five deliverables contributes no cuts to any
+   pack, any calibration or any critic pack built from it, and says so only as a
+   count of zero. This is `detect_cuts`' documented blind spot at whole-song
+   scale; the v3 slow-transition pass looks at shot tails and the ending, not at
+   boundaries nobody detected. Own ticket.
 4. Cut-to-beat offsets at sub-100 ms, in ms and beat fractions (1-s RMS
    cannot resolve musicality).
 5. Audio class track (applause/speech/music/silence at 1 s resolution).

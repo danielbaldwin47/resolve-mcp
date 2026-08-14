@@ -100,10 +100,25 @@ clause rather than its subject."""
 JUMP_DELTA = 0.20
 """Below this composite the cut is a jump-cut candidate.
 
-Calibrated on the five human deliverables (``gauntlet/recon/cut_delta_calib.py``,
-receipt in ``cut_delta_calib.json``): the threshold sits under the human's own
-cuts, so their edits raise no flags, and above the synthetic near-jump-cut this
-tier fixes. Re-run the calibration before moving it."""
+Calibrated on the human deliverables — ``gauntlet/recon/cut_delta_calib.py``,
+receipt in ``cut_delta_calib.json``, measured 2026-08-14 over the five Zinc Bar
+songs. 200 cuts read through the same path a pack build uses: the smallest step
+any of them makes is 0.44, the median 0.63, the largest 0.73. The threshold is
+half that floor, rounded down to a 0.05 grid, and none of the 200 reaches it.
+
+Half rather than at the floor, because that floor is the floor of *real angle
+changes* — every cut a professional made between two cameras. A threshold sitting
+on it would flag any cut that merely steps less than their smallest, which reports
+the footage rather than the edit. A jump cut is not a small step; it is a step of
+almost nothing, and the synthetic near-jump-cuts the fixture tier fixes score
+0.01-0.05, an order below this line.
+
+One deliverable, Soultrane, contributed none of the 200: it is cut with
+multi-second dissolves throughout, and the per-frame scene detector that finds the
+boundaries cannot see them (measured: the picture changes by 0.67 across three
+seconds while no frame pair exceeds 4.95 against a noise floor of 1.5). The
+threshold therefore rests on four hard-cut songs. Re-run the calibration before
+moving it."""
 
 LAYOUT_MATCH = 0.15
 SCALE_MATCH = 0.10
