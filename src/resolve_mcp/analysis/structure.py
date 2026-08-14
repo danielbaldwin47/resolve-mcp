@@ -9,7 +9,11 @@ Two halves, because they answer the two questions a concert's shape is made of (
   before placing a single marker (#22, story 33). Applause alone over-calls, though: on the
   first live concert three of thirteen calls were talking bounded by clapping, so a call
   also has to have a pulse under it, and this half reads the beat grid too (#133). Set
-  ``density_per_second`` to zero and it does not.
+  ``density_per_second`` to zero and it does not. It reads the loudness curve for the same
+  kind of reason (#179): on a board mix the clapping barely registers and the announcement
+  after it is a minute long, so the threshold scales to the file's own peak and each
+  boundary walks forward to where the band actually comes in. Set ``settle_seconds`` to
+  zero and it does not.
 
 * **Solo changes** come off the stems, because "who is out front" is not a question the mix
   can answer. They are also snapped to downbeats, which means this job needs a beat grid —
@@ -50,9 +54,12 @@ SOLOS = "solos"
 
 APPLAUSE_SHAPE = (
     "threshold",
+    "scale",
     "burst_seconds",
     "gap_seconds",
     "tune_seconds",
+    "settle_db",
+    "settle_seconds",
     "density_per_second",
 )
 """Every setting that changes what the tune half says — and so what it is keyed on.
@@ -78,9 +85,12 @@ def analyze_structure(
     solos: bool = False,
     stems: str | Path | None = None,
     threshold: float = applause_module.DEFAULT_THRESHOLD,
+    scale: float = applause_module.DEFAULT_SCALE,
     burst_seconds: float = applause_module.DEFAULT_MINIMUM_SECONDS,
     gap_seconds: float = applause_module.DEFAULT_GAP_SECONDS,
     tune_seconds: float = applause_module.DEFAULT_TUNE_SECONDS,
+    settle_db: float = applause_module.DEFAULT_SETTLE_DB,
+    settle_seconds: float = applause_module.DEFAULT_SETTLE_SECONDS,
     density_per_second: float = applause_module.DEFAULT_DENSITY_PER_SECOND,
     window_seconds: float = solos_module.DEFAULT_WINDOW_SECONDS,
     hop_seconds: float = solos_module.DEFAULT_HOP_SECONDS,
@@ -97,16 +107,27 @@ def analyze_structure(
     config = config or get_config()
     source = halves.readable(audio)
     _asked_for_something(tunes, solos)
-    _sane_numbers(threshold, window_seconds, hop_seconds, density_per_second)
+    _sane_numbers(
+        threshold,
+        scale,
+        settle_db,
+        settle_seconds,
+        window_seconds,
+        hop_seconds,
+        density_per_second,
+    )
     found = _stems(stems, solos)
 
     settings: dict[str, Any] = {
         TUNES: tunes,
         SOLOS: solos,
         "threshold": float(threshold),
+        "scale": float(scale),
         "burst_seconds": float(burst_seconds),
         "gap_seconds": float(gap_seconds),
         "tune_seconds": float(tune_seconds),
+        "settle_db": float(settle_db),
+        "settle_seconds": float(settle_seconds),
         "density_per_second": float(density_per_second),
         "window_seconds": float(window_seconds),
         "hop_seconds": float(hop_seconds),
@@ -154,23 +175,40 @@ def _asked_for_something(tunes: bool, solos: bool) -> None:
 
 def _sane_numbers(
     threshold: float,
+    scale: float,
+    settle_db: float,
+    settle_seconds: float,
     window_seconds: float,
     hop_seconds: float,
     density_per_second: float,
 ) -> None:
+    """Refuse the numbers that would quietly mean something other than what was asked.
+
+    ``settle_db`` is in here because a negative margin puts playing level *above* the file's
+    own median, which no set has half of itself over — every call would come back as one
+    the band never came in on, and the job would succeed while reporting no tunes at all.
+    """
     if (
         not 0.0 < threshold <= 1.0
+        or not 0.0 <= scale <= 1.0
+        or settle_db < 0
+        or settle_seconds < 0
         or window_seconds <= 0
         or hop_seconds <= 0
         or density_per_second < 0
     ):
         raise InvalidRequestError(
             cause=(
-                "The applause threshold must be a probability, the windows positive, and the "
-                "beat-density floor zero or more."
+                "The applause threshold must be a probability, the scale a fraction of one, "
+                "the windows positive, and the settle margin, settle hold and beat-density "
+                "floor zero or more."
             ),
             fix=(
                 f"Defaults are threshold={applause_module.DEFAULT_THRESHOLD}, "
+                f"scale={applause_module.DEFAULT_SCALE} (0 uses the threshold as it stands), "
+                f"settle_db={applause_module.DEFAULT_SETTLE_DB}, "
+                f"settle_seconds={applause_module.DEFAULT_SETTLE_SECONDS} "
+                "(0 turns the settle step off), "
                 f"window_seconds={solos_module.DEFAULT_WINDOW_SECONDS}, "
                 f"hop_seconds={solos_module.DEFAULT_HOP_SECONDS}, "
                 f"density_per_second={applause_module.DEFAULT_DENSITY_PER_SECOND} "
@@ -178,6 +216,9 @@ def _sane_numbers(
             ),
             detail={
                 "threshold": threshold,
+                "scale": scale,
+                "settle_db": settle_db,
+                "settle_seconds": settle_seconds,
                 "window_seconds": window_seconds,
                 "hop_seconds": hop_seconds,
                 "density_per_second": density_per_second,
@@ -370,25 +411,46 @@ def _tunes(
     config: Config,
 ) -> dict[str, Any]:
     curve = applause_module.tag(source, tagger)
-    spans = applause_module.spans(
+    read = applause_module.reading(
         curve,
         float(shape["threshold"]),
+        float(shape["scale"]),
         float(shape["burst_seconds"]),
+    )
+    spans = applause_module.spans(
+        curve,
+        read.threshold,
+        read.burst_seconds,
         float(shape["gap_seconds"]),
     )
-    found = applause_module.tunes(
-        spans,
-        float(described["duration_seconds"]),
-        float(shape["tune_seconds"]),
+    tune_seconds = float(shape["tune_seconds"])
+    found = applause_module.tunes(spans, float(described["duration_seconds"]), tune_seconds)
+    margin_db = float(shape["settle_db"])
+    hold = float(shape["settle_seconds"])
+    played = _where_the_band_comes_in(
+        found, margin_db, hold, tune_seconds, source, described, identity, refresh, config
     )
     floor = float(shape["density_per_second"])
-    calls = _with_a_pulse(found, floor, source, described, identity, detector, refresh, config)
-    gist = {**applause_module.gist(curve, spans, calls), **shape}
+    calls = _with_a_pulse(
+        played.kept, floor, source, described, identity, detector, refresh, config
+    )
+    # The shape goes in first and the reading over it: ``threshold`` and ``burst_seconds``
+    # are what the caller asked for, and the ``_used`` pair what the file was actually read
+    # at, which are the same numbers only when the fallback did not fire.
+    gist = {
+        **applause_module.gist(curve, spans, calls, played),
+        **shape,
+        "threshold_used": round(read.threshold, 4),
+        "burst_seconds_used": read.burst_seconds,
+        "read_at_own_scale": read.own_scale,
+    }
     log.info(
-        "Found %d tunes and %d bursts of applause in %s",
+        "Found %d tunes and %d bursts of applause in %s at a threshold of %.4f (%s)",
         len(calls.kept),
         len(spans),
         source.name,
+        read.threshold,
+        "the file's own scale" if read.own_scale else "as asked",
     )
     for one in calls.dropped:
         log.info(
@@ -398,14 +460,57 @@ def _tunes(
             one.beats_per_second or 0.0,
             source.name,
         )
+    for one in (*played.silent, *played.brief):
+        log.info(
+            "Dropped the call at %.2fs (%.1fs) from %s: the band never comes in",
+            one.start,
+            one.seconds,
+            source.name,
+        )
     return halves.written(
         target,
         TUNES,
         described,
         gist,
         applause_module.numbered(calls.kept),
-        {"dropped_calls": list(applause_module.dropped_calls(calls.dropped, floor))},
+        {
+            "dropped_calls": list(applause_module.dropped_calls(calls.dropped, floor)),
+            "quiet_calls": list(applause_module.quiet_calls(played, margin_db, tune_seconds)),
+        },
     )
+
+
+def _where_the_band_comes_in(
+    found: Sequence[applause_module.Tune],
+    margin_db: float,
+    hold_seconds: float,
+    tune_seconds: float,
+    source: Path,
+    described: Mapping[str, Any],
+    identity: Mapping[str, Any],
+    refresh: bool,
+    config: Config,
+) -> applause_module.Settled:
+    """The calls with their starts moved off the applause and onto the downbeat (#179).
+
+    The loudness curve is ``analyze_music``'s, read the way the beat grid is: one
+    measurement per piece of audio, whichever job asks for it first, at that job's default
+    window so a set already analysed does not get a second curve keyed one hop apart. A hold
+    of zero is the way out — the step is off, no curve is read, and a boundary is the end of
+    the applause again.
+    """
+    if hold_seconds <= 0:
+        return applause_module.Settled(tuple(found), (), ())
+    shape = {
+        "window_seconds": music.DEFAULT_WINDOW_SECONDS,
+        "hop_seconds": music.DEFAULT_HOP_SECONDS,
+    }
+    rows = music.numbered_energy(source, dict(described), dict(identity), shape, refresh, config)
+    loudness = applause_module.Loudness(
+        seconds=tuple(float(row["t"]) for row in rows),
+        lufs=tuple(float(row["lufs"]) for row in rows),
+    )
+    return applause_module.settled(found, loudness, margin_db, hold_seconds, tune_seconds)
 
 
 def _with_a_pulse(

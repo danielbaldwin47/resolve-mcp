@@ -99,12 +99,26 @@ director confirmed this reading on 2026-08-07** — sidecars stay in the repo.
 }
 ```
 
-- **`role`** is the only key `correlate_timeline` consumes, and it is what
-  cross-project claims group on — so keep the vocabulary small and reuse it
-  across projects. `<subject>-<character>` is the default shape.
+- **`role`** is what cross-project claims group on — so keep the vocabulary
+  small and reuse it across projects. `<subject>-<character>` is the default
+  shape.
 - **`subject`** and **`character`** are the two axes kept apart, because
   "the drummer" and "a moving shot" are different facts about the same camera
-  and the profile makes claims about each.
+  and the profile makes claims about each. `subject` is also the second key
+  `correlate_timeline` consumes (#181): with a solo map it answers whether a
+  shot is on the player out front, on the ensemble, on a player who was not
+  soloing, or on neither (an audience camera, a room shot). It is read from
+  `subject` where an entry names one and otherwise from the subject half of a
+  `<subject>-<character>` role — a one-word role is a *character* and labels no
+  subject. `ensemble` is the whole band; `soloist` is a camera pointed at
+  whoever is out front, whose shots are on the soloist by construction rather
+  than by measurement — the reading says which of the two it was, and how many
+  of a cut's soloist seconds came from a camera taken at its word.
+- **`voice`** — optional, and only where this sidecar's subjects and the solo
+  map's stems are different words for the same player: `{"subject": "mike",
+  "voice": "wind"}`. The join uses it; a subject the solo map never names reads
+  as neither a player nor the band, which is right for an audience camera and
+  wrong for a horn player nobody aliased.
 - **`confidence`** and **`evidence`** are why a claim resting on this angle is
   thin or not: a `low` here is a reason a corpus claim downgrades.
 - **`confirmed_by_director`** — `false` until confirmed, then the date it was
@@ -169,7 +183,9 @@ one project: on the Judson's show `Angle 10` is the drummer on one tune and the
 roaming camera on another. Label every timeline separately.
 
 An entry with no `role` is dropped by `correlate_timeline` rather than refused,
-so a half-labelled project still measures — its shots land under `unlabelled`.
+so a half-labelled project still measures — its shots land under `unlabelled`,
+in the role shares and in the on-soloist track alike, and the track counts that
+screen time apart from its shares rather than in them.
 
 Pass a sidecar by lifting its `angles` object straight through; the tool takes
 labels, never a path:
@@ -201,11 +217,45 @@ Per #13, and in this order:
    acquires it on the way. **Rubato regions are excluded from cut-placement
    evidence** via beat-confidence gating — a grid fitted to free time measures
    nothing.
-4. **`correlate_timeline`** with the sidecar's labels. This is the one tested
-   measurement path: Claude interprets its records and never recomputes
-   statistics ad hoc.
+3b. **`detect_bars`** on the same mix whenever `analyze_music` comes back with a
+   `meter` under 2, which is what the beat model reports on the anchor-side
+   material. See "Bar and phrase vocabulary" below for what its output entitles
+   a claim to say.
+4. **`correlate_timeline`** with the sidecar's labels, and with `bars=` when
+   step 3b produced a map. This is the one tested measurement path: Claude
+   interprets its records and never recomputes statistics ad hoc.
 5. **Draft.** Update the profile sections from the records, tag every claim,
    record the row in `corpus.md`. The director reviews; then commit.
+
+## Bar and phrase vocabulary
+
+Four names a style profile may use for *where in the music* a cut sits, and the
+file each one comes from. They are not interchangeable, and a claim that mixes
+them is a claim about nothing:
+
+- **beat** — `analyze_music`. The pulse the model tracked. Always available,
+  and on some material it is a subdivision rather than the beat (#180).
+- **bar** — the beat grid's `bar`/`in_bar` columns when the *model* committed to
+  a meter; `detect_bars`'s `map_bar` when it did not. `correlate_timeline`
+  reports the first as `bar`/`in_bar` and the second as `map_bar`, and they are
+  separate columns on purpose: one is the model's reading and one is a reading
+  over it, and a profile that folded them together could not say which stood
+  behind a number. A bar map says how it was arrived at — `model`, `inferred`,
+  or `refused` — and a claim off an `inferred` map carries that word.
+- **group** — `detect_bars`'s `in_group`, the bar's place in the four-bar group.
+  This is *hypermeter*, not a phrase: it says a bar line is a plausible place
+  for a phrase to turn over, never that one did. Every eight- and twelve-bar
+  form turns over on a four-bar boundary, which is why four is the divisor.
+- **phrase** — `detect_phrases`. Where the soloist actually stopped, which is a
+  reading of the line and not of the grid. This is the cut-placement unit the
+  #46 round named; a group boundary is where one *could* end, a phrase boundary
+  is where one did.
+
+The provenance tag follows the weakest input. A claim about bars drawn from an
+`inferred` map over a `refused`-adjacent grid is `[believed, unverified]` until
+a corpus pass says otherwise, however many cuts stand behind it: the phase is a
+reading, and a bar map one beat out makes every claim resting on it confidently
+wrong rather than merely thin.
 
 Read **across** the corpus before claiming, not one project at a time: the
 number that matters is the distribution, and the tag a claim is entitled to is

@@ -51,6 +51,18 @@ timelines. The server measures; Claude decides.
   measuring all three counts the residual twice (#157).
   _Avoid_: "piano stem" as a name for `comp` — it is accompaniment, and
   nothing may name it otherwise (#126).
+- **bar map** — `analysis/bars.py`'s reading: one record per bar, each with its
+  downbeat time, its length, the grid beat it starts on and its `in_group`
+  position in the four-bar group. Every map says its `source` — `model` when the
+  beat model committed to a meter and the map takes it at its word, `inferred`
+  when it was recovered from the accents, `refused` when neither reading was
+  worth having. The last is the point: the failure it ends is a grid quietly
+  reporting `meter: 1` and callers doing bar arithmetic on it (#180).
+  _Avoid_: reading `in_group` as a phrase — it is hypermeter, saying a bar line
+  is a plausible place for a phrase to turn over, never that one did.
+- **tactus** — the pulse the bars are counted in, and the thing a bar map folds
+  a subdivision-scale grid down to. Not the grid's own beat: on the corpus
+  anchor the grid is swung eighths and the tactus is every second one of them.
 - **phrase** — the cut-placement unit (#46, `styles/concert.md` §1): a
   stretch of the soloist's line between two endings. `analysis/phrases.py`
   reports the **boundaries**, each with two times — `measured_t`, where the
@@ -67,8 +79,10 @@ timelines. The server measures; Claude decides.
   `[measured — N projects, n=…, context]`, `[review feedback, YYYY-MM]`,
   `[believed, unverified]`.
 - **angle sidecar** — one JSON file per Resolve project labelling each camera
-  by subject × character; `role` is the only key `correlate_timeline` reads,
-  and it arrives as a mapping the agent lifted, never as a path.
+  by subject × character; `correlate_timeline` reads `role` and `subject`
+  (falling back to the subject half of a `subject-character` role) plus the
+  optional `voice`, which says what the solo map calls that subject, and it
+  arrives as a mapping the agent lifted, never as a path.
   _Avoid_: `camera_sidecar` for this — that module reads a camera model off
   the card's own XML (#94) and is not an angle sidecar.
 
@@ -93,7 +107,15 @@ Top level:
 
 `analysis/` — compute jobs that read audio and write findings to disk:
 `applause` (bursts → tune boundaries, then a beat-density floor drops the calls
-with no pulse under them, #133), `beats` (grid + downbeats, model
+with no pulse under them, #133; every boundary then walks forward off the applause
+to where the loudness curve says the band comes in, and a mix the threshold finds
+no clapping in at all is read at its own scale instead, #179),
+`bars` (the **bar map**: a rule layer over the grid for the material the beat
+model will not commit a meter to — folds a too-fast grid to the tactus, then
+scores every meter and phase against a per-beat accent reading and takes the
+widest lead over the runner-up, refusing rather than guessing when the accents
+say nothing. The accent reading is injected per ADR 0002 and defaults to RMS off
+the mix; a named stem reads that instead, #180), `beats` (grid + downbeats, model
 injected per ADR 0002; `trust` says which beats the grid describes well enough
 to count, #112; `spacing` says how wide a beat is at each beat), `correlate`
 (measure a cut against its music — by default the *visible* edit,
@@ -107,25 +129,39 @@ duration `ramp`, and says `reads_metronomic` with the heuristic that drew it,
 and its `gears` block splits the cut's span into loudness terciles off a 1 s
 RMS curve and reports cuts per minute in each, the loud/quiet `rate_ratio`,
 where the sub-2 s shots sit, `one_speed`, and `outside_shots` — shots past
-the analysed mix, counted apart rather than clamped into a tercile —
-warnings the report carries, never gates),
+the analysed mix, counted apart rather than clamped into a tercile — plus
+`quiet_floor`, the passages the slow gear is held through, found by smoothing
+that curve rather than off the per-window tercile labels, each read for the
+spread its lone flashes are not holding up (#190) —
+warnings the report carries, never gates. Takes an optional **bar map**
+(`bars=`) and then reports `map_bar`, `in_group` and `bar_offset` per cut and
+a `bar_groups` histogram — ungated on the beat gate, since the map exists for
+the grids that gate refuses whole, #180),
 `cuda` (preloads
 the CUDA runtime the `analysis` extra ships, so CTranslate2 finds it on Windows;
 pure decisions, #128),
 `decode` (WAV → numpy, no third-party decoder), `drums` (hits per stem), `energy`
 (loudness curves; `rms_curve` is the cheap level-only pass, no K-weighting and
 no onsets), `fills` (drum-fill candidates), `halves` (shared
-identify/cache/write pattern), `melody` (notes off one melodic stem —
+identify/cache/write pattern, plus `collected`/`stem_named` — where a
+separation's stems are and which one was asked for, shared by every detector
+that reads one: `phrases` off the line, `bars` off the pulse),
+`melody` (notes off one melodic stem —
 monophonic pitch + gating, model injected per ADR 0002; the reading `phrases`
 is a rule layer over, as `drums` is to `fills`), `music` (beats + energy + gist
-job), `phrases` (phrase boundaries: where the soloist stops, which is the
+job; `beats_of`/`energy_of` are the shared entries other jobs read a grid or a
+loudness curve through, one measurement per piece of audio), `phrases` (phrase boundaries: where the soloist stops, which is the
 cut-placement unit #46 named, #143),
 `records` (sliceable record files), `silence` (RMS spans), `solos` (front
 of band changes: lead off the stem energy, timbre off one stem's brightness —
 with the third pass on disk the voices are `wind`/`comp` rather than `other`
 and timbre reads `wind`, #157), `structure` (tunes + solo changes job; both
-halves read the shared beats half; its stem loader is what reaches the third
-pass), `transcribe`
+halves read the shared beats half and the tune half the shared energy half; its
+stem loader is what reaches the third pass), `subject` (what a shot is framed
+on crossed with who is out front: the angle sidecar's subject read as
+player/ensemble/other, joined to the solo windows in seconds so a shot that
+outlives its solo is split where the front changed — pure, no I/O, read by
+`correlate`, #181), `transcribe`
 (job), `transcript` (document + Word/Transcription/Transcriber vocabulary),
 `virtual` (a cut file read back as the words it will contain — the P4
 self-review, warnings only, touches no Resolve handle), `whisper`
@@ -149,7 +185,11 @@ and the build). A `segments` entry is a shot or a **gap**
 (`{"id", "gap": <frames>}`, literal black); `is_gap`/`entry_duration`/
 `overlay_track` are the accessors every walker of that array shares.
 
-`jobs/` — `cache` (hash-keyed results), `runner` (start heavy work without
+`jobs/` — `cache` (hash-keyed results; `audio_identity` is the content hash
+wherever the file sits, read off a `known_hash` note remembered against a
+stat, except under `audio_dir` where it is always read for real;
+`fingerprint` is path+size+mtime and stays the identity for video sources
+and stems — ADR 0007, ADR 0003), `runner` (start heavy work without
 stalling stdio), `store` (one JSON record per job on disk), `detached` (hand
 a job to a process that outlives this one — flags, command, environment),
 `worker` (that process's entry point: `python -m resolve_mcp.jobs.worker
@@ -285,7 +325,10 @@ per critic loss or prep finding, open/in-work/fixed), `HANDOFF.md`.
 cut-boundary filmstrips and a measured `cuts.json`, with the label→source
 mapping quarantined in `assignment.json` so a critic reads the pack without
 knowing whose cut is whose; it refuses to seal when its scene scan finds far
-fewer cuts than the timeline holds (G3). `recon/` is one-off instruments —
+fewer cuts than the timeline holds (G3). Given each label's own
+`correlate_timeline` cuts file (`--a-subjects`/`--b-subjects`, both or
+neither) it also carries the on-soloist track, stripped to four columns so no
+timeline or clip name reaches the pack (#181). `recon/` is one-off instruments —
 one script plus its JSON receipt per question (plans, builds, pixel checks,
 occlusion scans). Renders, packs, frame dirs and the per-frame ffmpeg dumps
 under `recon/` are regenerable and gitignored; only scripts and receipts are
@@ -304,7 +347,8 @@ template; `titles/schema.py` §6).
   analysis models are injected; 0003 stems fingerprinted (path is a
   content hash); 0004 editor-state getters answer only for the current
   timeline; 0005 source frames are read off the left offset, not the
-  source start.
+  source start; 0006 markers ride the mix across a rebuild; 0007 audio is
+  identified by content, the hash remembered against a stat.
 - `docs/agents/` — issue-tracker conventions (wayfinder map ops), triage
   labels, domain-docs usage, the style layer (sidecar + profile formats,
   provenance tags, how a corpus pass is run), the concert pillar

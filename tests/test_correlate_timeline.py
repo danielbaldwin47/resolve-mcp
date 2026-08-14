@@ -22,6 +22,7 @@ import pytest
 from resolve_mcp.analysis import beats as beats_module
 from resolve_mcp.analysis import correlate, energy, records
 from resolve_mcp.analysis.beats import BeatGrid
+from resolve_mcp.errors import InvalidRequestError
 from resolve_mcp.jobs.runner import wait_for
 from resolve_mcp.resolve.connection import get_connection
 from resolve_mcp.tools import analysis as analysis_tools
@@ -196,6 +197,26 @@ def _nested(t: float, delta: float, jump_cut: bool) -> dict[str, Any]:
     }
 
 
+def bars_file(tmp_path: Path, first: float = 0.0, name: str = "concert-bars.json") -> Path:
+    """A bar map in the shape detect_bars writes: a bar a second, four to the group."""
+    return records.write(
+        tmp_path / name,
+        {"kind": "bars", "audio": "concert.wav", "count": 6, "meter": 2, "source": "inferred"},
+        "bars",
+        [
+            {
+                "bar": index + 1,
+                "t": round(first + index, 3),
+                "seconds": 1.0,
+                "beats": 2,
+                "beat": index * 2 + 1,
+                "in_group": index % 4 + 1,
+            }
+            for index in range(6)
+        ],
+    )
+
+
 def _onsets(times: Sequence[float] = ONSETS) -> correlate.Onsets:
     def detect(path: Path) -> tuple[float, ...]:
         return tuple(times)
@@ -280,6 +301,11 @@ def test_every_shot_lands_on_disk_with_its_offsets_bar_and_section(
         "clip": "C0031.mp4",
         "track": 1,
         "role": None,
+        "subject": None,
+        "subject_kind": None,
+        "on_soloist": None,
+        "on_soloist_by": None,
+        "on_soloist_seconds": {"unlabelled": 1.45},
         "opening": False,
         "t": 1.033,
         "in": {"frames": 162, "seconds": 2.7, "timecode": "00:00:02:42", "fps": 60.0},
@@ -291,6 +317,9 @@ def test_every_shot_lands_on_disk_with_its_offsets_bar_and_section(
         "in_bar": 3,
         "in_grid": True,
         "stranded": False,
+        "map_bar": None,
+        "in_group": None,
+        "bar_offset": None,
         "transient_offset": -0.017,
         "tune": 1,
         "front": "drums",
@@ -375,6 +404,84 @@ def test_a_named_catalog_is_part_of_the_cache_key(attach: Attach, tmp_path: Path
 
     assert _rows(again)[1]["delta"] == 0.09
     assert _rows(again)[1]["jump_cut"] is True
+
+
+def test_a_bar_map_puts_every_cut_on_the_form(attach: Attach, tmp_path: Path) -> None:
+    """The in_bar column comes from the beat model's own downbeats; where the model commits
+    to nothing, this is the only column that can say where in the form a cut landed (#180)."""
+    attach(studio(timeline=a_cut()))
+
+    result = _measured(tmp_path, bars=str(bars_file(tmp_path)))
+
+    cuts = _rows(result)
+    assert [one["map_bar"] for one in cuts[1:]] == [2, 3]
+    assert [one["in_group"] for one in cuts[1:]] == [2, 3]
+    assert cuts[1]["bar_offset"] == 0.033  # 1.033s against a bar line at 1.0
+    assert cuts[2]["bar_offset"] == 0.483  # 2.483s: nearer the line at 2.0 than the one at 3.0
+
+
+def test_a_cut_just_before_a_bar_line_belongs_to_that_bar(attach: Attach, tmp_path: Path) -> None:
+    """A cut just before a downbeat is a cut on the one; filing it under the bar it falls
+    inside would put the commonest placement in this material in the wrong bar every time."""
+    attach(studio(timeline=a_cut()))
+    # Bar lines at 1.05 and 2.05: the cut at 1.033 sits before the second one, not inside it.
+    late = bars_file(tmp_path, first=0.05, name="late-bars.json")
+
+    cuts = _rows(_measured(tmp_path, bars=str(late)))
+
+    assert cuts[1]["map_bar"] == 2
+    assert cuts[1]["bar_offset"] == -0.017
+
+
+def test_the_bar_columns_read_null_when_no_map_was_named(attach: Attach, tmp_path: Path) -> None:
+    attach(studio(timeline=a_cut()))
+
+    result = _measured(tmp_path)
+
+    assert all(one["map_bar"] is None for one in _rows(result))
+    assert result["bar_groups"] is None
+    assert result["bar_offsets"] is None
+
+
+def test_the_reading_counts_where_in_the_group_the_cuts_land(
+    attach: Attach, tmp_path: Path
+) -> None:
+    attach(studio(timeline=a_cut()))
+
+    result = _measured(tmp_path, bars=str(bars_file(tmp_path)))
+
+    assert result["bar_groups"] == {"2": 1, "3": 1}
+    assert result["bar_offsets"]["measured"] == 2
+    assert result["bar_offsets"]["late"] == 2
+
+
+def test_the_group_histogram_is_not_gated_on_the_grid(attach: Attach, tmp_path: Path) -> None:
+    """A bar map exists for the grids the #112 gate refuses wholesale; gating its histogram
+    on that verdict would empty the one reading that still had something to say."""
+    attach(studio(timeline=a_cut()))
+    beats = beats_file(tmp_path, BAD_BAR_SECONDS, BAD_BAR_DOWNBEATS, name="bad-bars.json")
+
+    result = _measured(tmp_path, beats=str(beats), bars=str(bars_file(tmp_path)))
+
+    assert result["gated"] > 0
+    assert sum(result["bar_groups"].values()) == result["cuts"] - result["openings"]
+
+
+def test_a_file_that_is_not_a_bar_map_is_refused_by_name(attach: Attach, tmp_path: Path) -> None:
+    attach(studio(timeline=a_cut()))
+
+    with pytest.raises(InvalidRequestError) as caught:
+        _started(tmp_path, bars=str(tunes_file(tmp_path)))
+    assert caught.value.payload()["detail"]["field"] == "bars"
+
+
+def test_naming_a_bar_map_is_a_different_measurement(attach: Attach, tmp_path: Path) -> None:
+    attach(studio(timeline=a_cut()))
+
+    without = _measured(tmp_path)
+    with_map = _measured(tmp_path, bars=str(bars_file(tmp_path)))
+
+    assert with_map["path"] != without["path"]
 
 
 def test_the_offset_is_signed_from_the_cut_to_the_nearest_beat(
@@ -465,6 +572,89 @@ def test_an_entry_with_no_role_in_it_is_dropped_rather_than_refused(
     result = _measured(tmp_path, angles={"C0012.mp4": {"subject": "the room"}})
 
     assert result["roles"] is None
+
+
+ANGLES: dict[str, Any] = {
+    "C0012.mp4": {"role": "ensemble-wide"},
+    "C0031.mp4": {"role": "drums-tight", "subject": "drums"},
+}
+"""The fixture rig: a wide on the band and a tight one on the drummer, as a sidecar labels them.
+
+The solo fixture puts drums out front from the top and hands over at 2.0 s, so the drum cam's
+shot — 1.033 s to 2.483 s — straddles the change and is the case the seconds exist for.
+"""
+
+
+def test_each_shot_says_what_it_is_framed_on_and_whether_that_is_the_soloist(
+    attach: Attach, tmp_path: Path
+) -> None:
+    attach(studio(timeline=a_cut()))
+
+    cuts = _rows(_measured(tmp_path, angles=ANGLES, solos=str(solos_file(tmp_path))))
+
+    assert [one["subject"] for one in cuts] == ["ensemble", "drums", "ensemble"]
+    assert [one["subject_kind"] for one in cuts] == ["ensemble", "player", "ensemble"]
+    assert [one["on_soloist"] for one in cuts] == [False, True, False]
+
+
+def test_a_shot_that_outlives_the_solo_it_opened_in_is_split_where_the_front_changed(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Reading the front at the cut alone would call this shot 1.45 s on the soloist."""
+    attach(studio(timeline=a_cut()))
+
+    cuts = _rows(_measured(tmp_path, angles=ANGLES, solos=str(solos_file(tmp_path))))
+
+    assert cuts[1]["front"] == "drums"
+    assert cuts[1]["on_soloist_seconds"] == {"soloist": 0.967, "other_player": 0.483}
+
+
+def test_the_reading_says_what_share_of_the_solo_windows_is_on_the_soloist(
+    attach: Attach, tmp_path: Path
+) -> None:
+    attach(studio(timeline=a_cut()))
+
+    result = _measured(tmp_path, angles=ANGLES, solos=str(solos_file(tmp_path)))
+
+    assert result["subjects"]["drums"]["cuts"] == 1
+    assert result["on_soloist"]["seconds"] == {
+        "soloist": 0.967,
+        "ensemble": 1.866,
+        "other_player": 0.483,
+    }
+    assert result["on_soloist"]["fraction_on_soloist"] == 0.292
+    assert result["on_soloist"]["unlabelled_seconds"] == 0.0
+    assert result["on_soloist"]["shots"] == {"soloist": 1, "ensemble": 2}
+
+
+def test_without_a_solo_map_a_shot_is_labelled_but_nothing_is_on_the_soloist(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Who is out front is the other document's answer; absent it, the join reads nothing."""
+    attach(studio(timeline=a_cut()))
+
+    result = _measured(tmp_path, angles=ANGLES)
+
+    assert [one["subject"] for one in _rows(result)] == ["ensemble", "drums", "ensemble"]
+    assert [one["on_soloist"] for one in _rows(result)] == [None, None, None]
+    assert result["on_soloist"] is None
+
+
+def test_screen_time_no_sidecar_label_reaches_is_counted_apart_from_the_fractions(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Folded into the denominator it reads as a cut ignoring the soloist; it is not that."""
+    attach(studio(timeline=a_cut()))
+
+    result = _measured(
+        tmp_path,
+        angles={"C0031.mp4": {"role": "drums-tight"}},
+        solos=str(solos_file(tmp_path)),
+    )
+
+    assert result["on_soloist"]["unlabelled_seconds"] == 1.866
+    assert result["on_soloist"]["labelled_seconds"] == 1.45
+    assert result["on_soloist"]["shots"]["unlabelled"] == 2
 
 
 def test_a_dissolve_is_not_a_shot(attach: Attach, tmp_path: Path) -> None:
@@ -652,6 +842,22 @@ def test_black_is_counted_apart_from_the_clips_nobody_labelled(
     assert result["roles"]["black"]["cuts"] == 1
     assert result["roles"]["unlabelled"]["cuts"] == 1
     assert result["roles"]["wide"]["cuts"] == 1
+
+
+def test_black_is_counted_apart_in_the_on_soloist_track_too(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The same distinction, one reading down: a cut to black is not a camera nobody named."""
+    gapped = (SHOTS[0], ("C0031.mp4", 200, 87, 4200))
+    attach(studio(timeline=a_cut(shots=gapped)))
+
+    result = _measured(tmp_path, angles=ANGLES, solos=str(solos_file(tmp_path)))
+
+    assert result["on_soloist"]["black_seconds"] == 0.633
+    assert result["on_soloist"]["unlabelled_seconds"] == 0.0
+    assert result["on_soloist"]["shots"]["black"] == 1
+    assert [one["on_soloist"] for one in _rows(result)] == [False, None, False]
+    assert _rows(result)[1]["on_soloist_seconds"] == {"black": 0.633}
 
 
 def test_a_cut_out_of_black_is_a_cut_rather_than_an_opening(
@@ -1884,6 +2090,7 @@ def test_the_gearing_reading_carries_the_rule_it_applied(attach: Attach, tmp_pat
         "sub2s_in_loud",
         "sub2s_loud_fraction",
         "one_speed",
+        "quiet_floor",
         "heuristic",
     }
 
@@ -1958,3 +2165,217 @@ def test_the_default_curve_is_read_off_the_mix_itself(attach: Attach, tmp_path: 
     assert gears["terciles"]["quiet"]["shots"] == 2  # the first four seconds, both silent
     assert gears["terciles"]["loud"]["level_dbfs"] > -30.0
     assert gears["rate_ratio"] == 1.0  # one cut every two seconds throughout
+
+
+# --- the quiet floor (#190) -------------------------------------------------------------
+#
+# A song in three even blocks — loud, quiet, mid, thirty seconds each — so the quiet third of
+# the smoothed curve is exactly the middle block and every passage below runs 30.0 to 60.0.
+# The shots either side of it are filler at a rate nothing here asserts; the reading under
+# test is what happens between the thirtieth and the sixtieth second.
+
+BLOCKS = ((-20.0, 30), (-50.0, 30), (-35.0, 30))
+LOUD_FILLER = [("A.mp4", SECOND)] * 30
+MID_FILLER = [("B.mp4", 2 * SECOND)] * 15
+
+
+def _floor(result: dict[str, Any]) -> dict[str, Any]:
+    block = _gears(result)["quiet_floor"]
+    assert isinstance(block, dict)
+    return block
+
+
+def _passage(result: dict[str, Any]) -> dict[str, Any]:
+    runs = _floor(result)["runs"]
+    assert len(runs) == 1, f"one quiet block, so one passage: {runs}"
+    passage: dict[str, Any] = runs[0]
+    return passage
+
+
+def _through(*quiet: float) -> FakeTimeline:
+    """A cut whose middle stretch holds the given shot lengths, in seconds."""
+    held = [(f"Q{turn}.mp4", round(length * SECOND)) for turn, length in enumerate(quiet)]
+    return _paced(*LOUD_FILLER, *held, *MID_FILLER)
+
+
+def test_a_quiet_passage_is_the_stretch_of_music_it_covers(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Where the passage sits and how it was cut: the frame every other reading hangs on."""
+    attach(studio(timeline=_through(8, 7, 8, 7)))
+
+    passage = _passage(_measured(tmp_path, loudness=_levels(_steps(*BLOCKS))))
+
+    assert passage["from"] == 30.0
+    assert passage["to"] == 60.0
+    assert passage["seconds"] == 30.0
+    assert passage["shots"] == 4
+    assert passage["cuts_per_minute"] == 8.0
+    assert passage["median_seconds"] == 7.5
+
+
+def test_a_floor_of_holds_all_much_one_length_reads_locked(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Four holds inside a second of each other: the slow gear, driven at one speed.
+
+    This is the failure the block exists for. Nothing above it can see this cut: the rate is
+    the one the quiet gear asks for, the ratio against the loud third is right, and the whole
+    cut's spread is carried by the fast material either side of this passage.
+    """
+    attach(studio(timeline=_through(8, 7, 8, 7)))
+
+    floor = _floor(_measured(tmp_path, loudness=_levels(_steps(*BLOCKS))))
+
+    assert floor["runs"][0]["cv"] == 0.067
+    assert floor["runs"][0]["reads_locked"] is True
+    assert floor["reads_locked"] is True
+
+
+def test_a_floor_whose_lengths_move_does_not_read_locked(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The same passage, the same rate, lengths that travel — one second out to eighteen."""
+    attach(studio(timeline=_through(1, 3, 8, 18)))
+
+    passage = _passage(_measured(tmp_path, loudness=_levels(_steps(*BLOCKS))))
+
+    assert passage["cuts_per_minute"] == 8.0  # the rate the locked passage ran at
+    assert passage["cv"] == 0.877
+    assert passage["reads_locked"] is False
+
+
+def test_the_spread_a_lone_flash_holds_up_is_not_the_passages_spread(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Two long holds, one flash between them: the reading is the spread without the flash.
+
+    The whole reason the orphans are dropped and the question asked again. Raw, this passage
+    scores a spread over the floor — a single one-second shot beside a twelve and a thirteen
+    moves a coefficient of variation a long way. What a viewer sits through is the holds.
+    """
+    attach(studio(timeline=_through(12, 1, 13, 4)))
+
+    passage = _passage(_measured(tmp_path, loudness=_levels(_steps(*BLOCKS))))
+
+    assert passage["cv"] == 0.683  # over the floor on its own
+    assert passage["orphans"] == 1
+    assert passage["orphan_seconds"] == [1.0]
+    assert passage["cv_less_orphans"] == 0.417
+    assert passage["reads_locked"] is True
+
+
+def test_two_short_shots_side_by_side_are_a_burst_rather_than_orphans(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """A burst is a gesture the quiet floor is allowed to make, so it stays in the spread."""
+    attach(studio(timeline=_through(12, 1, 1, 16)))
+
+    passage = _passage(_measured(tmp_path, loudness=_levels(_steps(*BLOCKS))))
+
+    assert passage["orphans"] == 0
+    assert passage["cv_less_orphans"] == passage["cv"] == 0.887
+    assert passage["reads_locked"] is False
+
+
+def test_a_single_hold_across_the_passage_is_the_stillest_reading_there_is(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """One shot is a spread of zero, not an unreadable one — the most locked a floor can be."""
+    attach(studio(timeline=_paced(*[("A.mp4", 2 * SECOND)] * 15, ("H.mp4", 30 * SECOND),
+                                  *MID_FILLER)))
+
+    passage = _passage(_measured(tmp_path, loudness=_levels(_steps(*BLOCKS))))
+
+    assert passage["shots"] == 1
+    assert passage["median_seconds"] == 30.0
+    assert passage["cv"] == 0.0
+    assert passage["reads_locked"] is True
+
+
+def test_a_hold_that_runs_the_whole_passage_through_is_locked_by_that_alone(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """No shot starts inside, because one that started before it covers the lot.
+
+    The stillest floor there is, and the one a spread cannot see: with no cut inside the
+    passage there is no length to take a coefficient of variation over, and reading that as
+    "no finding" would wave through the only case where nothing whatsoever happens. The shot's
+    own length is the reading instead.
+    """
+    attach(studio(timeline=_paced(*[("A.mp4", 2 * SECOND)] * 14, ("H.mp4", 34 * SECOND),
+                                  *[("B.mp4", 2 * SECOND)] * 14)))
+
+    passage = _passage(_measured(tmp_path, loudness=_levels(_steps(*BLOCKS))))
+
+    assert passage["shots"] == 0
+    assert passage["cv"] is None  # nothing inside to take a spread over
+    assert passage["held_through_seconds"] == 34.0
+    assert passage["reads_locked"] is True
+
+
+def test_a_quiet_pocket_too_short_to_sit_in_is_not_a_passage(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Three ten-second dips: the quiet third of the music, and not one passage among them.
+
+    A pocket holds two or three shots, and a spread over three shots is a number the report
+    cannot mean anything by. The runs list is empty, which is not the same as passing — the
+    heuristic says so in as many words.
+    """
+    pockets = [level for _ in range(3) for level in ((-50.0, 10), (-20.0, 20))]
+    attach(studio(timeline=_paced(*[(f"{'AB'[turn % 2]}.mp4", 3 * SECOND) for turn in range(30)])))
+
+    floor = _floor(_measured(tmp_path, loudness=_levels(_steps(*pockets))))
+
+    assert floor["runs"] == []
+    assert floor["reads_locked"] is False
+
+
+def test_a_room_that_crosses_the_quiet_edge_and_back_is_one_passage_not_six(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The reason the passages are found on a smoothed curve rather than on the gear labels.
+
+    A live room does not go quiet and stay there: a crash, a shout, a chord puts one window
+    back over the edge every few seconds. Read window by window this is six quiet pockets,
+    none of them long enough to be anything — and the passage a viewer sat through for half a
+    minute vanishes between them.
+    """
+    spiked = [level for _ in range(6) for level in ((-50.0, 4), (-20.0, 1))]
+    attach(studio(timeline=_through(8, 7, 8, 7)))
+
+    floor = _floor(_measured(tmp_path, loudness=_levels(_steps((-20.0, 30), *spiked, (-35.0, 30)))))
+
+    assert [(run["from"], run["to"]) for run in floor["runs"]] == [(31.0, 61.0)]
+
+
+def test_the_quiet_floor_reading_carries_the_rule_it_applied(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Numbers, verdict, and the rule between them — the shape every warning here takes."""
+    attach(studio(timeline=_through(8, 7, 8, 7)))
+
+    floor = _floor(_measured(tmp_path, loudness=_levels(_steps(*BLOCKS))))
+
+    assert floor["heuristic"] == correlate.FLOOR_HEURISTIC
+    assert "warning" in floor["heuristic"]
+    assert str(correlate.FLOOR_CV_FLOOR) in floor["heuristic"]
+    assert str(correlate.ORPHAN_FRACTION) in floor["heuristic"]
+    assert str(correlate.QUIET_FLOOR_SECONDS) in floor["heuristic"]
+    assert floor["smoothing_windows"] == correlate.QUIET_SMOOTHING_WINDOWS
+    assert set(floor) == {"smoothing_windows", "runs", "reads_locked", "heuristic"}
+    assert set(floor["runs"][0]) == {
+        "from",
+        "to",
+        "seconds",
+        "shots",
+        "cuts_per_minute",
+        "median_seconds",
+        "cv",
+        "orphans",
+        "orphan_seconds",
+        "cv_less_orphans",
+        "held_through_seconds",
+        "reads_locked",
+    }

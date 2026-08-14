@@ -1,0 +1,441 @@
+{
+  "curve": "C:\\Users\\Daniel\\.claude\\jobs\\5d7c9b67\\tmp\\zinc_set2_curve.npz",
+  "human_cut_starts_s": [
+    107.4405,
+    1373.8725,
+    1920.1265,
+    2725.014,
+    3568.4815
+  ],
+  "peak_probability": 0.2977,
+  "most_boundaries_reached": 5,
+  "burst_seconds_that_reach_all_five": [
+    1.5,
+    2.0,
+    2.5
+  ],
+  "runs": [
+    {
+      "threshold": 0.3,
+      "burst_seconds": 1.5,
+      "applause_count": 0,
+      "tunes": 1,
+      "bursts_near_a_human_start": 0,
+      "starts_s": [
+        0.0
+      ]
+    },
+    {
+      "threshold": 0.3,
+      "burst_seconds": 2.0,
+      "applause_count": 0,
+      "tunes": 1,
+      "bursts_near_a_human_start": 0,
+      "starts_s": [
+        0.0
+      ]
+    },
+    {
+      "threshold": 0.3,
+      "burst_seconds": 2.5,
+      "applause_count": 0,
+      "tunes": 1,
+      "bursts_near_a_human_start": 0,
+      "starts_s": [
+        0.0
+      ]
+    },
+    {
+      "threshold": 0.3,
+      "burst_seconds": 3.0,
+      "applause_count": 0,
+      "tunes": 1,
+      "bursts_near_a_human_start": 0,
+      "starts_s": [
+        0.0
+      ]
+    },
+    {
+      "threshold": 0.2,
+      "burst_seconds": 1.5,
+      "applause_count": 1,
+      "tunes": 2,
+      "bursts_near_a_human_start": 1,
+      "starts_s": [
+        0.0,
+        1289.1
+      ]
+    },
+    {
+      "threshold": 0.2,
+      "burst_seconds": 2.0,
+      "applause_count": 0,
+      "tunes": 1,
+      "bursts_near_a_human_start": 0,
+      "starts_s": [
+        0.0
+      ]
+    },
+    {
+      "threshold": 0.2,
+      "burst_seconds": 2.5,
+      "applause_count": 0,
+      "tunes": 1,
+      "bursts_near_a_human_start": 0,
+      "starts_s": [
+        0.0
+      ]
+    },
+    {
+      "threshold": 0.2,
+      "burst_seconds": 3.0,
+      "applause_count": 0,
+      "tunes": 1,
+      "bursts_near_a_human_start": 0,
+      "starts_s": [
+        0.0
+      ]
+    },
+    {
+      "threshold": 0.12,
+      "burst_seconds": 1.5,
+      "applause_count": 8,
+      "tunes": 5,
+      "bursts_near_a_human_start": 3,
+      "starts_s": [
+        0.0,
+        106.1,
+        1308.3,
+        3513.6,
+        4079.5
+      ]
+    },
+    {
+      "threshold": 0.12,
+      "burst_seconds": 2.0,
+      "applause_count": 5,
+      "tunes": 4,
+      "bursts_near_a_human_start": 3,
+      "starts_s": [
+        0.0,
+        106.1,
+        1308.3,
+        3506.9
+      ]
+    },
+    {
+      "threshold": 0.12,
+      "burst_seconds": 2.5,
+      "applause_count": 3,
+      "tunes": 3,
+      "bursts_near_a_human_start": 2,
+      "starts_s": [
+        0.0,
+        106.1,
+        1308.3
+      ]
+    },
+    {
+      "threshold": 0.12,
+      "burst_seconds": 3.0,
+      "applause_count": 1,
+      "tunes": 2,
+      "bursts_near_a_human_start": 1,
+      "starts_s": [
+        0.0,
+        1289.1
+      ]
+    },
+    {
+      "threshold": 0.09,
+      "burst_seconds": 1.5,
+      "applause_count": 10,
+      "tunes": 5,
+      "bursts_near_a_human_start": 3,
+      "starts_s": [
+        0.0,
+        106.4,
+        1308.3,
+        3526.1,
+        4080.0
+      ]
+    },
+    {
+      "threshold": 0.09,
+      "burst_seconds": 2.0,
+      "applause_count": 9,
+      "tunes": 5,
+      "bursts_near_a_human_start": 3,
+      "starts_s": [
+        0.0,
+        106.4,
+        1308.3,
+        3514.6,
+        4080.0
+      ]
+    },
+    {
+      "threshold": 0.09,
+      "burst_seconds": 2.5,
+      "applause_count": 6,
+      "tunes": 4,
+      "bursts_near_a_human_start": 3,
+      "starts_s": [
+        0.0,
+        106.4,
+        1308.3,
+        3514.6
+      ]
+    },
+    {
+      "threshold": 0.09,
+      "burst_seconds": 3.0,
+      "applause_count": 2,
+      "tunes": 3,
+      "bursts_near_a_human_start": 2,
+      "starts_s": [
+        0.0,
+        1289.4,
+        3507.5
+      ]
+    },
+    {
+      "threshold": 0.06,
+      "burst_seconds": 1.5,
+      "applause_count": 12,
+      "tunes": 6,
+      "bursts_near_a_human_start": 4,
+      "starts_s": [
+        0.0,
+        106.4,
+        1308.3,
+        2676.5,
+        3526.4,
+        4080.0
+      ]
+    },
+    {
+      "threshold": 0.06,
+      "burst_seconds": 2.0,
+      "applause_count": 11,
+      "tunes": 5,
+      "bursts_near_a_human_start": 3,
+      "starts_s": [
+        0.0,
+        106.4,
+        1308.3,
+        3526.4,
+        4080.0
+      ]
+    },
+    {
+      "threshold": 0.06,
+      "burst_seconds": 2.5,
+      "applause_count": 8,
+      "tunes": 4,
+      "bursts_near_a_human_start": 3,
+      "starts_s": [
+        0.0,
+        106.4,
+        1308.3,
+        3514.9
+      ]
+    },
+    {
+      "threshold": 0.06,
+      "burst_seconds": 3.0,
+      "applause_count": 6,
+      "tunes": 4,
+      "bursts_near_a_human_start": 3,
+      "starts_s": [
+        0.0,
+        106.4,
+        1308.3,
+        3514.9
+      ]
+    },
+    {
+      "threshold": 0.045,
+      "burst_seconds": 1.5,
+      "applause_count": 12,
+      "tunes": 6,
+      "bursts_near_a_human_start": 4,
+      "starts_s": [
+        0.0,
+        106.4,
+        1308.3,
+        2677.1,
+        3526.7,
+        4080.0
+      ]
+    },
+    {
+      "threshold": 0.045,
+      "burst_seconds": 2.0,
+      "applause_count": 12,
+      "tunes": 6,
+      "bursts_near_a_human_start": 4,
+      "starts_s": [
+        0.0,
+        106.4,
+        1308.3,
+        2677.1,
+        3526.7,
+        4080.0
+      ]
+    },
+    {
+      "threshold": 0.045,
+      "burst_seconds": 2.5,
+      "applause_count": 11,
+      "tunes": 5,
+      "bursts_near_a_human_start": 3,
+      "starts_s": [
+        0.0,
+        106.4,
+        1308.3,
+        3526.7,
+        4080.0
+      ]
+    },
+    {
+      "threshold": 0.045,
+      "burst_seconds": 3.0,
+      "applause_count": 7,
+      "tunes": 4,
+      "bursts_near_a_human_start": 3,
+      "starts_s": [
+        0.0,
+        106.4,
+        1308.3,
+        3520.0
+      ]
+    },
+    {
+      "threshold": 0.03,
+      "burst_seconds": 1.5,
+      "applause_count": 14,
+      "tunes": 8,
+      "bursts_near_a_human_start": 5,
+      "starts_s": [
+        0.0,
+        106.7,
+        1308.3,
+        1907.7,
+        2677.1,
+        3526.7,
+        4080.0,
+        4149.9
+      ]
+    },
+    {
+      "threshold": 0.03,
+      "burst_seconds": 2.0,
+      "applause_count": 13,
+      "tunes": 7,
+      "bursts_near_a_human_start": 5,
+      "starts_s": [
+        0.0,
+        106.7,
+        1308.3,
+        1907.7,
+        2677.1,
+        3526.7,
+        4080.0
+      ]
+    },
+    {
+      "threshold": 0.03,
+      "burst_seconds": 2.5,
+      "applause_count": 13,
+      "tunes": 7,
+      "bursts_near_a_human_start": 5,
+      "starts_s": [
+        0.0,
+        106.7,
+        1308.3,
+        1907.7,
+        2677.1,
+        3526.7,
+        4080.0
+      ]
+    },
+    {
+      "threshold": 0.03,
+      "burst_seconds": 3.0,
+      "applause_count": 9,
+      "tunes": 5,
+      "bursts_near_a_human_start": 4,
+      "starts_s": [
+        0.0,
+        106.7,
+        1308.3,
+        1907.7,
+        3520.3
+      ]
+    },
+    {
+      "threshold": 0.02,
+      "burst_seconds": 1.5,
+      "applause_count": 16,
+      "tunes": 7,
+      "bursts_near_a_human_start": 5,
+      "starts_s": [
+        106.7,
+        1308.3,
+        1907.7,
+        2677.4,
+        3526.7,
+        4080.0,
+        4153.4
+      ]
+    },
+    {
+      "threshold": 0.02,
+      "burst_seconds": 2.0,
+      "applause_count": 16,
+      "tunes": 7,
+      "bursts_near_a_human_start": 5,
+      "starts_s": [
+        106.7,
+        1308.3,
+        1907.7,
+        2677.4,
+        3526.7,
+        4080.0,
+        4153.4
+      ]
+    },
+    {
+      "threshold": 0.02,
+      "burst_seconds": 2.5,
+      "applause_count": 16,
+      "tunes": 7,
+      "bursts_near_a_human_start": 5,
+      "starts_s": [
+        106.7,
+        1308.3,
+        1907.7,
+        2677.4,
+        3526.7,
+        4080.0,
+        4153.4
+      ]
+    },
+    {
+      "threshold": 0.02,
+      "burst_seconds": 3.0,
+      "applause_count": 12,
+      "tunes": 6,
+      "bursts_near_a_human_start": 4,
+      "starts_s": [
+        0.0,
+        106.7,
+        1308.3,
+        1907.7,
+        3520.3,
+        4153.4
+      ]
+    }
+  ]
+}

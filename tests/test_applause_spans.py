@@ -122,6 +122,196 @@ def test_a_concert_with_no_applause_at_all_is_one_tune() -> None:
     assert found[0].applause_before is None and found[0].applause_after is None
 
 
+# --- what threshold this file's own curve deserves ----------------------------------------
+
+
+def test_a_curve_the_threshold_finds_clapping_in_is_read_at_the_threshold() -> None:
+    """A room mic clears 0.3 for a hundred seconds a set. Nothing about it should move."""
+    read = applause.reading(_concert((0.0, 100.0), (0.9, 20.0), (0.0, 100.0)))
+
+    assert read.threshold == applause.DEFAULT_THRESHOLD
+    assert read.burst_seconds == applause.DEFAULT_MINIMUM_SECONDS
+    assert read.own_scale is False
+
+
+def test_a_curve_that_never_reaches_the_threshold_is_read_at_its_own_peak() -> None:
+    """The board mix (#179): a whole set peaking at 0.2 against a threshold of 0.3."""
+    read = applause.reading(_concert((0.0, 100.0), (0.2, 20.0), (0.0, 100.0)), scale=0.5)
+
+    assert read.threshold == 0.1
+    assert read.burst_seconds == applause.QUIET_BURST_SECONDS
+    assert read.own_scale is True
+
+
+def test_one_lucky_burst_over_the_line_is_still_a_file_read_at_its_own_scale() -> None:
+    """A hair over the threshold for two seconds is not a set the threshold can segment."""
+    read = applause.reading(_concert((0.0, 100.0), (0.31, 2.0), (0.0, 100.0)), scale=0.5)
+
+    assert read.own_scale is True
+    assert read.threshold == 0.155
+
+
+def test_one_frame_the_model_liked_does_not_set_the_threshold_for_the_whole_file() -> None:
+    """A shout into a vocal mic is not a room, and everything else is scaled off this."""
+    spike = _concert((0.02, 100.0), (0.9, 0.5), (0.02, 100.0))
+
+    read = applause.reading(spike, scale=0.5, burst_seconds=3.0)
+
+    # Half of the spike would be 0.45. What the file holds for a burst's worth is 0.02, and
+    # half of that is under the floor — so the floor is the answer and the spike is not.
+    assert read.own_scale is True
+    assert read.threshold == applause.MINIMUM_THRESHOLD
+
+
+def test_a_curve_too_short_to_time_anything_in_is_read_at_the_threshold() -> None:
+    """One frame has no duration, so nothing about how long it lasted can be measured."""
+    one_frame = applause.Curve(seconds=(0.0,), probability=(0.01,))
+
+    assert applause.reading(one_frame).own_scale is False
+
+
+def test_the_fallback_never_reaches_down_into_the_model_s_own_noise() -> None:
+    """A file with no applause in it at all has a peak too, and a fraction of it is dither."""
+    read = applause.reading(_concert((0.0001, 200.0)), scale=0.09)
+
+    assert read.threshold == applause.MINIMUM_THRESHOLD
+
+
+def test_a_scale_of_zero_leaves_the_threshold_where_the_caller_put_it() -> None:
+    read = applause.reading(_concert((0.0, 100.0), (0.2, 20.0)), ceiling=0.25, scale=0.0)
+
+    assert (read.threshold, read.own_scale) == (0.25, False)
+
+
+def test_the_fallback_never_climbs_above_the_ceiling_it_was_given() -> None:
+    """A caller asking for 0.01 has asked for something this rule has no business raising."""
+    read = applause.reading(_concert((0.0, 20.0), (0.9, 1.0)), ceiling=0.01, scale=0.5)
+
+    assert read.threshold == 0.01
+
+
+def test_an_empty_curve_is_read_at_the_threshold_it_was_given() -> None:
+    assert applause.reading(applause.Curve((), ())).threshold == applause.DEFAULT_THRESHOLD
+
+
+# --- where the band actually comes in ------------------------------------------------------
+
+
+def _loudness(*sections: tuple[float, float], step: float = 0.5) -> applause.Loudness:
+    """A loudness curve from ``(lufs, seconds)`` sections laid end to end."""
+    levels: list[float] = []
+    for level, seconds in sections:
+        levels.extend([level] * int(round(seconds / step)))
+    return applause.Loudness(
+        seconds=tuple(round(index * step, 6) for index in range(len(levels))),
+        lufs=tuple(levels),
+    )
+
+
+def test_a_call_starts_where_the_mix_comes_up_and_not_where_the_clapping_stopped() -> None:
+    """The measured case (#179): applause, then a minute of announcement, then the band."""
+    quiet_then_music = _loudness((-45.0, 60.0), (-14.0, 240.0))
+    found = applause.settled(
+        _called((0.0, 300.0)), quiet_then_music, margin_db=6.0, hold_seconds=10.0
+    )
+
+    assert [one.start for one in found.kept] == [60.0]
+    assert found.kept[0].talk_seconds == 60.0
+
+
+def test_a_call_the_band_counts_straight_into_keeps_the_boundary_it_had() -> None:
+    found = applause.settled(_called((0.0, 300.0)), _loudness((-14.0, 300.0)), hold_seconds=10.0)
+
+    assert [one.start for one in found.kept] == [0.0]
+    assert found.kept[0].talk_seconds == 0.0
+
+
+def test_a_call_the_mix_never_comes_up_in_is_not_a_tune() -> None:
+    """Two minutes of talking bounded by clapping — the shape #133 found by its pulse.
+
+    The rest of the set is in the curve because playing level is the file's own median, so
+    a fixture that is quiet from end to end has no music for the talking to be quiet against.
+    """
+    talk_then_the_set = _loudness((-45.0, 300.0), (-14.0, 400.0))
+    found = applause.settled(_called((0.0, 300.0)), talk_then_the_set, hold_seconds=10.0)
+
+    assert found.kept == ()
+    assert [one.start for one in found.silent] == [0.0]
+
+
+def test_a_call_with_less_music_left_in_it_than_a_tune_takes_is_dropped_too() -> None:
+    """The applause was two minutes apart and a hundred seconds of that was the announcement."""
+    found = applause.settled(
+        _called((0.0, 120.0)),
+        _loudness((-45.0, 100.0), (-14.0, 400.0)),
+        hold_seconds=10.0,
+        minimum_seconds=60.0,
+    )
+
+    assert found.kept == ()
+    assert [(one.start, one.seconds) for one in found.brief] == [(100.0, 20.0)]
+
+
+def test_music_dipping_inside_a_phrase_does_not_move_the_boundary() -> None:
+    """Music dips; it does not stop. An unbroken run would put the start after the first dip."""
+    dipping = _loudness((-45.0, 30.0), (-14.0, 4.0), (-30.0, 1.0), (-14.0, 265.0))
+    found = applause.settled(_called((0.0, 300.0)), dipping, hold_seconds=10.0)
+
+    assert [one.start for one in found.kept] == [30.0]
+
+
+def test_a_hold_of_zero_leaves_every_boundary_on_the_end_of_the_applause() -> None:
+    found = applause.settled(_called((0.0, 300.0)), _loudness((-45.0, 300.0)), hold_seconds=0.0)
+
+    assert [one.start for one in found.kept] == [0.0]
+    assert found.kept[0].talk_seconds is None
+
+
+def test_with_no_loudness_curve_at_all_nothing_is_dropped_for_want_of_one() -> None:
+    found = applause.settled(_called((0.0, 300.0)), applause.Loudness((), ()))
+
+    assert [one.start for one in found.kept] == [0.0]
+
+
+def test_a_call_too_short_to_hold_the_window_is_kept_rather_than_called_silent() -> None:
+    """Shorter than the hold is "not measured here", which is not "the band never came in".
+
+    Reachable from the tool: ``tune_seconds`` and ``settle_seconds`` are both caller-set,
+    so a caller asking for short tunes and a long hold would otherwise lose every call to a
+    reason that never happened.
+    """
+    found = applause.settled(
+        _called((0.0, 4.0)),
+        _loudness((-45.0, 4.0), (-14.0, 300.0)),
+        hold_seconds=60.0,
+        minimum_seconds=1.0,
+    )
+
+    assert [one.start for one in found.kept] == [0.0]
+    assert found.silent == ()
+    assert found.kept[0].talk_seconds is None
+
+
+def test_the_floor_is_read_off_the_file_rather_than_off_an_absolute_level() -> None:
+    """The same shape mastered ten dB quieter is the same set of boundaries."""
+    loud = _loudness((-45.0, 60.0), (-14.0, 240.0))
+    quiet = applause.Loudness(loud.seconds, tuple(one - 10.0 for one in loud.lufs))
+
+    assert applause.settled(_called((0.0, 300.0)), loud).kept[0].start == (
+        applause.settled(_called((0.0, 300.0)), quiet).kept[0].start
+    )
+
+
+def test_what_the_settle_step_refused_is_on_disk_with_the_reason() -> None:
+    talk_then_the_set = _loudness((-45.0, 300.0), (-14.0, 400.0))
+    found = applause.settled(_called((0.0, 300.0)), talk_then_the_set, hold_seconds=10.0)
+    rows = applause.quiet_calls(found, margin_db=6.0, minimum_seconds=60.0)
+
+    assert len(rows) == 1
+    assert rows[0]["t"] == 0.0
+    assert "never came up" in rows[0]["reason"]
+
+
 # --- which calls have a pulse under them --------------------------------------------------
 
 
@@ -219,6 +409,7 @@ def test_every_tune_is_one_record_with_its_own_number() -> None:
         "applause_after",
         "beats",
         "beats_per_second",
+        "talk_seconds",
     }
     assert rows[0]["t"] == 0.0
     assert rows[1]["applause_before"] == 4.0

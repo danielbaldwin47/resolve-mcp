@@ -21,6 +21,7 @@ from ..analysis import (
     transcript,
     whisper,
 )
+from ..analysis import bars as bars_module  # `bars` is a tool argument on correlate_timeline
 from ..resolve.connection import get_connection
 from .envelope import tool
 
@@ -69,7 +70,9 @@ def analyze_structure(
     solos: bool = False,
     stems: str | None = None,
     threshold: float = applause.DEFAULT_THRESHOLD,
+    scale: float = applause.DEFAULT_SCALE,
     tune_seconds: float = applause.DEFAULT_TUNE_SECONDS,
+    settle_seconds: float = applause.DEFAULT_SETTLE_SECONDS,
     density_per_second: float = applause.DEFAULT_DENSITY_PER_SECOND,
     solo_seconds: float = solos.DEFAULT_MINIMUM_SECONDS,
     snap_seconds: float = solos.DEFAULT_SNAP_SECONDS,
@@ -92,6 +95,22 @@ def analyze_structure(
     on. density_per_second is the floor in beats per second; set it to 0 to keep every
     call the tagger made, which is also the way to run this tool with no beat model
     installed.
+
+    A board mix needs two more things, and gets them by default. The tagger is far less
+    sure of clapping it hears through a desk feed than of clapping in a room — a whole set
+    can peak under the 0.3 an audible crowd clears easily — so the threshold you pass is a
+    ceiling: if the file holds almost no clapping over it, the curve is read at `scale` of
+    its own peak instead. read_at_own_scale says whether that happened, and threshold_used
+    and burst_seconds_used what the file was actually read at, beside the threshold and
+    burst_seconds you asked for; a mix the threshold does find clapping in is read exactly
+    where it always was. scale=0 turns the fallback off. And the applause is
+    not where the next tune starts: after it come the announcement, the re-tune and the
+    count-in, up to a minute of them, all far below playing level. So each boundary walks
+    forward to where the mix comes up and stays up for settle_seconds, and a call the band
+    never comes in on is not a tune at all. Each tune record carries the talk_seconds that
+    were skipped, and inline you get how many boundaries moved and by how much in total.
+    This reads analyze_music's loudness curve, measuring one if there is none;
+    settle_seconds=0 turns it off and puts the boundary back on the end of the applause.
 
     solos=true adds the second half and needs stems: pass the directory a separate_stems
     job returned. It measures which stem is out front over its own quiet baseline, and
@@ -124,7 +143,9 @@ def analyze_structure(
             solos=solos,
             stems=stems,
             threshold=threshold,
+            scale=scale,
             tune_seconds=tune_seconds,
+            settle_seconds=settle_seconds,
             density_per_second=density_per_second,
             solo_seconds=solo_seconds,
             snap_seconds=snap_seconds,
@@ -188,6 +209,7 @@ def correlate_timeline(
     tunes: str | None = None,
     solos: str | None = None,
     deltas: str | None = None,
+    bars: str | None = None,
     angles: dict[str, Any] | None = None,
     track: int | None = None,
     audio_at: Any | None = None,
@@ -203,9 +225,18 @@ def correlate_timeline(
 
     beats is the beats file analyze_music wrote. audio is the same master mix it analysed,
     and naming it is what makes the transient column real — onsets are not stored by any
-    other job, so they are measured here. tunes and solos are the structure job's files.
+    other job, so they are measured here. tunes and solos are the structure job's files. bars
+    is the bar map detect_bars wrote, and it is what makes the form measurable: the in_bar
+    column comes from the beat model's own downbeats, so on material where the model commits
+    to no meter it says nothing, and the bar map is the second reading that recovers the bar
+    line. Name it and every record also carries which bar of the form the cut is on, that
+    bar's place in the four-bar group, and how far off the bar line it landed.
     angles is the angle labels themselves, not a path: {"C0012.mp4": {"role": "drums"}}, or
     just {"C0012.mp4": "drums"} — you keep the sidecar, you read it, you pass what it says.
+    An entry's subject — what that camera is framed on — is read from "subject", or from a
+    role written the way the corpus writes them, "drums-tight" or "ensemble-wide"; a one-word
+    role names a character rather than a subject and labels nothing. Add "voice" where your
+    sidecar names people and the solo map names stems: {"subject": "mike", "voice": "wind"}.
     Each of these is optional, and each one absent means that column reads null rather than
     a guess.
 
@@ -238,6 +269,15 @@ def correlate_timeline(
     cut each angle and role holds (black counted on its own line, apart from the angles the
     sidecar has not named).
 
+    With both a solo map and subject labels it also carries the on-soloist track: per shot,
+    what it is framed on and whether that is the player out front, split in seconds where the
+    front changes mid-shot; and inline, what share of the solo-window screen time went to the
+    soloist, to the ensemble, to a player who was not soloing and to neither (an audience
+    camera, a room shot). Screen time no label reaches, and black, are counted apart rather
+    than folded into the shares. on_soloist_by says how a shot reached the soloist line —
+    joined against the solo map, or asserted by a camera the sidecar says follows the front —
+    and soloist_seconds_by_follow_camera is how much of the share is the second kind.
+
     Nothing here judges the edit. Two frames late is reported as two frames late; what
     counts as musical belongs in your style profile, not in this server.
     """
@@ -251,6 +291,7 @@ def correlate_timeline(
             tunes=tunes,
             solos=solos,
             deltas=deltas,
+            bars=bars,
             angles=angles,
             track=track,
             audio_at=audio_at,
@@ -336,10 +377,73 @@ def detect_phrases(
     }
 
 
+@tool
+def detect_bars(
+    audio: str,
+    stems: str | None = None,
+    stem: str = bars_module.DEFAULT_STEM,
+    start_seconds: float | None = None,
+    end_seconds: float | None = None,
+    minimum_confidence: float = bars_module.DEFAULT_MINIMUM_CONFIDENCE,
+    refresh: bool = False,
+) -> dict[str, Any]:
+    """Find where the bar starts, when the beat model would not say. Returns a job to poll.
+
+    analyze_music reports the meter the beat model committed to, and on some material it does
+    not commit: over a jazz set it tracks the swung eighth as the beat and calls every one of
+    them a downbeat, so the meter reads 1 and nothing can cut on the "1". This is the second
+    pass that recovers the bar. audio is the master mix; if music analysis already ran over it
+    the beat grid comes from cache rather than the model again.
+
+    **Ask about one tune, not one set.** The reading is a single fold, meter and phase, and a
+    set has a different tempo and a different form every tune with applause between them — run
+    over all of it at once the answer is wrong before the arithmetic starts, and the evidence
+    averages to nothing. Pass start_seconds and end_seconds from the tune boundaries
+    analyze_structure wrote.
+
+    Two readings, in order. The pulse: a grid running faster than anything you would tap is a
+    subdivision, so every k-th beat is tried and the one that lands in the tapping range and
+    sits on the accents wins — a grid already in that range is kept exactly as it is. Then the
+    bar line: each meter and each phase scored by how far its beats sit above the rest, the
+    winner's lead over the runner-up, and — the check that matters most on this material —
+    whether four-bar windows of the span reach the same answer on their own. A meter that
+    holds for eight bars and not the next eight is not the meter, whatever its contrast, and
+    that share comes back as agreement beside the confidence.
+
+    The result names one JSON file and summarises it. Every bar carries its start in seconds
+    (the downbeat time), its length, how many beats it holds, the grid beat it starts on, and
+    its place in the four-bar group. Inline you get the meter, the tempo, how the meter was
+    arrived at — model, inferred, or refused — the confidence, and the grid's own reading
+    beside it, so 214 bpm in a meter of one against 107 in four is visible rather than
+    inherited.
+
+    A reading with no accents behind it is refused rather than guessed: source reads refused,
+    meter is null, and no bars are written. That is the honest answer, and minimum_confidence
+    is where the line sits — 0 writes whatever the arithmetic found.
+
+    stems is optional: pass the directory a separate_stems job reported, and stem names which
+    one the accents are read off. Worth doing exactly when the mix will not carry the pulse —
+    brushes, a quiet room — because the bass walks quarters and is the strongest witness to
+    the beat there is. refresh redoes work the cache would answer for.
+    """
+    return {
+        "job": bars_module.detect_bars(
+            audio,
+            stems=stems,
+            stem=stem,
+            start_seconds=start_seconds,
+            end_seconds=end_seconds,
+            minimum_confidence=minimum_confidence,
+            refresh=refresh,
+        )
+    }
+
+
 TOOLS: tuple[Any, ...] = (
     transcribe_audio,
     analyze_music,
     analyze_structure,
+    detect_bars,
     detect_drum_fills,
     detect_phrases,
     correlate_timeline,
@@ -350,6 +454,7 @@ __all__ = [
     "analyze_music",
     "analyze_structure",
     "correlate_timeline",
+    "detect_bars",
     "detect_drum_fills",
     "detect_phrases",
     "transcribe_audio",

@@ -154,6 +154,50 @@ def numbered_beats(
     return list(written[BEATS])
 
 
+def energy_of(
+    source: Path,
+    described: dict[str, Any],
+    identity: dict[str, Any],
+    shape: dict[str, Any],
+    refresh: bool = False,
+    config: Config | None = None,
+) -> dict[str, Any]:
+    """The loudness curve for this audio, computed or reused — the other shared entry.
+
+    Public for the reason ``beats_of`` is: structure analysis reads this curve to find where
+    a tune starts after the applause (#179), and measuring it a second time would decode the
+    whole set again. ``shape`` is the window and hop, which key the half — a caller asking
+    for the defaults gets whatever ``analyze_music`` already wrote.
+    """
+    return halves.cached(
+        f"{KIND}:{ENERGY}",
+        cache.cache_key(f"{KIND}:{ENERGY}", [identity], shape),
+        lambda path: _energy(source, path, described, shape),
+        source,
+        refresh,
+        config or get_config(),
+    )
+
+
+def numbered_energy(
+    source: Path,
+    described: dict[str, Any],
+    identity: dict[str, Any],
+    shape: dict[str, Any],
+    refresh: bool,
+    config: Config,
+) -> list[dict[str, Any]]:
+    """The energy records themselves, from ``energy_of`` — computed or read back from disk.
+
+    The document is the interchange format, the same bargain ``numbered_beats`` makes: a
+    caller that wants the curve rather than a path reads it the way an agent would, and the
+    file's layout stays the business of the module that writes it.
+    """
+    document = energy_of(source, described, identity, shape, refresh, config)
+    written = json.loads(Path(document["path"]).read_text(encoding="utf-8"))
+    return list(written[ENERGY])
+
+
 def analyze(
     source: Path,
     settings: dict[str, Any],
@@ -182,14 +226,7 @@ def analyze(
     if settings[ENERGY]:
         progress(0.6, "measuring loudness and onset density")
         shape = {name: settings[name] for name in ("window_seconds", "hop_seconds")}
-        result[ENERGY] = halves.cached(
-            f"{KIND}:{ENERGY}",
-            cache.cache_key(f"{KIND}:{ENERGY}", [identity], shape),
-            lambda path: _energy(source, path, described, shape),
-            source,
-            refresh,
-            config,
-        )
+        result[ENERGY] = energy_of(source, described, identity, shape, refresh, config)
         artifacts.append(Path(result[ENERGY]["path"]))
 
     progress(0.95, "written")

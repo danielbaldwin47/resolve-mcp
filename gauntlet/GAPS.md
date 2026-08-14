@@ -3,7 +3,7 @@
 Every critic loss and prep finding lands here as server or workflow work.
 Never a hand-tuned fix to an edit. Status: open / in-work / fixed (PR).
 
-## G1 — applause/tune detection blind on board mixes (open)
+## G1 — applause/tune detection blind on board mixes (FIXED, #179)
 
 Prep, iter 1. Peak applause probability 0.297 over the whole 74-min Reaper
 board mix vs 0.3 threshold → 1 tune found where 5 exist. The concert
@@ -13,11 +13,97 @@ gating, a spectral applause signature that survives a board mix, or a
 cross-correlation route against deliverables when they exist (that is how
 the gauntlet measured the real spans).
 
-## G2 — beat grid unusable as bar map on this corpus anchor (open)
+**Fixed by two rules in `analysis/applause.py`**, both arithmetic over
+measurements that already existed. First, the threshold is a ceiling: when a
+whole file holds under 10 s over it, the curve is read at 0.09 of its own
+peak — the peak that lasts a burst's worth, not a single frame — and the
+burst minimum drops to 2.0 s with it (`reading`). It is a fallback and not a
+recalibration on purpose: scaling the room mic the same way turns the
+clapping after every solo into a boundary, 19 calls where 13 belong. Second,
+the applause says a tune *ended*, not that the next one started: on this mix
+the announcement between them ran 0.3 s to 65 s at 20-40 dB under the music,
+so each boundary walks forward to where the loudness curve `analyze_music`
+already wrote comes up to the file's median less 6 dB and holds for 10 s
+(`settled`), and a call the band never comes in on is refused.
+
+Measured, this mix, `gauntlet/recon/board_tunes_job.json` (the real job) and
+`board_boundary_check.json` (the shipped functions, before and after):
+
+| | tunes | boundaries within 5 s of the human spans |
+|---|---|---|
+| before | 1 | 0 of 5 |
+| after | 5 | 5 of 5, worst error 1.63 s |
+
+Every constant is the middle of a measured plateau, not a fit:
+`board_boundary_sweep.json` runs 140 settings and 35 of them call this set
+correctly, worst error across all 35 of 2.01 s.
+
+`scullers_boundary_check.json` is the no-regression control — the room mic
+from #133, 13 calls at a peak of 0.65. The fallback correctly does not fire:
+threshold, burst count and burst length identical to before. The settle step
+does run there, as it does everywhere, and takes its call count 13 → 11
+before the pulse check and 10 → 9 after. Both losses are argued rather than
+accidental: one is the 296-440 s call the pulse check independently drops as
+talking, and one is an opening whose 293 s hold 27 s of music. Anyone who
+wants the old boundaries on room-mic material passes `settle_seconds=0`.
+
+## G2 — beat grid unusable as bar map on this corpus anchor (in-work)
 
 Prep, iter 1. `meter: 1`, median gap 0.28 s (~214 "bpm"), 71.7% trust,
 27 gaps >2 s. Onset-scale placement only; beat-1/bar-position style rules
 cannot fire. Known confound from docs survey (same on the corpus anchor).
+
+Fix: `detect_bars` (#180) — a second reading over the same grid rather than a
+second model. Folds the onset-scale grid to the tactus (only when the grid's own
+rate is outside the tapping range, so a backbeat cannot fold a grid that is
+already a plausible pulse), then scores every meter and phase against a per-beat
+accent reading and takes the widest lead over the runner-up. Refuses rather than
+guessing when the accents say nothing, and carries the grid's own `meter: 1` and
+214 bpm in the result beside its own answer. `correlate_timeline` takes the map
+as `bars=` and reports `map_bar` / `in_group` / `bar_offset` per cut plus a
+`bar_groups` histogram, ungated on the #112 beat gate — the map exists for the
+grids that gate refuses whole. Style vocabulary in `docs/agents/style-layer.md`
+§"Bar and phrase vocabulary"; the claim in `styles/concert.md` §1 is
+`[believed, unverified]` until a corpus pass measures it.
+
+**Measured, 2026-08-14** (`gauntlet/recon/g2_bar_map.json`), over the cached
+Zinc grid, both witnesses, Taurus span and whole set:
+
+- **The tempo half is fixed.** All four readings — both witnesses, both spans —
+  fold to 107.14 bpm from a grid reporting 214.29. That reading rides home in
+  every result beside the grid's own.
+
+  It did not start out that way, and the reason is worth keeping. The first
+  version chose between halving and thirding on whichever scored higher, and
+  both land inside the tapping range at this tempo: the mix folded to 107 and
+  its own bass stem to 71, off contrasts of 0.013 against 0.053. At these sample
+  sizes that is noise deciding the tempo. Two fixes, both in `analysis/bars`:
+  the accent threshold now scales with the span (`_accent_floor` — three
+  standard errors of a contrast between two halves, which is 0.18 over a
+  hundred-beat fixture and 0.02 over this set, so one fixed number cannot serve
+  both), and when no candidate clears it the *least aggressive* fold wins rather
+  than the highest-scoring one. The octave error every tempo tracker has,
+  answered by assuming least and saying so in `fold_reason`.
+- **The bar-line half is refused, and the refusal is measured.** Agreement
+  across four-bar windows is 0.10–0.17: adjacent windows of one tune at one
+  tempo reach *different* meters and phases 83–90% of the time. Confidence
+  0.07–0.13 against a floor of 0.3. Before the agreement check went in, the same
+  spans scored 0.3–0.6 on contrast alone over sixty-second windows and every one
+  of those readings disagreed with its neighbour — the check is what turned a
+  coin flip into an honest refusal.
+- **What that means:** RMS at the beat carries no bar-level accent on this
+  idiom. Brushes do not mark the one and a walking bass plays every quarter
+  alike, so the loudness witness has nothing to find. This is a fact about the
+  witness, not about the arithmetic — the same code reads a click track with a
+  loud one correctly through the installed beat model (live tier,
+  `test_live_analysis.py`).
+
+Still open, and now scoped: **a witness that is not loudness.** The two the
+ticket named and this did not try are downbeat tracking proper (a DBN over the
+beat activation, which is where the published work on this lives) and harmonic
+change — the root the bass lands on, not how hard it lands. Either is its own
+ticket. Closing G2 needs one of them plus the director's ear check on whatever
+map it produces.
 
 ## G3 — the gauntlet's own measuring tool lied, and the pack sealed anyway (in-work)
 
@@ -87,16 +173,46 @@ Round 1 critic, verbatim needs; each is server measurement work:
    cannot resolve musicality).
 5. Audio class track (applause/speech/music/silence at 1 s resolution).
 6. Per-shot subject labeling × who-is-soloing track — the core concert
-   question.
+   question. **Fixed in #181** (`analysis/subject.py`): the sidecar's subject
+   read as player/ensemble/other and joined to the solo windows in seconds, so
+   `correlate_timeline` carries `subject`/`subject_kind`/`on_soloist` per shot
+   and an `on_soloist` share inline, and `ab_pack.py` carries the same track
+   into a pack (`--a-subjects`/`--b-subjects`, both or neither). Authored, not
+   detected: no pixel here knows a drummer from a horn player, so the answer is
+   only as good as the sidecar — a camera that roams the band is labelled by
+   habit rather than by shot, and `unlabelled_seconds` is what says how much of
+   the cut no label reached. Measured live on the two closed Taurus pieces
+   (`recon/subject_track.py`, receipt beside it): the R3 opening is 52% on the
+   ensemble, 48% on a non-soloing player, 0% on the soloist over 81.5 s of
+   labelled screen time; the P4 R2 capstone is 53% / 42% / 5% over 489 s. The
+   0% is real rather than a hole — this rig's only player camera is the drum
+   cam, and the solo map has nobody drumming out front in the opening. Spot
+   check against frames of both cameras: the FX6 wide holds the whole band
+   (`ensemble`) and the A7IV holds the drummer (`drums`, a player), the two
+   labels 15 of the opening's 17 shots carry; the other two are title cards,
+   which is what `unlabelled_seconds` counts. Two things the reading refuses to
+   round off: a camera on neither a player nor the band (audience, room) has its
+   own `elsewhere` line rather than counting as a player nobody was watching,
+   and `soloist_seconds_by_follow_camera` says how much of the soloist share
+   came from a camera whose sidecar label asserts it follows the front rather
+   than from a subject the solo map matched. Pack side verified on the same two
+   cuts (`recon/subject_pack.py`): the pack's share equals correlate's exactly,
+   nothing but the four subject columns crosses into the pack, and a span that
+   cuts through shots counts the part inside where the front held through it.
 7. Per-shot sharpness, clipped-highlight %, exposure variance.
 8. Super/graphic presence detection with in/out timecodes + straddle check.
 9. Head/tail treatment: fade-in vs dropped frames, audio floor handling.
 10. Audio feel across cuts (balance/room-tone jumps) beyond RMS level.
 
-## G6 — angle sidecar A7IV zero off by one (open, trivial)
+## G6 — angle sidecar A7IV zero off by one (closed)
 
-Builder measured A7IV record zero 86306 live; sidecar says 86307.
-Correct the sidecar datum.
+Builder measured A7IV record zero 86306 live; sidecar said 86307.
+Fixed 2026-08-14 (#185): the second A7IV item in
+`styles/angles/mcp-tests-zinc.json` carried source in 31269 against record
+117576; it is 31270, and the entry now records why (live `GetLeftOffset`,
+frame proof, and the entry's own duration arithmetic). No test fixture
+encoded the old datum, and the cut files under `projects/mcp-tests-zinc/`
+were already on 86306.
 
 ## G8 — song-opening title card convention absent from our workflow (open)
 
@@ -259,6 +375,28 @@ transitions. Fixes in flight: style (bimodal spread; break the
 alternation; accents matter at 0.5–1 s scale, not just onsets at 30 ms)
 + server (correlate report gains a shot_rhythm block with a
 reads_metronomic heuristic as a builder self-review gate).
+
+## G18 — the quiet floor reads locked-off even when its gear is right (in-work)
+
+P4R2's remaining flank, carried out of a round we won 3–0 (STATE.md).
+Ours holds the quiet passage (derived d38–195) at 6.88 cuts/min — the
+0.74× gear the arc table asks for, hit — and still parks: shot-length
+CV 0.597 against the human's 0.783 over the same passage, and the
+trough at 79–157 s is five holds (17.1|12.9|10.3|20.7|14.4) with one
+2.5 s flash punched through them. What makes this its own gap rather
+than G17's is scale: G17 is the whole cut reading metronomic, this is
+one passage parking while the cut around it varies enough to hide it.
+On this pair the orphan correction does **not** change the verdict —
+ours fails on the raw spread too (0.597, and 0.564 without the flash),
+so the flash is named rather than decisive. It is dropped because a
+spread a lone flash holds up is not a spread a viewer sees, not because
+it flipped this reading. Fixed both sides (#190): style (quiet passages
+keep their spread with no orphan flashes; what raises it is unequal
+holds, a reframe or push-in where the footage has one, a scale change)
++ server (`gears.quiet_floor` finds the passages off a smoothed level
+curve and reports `cv_less_orphans` / `reads_locked`, a blocker in
+`docs/agents/concert.md`). **Open until a full-song build passes it** —
+the measurement and the rule exist, the proving round does not.
 
 ## Round record
 

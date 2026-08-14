@@ -16,15 +16,19 @@ from pathlib import Path
 
 import pytest
 
-from resolve_mcp.analysis import applause, beats
+from resolve_mcp.analysis import applause, bars, beats
+from resolve_mcp.audio import wav
 
-from .fakes import write_clicks, write_sections
+from .fakes import write_clicks, write_hits, write_sections
 
 CLICK_SECONDS = 20.0
 CLICK_BPM = 120.0
 
 APPLAUSE_SECONDS = 8.0
 ROOM_SECONDS = 6.0
+
+BAR_METER = 4
+BAR_SECONDS = 60.0 / CLICK_BPM * BAR_METER
 
 
 @pytest.mark.live
@@ -41,6 +45,43 @@ def test_the_installed_beat_model_hears_a_click_track(tmp_path: Path) -> None:
     # Downbeats are the second of the two lists the model returns, and a subset of the first.
     assert grid.downbeats
     assert set(grid.downbeats) <= set(grid.beats)
+
+
+@pytest.mark.live
+def test_a_bar_map_over_the_real_model_and_the_real_accents_finds_the_downbeat(
+    tmp_path: Path,
+) -> None:
+    """The two seams the fake tier cannot join: the installed model, and RMS off real audio.
+
+    Every decision in ``bars`` is checked against grids and readings written by hand. What
+    that cannot show is whether the accent reading, run over a file the *model* also read,
+    ranks the same beats the arithmetic was tested on — a window off by a beat, or a decoder
+    handing back a different length than the grid was measured in, is right or wrong on the
+    first real run and nowhere before it.
+
+    A click track with a loud one, which is the meter no ear has to arbitrate.
+    """
+    pytest.importorskip("beat_this.inference", reason="beat_this is not installed")
+    step = 60.0 / CLICK_BPM
+    times = [round(index * step, 6) for index in range(int(CLICK_SECONDS / step))]
+    path = write_hits(
+        tmp_path / "accented.wav",
+        times,
+        seconds=CLICK_SECONDS,
+        accents=[1.0 if index % BAR_METER == 0 else 0.3 for index in range(len(times))],
+    )
+
+    grid = beats.numbered(beats.detect(path))
+    salience = bars.accents(path, [float(row["t"]) for row in grid])
+    found = bars.mapped(grid, salience)
+
+    assert found.source in (bars.MODEL, bars.INFERRED), found.reasons
+    assert found.meter == BAR_METER
+    # The loud clicks are two seconds apart; the map has to put its bar lines on them.
+    assert [one.t for one in found.bars][:3] == [
+        pytest.approx(index * BAR_SECONDS, abs=0.1) for index in range(3)
+    ]
+    assert [one.in_group for one in found.bars][:5] == [1, 2, 3, 4, 1]
 
 
 @pytest.mark.live
@@ -67,3 +108,54 @@ def test_the_installed_applause_tagger_returns_a_curve_over_the_whole_file(
     assert all(0.0 <= one <= 1.0 for one in curve.probability)
     assert curve.seconds[0] < 1.0
     assert curve.seconds[-1] == pytest.approx(total, abs=1.0)
+
+
+BOARD_MIX = Path(
+    r"P:\Client Work\Ryan Devlin\2026-06-17_Zinc Bar\Audio\Reaper\Zinc Set 2 Reaper v4.wav"
+)
+BOARD_TUNE_STARTS = (107.4405, 1373.8725, 1920.1265, 2725.014, 3568.4815)
+"""The five human-established tune starts on that set, from the deliverable's own cuts."""
+
+BOARD_TOLERANCE_SECONDS = 5.0
+
+
+@pytest.mark.live
+def test_the_five_tunes_of_a_board_mix_are_found_where_the_human_cut_them() -> None:
+    """The #179 acceptance criterion, at the only seam that can hold it.
+
+    Every rule this exercises is unit-tested on fixtures, and none of those fixtures can
+    say the numbers are right: what the thresholds and margins are calibrated against is a
+    real 74-minute desk feed with no crowd bleed in it, and the evidence that they still
+    are is this file, tagged for real. Skips where the media is not mounted, which is most
+    machines — record the run on the ticket when it is.
+    """
+    pytest.importorskip(applause.MODULE, reason="panns_inference is not installed")
+    if not BOARD_MIX.exists():
+        pytest.skip(f"the measured board mix is not mounted at {BOARD_MIX}")
+
+    curve = applause.tag(BOARD_MIX)
+    read = applause.reading(curve)
+    bursts = applause.spans(curve, read.threshold, read.burst_seconds)
+    duration = wav.describe(BOARD_MIX)["duration_seconds"]
+    calls = applause.tunes(bursts, float(duration))
+    loudness = _loudness_of(BOARD_MIX)
+    found = applause.settled(calls, loudness)
+
+    # The fallback has to fire here: this is the mix whose whole set sits under 0.3.
+    assert read.own_scale is True
+    starts = [one.start for one in found.kept]
+    assert len(starts) == len(BOARD_TUNE_STARTS)
+    for want in BOARD_TUNE_STARTS:
+        assert min(abs(one - want) for one in starts) <= BOARD_TOLERANCE_SECONDS
+
+
+def _loudness_of(path: Path) -> applause.Loudness:
+    """The loudness curve for a file, measured here rather than read from an analysis run."""
+    from resolve_mcp.analysis import decode
+    from resolve_mcp.analysis import energy as energy_module
+
+    measured = energy_module.measure(decode.read(path), 3.0, 0.5)
+    return applause.Loudness(
+        seconds=tuple(point.seconds for point in measured.points),
+        lufs=tuple(point.lufs for point in measured.points),
+    )
