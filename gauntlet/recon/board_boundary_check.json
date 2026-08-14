@@ -1,0 +1,99 @@
+{
+  "curve": "C:\\Users\\Daniel\\.claude\\jobs\\5d7c9b67\\tmp\\zinc_set2_curve.npz",
+  "energy": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\analysis\\Zinc-Set-2-Reaper-v4-0b66b71707de-energy.json",
+  "duration_s": 4450.5,
+  "human_cut_starts_s": [
+    107.4405,
+    1373.8725,
+    1920.1265,
+    2725.014,
+    3568.4815
+  ],
+  "peak_probability": 0.2977,
+  "median_lufs": -17.49,
+  "readings": {
+    "before #179": {
+      "threshold_used": 0.3,
+      "burst_seconds_used": 3.0,
+      "read_at_own_scale": false,
+      "settle_seconds": 0.0,
+      "applause_count": 0,
+      "tunes": 1,
+      "starts_s": [
+        0.0
+      ],
+      "talk_seconds": [
+        null
+      ],
+      "silent_calls": [],
+      "brief_calls": [],
+      "errors_s": [
+        107.44,
+        1373.87,
+        1920.13,
+        2725.01,
+        3568.48
+      ],
+      "within_tolerance": 0
+    },
+    "settle only": {
+      "threshold_used": 0.3,
+      "burst_seconds_used": 3.0,
+      "read_at_own_scale": false,
+      "settle_seconds": 10.0,
+      "applause_count": 0,
+      "tunes": 1,
+      "starts_s": [
+        107.0
+      ],
+      "talk_seconds": [
+        107.0
+      ],
+      "silent_calls": [],
+      "brief_calls": [],
+      "errors_s": [
+        0.44,
+        1266.87,
+        1813.13,
+        2618.01,
+        3461.48
+      ],
+      "within_tolerance": 1
+    },
+    "after #179": {
+      "threshold_used": 0.0234,
+      "burst_seconds_used": 2.0,
+      "read_at_own_scale": true,
+      "settle_seconds": 10.0,
+      "applause_count": 15,
+      "tunes": 5,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1918.5,
+        2724.0,
+        3568.5
+      ],
+      "talk_seconds": [
+        0.288,
+        64.688,
+        10.828,
+        46.886,
+        41.788
+      ],
+      "silent_calls": [
+        "4080.0-4146.1",
+        "4150.9-4450.5"
+      ],
+      "brief_calls": [],
+      "errors_s": [
+        0.44,
+        0.87,
+        1.63,
+        1.01,
+        0.02
+      ],
+      "within_tolerance": 5
+    }
+  }
+}

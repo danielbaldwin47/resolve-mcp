@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 from resolve_mcp.analysis import applause, beats
+from resolve_mcp.audio import wav
 
 from .fakes import write_clicks, write_sections
 
@@ -67,3 +68,54 @@ def test_the_installed_applause_tagger_returns_a_curve_over_the_whole_file(
     assert all(0.0 <= one <= 1.0 for one in curve.probability)
     assert curve.seconds[0] < 1.0
     assert curve.seconds[-1] == pytest.approx(total, abs=1.0)
+
+
+BOARD_MIX = Path(
+    r"P:\Client Work\Ryan Devlin\2026-06-17_Zinc Bar\Audio\Reaper\Zinc Set 2 Reaper v4.wav"
+)
+BOARD_TUNE_STARTS = (107.4405, 1373.8725, 1920.1265, 2725.014, 3568.4815)
+"""The five human-established tune starts on that set, from the deliverable's own cuts."""
+
+BOARD_TOLERANCE_SECONDS = 5.0
+
+
+@pytest.mark.live
+def test_the_five_tunes_of_a_board_mix_are_found_where_the_human_cut_them() -> None:
+    """The #179 acceptance criterion, at the only seam that can hold it.
+
+    Every rule this exercises is unit-tested on fixtures, and none of those fixtures can
+    say the numbers are right: what the thresholds and margins are calibrated against is a
+    real 74-minute desk feed with no crowd bleed in it, and the evidence that they still
+    are is this file, tagged for real. Skips where the media is not mounted, which is most
+    machines — record the run on the ticket when it is.
+    """
+    pytest.importorskip(applause.MODULE, reason="panns_inference is not installed")
+    if not BOARD_MIX.exists():
+        pytest.skip(f"the measured board mix is not mounted at {BOARD_MIX}")
+
+    curve = applause.tag(BOARD_MIX)
+    read = applause.reading(curve)
+    bursts = applause.spans(curve, read.threshold, read.burst_seconds)
+    duration = wav.describe(BOARD_MIX)["duration_seconds"]
+    calls = applause.tunes(bursts, float(duration))
+    loudness = _loudness_of(BOARD_MIX)
+    found = applause.settled(calls, loudness)
+
+    # The fallback has to fire here: this is the mix whose whole set sits under 0.3.
+    assert read.own_scale is True
+    starts = [one.start for one in found.kept]
+    assert len(starts) == len(BOARD_TUNE_STARTS)
+    for want in BOARD_TUNE_STARTS:
+        assert min(abs(one - want) for one in starts) <= BOARD_TOLERANCE_SECONDS
+
+
+def _loudness_of(path: Path) -> applause.Loudness:
+    """The loudness curve for a file, measured here rather than read from an analysis run."""
+    from resolve_mcp.analysis import decode
+    from resolve_mcp.analysis import energy as energy_module
+
+    measured = energy_module.measure(decode.read(path), 3.0, 0.5)
+    return applause.Loudness(
+        seconds=tuple(point.seconds for point in measured.points),
+        lufs=tuple(point.lufs for point in measured.points),
+    )

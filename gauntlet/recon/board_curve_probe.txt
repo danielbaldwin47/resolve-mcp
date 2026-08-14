@@ -1,0 +1,32 @@
+frames=445125 span=0.00..4450.49
+frame_step=0.0100s
+q0.5      0.00003
+q0.9      0.00030
+q0.99     0.04246
+q0.999    0.22693
+q0.9999   0.29224
+q1.0      0.29773
+
+-- near each human boundary (window -120s..+20s) --
+   107.44  local_peak=0.2608 at    68.64s
+  1373.87  local_peak=0.2977 at  1307.35s
+  1920.13  local_peak=0.0662 at  1905.11s
+  2725.01  local_peak=0.1286 at  2675.19s
+  3568.48  local_peak=0.2728 at  3512.63s
+
+-- 15 tallest separated excursions --
+    21.90  p=0.0369  nearest_truth=   107.44 (-85.5s)
+    68.68  p=0.2608  nearest_truth=   107.44 (-38.8s)
+   105.66  p=0.1725  nearest_truth=   107.44 (-1.8s)
+  1277.12  p=0.1563  nearest_truth=  1373.87 (-96.8s)
+  1307.35  p=0.2977  nearest_truth=  1373.87 (-66.5s)
+  1905.31  p=0.0662  nearest_truth=  1920.13 (-14.8s)
+  2675.47  p=0.1286  nearest_truth=  2725.01 (-49.5s)
+  3512.89  p=0.2728  nearest_truth=  3568.48 (-55.6s)
+  4079.04  p=0.1740  nearest_truth=  3568.48 (+510.6s)
+  4148.35  p=0.0487  nearest_truth=  3568.48 (+579.9s)
+  4180.90  p=0.0091  nearest_truth=  3568.48 (+612.4s)
+  4214.12  p=0.0257  nearest_truth=  3568.48 (+645.6s)
+  4244.75  p=0.0609  nearest_truth=  3568.48 (+676.3s)
+  4400.27  p=0.0354  nearest_truth=  3568.48 (+831.8s)
+  4432.36  p=0.0120  nearest_truth=  3568.48 (+863.9s)

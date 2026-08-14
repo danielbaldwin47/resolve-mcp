@@ -1,0 +1,146 @@
+{
+  "curve": "C:\\Users\\Daniel\\.claude\\jobs\\5d7c9b67\\tmp\\scullers_curve.npz",
+  "energy": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\analysis\\Unisphere-Mike-Tucker-Scullers---Mixed-dd0b8b2a1957-energy.json",
+  "duration_s": 6130.889,
+  "human_cut_starts_s": [],
+  "peak_probability": 0.6528,
+  "median_lufs": -17.55,
+  "readings": {
+    "before #179": {
+      "threshold_used": 0.3,
+      "burst_seconds_used": 3.0,
+      "read_at_own_scale": false,
+      "settle_seconds": 0.0,
+      "applause_count": 21,
+      "tunes": 13,
+      "starts_s": [
+        0.0,
+        296.6,
+        453.0,
+        1186.4,
+        1997.6,
+        2557.4,
+        3242.6,
+        3822.2,
+        3945.1,
+        4544.8,
+        5255.5,
+        5380.6,
+        5894.7
+      ],
+      "talk_seconds": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "silent_calls": [],
+      "brief_calls": [],
+      "tunes_after_the_density_floor": 10,
+      "no_pulse": [
+        "296.6-440.5 at 0.07/s",
+        "3822.2-3940.0 at 0.0/s",
+        "5255.5-5376.8 at 0.0/s"
+      ]
+    },
+    "settle only": {
+      "threshold_used": 0.3,
+      "burst_seconds_used": 3.0,
+      "read_at_own_scale": false,
+      "settle_seconds": 10.0,
+      "applause_count": 21,
+      "tunes": 11,
+      "starts_s": [
+        505.5,
+        1201.0,
+        2118.0,
+        2614.5,
+        3269.5,
+        3851.0,
+        3971.0,
+        4548.5,
+        5256.0,
+        5430.0,
+        5895.0
+      ],
+      "talk_seconds": [
+        52.545,
+        14.608,
+        120.403,
+        57.066,
+        26.94,
+        28.767,
+        25.888,
+        3.707,
+        0.486,
+        49.367,
+        0.282
+      ],
+      "silent_calls": [
+        "296.6-440.5"
+      ],
+      "brief_calls": [
+        "266.0-293.1"
+      ],
+      "tunes_after_the_density_floor": 9,
+      "no_pulse": [
+        "3851.0-3940.0 at 0.0/s",
+        "5256.0-5376.8 at 0.0/s"
+      ]
+    },
+    "after #179": {
+      "threshold_used": 0.3,
+      "burst_seconds_used": 3.0,
+      "read_at_own_scale": false,
+      "settle_seconds": 10.0,
+      "applause_count": 21,
+      "tunes": 11,
+      "starts_s": [
+        505.5,
+        1201.0,
+        2118.0,
+        2614.5,
+        3269.5,
+        3851.0,
+        3971.0,
+        4548.5,
+        5256.0,
+        5430.0,
+        5895.0
+      ],
+      "talk_seconds": [
+        52.545,
+        14.608,
+        120.403,
+        57.066,
+        26.94,
+        28.767,
+        25.888,
+        3.707,
+        0.486,
+        49.367,
+        0.282
+      ],
+      "silent_calls": [
+        "296.6-440.5"
+      ],
+      "brief_calls": [
+        "266.0-293.1"
+      ],
+      "tunes_after_the_density_floor": 9,
+      "no_pulse": [
+        "3851.0-3940.0 at 0.0/s",
+        "5256.0-5376.8 at 0.0/s"
+      ]
+    }
+  }
+}
