@@ -415,6 +415,18 @@ def gray_frame(
     return bytes(pixels)
 
 
+def hwaccel_probe_reply(argv: Sequence[str], methods: Sequence[str] = ()) -> Completed | None:
+    """The ``-hwaccels`` capability probe, answered the way the binary prints it — or ``None``
+    for any other command. Fake runners answer this first, so the probe the video routes now
+    send (#202) never reads as a decode: a fake that parsed the probe's argv for a target
+    path would write a file named ``-hwaccels``.
+    """
+    if "-hwaccels" in argv:
+        listing = "\n".join(["Hardware acceleration methods:", *methods])
+        return Completed(0, "", listing + "\n")
+    return None
+
+
 def ffmpeg_sampling(calls: list[Sequence[str]], frames: Sequence[bytes]) -> Runner:
     """An ffmpeg that writes the raw grey a sampling command asked for, and records the call.
 
@@ -423,6 +435,9 @@ def ffmpeg_sampling(calls: list[Sequence[str]], frames: Sequence[bytes]) -> Runn
     """
 
     def runner(argv: Sequence[str]) -> Completed:
+        probed = hwaccel_probe_reply(argv)
+        if probed is not None:
+            return probed
         calls.append(list(argv))
         target = Path(argv[-1])
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -436,6 +451,9 @@ def ffmpeg_writing_nothing(calls: list[Sequence[str]]) -> Runner:
     """An ffmpeg that exits zero and writes no frames — what a seek past the end does."""
 
     def runner(argv: Sequence[str]) -> Completed:
+        probed = hwaccel_probe_reply(argv)
+        if probed is not None:
+            return probed
         calls.append(list(argv))
         return Completed(0, "")
 
@@ -451,6 +469,9 @@ def ffmpeg_refusing(stderr: str) -> Runner:
     """An ffmpeg that ran and would not have the file, complaining the way it does."""
 
     def runner(argv: Sequence[str]) -> Completed:
+        probed = hwaccel_probe_reply(argv)
+        if probed is not None:
+            return probed
         return Completed(1, stderr)
 
     return runner

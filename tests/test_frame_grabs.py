@@ -33,6 +33,7 @@ from .fakes import (
     FakeResolve,
     ffmpeg_absent,
     ffmpeg_refusing,
+    hwaccel_probe_reply,
     media_pool,
     studio,
     write_jpeg,
@@ -462,6 +463,9 @@ def _drawing(calls: list[Sequence[str]], width: int = 1568, height: int = 882) -
     """Stand in for ffmpeg by writing the JPEG header it would have written."""
 
     def runner(argv: Sequence[str]) -> Completed:
+        probed = hwaccel_probe_reply(argv)
+        if probed is not None:
+            return probed
         calls.append(list(argv))
         write_jpeg(Path(argv[-1]), width=width, height=height)
         return Completed(0, "")
@@ -471,7 +475,7 @@ def _drawing(calls: list[Sequence[str]], width: int = 1568, height: int = 882) -
 
 def _pretending(argv: Sequence[str]) -> Completed:
     """Exit zero and write nothing — the failure mode that would otherwise cache a lie."""
-    return Completed(0, "")
+    return hwaccel_probe_reply(argv) or Completed(0, "")
 
 
 def _seek(argv: Sequence[str]) -> float:

@@ -69,6 +69,7 @@ import numpy as np
 
 from ..errors import AnalysisDependencyError, AnalysisFailedError, ResolveMcpError
 from ..logging_config import get_logger
+from . import device
 
 log = get_logger("analysis")
 
@@ -319,6 +320,7 @@ def panns_tagger(path: Path) -> Curve:
     job dies on the GPU rather than returning a boundary list.
     """
     module = _loaded()
+    device.announce("PANNs")
     detector = module.SoundEventDetection(checkpoint_path=None)
     wanted = _wanted(module)
     log.info("Tagging %s for applause with PANNs", path.name)

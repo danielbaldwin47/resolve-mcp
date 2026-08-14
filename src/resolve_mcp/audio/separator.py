@@ -31,6 +31,7 @@ import subprocess
 from collections import deque
 from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
+from typing import Any
 
 from ..config import Config, get_config
 from ..errors import SeparatorUnavailableError, StemSeparationError
@@ -44,6 +45,8 @@ OUTPUT_TAIL = 40
 
 LABEL = re.compile(r"\(([^()]+)\)")
 PERCENT = re.compile(r"(\d{1,3})\s*%")
+TORCH_BUILD = re.compile(r"PyTorch Version:\s*(\S+)", re.IGNORECASE)
+"""What ``--env_info`` prints for its torch build, e.g. ``PyTorch Version: 2.13.0+cpu``."""
 DOWNLOAD = re.compile(r"download", re.IGNORECASE)
 """A first run fetches its model and prints a bar for that too. It is not the separation."""
 
@@ -90,6 +93,61 @@ def collect(out_dir: Path | str) -> dict[str, Path]:
         if label is not None:
             found[label] = one
     return found
+
+
+def environment_command(executable: str) -> list[str]:
+    """Ask the separator CLI what it runs on. Prints one fact a line, torch build included."""
+    return [executable, "--env_info"]
+
+
+def environment(
+    runner: Runner | None = None,
+    config: Config | None = None,
+) -> dict[str, Any]:
+    """Which torch build the resolved separator runs on — G10's bug class, made loud (#202).
+
+    ``config.audio_separator`` names a binary, and PATH decides which install — and which
+    torch — that is. A CPU-build torch turns a forty-minute separation into a day's, and the
+    only symptom used to be that it was slow; here the build goes into the log and the job
+    record, and a ``+cpu`` build is a warning. A separator too old to answer ``--env_info``
+    still separates: the report says the build is unknown rather than failing the job.
+    """
+    config = config or get_config()
+    lines: list[str] = []
+    try:
+        returncode = (runner or _run)(environment_command(config.audio_separator), lines.append)
+    except FileNotFoundError as exc:
+        raise SeparatorUnavailableError(
+            cause=f"No audio-separator at {config.audio_separator!r}.",
+            detail={"executable": config.audio_separator},
+        ) from exc
+
+    found = TORCH_BUILD.search("\n".join(lines))
+    report: dict[str, Any] = {
+        "executable": config.audio_separator,
+        "torch": found.group(1) if found else None,
+    }
+    if returncode != 0:
+        log.info("audio-separator --env_info exited %d; reading what it printed", returncode)
+    # A parsed build is believed even off a non-zero exit — the +cpu warning matters most
+    # on exactly the runs where the CLI also grumbled about something else.
+    if found is None:
+        report["warning"] = (
+            "The separator did not report its torch build (--env_info), so whether this "
+            "separation runs on the GPU is unknown."
+        )
+        log.warning("%s", report["warning"])
+    elif "+cpu" in report["torch"]:
+        report["warning"] = (
+            f"The separator's torch is the CPU build ({report['torch']}): separations run "
+            "on the CPU at a fraction of GPU speed. Install CUDA torch into the "
+            "environment that owns the audio-separator on PATH, or point "
+            "RESOLVE_MCP_AUDIO_SEPARATOR at one that has it."
+        )
+        log.warning("%s", report["warning"])
+    else:
+        log.info("audio-separator torch build: %s", report["torch"])
+    return report
 
 
 def separate(

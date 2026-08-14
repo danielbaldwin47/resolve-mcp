@@ -848,6 +848,7 @@ def multi_pass(
     other_dir = directory / OTHER_PASS
     wanted_other = other_dir if split_wind else None
 
+    separator_env: dict[str, Any] | None = None
     reused = reuse and _already_separated(mix_dir, drums_dir, wanted_other)
     if reused:
         log.info("Stems for %s are already on disk at %s", audio["path"], directory)
@@ -869,6 +870,9 @@ def multi_pass(
                 )
                 stems, drums, other = _on_disk(mix_dir, drums_dir, wanted_other)
             else:
+                # Asked only when a separation is actually about to run: the report says
+                # what *this* work ran on, and a reuse ran nothing (#202).
+                separator_env = separator.environment(runner=runner, config=config)
                 stems, drums, other = _passes(
                     audio,
                     mix_dir,
@@ -891,6 +895,8 @@ def multi_pass(
         "audio": audio,
         "reused": reused,
     }
+    if separator_env is not None:
+        result["separator"] = separator_env
     if split_wind:
         # Keyed like ``drums`` is: the name of the stem this pass took apart. Absent rather
         # than empty when the pass is off, so the envelope never offers a stem nobody made.

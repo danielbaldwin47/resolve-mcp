@@ -28,7 +28,7 @@ from ..errors import InvalidRequestError
 from ..jobs import cache
 from ..jobs.runner import JobOutput, Progress, start_job
 from . import beats as beats_module
-from . import halves
+from . import device, halves
 
 if TYPE_CHECKING:  # pragma: no cover - the worker imports these when it runs
     from .energy import Measurement
@@ -222,6 +222,12 @@ def analyze(
         progress(0.1, "finding beats and downbeats")
         result[BEATS] = beats_of(source, described, identity, detector, refresh, config)
         artifacts.append(Path(result[BEATS]["path"]))
+        # Which torch stack the beat model runs on (#202). Reported per job rather than
+        # only at the inference site, because a cached grid ran nothing and the record
+        # should still say what a fresh run here would use.
+        note = device.torch_note()
+        if note is not None:
+            result["torch"] = note
 
     if settings[ENERGY]:
         progress(0.6, "measuring loudness and onset density")

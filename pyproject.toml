@@ -114,6 +114,8 @@ warn_unused_ignores = true
 # The analysis extras ship no stubs, and are not installed at all in CI or on a machine
 # that only drives Resolve — so the imports are unresolvable rather than untyped. scipy
 # ships no type information either; the two functions used from it are filters over arrays.
+# torch does ship types, so a box with the analysis extra typechecks it for real; the
+# override only quiets CI, where analysis/device.py's guarded import has nothing to resolve.
 [[tool.mypy.overrides]]
-module = ["faster_whisper.*", "scipy.*"]
+module = ["faster_whisper.*", "scipy.*", "torch.*"]
 ignore_missing_imports = true

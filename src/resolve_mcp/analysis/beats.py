@@ -19,6 +19,7 @@ from typing import Any, NamedTuple
 
 from ..errors import AnalysisDependencyError, AnalysisFailedError, ResolveMcpError
 from ..logging_config import get_logger
+from . import device
 
 log = get_logger("analysis")
 
@@ -101,6 +102,7 @@ def detect(path: Path, detector: Detector | None = None) -> BeatGrid:
 def beat_this_detector(path: Path) -> BeatGrid:
     """The real thing: beat_this over the whole file, beats and downbeats in seconds."""
     module = _loaded()
+    device.announce("beat_this")
     log.info("Running beat_this over %s", path.name)
     beats, downbeats = module.File2Beats()(str(path))
     return BeatGrid(

@@ -8,9 +8,12 @@ from typing import Protocol
 import pytest
 
 from resolve_mcp import config as config_module
+from resolve_mcp import ffmpeg as ffmpeg_module
+from resolve_mcp.analysis import device as device_module
 from resolve_mcp.config import Config
 from resolve_mcp.resolve import connection as connection_module
 from resolve_mcp.resolve.connection import ResolveConnection
+from resolve_mcp.video import ffmpeg as video_ffmpeg_module
 
 from .fakes import FakeConnector, FakeResolve
 
@@ -35,9 +38,15 @@ def _clean_globals(request: pytest.FixtureRequest, tmp_path: Path) -> Iterator[N
     config_module.set_config(
         Config.from_env({**base, "RESOLVE_MCP_CACHE": str(tmp_path / "cache")})
     )
+    ffmpeg_module.reset_hwaccel_probe()
+    video_ffmpeg_module.reset_decode_announcements()
+    device_module.reset_announcements()
     yield
     connection_module.reset_connection()
     config_module.reset_config()
+    ffmpeg_module.reset_hwaccel_probe()
+    video_ffmpeg_module.reset_decode_announcements()
+    device_module.reset_announcements()
 
 
 @pytest.fixture

@@ -46,10 +46,11 @@ dozen is a scene-cut scan or a render, not a grab."""
 
 
 class _Grab(NamedTuple):
-    """One frame and whether it was already in the cache."""
+    """One frame, whether it was already in the cache, and what decoded it if anything did."""
 
     frame: dict[str, Any]
     cached: bool
+    decode: dict[str, Any] | None = None
 
 
 def grab_frames(
@@ -82,6 +83,7 @@ def grab_frames(
     ]
 
     hits = sum(1 for one in grabs if one.cached)
+    decodes = [one.decode for one in grabs if one.decode is not None]
     log.info("Returned %d frame(s) of %s, %d of them from cache", len(grabs), clip, hits)
     return {
         "clip": source.name,
@@ -89,6 +91,9 @@ def grab_frames(
         "source": source.path,
         "max_edge": edge,
         "frames": [one.frame for one in grabs],
+        # Null when every frame came off the cache — nothing decoded, so there is no
+        # device to report (#202). Every fresh grab in one call decodes the same way.
+        "decode": decodes[0] if decodes else None,
         "cached": hits == len(grabs),
     }
 
@@ -111,7 +116,7 @@ def _one_frame(
             return _Grab(hit, True)
 
     target = config.frame_dir / f"{slug(source.name, 'frame')}-{key[:12]}.jpg"
-    ffmpeg.grab(
+    written = ffmpeg.grab(
         source.path,
         target,
         seconds=source.seek_seconds(frame),
@@ -121,7 +126,7 @@ def _one_frame(
     )
     grabbed = {"time": dual_time(frame, source.fps), **jpeg.describe(target)}
     cache.remember(key, KIND, grabbed, (target,), config)
-    return _Grab(grabbed, False)
+    return _Grab(grabbed, False, written.decode)
 
 
 def _readable_edge(max_edge: int) -> int:

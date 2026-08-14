@@ -34,6 +34,7 @@ from .fakes import (
     FakeResolve,
     ffmpeg_absent,
     ffmpeg_refusing,
+    hwaccel_probe_reply,
     media_pool,
     studio,
 )
@@ -346,6 +347,9 @@ def _finding(calls: list[Sequence[str]], seconds: Sequence[float]) -> Runner:
     """Replay the showinfo lines ffmpeg prints for the frames the select filter kept."""
 
     def runner(argv: Sequence[str]) -> Completed:
+        probed = hwaccel_probe_reply(argv)
+        if probed is not None:
+            return probed
         calls.append(list(argv))
         lines = [
             f"[Parsed_showinfo_1 @ 000001] n:{index:4d} pts:{int(one * 1000):8d} "
