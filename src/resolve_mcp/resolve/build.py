@@ -69,9 +69,18 @@ from .session import frame_rate
 log = get_logger("build")
 
 Clip = Any
+Item = Any
 Pool = Any
 Project = Any
 Timeline = Any
+
+Stills = frozenset[int]
+"""Which source clips are single-frame media, by handle identity.
+
+Resolve's handles define no equality of their own and two aliases can name one clip, so
+identity is what groups them. Read once before the append (:func:`_prepare_sources`) and
+carried on each :class:`Shot`, because the source read-back has to skip exactly the clips
+E5's bounds rule already exempts."""
 
 MEDIA_TYPES: Final[dict[str, int]] = {"video": 1, "audio": 2}
 """Resolve's ``mediaType``: 1 appends video only, 2 audio only. Never omitted."""
@@ -82,8 +91,12 @@ TRACK_PREFIXES: Final[dict[str, str]] = {"video": "V", "audio": "A"}
 AUDIO_TRACK_TYPE: Final = "stereo"
 """What a master mix is. ``AddTrack`` defaults to mono, which would fold a stereo mix."""
 
-MISPLACED_CAP: Final = 20
-"""A drifted build misplaces everything downstream of the blockage; the count says how many."""
+REPORTED_SHOT_CAP: Final = 20
+"""How many bad shots a build failure lists before it only counts them.
+
+One blockage misplaces everything downstream of it, and one misread of ``startFrame`` moves
+every shot off the same clip, so either list runs to the length of the cut. Both are capped
+here and both carry their own total beside the list."""
 
 REFUSED_MARKER_CAP: Final = 20
 """Carried markers that would not land are listed, not just counted — up to this many."""
@@ -181,7 +194,7 @@ def build_timeline(
     superseded = latest_version(base, existing)
     name = next_version_name(base, existing)
     clips = cut.clips_by_alias(checked)
-    stills = _read_sources(clips)
+    stills = _prepare_sources(clips)
 
     # A cut whose tail has something to cut in is appended to a staging timeline and
     # round-tripped into its own name, because the scripting API cannot cut a transition
@@ -423,7 +436,7 @@ def _shots(
     doc: dict[str, Any],
     clips: dict[str, media.LocatedClip],
     start: int,
-    stills: frozenset[int],
+    stills: Stills,
 ) -> list[Shot]:
     """Every append the cut asks for, positioned absolutely from the timeline start."""
     placed = placements(doc, start)
@@ -489,7 +502,7 @@ def _shot(
     source_in: int,
     record: int,
     duration: int,
-    stills: frozenset[int],
+    stills: Stills,
 ) -> Shot:
     return Shot(
         id=id,
@@ -648,12 +661,14 @@ def _handle(clip: Clip) -> int:
     return id(clip)
 
 
-def _read_sources(clips: dict[str, media.LocatedClip]) -> frozenset[int]:
-    """Read every source clip once, before the append: the one place its properties are needed.
+def _prepare_sources(clips: dict[str, media.LocatedClip]) -> Stills:
+    """Get every source clip ready to be appended, and answer with the stills among them.
 
-    Two things come out of the read. Each still gets its out point written, so its
-    ``endFrame`` is honoured exactly (#18 (a)) — and the stills are named, because they are
-    the clips whose source frames cannot be read back off the timeline (ADR 0005).
+    One pass, because each clip's properties are a round trip to Resolve and there is
+    nothing to be gained by making two. Each still gets its out point written, so its
+    ``endFrame`` is honoured exactly (#18 (a)) — and the stills are the return value,
+    because they are the clips whose source frames cannot be read back off the timeline
+    (ADR 0005).
 
     A clip whose media does not start at frame 0 is logged. Nothing here rebases on it: the
     cut file's ranges are absolute media frames — the space ``Start`` and ``End`` report and
@@ -763,7 +778,7 @@ def _verify(
             "check the cut file's ranges, and build again.",
             detail={
                 "timeline": name,
-                "misplaced": [_expected(shot) for shot in misplaced[:MISPLACED_CAP]],
+                "misplaced": [_expected(shot) for shot in misplaced[:REPORTED_SHOT_CAP]],
                 "misplaced_total": len(misplaced),
             },
         )
@@ -775,13 +790,15 @@ def _verify(
         cause=f"{len(drifted)} of {len(shots)} clips in {name!r} landed on source frames the "
         f"cut file did not ask for, so the timeline holds the wrong footage.",
         fix="The cut file's in and out points are frames of the clip's own media, counted the "
-        "way inspect_clip reports its bounds. Delete the timeline it made, check those bounds "
-        "against the ranges, and build again.",
+        "way inspect_clip reports its bounds. Delete the timeline it made and compare the two "
+        "numbers below: where the landed frame is the one asked for plus the clip's own start, "
+        "Resolve is counting from that stamp rather than from zero, the ranges are not the "
+        "thing to change, and the build log names the clip that carries the stamp.",
         detail={
             "timeline": name,
             "wrong_source": [
                 {**_expected(shot), "source_frame": shot.source_in, "landed_on": landed}
-                for shot, landed in drifted[:MISPLACED_CAP]
+                for shot, landed in drifted[:REPORTED_SHOT_CAP]
             ],
             "wrong_source_total": len(drifted),
         },
@@ -793,7 +810,7 @@ def _key(shot: Shot, origin: int) -> tuple[int, int]:
     return (shot.record - origin, shot.duration)
 
 
-def _landed(timeline: Timeline, track: Track, landed_origin: int) -> dict[tuple[int, int], Any]:
+def _landed(timeline: Timeline, track: Track, landed_origin: int) -> dict[tuple[int, int], Item]:
     """Everything this track holds, keyed the way a shot is looked up.
 
     Positions repeat only where Resolve spread one clip over several items at the same
@@ -809,7 +826,7 @@ def _landed(timeline: Timeline, track: Track, landed_origin: int) -> dict[tuple[
 def _wrong_source(
     reader: timeline_read.Reader,
     shots: list[Shot],
-    placed: dict[Track, dict[tuple[int, int], Any]],
+    placed: dict[Track, dict[tuple[int, int], Item]],
     origin: int,
 ) -> list[tuple[Shot, int]]:
     """Every shot that plays frames the cut file did not name, with the frame it begins on.

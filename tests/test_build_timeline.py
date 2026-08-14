@@ -1155,6 +1155,46 @@ def test_a_pool_that_rebases_source_frames_off_the_clip_start_fails_the_build(
     assert drifted[0]["landed_on"] == 87400 + 86400
 
 
+def test_a_relative_left_offset_on_a_start_stamped_clip_is_not_a_false_alarm(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The read-back must survive the other reading of ``GetLeftOffset`` too.
+
+    ADR 0005 measured the offset against ``GetSourceStartFrame`` on media starting at 0,
+    where "how far into the media" and "which frame it plays" are the same number. A start
+    stamp separates them, and ``source_bounds`` is what keeps the comparison honest: the
+    two getters then disagree by the whole stamp, well past the measured slip, so it falls
+    back to the absolute one — the space the cut file's ranges are written in.
+    """
+    pool = a_stamped_pool()
+    pool.reports_relative_left_offset = True
+    resolve = empty_project(pool)
+    attach(resolve)
+
+    result = build_timeline(a_cut(tmp_path, a_stamped_doc()))
+
+    assert result["ok"] is True
+    items = built(resolve, "sunset-set v1").GetItemListInTrack("video", 1) or []
+    assert [item.GetLeftOffset() for item in items] == [1000]
+
+
+def test_a_rebase_is_caught_whichever_frame_the_left_offset_reports(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Both unknowns at once: a rebasing append read through a relative offset still fails."""
+    pool = a_stamped_pool()
+    pool.rebases_source_frames = True
+    pool.reports_relative_left_offset = True
+    attach(empty_project(pool))
+
+    result = build_timeline(a_cut(tmp_path, a_stamped_doc()))
+
+    assert result["ok"] is False
+    drifted = result["error"]["detail"]["wrong_source"]
+    assert [finding["id"] for finding in drifted] == ["s001"]
+    assert drifted[0]["landed_on"] == 87400 + 86400
+
+
 def test_an_append_that_hands_back_fewer_items_than_it_was_given_fails_the_build(
     attach: Attach, tmp_path: Path
 ) -> None:

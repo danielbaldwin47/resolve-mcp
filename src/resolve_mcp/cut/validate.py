@@ -1172,9 +1172,10 @@ def _bounds_unknown(clip: ClipFacts) -> bool:
 def _outside_media(item: dict[str, Any], clip: ClipFacts) -> bool:
     """Whether a half-open range asks for frames the clip's media does not have.
 
-    Unknown bounds cannot convict: when Resolve never reported the clip's extent the
-    check fails open — the same stance E7's has-audio leg takes on an unreported
-    channel count, because "Resolve did not say" is not evidence of an overrun.
+    Only answerable against bounds Resolve reported. What to do when it reported none is
+    not this function's call any more — both callers ask :func:`_bounds_unknown` first and
+    raise W9 — so the guard below is a precondition rather than a decision: unknown bounds
+    still cannot convict, and reaching here with them is a caller that forgot to ask.
     """
     if _bounds_unknown(clip):
         return False
