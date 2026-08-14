@@ -7,7 +7,8 @@ assigns them to labels A and B, and builds a scrubbed evidence pack:
     out/manifest.json            neutral metadata only (no source names)
     out/<label>/clip.mp4         the extracted span, 540p
     out/<label>/cuts.json        cut times + transition type, shots + motion,
-                                 stats, loudness
+                                 stats, loudness, the 1-s audio class track,
+                                 the ending type and slow-transition events
     out/<label>/sheet_N.jpg      contact sheets, 6 per row, timestamp burned in
     out/<label>/cutstrip_N.jpg   cut-boundary filmstrips, one cut per row:
                                  3 outgoing frames then 3 incoming frames
@@ -18,6 +19,14 @@ critic can read the pack without knowing which cut is which.
 Pack v2 adds the three measurements a stills-only judge could not make (gap G5,
 round R1b): what the frames either side of a cut actually look like, whether a
 shot is locked or moving, and whether a boundary is a hard cut or a mix.
+
+Pack v3 closes the two blind spots the P2 R1 ending exposed (gap G16). (a) An
+audio class track: applause, music or silence per second, so a judge reading a
+-34 dB tail can tell a crowd from a dead room. (b) A slow-transition pass: the
++/-12-frame transition window is half a second wide and typed the human's
+visible 5.9 s tail dissolve as "hard", so the ending and every weak boundary
+are refitted against a multi-second luma ramp, and mid-shot double images are
+reported as ghosting events.
 
 Usage:
     uv run python gauntlet/tools/ab_pack.py \
@@ -95,6 +104,82 @@ TRANS_RAMP_FRACTION = 0.25  # a pair this fraction of the peak is part of the ra
 TRANS_BLEND_RESIDUAL = 0.35  # normalised residual under this = linear blend
 TRANS_BLACK_LUMA = 12.0  # mean luma at/below this reads as black
 TRANS_LIT_LUMA = 30.0  # ...and this much above it as picture
+
+# pack v3 -- slow-transition pass. The +/-12-frame window above is half a
+# second wide by construction, so a multi-second dissolve enters and leaves it
+# looking like ordinary content drift and the boundary reads "hard" (G16b: the
+# human's visible 5.9 s tail dissolve was typed hard). This pass works on a
+# coarse whole-clip luma track instead, where a several-second ramp is the
+# obvious shape.
+SLOW_FPS = 20.0
+SLOW_W, SLOW_H = 128, 72
+SLOW_TAIL_SEC = 8.0  # trailing window fitted per candidate shot
+SLOW_ENDING_SEC = 20.0  # ...and for the clip's own ending, which the tail
+# convention owns: scene detection usually calls the black a shot of its own,
+# so the ending is fitted against the clip, not against the last shot.
+SLOW_MIN_RAMP_SEC = 1.0  # ramp at/over this = a transition, under it = a cut
+SLOW_MAX_RAMP_SEC = 12.0  # longer than this is a dim shot, not a transition
+SLOW_MONOTONE_SHARE = 0.7  # share of ramp steps that must descend
+# Black is the clip's own black: a stage shot can sit at luma 25 all night, so
+# "dark" is not a fixed level, but the black an encode settles on is.
+SLOW_DARK_LUMA = 6.0  # a window ending above this still holds picture
+SLOW_BLACK_FLOOR = 0.2
+SLOW_BLACK_MARGIN = 0.15  # ...or this much over the final frame, whichever is higher
+SLOW_SLOPE_MIN = 1.0  # descent of this many grey levels per second
+SLOW_SLOPE_TOL_SEC = 0.3  # ...may pause this long without ending the descent
+SLOW_PLATEAU_SEC = 0.5  # the level the ramp leaves from, read just before it
+SLOW_RAMP_TOP_SHARE = 0.9  # the ramp starts where luma leaves that level
+SLOW_MIN_SHOT_SEC = 2.0  # shorter shots cannot hide a multi-second ramp
+SLOW_WEAK_PEAK_DELTA = 6.0  # boundary this soft is a candidate slow transition
+
+# mid-shot blended double-image ("ghosting"): two pictures on screen at once,
+# inside what scene detection calls a single shot. The reliable signature is
+# the blend fit, not the high-frequency dip -- a mix between two similar
+# frames does dip, but a mix into a flatter picture need not, so hf is
+# reported as evidence rather than required.
+GHOST_HALF_SEC = 0.75  # endpoints sampled this far either side of the frame
+GHOST_STEP_SEC = 0.25
+GHOST_MIN_CHANGE = 8.0  # endpoints must differ structurally by this much grey
+GHOST_ALPHA_BAND = (0.2, 0.8)  # the frame must sit between them, not on one
+# Tight on purpose: a false "two pictures at once" would mislead the judge more
+# than a missed one. A real cross-dissolve fits at 0.04-0.30 residual (measured
+# on a synthetic xfade); slow drift inside a real shot sits at 0.31-0.35.
+GHOST_BLEND_RESIDUAL = 0.25
+GHOST_MERGE_SEC = 1.0  # hits closer than this are one event
+GHOST_MAX_EVENTS = 20
+
+# pack v3 -- audio class track. Spectral flatness is the discriminator:
+# applause is broadband noise (flatness high, centroid ~1 kHz+), a held chord
+# or a decayed cymbal is tonal (flatness low). Method lifted from
+# gauntlet/recon/end_tail_zoom.py; the band is clamped well inside the AAC
+# lowpass because near-zero bins above it would drag every geometric mean to
+# zero and flatten the discriminator itself.
+AUDIO_RATE = 48000
+AUDIO_WIN_SEC = 1.0
+AUDIO_HOP_SEC = 0.5  # overlap: a 1 s window is stable, a 1 s grid is coarse
+AUDIO_BAND = (80.0, 8000.0)
+AUDIO_HF_BAND = (2000.0, 8000.0)
+# Silence is the clip's own room tone, and measured jazz leaves only ~4 dB
+# between its quietest passage and an empty room, so no absolute level works.
+# A clip is credited with a room tone only when its quietest window sits well
+# under its own quiet band (the 20th percentile); silence is then what lies
+# within a few dB of that floor, and never inside the quiet band itself.
+AUDIO_QUIET_PERCENTILE = 20.0
+AUDIO_FLOOR_GAP_DB = 6.0
+AUDIO_SILENCE_MARGIN_DB = 6.0
+AUDIO_SILENCE_HEADROOM_DB = 3.0
+# Applause is seeded strictly and grown loosely. Measured on the Taurus tail:
+# the crowd runs flatness 0.14-0.16 at a 2.0-2.5 kHz centroid, while a ride
+# cymbal over a quiet passage reaches 0.10 at 1.4 kHz -- so nothing becomes
+# applause without a window that clears the strict pair, and the burst's
+# quieter edges are then grown from it.
+AUDIO_SEED_FLAT = 0.12
+AUDIO_SEED_CENTROID = 1800.0
+AUDIO_HOLD_FLAT = 0.04
+AUDIO_HOLD_CENTROID = 900.0
+AUDIO_BRIDGE_SEC = 1.5  # a burst may dip below the hold pair for this long
+AUDIO_REFINE_SEC = 1.0  # onset refinement searches this far either side
+AUDIO_REFINE_STEP_SEC = 0.05
 
 FONT_CANDIDATES = [
     Path("C:/Windows/Fonts/arial.ttf"),
@@ -491,20 +576,26 @@ def shot_motion(track: dict[str, list[float]], start: float, end: float) -> dict
 # transition typing
 
 
-def blend_residual(pre: np.ndarray, post: np.ndarray, mid: np.ndarray) -> float:
-    """How well `mid` is explained as a linear mix of `pre` and `post`.
+def blend_fit(pre: np.ndarray, post: np.ndarray, mid: np.ndarray) -> tuple[float, float]:
+    """Least-squares fit of `mid` as `pre + alpha * (post - pre)`.
 
-    Returns the least-squares residual normalised by the pre->post difference:
-    ~0 for a real dissolve frame, ~1 for a frame that is simply something else.
+    Returns (residual normalised by the pre->post difference, alpha): residual
+    ~0 for a real dissolve frame and ~1 for a frame that is simply something
+    else; alpha says how far through the mix the frame sits.
     """
     base = post - pre
     scale = float(np.sqrt((base * base).sum()))
     if scale < 1e-6:
-        return 1.0
+        return 1.0, 0.0
     target = mid - pre
     alpha = float((target * base).sum() / (base * base).sum())
     residual = target - alpha * base
-    return float(np.sqrt((residual * residual).sum())) / scale
+    return float(np.sqrt((residual * residual).sum())) / scale, alpha
+
+
+def blend_residual(pre: np.ndarray, post: np.ndarray, mid: np.ndarray) -> float:
+    """How well `mid` is explained as a linear mix of `pre` and `post`."""
+    return blend_fit(pre, post, mid)[0]
 
 
 def classify_transition(clip: Path, cut: float, fps: float, duration: float) -> dict[str, Any]:
@@ -583,6 +674,252 @@ def classify_transition(clip: Path, cut: float, fps: float, duration: float) -> 
 
 
 # --------------------------------------------------------------------------
+# slow transitions: multi-second ramps the +/-12-frame window cannot see
+
+
+def luma_track(clip: Path) -> dict[str, np.ndarray]:
+    """Coarse whole-clip track: time, mean luma, and high-frequency energy.
+
+    One decode serves both v3 video passes. `hf` is the mean absolute spatial
+    gradient -- it collapses when a frame is a soft blend of two pictures.
+    """
+    arr = decode_grey(clip, SLOW_W, SLOW_H, fps=SLOW_FPS)
+    if len(arr) == 0:
+        empty = np.zeros(0, dtype=np.float64)
+        return {"t": empty, "luma": empty, "hf": empty, "_frames": arr}
+    luma = arr.mean(axis=(1, 2))
+    hf = np.abs(np.diff(arr, axis=1)).mean(axis=(1, 2)) + np.abs(np.diff(arr, axis=2)).mean(
+        axis=(1, 2)
+    )
+    t = np.arange(len(arr), dtype=np.float64) / SLOW_FPS
+    return {"t": t, "luma": luma, "hf": hf, "_frames": arr}
+
+
+def ramp_to_black(t: np.ndarray, luma: np.ndarray) -> dict[str, Any]:
+    """Type the way a window of luma arrives at its final frame.
+
+    Three steps, in the order that survives real footage: find the black the
+    window ends on (relative to the encode's own black, not a fixed level);
+    walk back over the sustained descent that reached it; then put the ramp's
+    start where luma left the level it had been holding. A hard cut crosses
+    that in one frame, a dissolve or a fade takes seconds. Measured against the
+    human Taurus tail, whose stage shot sits at luma 26 -- an absolute "still
+    lit" threshold called that dissolve dim and put its start ten seconds early.
+    """
+    if len(t) < 3:
+        return {"kind": "unknown", "frames_sampled": int(len(t))}
+    final = float(luma[-1])
+    fps = (len(t) - 1) / float(t[-1] - t[0]) if t[-1] > t[0] else SLOW_FPS
+    doc: dict[str, Any] = {
+        "frames_sampled": int(len(t)),
+        "final_luma": round(final, 2),
+        "max_luma": round(float(luma.max()), 2),
+    }
+    if final > SLOW_DARK_LUMA:
+        doc["kind"] = "ends_lit"
+        return doc
+
+    black_level = max(SLOW_BLACK_FLOOR, final + SLOW_BLACK_MARGIN)
+    black_i = len(luma) - 1
+    while black_i > 0 and luma[black_i - 1] <= black_level:
+        black_i -= 1
+    doc["black_level"] = round(black_level, 2)
+    doc["black_at_sec"] = round(float(t[black_i]), 3)
+    doc["black_hold_sec"] = round(float(t[-1] - t[black_i]), 3)
+    if black_i == 0 or float(luma.max()) <= SLOW_DARK_LUMA:
+        doc["kind"] = "black_window"
+        return doc
+
+    # the sustained descent that reached black
+    k = max(int(round(0.15 * fps)), 1)
+    tol = max(int(round(SLOW_SLOPE_TOL_SEC * fps)), 1)
+    slope = np.zeros(len(luma), dtype=np.float64)
+    for i in range(len(luma)):
+        lo, hi = max(i - k, 0), min(i + k, len(luma) - 1)
+        slope[i] = (luma[hi] - luma[lo]) / max((hi - lo) / fps, 1e-6)
+    descent_i, viol, j = black_i, 0, black_i
+    while j > 0:
+        j -= 1
+        if slope[j] <= -SLOW_SLOPE_MIN:
+            descent_i, viol = j, 0
+        else:
+            viol += 1
+            if viol > tol:
+                break
+
+    plateau_lo = max(descent_i - int(round(SLOW_PLATEAU_SEC * fps)), 0)
+    plateau = float(luma[plateau_lo : descent_i + 1].max())
+    top = SLOW_RAMP_TOP_SHARE * plateau
+    holding = [i for i in range(descent_i, black_i + 1) if luma[i] >= top]
+    ramp_i = holding[-1] if holding else descent_i
+
+    steps = np.diff(luma[ramp_i : black_i + 1])
+    descending = float((steps <= 0.0).mean()) if len(steps) else 1.0
+    ramp = float(t[black_i] - t[ramp_i])
+    doc.update(
+        {
+            "descent_start_sec": round(float(t[descent_i]), 3),
+            "plateau_luma": round(plateau, 2),
+            "ramp_start_sec": round(float(t[ramp_i]), 3),
+            "ramp_start_luma": round(float(luma[ramp_i]), 2),
+            "ramp_sec": round(ramp, 3),
+            "monotone_share": round(descending, 3),
+        }
+    )
+    if ramp < SLOW_MIN_RAMP_SEC:
+        doc["kind"] = "hard_to_black"
+    elif ramp <= SLOW_MAX_RAMP_SEC and descending >= SLOW_MONOTONE_SHARE:
+        doc["kind"] = "dissolve_to_black"
+    else:
+        doc["kind"] = "dim_to_black"
+    return doc
+
+
+def slow_transition_scan(
+    track: dict[str, np.ndarray],
+    shots: list[tuple[float, float]],
+    transitions: list[dict[str, Any]],
+    duration: float,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Fit trailing windows; return slow-ramp events plus the clip's ending.
+
+    Per-shot candidates are any shot long enough to hide a multi-second ramp
+    and any shot whose closing scene-detect boundary was weak -- a soft
+    boundary is exactly what a dissolve leaves behind. The ending is fitted
+    against the clip's own last seconds rather than the last shot, because a
+    ramp into black usually trips scene detection somewhere along it and the
+    black then reads as a shot of its own.
+    """
+    t, luma = track["t"], track["luma"]
+    if len(t) == 0:
+        return [], {"kind": "unknown", "frames_sampled": 0}
+
+    tail_start = max(duration - SLOW_ENDING_SEC, 0.0)
+    sel = t >= tail_start
+    ending = ramp_to_black(t[sel], luma[sel])
+    ending["window"] = [round(tail_start, 3), round(duration, 3)]
+
+    weak_end = set()
+    for i in range(len(shots) - 1):
+        doc = transitions[i] if i < len(transitions) else {}
+        peak = float(doc.get("peak_frame_delta", 0.0) or 0.0)
+        soft = doc.get("type") in {"dissolve", "fade", "none", "unknown"}
+        if soft or peak < SLOW_WEAK_PEAK_DELTA:
+            weak_end.add(i)
+
+    events: list[dict[str, Any]] = []
+    for i, (start, end) in enumerate(shots):
+        if not (i in weak_end or (end - start) >= SLOW_MIN_SHOT_SEC):
+            continue
+        win_start = max(end - SLOW_TAIL_SEC, start)
+        sel = (t >= win_start) & (t <= end)
+        doc = ramp_to_black(t[sel], luma[sel])
+        if doc["kind"] not in {"dissolve_to_black", "dim_to_black"}:
+            continue
+        doc["shot_index"] = i + 1
+        doc["window"] = [round(win_start, 3), round(end, 3)]
+        doc["is_last_shot"] = i == len(shots) - 1
+        events.append(doc)
+    return events, ending
+
+
+def ghost_scan(
+    track: dict[str, np.ndarray],
+    shots: list[tuple[float, float]],
+    exclude: tuple[float, float] | None = None,
+) -> list[dict[str, Any]]:
+    """Mid-shot blended double-images: an hf dip whose frames are linear mixes.
+
+    Scene detection sees one shot; the eye (and the critics, in the R1
+    thumbnails) sees two pictures on screen at once. The signature is narrow:
+    high-frequency energy drops well under the shot's own median while the
+    frames in the dip are explained as a blend of the frames either side.
+    """
+    t, hf, frames = track["t"], track["hf"], track["_frames"]
+    if len(t) == 0:
+        return []
+    half = max(int(round(GHOST_HALF_SEC * SLOW_FPS)), 1)
+    step = max(int(round(GHOST_STEP_SEC * SLOW_FPS)), 1)
+    merge = max(int(round(GHOST_MERGE_SEC * SLOW_FPS)), step)
+    events: list[dict[str, Any]] = []
+    for si, (start, end) in enumerate(shots):
+        if end - start < SLOW_MIN_SHOT_SEC or len(events) >= GHOST_MAX_EVENTS:
+            continue
+        idx = np.flatnonzero((t >= start) & (t <= end))
+        if len(idx) < 2 * half + 1:
+            continue
+        med = float(np.median(hf[idx])) or 1.0
+        hits: list[dict[str, Any]] = []
+        for i in range(int(idx[0]) + half, int(idx[-1]) - half + 1, step):
+            if exclude and exclude[0] <= float(t[i]) <= exclude[1]:
+                continue  # the ending ramp is typed by the slow pass, not here
+            pre, post, mid = frames[i - half], frames[i + half], frames[i]
+            if min(float(pre.mean()), float(post.mean())) <= SLOW_DARK_LUMA:
+                continue  # a ramp into or out of black is the ending pass's job
+            # structural change only: a stage light dimming makes every frame
+            # a perfect "blend" of its neighbours without any double image
+            change = float(np.abs((post - post.mean()) - (pre - pre.mean())).mean())
+            if change < GHOST_MIN_CHANGE:
+                continue
+            resid, alpha = blend_fit(pre, post, mid)
+            if resid > GHOST_BLEND_RESIDUAL or not (
+                GHOST_ALPHA_BAND[0] <= alpha <= GHOST_ALPHA_BAND[1]
+            ):
+                continue
+            hits.append(
+                {
+                    "i": i,
+                    "resid": resid,
+                    "alpha": alpha,
+                    "change": change,
+                    "hf_ratio": float(hf[i]) / med,
+                }
+            )
+        for group in group_hits(hits, merge):
+            first, last = group[0]["i"], group[-1]["i"]
+            events.append(
+                {
+                    "shot_index": si + 1,
+                    "start": round(float(t[max(first - half, 0)]), 3),
+                    "end": round(float(t[min(last + half, len(t) - 1)]), 3),
+                    "duration": round(float(t[min(last + half, len(t) - 1)] - t[first - half]), 3),
+                    "blend_residual": round(max(g["resid"] for g in group), 3),
+                    "alpha_range": [
+                        round(min(g["alpha"] for g in group), 3),
+                        round(max(g["alpha"] for g in group), 3),
+                    ],
+                    "structure_change": round(max(g["change"] for g in group), 2),
+                    "hf_dip_ratio": round(min(g["hf_ratio"] for g in group), 3),
+                    "kind": "blend_ghost",
+                }
+            )
+            if len(events) >= GHOST_MAX_EVENTS:
+                break
+    return events
+
+
+def ending_ramp(ending: dict[str, Any]) -> tuple[float, float] | None:
+    """The span the ending pass owns, so the ghost scan does not re-report it."""
+    if "black_at_sec" not in ending:
+        return None
+    start = ending.get("descent_start_sec", ending.get("ramp_start_sec"))
+    if start is None:
+        return None
+    return float(start), float(ending["black_at_sec"])
+
+
+def group_hits(hits: list[dict[str, Any]], merge: int) -> list[list[dict[str, Any]]]:
+    """Split hit frames into runs separated by more than `merge` frames."""
+    groups: list[list[dict[str, Any]]] = []
+    for hit in hits:
+        if groups and hit["i"] - groups[-1][-1]["i"] <= merge:
+            groups[-1].append(hit)
+        else:
+            groups.append([hit])
+    return groups
+
+
+# --------------------------------------------------------------------------
 # loudness curve
 
 RMS_RE = re.compile(r"pts_time:([0-9]+\.?[0-9]*)\s*\n[^\n]*RMS_level=(-?[0-9]+\.?[0-9]*|-inf)")
@@ -612,6 +949,217 @@ def loudness_curve(clip: Path) -> list[dict[str, float]] | None:
         rms = -100.0 if rms_str == "-inf" else float(rms_str)
         points.append({"t": round(float(t_str), 2), "rms_db": round(rms, 2)})
     return points or None
+
+
+# --------------------------------------------------------------------------
+# audio class track
+
+
+def decode_mono(clip: Path) -> np.ndarray:
+    """Decode the clip's audio to mono float32 PCM at AUDIO_RATE."""
+    proc = subprocess.run(
+        [
+            "ffmpeg",
+            "-v",
+            "error",
+            "-nostdin",
+            "-i",
+            str(clip),
+            "-vn",
+            "-ac",
+            "1",
+            "-ar",
+            str(AUDIO_RATE),
+            "-f",
+            "f32le",
+            "-",
+        ],
+        capture_output=True,
+        check=False,
+    )
+    if not proc.stdout:
+        return np.zeros(0, dtype=np.float64)
+    usable = len(proc.stdout) - (len(proc.stdout) % 4)
+    return np.frombuffer(proc.stdout[:usable], dtype=np.float32).astype(np.float64)
+
+
+def audio_features(x: np.ndarray) -> list[dict[str, float]]:
+    """Per-window RMS, spectral flatness, centroid and high-band share."""
+    length = int(AUDIO_WIN_SEC * AUDIO_RATE)
+    hop = max(int(AUDIO_HOP_SEC * AUDIO_RATE), 1)
+    if len(x) < length:
+        return []
+    win = np.hanning(length)
+    freqs = np.fft.rfftfreq(length, 1.0 / AUDIO_RATE)
+    band = (freqs >= AUDIO_BAND[0]) & (freqs <= AUDIO_BAND[1])
+    high = (freqs >= AUDIO_HF_BAND[0]) & (freqs <= AUDIO_HF_BAND[1])
+    out: list[dict[str, float]] = []
+    for start in range(0, len(x) - length + 1, hop):
+        seg = x[start : start + length]
+        rms = float(np.sqrt((seg**2).mean() + 1e-20))
+        power = (np.abs(np.fft.rfft(seg * win)) + 1e-12) ** 2
+        pb = power[band]
+        flat = float(np.exp(np.log(pb).mean()) / pb.mean())
+        centroid = float((freqs[band] * pb).sum() / pb.sum())
+        out.append(
+            {
+                "t": round(start / AUDIO_RATE, 2),
+                "rms_db": round(20.0 * float(np.log10(rms + 1e-12)), 2),
+                "flatness": round(flat, 5),
+                "centroid_hz": round(centroid, 1),
+                "hf_share": round(float(power[high].sum() / pb.sum()), 4),
+            }
+        )
+    return out
+
+
+def grow_from_seeds(seed: np.ndarray, hold: np.ndarray, bridge: int) -> np.ndarray:
+    """Expand each seed window outwards over hold windows, bridging short dips."""
+    out = seed.copy()
+    n = len(seed)
+    for i in np.flatnonzero(seed):
+        for step in (-1, 1):
+            j = int(i) + step
+            pending: list[int] = []
+            while 0 <= j < n:
+                if hold[j]:
+                    out[j] = True
+                    for p in pending:
+                        out[p] = True
+                    pending = []
+                else:
+                    pending.append(j)
+                    if len(pending) > bridge:
+                        break
+                j += step
+    return out
+
+
+def classify_audio(features: list[dict[str, float]]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """applause | music | silence per window, plus the thresholds used.
+
+    Applause is decided first and by spectrum, because the case that matters
+    is a fading crowd under a tail dissolve: it is quiet enough to trip any
+    level test, and calling that "silence" is the exact mistake G16 is about.
+    Silence is what is left when a window is at the clip's own room tone.
+    """
+    if not features:
+        return [], {}
+    rms = np.array([f["rms_db"] for f in features], dtype=np.float64)
+    flat = np.array([f["flatness"] for f in features], dtype=np.float64)
+    cent = np.array([f["centroid_hz"] for f in features], dtype=np.float64)
+
+    quiet_band = float(np.percentile(rms, AUDIO_QUIET_PERCENTILE))
+    floor_db = float(rms.min())
+    has_floor = floor_db <= quiet_band - AUDIO_FLOOR_GAP_DB
+    silence_at = (
+        min(floor_db + AUDIO_SILENCE_MARGIN_DB, quiet_band - AUDIO_SILENCE_HEADROOM_DB)
+        if has_floor
+        else float("-inf")
+    )
+    seed = (flat >= AUDIO_SEED_FLAT) & (cent >= AUDIO_SEED_CENTROID)
+    hold = (flat >= AUDIO_HOLD_FLAT) & (cent >= AUDIO_HOLD_CENTROID)
+    bridge = max(int(round(AUDIO_BRIDGE_SEC / AUDIO_HOP_SEC)), 1)
+    applause = grow_from_seeds(seed, hold, bridge)
+
+    raw = [
+        "applause" if applause[i] else ("silence" if rms[i] <= silence_at else "music")
+        for i in range(len(features))
+    ]
+    # de-flicker: one window disagreeing with identical neighbours is a
+    # measurement wobble, not a change in what the room is doing. Applause
+    # windows are left alone -- the grow pass already decided those.
+    smooth = list(raw)
+    for i in range(1, len(raw) - 1):
+        if raw[i] == "applause":
+            continue
+        if raw[i] != raw[i - 1] and raw[i - 1] == raw[i + 1]:
+            smooth[i] = raw[i - 1]
+
+    track = [{**f, "class": smooth[i]} for i, f in enumerate(features)]
+    thresholds = {
+        "window_sec": AUDIO_WIN_SEC,
+        "hop_sec": AUDIO_HOP_SEC,
+        "band_hz": list(AUDIO_BAND),
+        "silence_at_or_below_db": round(silence_at, 2) if has_floor else None,
+        "room_tone_found": bool(has_floor),
+        "clip_min_rms_db": round(floor_db, 2),
+        "clip_quiet_band_db": round(quiet_band, 2),
+        "applause_seed": f"flatness >= {AUDIO_SEED_FLAT} and centroid >= {AUDIO_SEED_CENTROID}",
+        "applause_hold": f"flatness >= {AUDIO_HOLD_FLAT} and centroid >= {AUDIO_HOLD_CENTROID}",
+        "applause_seed_windows": int(seed.sum()),
+        "bridge_sec": AUDIO_BRIDGE_SEC,
+    }
+    return track, thresholds
+
+
+def refine_onset(x: np.ndarray, t_win: float) -> float:
+    """Sharpen a class boundary to the loudness edge nearest it.
+
+    The class grid is a 1-s window, so a boundary lands within a second of the
+    truth; the edge that caused it is usually a step in level (a chord ending,
+    a room opening into music). Returns the refined time, or the input if
+    nothing beats the grid.
+    """
+    step = max(int(AUDIO_REFINE_STEP_SEC * AUDIO_RATE), 1)
+    lo = max(int((t_win - AUDIO_REFINE_SEC) * AUDIO_RATE), 0)
+    hi = min(int((t_win + AUDIO_REFINE_SEC) * AUDIO_RATE), len(x))
+    span = max(int(0.25 * AUDIO_RATE), step)
+    best_t, best_d = t_win, 0.0
+    for s in range(lo, hi - step + 1, step):
+        pre = x[max(s - span, 0) : s]
+        post = x[s : s + span]
+        if len(pre) < step or len(post) < step:
+            continue
+        a = 20.0 * float(np.log10(np.sqrt((pre**2).mean()) + 1e-12))
+        b = 20.0 * float(np.log10(np.sqrt((post**2).mean()) + 1e-12))
+        if abs(b - a) > best_d:
+            best_d, best_t = abs(b - a), s / AUDIO_RATE
+    return round(best_t, 2) if best_d > 0.0 else t_win
+
+
+def audio_class_spans(
+    track: list[dict[str, Any]], samples: np.ndarray | None = None
+) -> list[dict[str, Any]]:
+    """Collapse the per-window classes into contiguous runs.
+
+    Each run after the first also carries `start_refined`: the class grid puts
+    a boundary within a window of the truth, and the loudness edge inside that
+    window says where it actually happened.
+    """
+    spans: list[dict[str, Any]] = []
+    for row in track:
+        end = round(float(row["t"]) + AUDIO_WIN_SEC, 2)
+        if spans and spans[-1]["class"] == row["class"]:
+            spans[-1]["end"] = end
+        else:
+            spans.append({"class": row["class"], "start": round(float(row["t"]), 2), "end": end})
+    for i, span in enumerate(spans):
+        if i + 1 < len(spans):  # overlapping windows: a run ends where the next begins
+            span["end"] = spans[i + 1]["start"]
+        span["duration"] = round(span["end"] - span["start"], 2)
+        if i and samples is not None and len(samples):
+            span["start_refined"] = refine_onset(samples, float(span["start"]))
+    return spans
+
+
+def audio_class_summary(track: list[dict[str, Any]], spans: list[dict[str, Any]]) -> dict[str, Any]:
+    totals = {name: 0.0 for name in ("music", "applause", "silence")}
+    for row in track:
+        totals[str(row["class"])] += AUDIO_HOP_SEC
+    firsts: dict[str, Any] = {}
+    for name in ("music", "applause", "silence"):
+        hit = next((s for s in spans if s["class"] == name), None)
+        firsts[f"first_{name}_sec"] = (
+            hit.get("start_refined", hit["start"]) if hit is not None else None
+        )
+    return {
+        "windows": len(track),
+        "seconds_by_class": {k: round(v, 2) for k, v in totals.items()},
+        **firsts,
+        "final_class": track[-1]["class"] if track else None,
+        "spans": len(spans),
+    }
 
 
 # --------------------------------------------------------------------------
@@ -870,6 +1418,14 @@ def build_label(
 
     track = motion_track(clip)
     transitions = [classify_transition(clip, cut, fps, duration) for cut in cuts]
+
+    # v3: the same boundaries again at multi-second scale, where a dissolve
+    # the +/-12-frame window cannot hold is the obvious shape.
+    slow = luma_track(clip)
+    slow_events, ending = slow_transition_scan(slow, shots, transitions, duration)
+    tail_ramp = ending_ramp(ending)
+    ghosts = ghost_scan(slow, shots, exclude=tail_ramp)
+
     motion_classes: dict[str, int] = {}
     shot_docs = []
     for i, (s, e) in enumerate(shots):
@@ -909,7 +1465,19 @@ def build_label(
             for i, cut in enumerate(cuts)
         ],
         "shots": shot_docs,
+        "ending": ending,
+        "slow_transitions": slow_events,
+        "ghosting": ghosts,
     }
+    samples = decode_mono(clip)
+    features = audio_features(samples)
+    audio_track, audio_thresholds = classify_audio(features)
+    if audio_track:
+        spans = audio_class_spans(audio_track, samples)
+        cuts_doc["audio_class_1s"] = audio_track
+        cuts_doc["audio_class_spans"] = spans
+        cuts_doc["audio_class_thresholds"] = audio_thresholds
+        cuts_doc["audio_class_summary"] = audio_class_summary(audio_track, spans)
     curve = loudness_curve(clip)
     if curve:
         cuts_doc["loudness_1s_rms_db"] = curve
@@ -941,6 +1509,12 @@ def build_label(
         "cut_strips": len(strips),
         "transition_types": cuts_doc["transition_types"],
         "motion_classes": motion_classes,
+        "ending": {
+            k: ending.get(k) for k in ("kind", "black_at_sec", "ramp_sec", "black_hold_sec")
+        },
+        "slow_transitions": len(slow_events),
+        "ghost_events": len(ghosts),
+        "audio_classes": cuts_doc.get("audio_class_summary", {}).get("seconds_by_class"),
         "files": ["clip.mp4", "cuts.json", *sheets, *strips],
     }
 
@@ -1054,7 +1628,7 @@ def main(argv: list[str] | None = None) -> int:
     (out / "assignment.json").write_text(json.dumps(assignment, indent=2), encoding="utf-8")
 
     manifest = {
-        "pack_version": 2,
+        "pack_version": 3,
         "kind": "blind_ab_comparison",
         "scene_threshold": SCENE_THRESHOLD,
         "contact_sheet": {
@@ -1099,6 +1673,53 @@ def main(argv: list[str] | None = None) -> int:
                 "fade": f"boundary passes through black (luma <= {TRANS_BLACK_LUMA})",
                 "none": "no frame-pair change above the decode noise floor",
             },
+            "blind_spot": f"cannot see a ramp longer than {2 * TRANS_HALF_FRAMES + 1} frames "
+            "-- see slow_transition",
+        },
+        "slow_transition": {
+            "method": f"mean luma over a {SLOW_W}x{SLOW_H} grey track at {SLOW_FPS} fps; "
+            "walk back from the closing black run to the last frame holding picture",
+            "ending_window_sec": SLOW_ENDING_SEC,
+            "per_shot_window_sec": SLOW_TAIL_SEC,
+            "classes": {
+                "hard_to_black": f"reaches black in under {SLOW_MIN_RAMP_SEC} s",
+                "dissolve_to_black": f"monotone ramp to black over {SLOW_MIN_RAMP_SEC}-"
+                f"{SLOW_MAX_RAMP_SEC} s (>= {SLOW_MONOTONE_SHARE} of steps descending)",
+                "dim_to_black": "arrives at black but not as one clean ramp",
+                "ends_lit": "the window's last frame still holds picture",
+                "black_window": "no lit frame in the window at all",
+            },
+            "reported_fields": "black_at_sec, ramp_start_sec, ramp_sec, black_hold_sec",
+            "ghosting": {
+                "method": f"mid-shot frames explained as a linear mix of the frames "
+                f"+/-{GHOST_HALF_SEC} s away (a double image inside one detected shot); "
+                "level-only change is removed before the test, and ramps into black "
+                "are left to the ending pass",
+                "blend_residual_at_or_below": GHOST_BLEND_RESIDUAL,
+                "alpha_band": list(GHOST_ALPHA_BAND),
+                "structure_change_at_or_above": GHOST_MIN_CHANGE,
+                "hf_dip_ratio": "reported as evidence, not required",
+            },
+        },
+        "audio_class": {
+            "method": "1-s windows of mono PCM; spectral flatness, centroid and RMS "
+            f"over {AUDIO_BAND[0]:.0f}-{AUDIO_BAND[1]:.0f} Hz",
+            "classes": {
+                "music": "tonal -- neither of the other two",
+                "applause": f"a window at flatness >= {AUDIO_SEED_FLAT} with centroid "
+                f">= {AUDIO_SEED_CENTROID:.0f} Hz, grown over neighbours holding "
+                f"flatness >= {AUDIO_HOLD_FLAT} and centroid >= {AUDIO_HOLD_CENTROID:.0f} Hz",
+                "silence": "within "
+                f"{AUDIO_SILENCE_MARGIN_DB} dB of the clip's own room-tone floor, where a "
+                f"floor exists (its quietest window {AUDIO_FLOOR_GAP_DB} dB or more under "
+                f"its {AUDIO_QUIET_PERCENTILE:.0f}th-percentile level)",
+            },
+            "order": "applause is decided first: a fading crowd is quiet enough to trip "
+            "any level test, and calling that silence is the mistake this pass exists for",
+            "smoothing": "a lone window between two identical neighbours takes their class",
+            "onsets": "each run carries start_refined -- the loudness edge inside the "
+            "window that moved the class",
+            "written_to": "cuts.json: audio_class_1s, audio_class_spans, audio_class_summary",
         },
         "labels": label_entries,
         "sealed_envelope": "assignment.json",
