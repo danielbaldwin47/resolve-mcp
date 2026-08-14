@@ -137,3 +137,20 @@ def test_ffmpeg_is_a_bare_name_on_path_until_told_otherwise() -> None:
     assert Config.from_env({"RESOLVE_MCP_FFMPEG": r"D:\tools\ffmpeg.exe"}).ffmpeg == (
         r"D:\tools\ffmpeg.exe"
     )
+
+
+def test_hardware_decode_probes_by_default_and_is_overridable() -> None:
+    """"auto" probes the binary, so the live box gets NVDEC and a box without a card still
+    runs (#202); the overrides exist to force the flag or turn it off without a reinstall.
+    """
+    assert Config.from_env({}).ffmpeg_hwaccel == "auto"
+    assert Config.from_env({"RESOLVE_MCP_FFMPEG_HWACCEL": "off"}).ffmpeg_hwaccel == "off"
+    assert Config.from_env({"RESOLVE_MCP_FFMPEG_HWACCEL": "cuda"}).ffmpeg_hwaccel == "cuda"
+
+
+def test_the_hardware_decode_setting_survives_the_env_round_trip() -> None:
+    """A detached worker rebuilds config from ``to_env``; a field it dropped would silently
+    decode in software in exactly the process that does the long decodes.
+    """
+    config = Config.from_env({"RESOLVE_MCP_FFMPEG_HWACCEL": "off"})
+    assert Config.from_env(config.to_env()).ffmpeg_hwaccel == "off"

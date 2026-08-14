@@ -182,6 +182,7 @@ def test_a_config_survives_the_trip_through_the_environment() -> None:
         log_level="DEBUG",
         allow_any_python=True,
         ffmpeg="D:/tools/ffmpeg.exe",
+        ffmpeg_hwaccel="off",
         audio_separator="D:/tools/audio-separator.exe",
         stem_model="some-stem-model.ckpt",
         drum_model="some-drum-model.ckpt",
@@ -1353,6 +1354,8 @@ def test_a_separation_long_enough_to_pass_the_ceiling_still_owns_its_directory(
     stamps: list[float] = []
 
     def watching(argv: Sequence[str], on_line: Callable[[str], None]) -> int:
+        if "--env_info" in argv:  # the build probe (#202) is not a pass
+            return separating(argv, on_line)
         out_dir = Path(argv[list(argv).index("--output_dir") + 1])
         marker = out_dir.parent / CLAIM
         held = json.loads(marker.read_text(encoding="utf-8"))
@@ -1381,6 +1384,8 @@ def test_a_finished_separation_holds_the_claim_for_the_passes_and_leaves_none_be
     held: list[bool] = []
 
     def watching(argv: Sequence[str], on_line: Callable[[str], None]) -> int:
+        if "--env_info" in argv:  # the build probe (#202) is not a pass
+            return separating(argv, on_line)
         out_dir = Path(argv[list(argv).index("--output_dir") + 1])
         held.append((out_dir.parent / CLAIM).exists())
         return separating(argv, on_line)

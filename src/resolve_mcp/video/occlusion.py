@@ -135,7 +135,7 @@ def scan_occlusion(
     raw = config.analysis_dir / f"{stem}-{os.getpid()}-{uuid4().hex[:8]}.gray"
     progress(0.1, f"decoding {duration:.0f}s of {source.name} at {rate:g} samples a second")
     try:
-        ffmpeg.sample(
+        sampled = ffmpeg.sample(
             source.path,
             raw,
             start_seconds=source.seek_seconds(first),
@@ -166,6 +166,8 @@ def scan_occlusion(
         "fps": source.fps,
         "sample_fps": rate,
         "threshold": level,
+        # Which device decoded the range, and why not the GPU when it was the CPU (#202).
+        "decode": sampled.decode,
         "grid": {"width": blocking.GRID_WIDTH, "height": blocking.GRID_HEIGHT},
         # What this shot covers even unobstructed: the scan's own floor, subtracted from
         # every score. A high baseline is worth seeing — it means the framing itself is tight.
@@ -204,6 +206,7 @@ def _gist(
         "range": catalog["range"],
         "sample_fps": catalog["sample_fps"],
         "threshold": catalog["threshold"],
+        "decode": catalog["decode"],
         "baseline": catalog["baseline"],
         "samples": len(samples),
         "blocked_samples": len(blocked),

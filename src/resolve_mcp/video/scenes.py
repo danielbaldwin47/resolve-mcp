@@ -85,10 +85,10 @@ def scan_scene_cuts(
     threshold = float(params["threshold"])
 
     progress(0.1, "decoding the clip to find scene cuts")
-    printed = ffmpeg.scan(source.path, threshold, runner=runner, config=config)
+    scanned = ffmpeg.scan(source.path, threshold, runner=runner, config=config)
 
     progress(0.9, "cataloguing the cuts")
-    cuts = _cut_frames(printed, source)
+    cuts = _cut_frames(scanned.printed, source)
     shots = _shots(cuts, source)
     target = config.analysis_dir / f"{slug(source.name, 'scenes')}-{key[:12]}.scenes.json"
     catalog = {
@@ -98,6 +98,9 @@ def scan_scene_cuts(
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "threshold": threshold,
         "fps": source.fps,
+        # Which device decoded the pass, and why not the GPU when it was the CPU (#202):
+        # the whole file is decoded here, so a silent software pass is minutes, not noise.
+        "decode": scanned.decode,
         # The bounds the shots below are cut against. An out of null is why the last shot is
         # missing: Resolve reported no End for this clip, so where the tail stops is unknown.
         "bounds": source.bounds,
@@ -118,6 +121,7 @@ def _gist(catalog: dict[str, Any], target: Path, shots: list[dict[str, Any]]) ->
         "path": str(target),
         "clip": catalog["clip"],
         "threshold": catalog["threshold"],
+        "decode": catalog["decode"],
         "cuts": len(catalog["cuts"]),
         "shots": len(shots),
         "first_cuts": catalog["cuts"][:INLINE_CUTS],

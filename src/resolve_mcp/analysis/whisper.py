@@ -58,7 +58,9 @@ def _model(name: str) -> Any:
     cuda.prepare()
     device, compute_type = config.whisper_device, config.whisper_compute_type
     try:
-        return _build(name, device, compute_type)
+        model = _build(name, device, compute_type)
+        _announce_device(name, device, model)
+        return model
     except TranscriberUnavailableError:
         raise
     except Exception as exc:  # noqa: BLE001 - the backend raises its own unrelated types
@@ -72,6 +74,27 @@ def _model(name: str) -> Any:
             fix=_load_fix(device, compute_type),
             detail={"model": name, "device": device, "compute_type": compute_type},
         ) from exc
+
+
+def _announce_device(name: str, requested: str, model: Any) -> None:
+    """Say which device ``auto`` actually landed on — a quiet CPU resolve is the G10 bug (#202).
+
+    CTranslate2 exposes the device the loaded model sits on; a backend that does not is
+    left unannounced rather than guessed at.
+    """
+    resolved = getattr(getattr(model, "model", None), "device", None)
+    if resolved is None:
+        return
+    if str(resolved) == "cpu" and requested != "cpu":
+        log.warning(
+            "faster-whisper %s: device=%r resolved to the CPU — transcription runs at CPU "
+            "speed. The analysis extra ships the CUDA runtime; check `uv sync --extra "
+            "analysis` ran against this venv.",
+            name,
+            requested,
+        )
+    else:
+        log.info("faster-whisper %s transcribes on %s", name, resolved)
 
 
 def _load_fix(device: str, compute_type: str) -> str:

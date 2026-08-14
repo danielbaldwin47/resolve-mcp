@@ -43,7 +43,7 @@ from ..jobs.runner import JobOutput, Progress, start_job
 from ..logging_config import get_logger
 from . import applause as applause_module
 from . import beats as beats_module
-from . import halves, music
+from . import device, halves, music
 from . import solos as solos_module
 
 log = get_logger("analysis")
@@ -364,6 +364,11 @@ def analyze(
             config,
         )
         artifacts.append(Path(result[TUNES]["path"]))
+        # Which torch stack the applause model runs on (#202); same bargain as the music
+        # job's note — a cached curve ran nothing, and the record still says what would run.
+        note = device.torch_note()
+        if note is not None:
+            result["torch"] = note
 
     if settings[SOLOS]:
         progress(0.6, "measuring the stems")

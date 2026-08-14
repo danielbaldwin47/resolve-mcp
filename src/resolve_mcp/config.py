@@ -17,6 +17,12 @@ DEFAULT_SCRIPT_LIB = Path("C:/Program Files/Blackmagic Design/DaVinci Resolve/fu
 DEFAULT_LOG_LEVEL = "INFO"
 CACHE_DIR_NAME = "resolve-mcp"
 DEFAULT_FFMPEG = "ffmpeg"
+# Hardware decode for the video routes (#202). "auto" asks the ffmpeg binary what it
+# supports and uses NVDEC when it lists cuda, so the live box decodes on the card and a
+# box without one still runs; "cuda" forces the flag (a wrong box fails loudly rather
+# than quietly decoding in software); "off" never passes it. Whatever is chosen, the
+# route reports the device it decoded on — a silent CPU decode is the G10 failure.
+DEFAULT_FFMPEG_HWACCEL = "auto"
 DEFAULT_AUDIO_SEPARATOR = "audio-separator"
 DEFAULT_STEM_MODEL = "htdemucs_ft.yaml"
 # The name audio-separator 0.44.5 lists for the six-stem MDX23C drum model; the
@@ -51,6 +57,7 @@ class Config:
     log_level: str
     allow_any_python: bool = False
     ffmpeg: str = DEFAULT_FFMPEG
+    ffmpeg_hwaccel: str = DEFAULT_FFMPEG_HWACCEL
     audio_separator: str = DEFAULT_AUDIO_SEPARATOR
     stem_model: str = DEFAULT_STEM_MODEL
     drum_model: str = DEFAULT_DRUM_MODEL
@@ -73,6 +80,7 @@ class Config:
             log_level=env.get("RESOLVE_MCP_LOG_LEVEL") or DEFAULT_LOG_LEVEL,
             allow_any_python=(env.get(BYPASS_ENV) or "").lower() in TRUTHY,
             ffmpeg=env.get("RESOLVE_MCP_FFMPEG") or DEFAULT_FFMPEG,
+            ffmpeg_hwaccel=env.get("RESOLVE_MCP_FFMPEG_HWACCEL") or DEFAULT_FFMPEG_HWACCEL,
             audio_separator=env.get("RESOLVE_MCP_AUDIO_SEPARATOR") or DEFAULT_AUDIO_SEPARATOR,
             stem_model=env.get("RESOLVE_MCP_STEM_MODEL") or DEFAULT_STEM_MODEL,
             drum_model=env.get("RESOLVE_MCP_DRUM_MODEL") or DEFAULT_DRUM_MODEL,
@@ -102,6 +110,7 @@ class Config:
             "RESOLVE_MCP_CACHE": str(self.cache_dir),
             "RESOLVE_MCP_LOG_LEVEL": self.log_level,
             "RESOLVE_MCP_FFMPEG": self.ffmpeg,
+            "RESOLVE_MCP_FFMPEG_HWACCEL": self.ffmpeg_hwaccel,
             "RESOLVE_MCP_AUDIO_SEPARATOR": self.audio_separator,
             "RESOLVE_MCP_STEM_MODEL": self.stem_model,
             "RESOLVE_MCP_DRUM_MODEL": self.drum_model,

@@ -9,17 +9,118 @@ ends the filter and starts the next: ``min(iw,1568)`` would be read as a filter 
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import Any, NamedTuple
 
 from ..config import Config, get_config
-from ..errors import FrameGrabError, OcclusionScanError, SceneDetectionError
-from ..ffmpeg import Runner, invoke, refused
+from ..errors import FrameGrabError, InvalidRequestError, OcclusionScanError, SceneDetectionError
+from ..ffmpeg import Completed, Runner, hwaccels, invoke, refused
 from ..logging_config import get_logger
 
 log = get_logger("video")
 
 JPEG_QUALITY = "3"
 """ffmpeg's ``-q:v`` scale, 2 (best) to 31. Three is visually clean at a fraction of 2's size."""
+
+CUDA_FLAGS = ("-hwaccel", "cuda")
+"""NVDEC, without ``-hwaccel_output_format cuda``: the frames decode on the card and come
+back to system memory, which is the shape every consumer here wants — all of them are numpy
+or JPEG passes over pixels, so decoded frames have to land in RAM either way."""
+
+HWACCEL_MODES = ("auto", "cuda", "off")
+
+
+class Decode(NamedTuple):
+    """The decode this box gets: which flags to pass, and the report the record carries.
+
+    ``reason`` is only ever set on a software decode — it is the answer to "why did this
+    not use the GPU", which is the question G10 cost a session to ask (#202).
+    """
+
+    flags: tuple[str, ...]
+    device: str  # "cuda" | "cpu"
+    reason: str | None = None
+
+    def report(self) -> dict[str, Any]:
+        return {"device": self.device, "reason": self.reason}
+
+
+_announced: set[tuple[str, str]] = set()
+"""Which (executable, device) choices have already been logged, so a session's log says
+where decodes run once, not once per frame grab."""
+
+
+def reset_decode_announcements() -> None:
+    _announced.clear()
+
+
+def choose_decode(config: Config | None = None, runner: Runner | None = None) -> Decode:
+    """What ``config.ffmpeg_hwaccel`` means on this box, probed rather than assumed.
+
+    ``auto`` uses NVDEC when the binary lists cuda and degrades to software when it does
+    not; ``cuda`` forces the flag so a box that cannot honour it fails loudly; ``off``
+    never decodes on the card. Every software choice carries its reason, and each choice
+    is logged once per process — a CPU decode that says nothing is the G10 failure.
+    """
+    config = config or get_config()
+    mode = config.ffmpeg_hwaccel
+    if mode not in HWACCEL_MODES:
+        raise InvalidRequestError(
+            cause=f"ffmpeg_hwaccel={mode!r} is not a hardware-decode mode.",
+            fix=(
+                "Set RESOLVE_MCP_FFMPEG_HWACCEL to auto (probe the binary and use NVDEC "
+                "when it lists cuda), cuda (force it), or off (software decode)."
+            ),
+            detail={"requested": mode, "modes": list(HWACCEL_MODES)},
+        )
+
+    if mode == "off":
+        choice = Decode((), "cpu", "hardware decode disabled (ffmpeg_hwaccel=off)")
+    elif mode == "cuda" or "cuda" in hwaccels(config, runner):
+        choice = Decode(CUDA_FLAGS, "cuda")
+    else:
+        supported = ", ".join(sorted(hwaccels(config, runner))) or "none"
+        choice = Decode((), "cpu", f"ffmpeg lists no cuda hwaccel (supported: {supported})")
+
+    marker = (config.ffmpeg, choice.device)
+    if marker not in _announced:
+        _announced.add(marker)
+        if choice.device == "cuda":
+            log.info("Video decode on NVDEC (-hwaccel cuda) via %s", config.ffmpeg)
+        else:
+            log.info("Video decode in software via %s: %s", config.ffmpeg, choice.reason)
+    return choice
+
+
+def _decoded(
+    build: Callable[[Sequence[str]], list[str]],
+    source: Path | str,
+    runner: Runner | None,
+    config: Config,
+) -> tuple[Completed, dict[str, Any]]:
+    """Run a decode with the configured hardware choice, falling back loudly if it fails.
+
+    A hardware decode that exits non-zero is retried once in software before the failure
+    is believed: NVDEC refuses codecs it does not know, and the file may be fine. The
+    report says the retry happened — a fallback nothing records is the bug this ticket
+    exists for — and a file that is truly unreadable fails the software attempt with
+    ffmpeg's own message, which is the error worth relaying. Forcing ``ffmpeg_hwaccel=cuda``
+    turns the retry off: forcing is a claim about the box, and a box that cannot honour it
+    should fail in the caller's face rather than quietly decode in software.
+    """
+    choice = choose_decode(config, runner)
+    finished = invoke(build(choice.flags), runner=runner, config=config)
+    report = choice.report()
+    if finished.returncode != 0 and choice.flags and config.ffmpeg_hwaccel != "cuda":
+        log.warning(
+            "Hardware decode of %s failed (exit %d); retrying in software",
+            source,
+            finished.returncode,
+        )
+        finished = invoke(build(()), runner=runner, config=config)
+        report = {"device": "cpu", "reason": "hardware decode failed; retried in software"}
+    return finished, report
 
 
 def still_command(
@@ -28,6 +129,7 @@ def still_command(
     target: Path | str,
     seconds: float,
     max_edge: int,
+    decode: Sequence[str] = (),
 ) -> list[str]:
     """Seek, take one frame, scale it to fit inside ``max_edge``, write a JPEG.
 
@@ -45,6 +147,7 @@ def still_command(
         "-loglevel",
         "error",
         "-y",
+        *decode,
         "-ss",
         f"{seconds:.6f}",
         "-i",
@@ -59,7 +162,12 @@ def still_command(
     ]
 
 
-def scene_command(executable: str, source: Path | str, threshold: float) -> list[str]:
+def scene_command(
+    executable: str,
+    source: Path | str,
+    threshold: float,
+    decode: Sequence[str] = (),
+) -> list[str]:
     """Decode the whole file, keep the frames that differ from the last one, print their times.
 
     ``showinfo`` writes one line per kept frame to stderr, which is why the log level goes
@@ -72,6 +180,7 @@ def scene_command(executable: str, source: Path | str, threshold: float) -> list
         "-loglevel",
         "info",
         "-y",
+        *decode,
         "-i",
         str(source),
         "-filter:v",
@@ -92,6 +201,7 @@ def sample_command(
     rate: float,
     width: int,
     height: int,
+    decode: Sequence[str] = (),
 ) -> list[str]:
     """Seek, take ``rate`` frames a second of the next ``duration_seconds``, write raw grey.
 
@@ -111,6 +221,7 @@ def sample_command(
         "-loglevel",
         "error",
         "-y",
+        *decode,
         "-ss",
         f"{start_seconds:.6f}",
         "-i",
@@ -128,6 +239,21 @@ def sample_command(
     ]
 
 
+class Grabbed(NamedTuple):
+    path: Path
+    decode: dict[str, Any]
+
+
+class Scanned(NamedTuple):
+    printed: str
+    decode: dict[str, Any]
+
+
+class Sampled(NamedTuple):
+    path: Path
+    decode: dict[str, Any]
+
+
 def grab(
     source: Path | str,
     target: Path | str,
@@ -135,13 +261,17 @@ def grab(
     max_edge: int,
     runner: Runner | None = None,
     config: Config | None = None,
-) -> Path:
+) -> Grabbed:
     """Write one frame of ``source`` to ``target`` as a JPEG, or fail with ffmpeg's message."""
     config = config or get_config()
     destination = Path(target)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    argv = still_command(config.ffmpeg, source, destination, seconds, max_edge)
-    finished = invoke(argv, runner=runner, config=config)
+    finished, decode = _decoded(
+        lambda flags: still_command(config.ffmpeg, source, destination, seconds, max_edge, flags),
+        source,
+        runner,
+        config,
+    )
 
     if finished.returncode != 0:
         raise refused(source, finished, FrameGrabError, seconds=seconds)
@@ -155,7 +285,7 @@ def grab(
             detail={"source": str(source), "seconds": seconds, "expected": str(destination)},
         )
     log.info("Grabbed a frame of %s at %.3fs to %s", source, seconds, destination)
-    return destination
+    return Grabbed(destination, decode)
 
 
 def scan(
@@ -163,16 +293,20 @@ def scan(
     threshold: float,
     runner: Runner | None = None,
     config: Config | None = None,
-) -> str:
+) -> Scanned:
     """Run the scene filter over ``source`` and hand back the log it printed."""
     config = config or get_config()
-    argv = scene_command(config.ffmpeg, source, threshold)
-    finished = invoke(argv, runner=runner, config=config)
+    finished, decode = _decoded(
+        lambda flags: scene_command(config.ffmpeg, source, threshold, flags),
+        source,
+        runner,
+        config,
+    )
 
     if finished.returncode != 0:
         raise refused(source, finished, SceneDetectionError, threshold=threshold)
     log.info("Scanned %s for scene cuts at threshold %.2f", source, threshold)
-    return finished.stderr
+    return Scanned(finished.stderr, decode)
 
 
 def sample(
@@ -185,7 +319,7 @@ def sample(
     height: int,
     runner: Runner | None = None,
     config: Config | None = None,
-) -> Path:
+) -> Sampled:
     """Write the sampled frames of a range to ``target`` as raw grey, or say why not.
 
     An empty file is a failure rather than an empty scan: ffmpeg seeked past the end of a
@@ -195,17 +329,22 @@ def sample(
     config = config or get_config()
     destination = Path(target)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    argv = sample_command(
-        config.ffmpeg,
+    finished, decode = _decoded(
+        lambda flags: sample_command(
+            config.ffmpeg,
+            source,
+            destination,
+            start_seconds,
+            duration_seconds,
+            rate,
+            width,
+            height,
+            flags,
+        ),
         source,
-        destination,
-        start_seconds,
-        duration_seconds,
-        rate,
-        width,
-        height,
+        runner,
+        config,
     )
-    finished = invoke(argv, runner=runner, config=config)
 
     if finished.returncode != 0:
         raise refused(source, finished, OcclusionScanError, start_seconds=start_seconds)
@@ -231,7 +370,7 @@ def sample(
         rate,
         destination,
     )
-    return destination
+    return Sampled(destination, decode)
 
 
 def selected_seconds(log_text: str) -> list[float]:

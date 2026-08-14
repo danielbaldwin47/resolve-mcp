@@ -24,13 +24,23 @@ class FakeSeparator:
         *passes: Sequence[str],
         returncode: int = 0,
         output: Sequence[str] = (),
+        torch_build: str = "2.13.0+cu126",
     ) -> None:
         self.passes = [tuple(one) for one in passes]
         self.returncode = returncode
         self.output = tuple(output)
+        self.torch_build = torch_build
         self.calls: list[list[str]] = []
+        self.probes: list[list[str]] = []
 
     def __call__(self, argv: Sequence[str], on_line: Callable[[str], None]) -> int:
+        if "--env_info" in argv:
+            # The build report (#202), answered the way the real CLI prints it and kept off
+            # ``calls`` so the pass cycle still counts separations alone.
+            self.probes.append(list(argv))
+            prefix = "2026-01-01 00:00:00,000 - INFO - separator"
+            on_line(f"{prefix} - PyTorch Version: {self.torch_build}")
+            return 0
         self.calls.append(list(argv))
         for line in self.output:
             on_line(line)

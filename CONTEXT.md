@@ -140,7 +140,10 @@ the grids that gate refuses whole, #180),
 `cuda` (preloads
 the CUDA runtime the `analysis` extra ships, so CTranslate2 finds it on Windows;
 pure decisions, #128),
-`decode` (WAV → numpy, no third-party decoder), `drums` (hits per stem), `energy`
+`decode` (WAV → numpy, no third-party decoder), `device` (which device the
+torch models infer on, announced once per process and carried in job records —
+no silent CPU fallback, #202; the inventory and the stays-on-CPU corpus policy:
+`docs/reference/compute-device-inventory.md`), `drums` (hits per stem), `energy`
 (loudness curves; `rms_curve` is the cheap level-only pass, no K-weighting and
 no onsets), `fills` (drum-fill candidates), `halves` (shared
 identify/cache/write pattern, plus `collected`/`stem_named` — where a
@@ -296,7 +299,10 @@ same reason: gaps and overlay tracks are one device each across `cut/validate`,
 failures are the disagreements between them. `test_cut_tail.py` is the third: the
 tail is one device across `cut/tail`, `cut/validate`, `resolve/tail` and
 `resolve/build`, and a dissolve that did not land looks exactly like a cut that
-never asked for one. Live tier: `test_live_smoke.py` (module-level
+never asked for one. `test_hardware_decode.py` (#202) is the fourth: NVDEC is
+one decision across `ffmpeg` (the probe), `video/ffmpeg` (flags, fallback,
+report) and the three video routes that carry the report, and the failure worth
+testing is a decode that ran one way and reported another. Live tier: `test_live_smoke.py` (module-level
 `pytest.mark.live`) and two `@pytest.mark.live` tests in
 `test_live_analysis.py`; everything else is fake-tier. The live tier assumes no
 project state it can build itself (#135): a session-scoped sweep clears the last

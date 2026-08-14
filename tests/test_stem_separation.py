@@ -41,7 +41,11 @@ from resolve_mcp.audio.stems import (
     separation_params,
 )
 from resolve_mcp.config import Config, get_config, set_config
-from resolve_mcp.errors import InvalidRequestError, StemSeparationError
+from resolve_mcp.errors import (
+    InvalidRequestError,
+    SeparatorUnavailableError,
+    StemSeparationError,
+)
 from resolve_mcp.ffmpeg import Completed as FfmpegCompleted
 from resolve_mcp.ffmpeg import Runner as FfmpegRunner
 from resolve_mcp.jobs import cache
@@ -807,3 +811,63 @@ def _copying() -> FfmpegRunner:
 
 def _absent(argv: Sequence[str], on_line: separator.Lines) -> int:
     raise FileNotFoundError(argv[0])
+
+
+# --- the torch build the separator runs on (#202) ----------------------------------------
+
+
+def test_the_environment_report_reads_the_torch_build_off_env_info() -> None:
+    fake = FakeSeparator(torch_build="2.13.0+cu126")
+
+    report = separator.environment(runner=fake)
+
+    assert report["torch"] == "2.13.0+cu126"
+    assert "warning" not in report
+    assert fake.probes == [[get_config().audio_separator, "--env_info"]]
+
+
+def test_a_cpu_torch_build_is_a_warning_naming_the_fix() -> None:
+    """G10's bug class: PATH picked a separator whose torch is the CPU wheel, and the only
+    symptom used to be that a forty-minute job took a day."""
+    report = separator.environment(runner=FakeSeparator(torch_build="2.13.0+cpu"))
+
+    assert report["torch"] == "2.13.0+cpu"
+    assert "CPU build" in report["warning"]
+    assert "RESOLVE_MCP_AUDIO_SEPARATOR" in report["warning"]
+
+
+def test_a_separator_too_old_to_answer_still_reports_rather_than_failing() -> None:
+    def mute(argv: Sequence[str], on_line: separator.Lines) -> int:
+        return 2
+
+    report = separator.environment(runner=mute)
+
+    assert report["torch"] is None
+    assert "warning" in report
+
+
+def test_a_missing_separator_fails_the_probe_by_name() -> None:
+    with pytest.raises(SeparatorUnavailableError):
+        separator.environment(runner=_absent)
+
+
+def test_a_fresh_separation_carries_the_torch_build_in_its_record(tmp_path: Path) -> None:
+    fake = FakeSeparator(FOUR_STEMS, SIX_DRUM_STEMS, torch_build="2.13.0+cpu")
+
+    output = multi_pass(_acquired(tmp_path), {"scope": "timeline"}, _ignored, runner=fake)
+
+    assert output.result["separator"]["torch"] == "2.13.0+cpu"
+    assert "CPU build" in output.result["separator"]["warning"]
+
+
+def test_a_reused_separation_reports_no_environment_because_nothing_ran(
+    tmp_path: Path,
+    separating: FakeSeparator,
+) -> None:
+    audio = _acquired(tmp_path)
+    multi_pass(audio, {"scope": "timeline"}, _ignored, runner=separating)
+
+    output = multi_pass(audio, {"scope": "timeline"}, _ignored, runner=separating)
+
+    assert output.result["reused"] is True
+    assert "separator" not in output.result
