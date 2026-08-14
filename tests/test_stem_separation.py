@@ -313,9 +313,8 @@ def test_a_wind_split_on_stems_already_on_disk_runs_only_the_missing_pass(
 ) -> None:
     """#192: the pass a directory is missing is the only work that run owes.
 
-    The flag is not a stems-key param, so a two-pass and a three-pass run share a directory —
-    and reading that directory as partial-so-redo-it-whole spent the better part of an hour of
-    GPU rewriting two passes that were already correct, byte for byte, to add a third.
+    The count is the assertion. What the third pass costs is the whole reason it is opt-in, and
+    the bug was that asking for it charged for the first two as well.
     """
     audio = _acquired(tmp_path)
     two = multi_pass(audio, _params(), _ignored, runner=separating)

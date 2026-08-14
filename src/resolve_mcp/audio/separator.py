@@ -40,8 +40,15 @@ from ..logging_config import get_logger
 log = get_logger("audio")
 
 OUTPUT_FORMAT = "WAV"
-OUTPUT_TAIL = 40
-"""Lines of the separator's own output kept for a failure message."""
+OUTPUT_TAIL = 200
+"""Lines of the separator's own output kept for a failure message.
+
+Deep enough that a traceback survives what is printed under it. A pass prints a progress bar
+several times a second, so the forty this used to keep were forty redraws of the bar on any
+failure the model took a moment to die of — the account of a pass that died halfway through
+writing its output was the one thing worth keeping and the first thing pushed out (#192).
+Matched to ``store.WORKER_TAIL_LINES``, which is the same salvage one process further out.
+"""
 
 LABEL = re.compile(r"\(([^()]+)\)")
 PERCENT = re.compile(r"(\d{1,3})\s*%")

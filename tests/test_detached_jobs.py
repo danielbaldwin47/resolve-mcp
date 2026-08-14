@@ -229,7 +229,7 @@ def test_a_handed_off_job_stays_running_and_names_the_process_that_has_it() -> N
     assert (landed.state, landed.detached, landed.pid) == (store.RUNNING, True, pid)
     assert str(pid) in landed.step
     assert spawn.calls[0][0] == detached.command(record.job_id)
-    assert spawn.calls[0][1] == detached.worker_log(record.job_id, get_config())
+    assert spawn.calls[0][1] == store.worker_log(record.job_id, get_config())
 
 
 def test_a_worker_that_hands_off_neither_finishes_the_job_nor_caches_a_result(
@@ -527,7 +527,7 @@ def test_a_dead_workers_own_output_arrives_on_the_record_that_says_it_died() -> 
     """
     pid = _a_pid_that_has_exited()
     record = _running_under_a_dead_server(pid, step="splitting the winds (50%)")
-    log_file = detached.worker_log(record.job_id, get_config())
+    log_file = store.worker_log(record.job_id, get_config())
     log_file.write_text(
         "loading 17_HP-Wind_Inst-UVR\nCUDA error: out of memory\n", encoding="utf-8"
     )
@@ -561,7 +561,7 @@ def test_only_the_end_of_a_long_worker_log_travels_on_the_record() -> None:
     pid = _a_pid_that_has_exited()
     record = _running_under_a_dead_server(pid)
     chatter = "\n".join(f"separating {index}%" for index in range(5000))
-    detached.worker_log(record.job_id, get_config()).write_text(
+    store.worker_log(record.job_id, get_config()).write_text(
         f"{chatter}\nAccess violation\n", encoding="utf-8"
     )
 
@@ -1060,7 +1060,7 @@ def test_a_real_detached_worker_finds_the_record_and_closes_it() -> None:
     assert finished.pid is not None
     assert finished.pid != os.getpid()
     assert finished.session != store.SESSION
-    assert detached.worker_log(record.job_id, get_config()).exists()
+    assert store.worker_log(record.job_id, get_config()).exists()
 
 
 # --- the separation itself -----------------------------------------------------------------
@@ -1787,7 +1787,7 @@ def _why_the_worker_did_not_finish(record: JobRecord) -> str:
     import error, a cache directory it could not write. That is all in the log file the
     launcher opened for it.
     """
-    log_file = detached.worker_log(record.job_id, get_config())
+    log_file = store.worker_log(record.job_id, get_config())
     output = log_file.read_text(encoding="utf-8") if log_file.exists() else "(no worker log)"
     return f"job {record.job_id} is {record.state} at step {record.step!r}; worker log:\n{output}"
 

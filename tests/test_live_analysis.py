@@ -12,7 +12,6 @@ is to be run on the machine that has it, and to say so on the ticket when it has
 
 from __future__ import annotations
 
-import os
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -163,47 +162,57 @@ bytes. Reaching it any other way would separate a second copy under a second key
 
 
 @pytest.mark.live
-def test_a_wind_split_on_the_zinc_stems_runs_that_pass_and_no_other() -> None:
+def test_a_wind_split_on_the_zinc_stems_runs_that_pass_and_no_other(
+    machine_cache: Config,
+) -> None:
     """#192's live acceptance: the third pass over a two-pass directory is one pass.
 
     The fake tier proves the decision — which passes a directory owes — with the separator
     substituted. What it cannot say is that the real ``17_HP-Wind_Inst-UVR`` reads the
     ``other`` stem the first pass wrote and labels its halves the way ``WIND_STEMS`` spells
-    them, which is the half of this that only a real model on a real set can answer. Skips
-    where the Zinc stems are not on this machine — record the run on the ticket when they are.
+    them, which is the half of this only a real model on a real set can answer.
+
+    The wind pass's own output is cleared first, so what the run owes is the same on the
+    hundredth run as on the first. Measuring the directory as found would make this pass while
+    proving nothing the moment the split is complete, which is a green test that has stopped
+    being an acceptance criterion. Only that pass's output is cleared, and the run rebuilds it;
+    the two passes it must *not* redo are the ones deliberately left alone.
+
+    Skips where the Zinc set is not on this machine — record the run on the ticket when it is.
     """
-    config = _machine_cache()
+    config = machine_cache
     acquired = config.audio_dir / ACQUIRED_SET
     if not acquired.exists():
         pytest.skip(f"the acquired Zinc set is not in this cache at {acquired}")
     audio = {"path": str(acquired), "content_sha256": cache.content_hash(acquired)}
     params = {**stems.separation_params(config), "split_wind": True}
+    _clear_the_wind_pass(stems.stem_directory(audio, params, config))
     counting = _CountingSeparator()
 
     output = stems.multi_pass(
         audio, params, _no_progress, split_wind=True, runner=counting, config=config
     )
 
-    assert len(counting.calls) <= 1  # nothing to run at all once this test has run once
-    for argv in counting.calls:
-        assert argv[3] == config.wind_model
-        assert argv[1] == output.result["stems"][stems.OTHER_SOURCE]
+    assert len(counting.calls) == 1
+    assert counting.calls[0][3] == config.wind_model
+    assert counting.calls[0][1] == output.result["stems"][stems.OTHER_SOURCE]
+    assert output.result["reused"] is False
     assert set(output.result[stems.OTHER_PASS]) == set(stems.WIND_KEYS.values())
     assert all(Path(one).exists() for one in output.result[stems.OTHER_PASS].values())
     assert len(output.result["stems"]) == len(stems.FOUR_STEMS)
     assert len(output.result["drums"]) >= len(stems.DRUM_STEMS)
 
 
-def _machine_cache() -> Config:
-    """The machine's own cache, not the per-test one redirected into ``tmp_path``.
+def _clear_the_wind_pass(directory: Path) -> None:
+    """Undo the third pass, and refuse to run at all if the first two are not there to reuse.
 
-    That redirect is right everywhere else — nothing a test writes should be readable by the
-    next one — and wrong here. What this verifies is a directory the director's separations
-    filled, reached by a 1.2 GB file's bytes; a temporary copy of it would be a differently
-    keyed directory answering a question the fake tier already answers. The pass this runs is
-    the one that directory is missing, so the run leaves the cache more complete, not dirtier.
+    The skip is the point: with no stems on disk this would separate a 74-minute set from
+    scratch and then assert that it did not, which is a twenty-minute way of learning nothing.
     """
-    return Config.from_env(dict(os.environ))
+    if not (directory / stems.MIX_PASS).is_dir() or not (directory / stems.DRUM_PASS).is_dir():
+        pytest.skip(f"the Zinc set has no two-pass separation at {directory} to add a pass to")
+    for stem in (directory / stems.OTHER_PASS).glob("*.wav"):
+        stem.unlink()
 
 
 class _CountingSeparator:

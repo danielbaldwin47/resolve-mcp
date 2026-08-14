@@ -176,7 +176,10 @@ IEEE float and extensible headers, because stdlib `wave` opens PCM only),
 `separator` (python-audio-separator out of process), `stems` (two passes —
 mix into four, then the drum stem into the kit — plus an opt-in third,
 `split_wind`, splitting `other` into `wind` and `comp`; `comp` is
-accompaniment, never a piano stem), `wav` (header facts + the one
+accompaniment, never a piano stem. A directory is judged pass by pass and
+only the passes it owes are run, so turning the third one on costs that pass
+alone — but a missing first pass redoes all three, since the later two are cut
+from what it wrote, #192), `wav` (header facts + the one
 unreadable-WAV error).
 
 `cut/` — cut-file schema v1: `document` (read off disk), `schema`
@@ -308,8 +311,11 @@ never asked for one. `test_hardware_decode.py` (#202) is the fourth: NVDEC is
 one decision across `ffmpeg` (the probe), `video/ffmpeg` (flags, fallback,
 report) and the three video routes that carry the report, and the failure worth
 testing is a decode that ran one way and reported another. Live tier: `test_live_smoke.py` (module-level
-`pytest.mark.live`) and two `@pytest.mark.live` tests in
-`test_live_analysis.py`; everything else is fake-tier. The live tier assumes no
+`pytest.mark.live`) and five `@pytest.mark.live` tests in
+`test_live_analysis.py` — four over installed models, plus the #192 wind split
+over the director's own separated stems, the one test that opts out of the
+per-test cache redirect through conftest's `machine_cache` fixture; everything
+else is fake-tier. The live tier assumes no
 project state it can build itself (#135): a session-scoped sweep clears the last
 run's timelines, `a_known_cut` builds and makes current the short cut the export
 and round-trip tests read, and `a_clip_with_hard_cuts` generates the scan clip

@@ -111,16 +111,6 @@ def spawn_options(platform: str = sys.platform) -> list[dict[str, Any]]:
     return [{"start_new_session": True}]
 
 
-def worker_log(job_id: str, config: Config) -> Path:
-    """Where the detached worker's own output lands: beside the record, never inside it.
-
-    ``store`` owns the name, because ``store`` is what reads the file back onto the record of a
-    worker that died without writing its own failure (#192). This is the launcher's word for
-    the same file, kept so callers here do not have to know which module named it.
-    """
-    return store.worker_log(job_id, config)
-
-
 def child_env(config: Config, env: dict[str, str] | None = None) -> dict[str, str]:
     """The parent's environment with this config's settings written over it."""
     return {**(os.environ if env is None else env), **config.to_env()}
@@ -148,7 +138,7 @@ def launch(
     store.save(record, config)
 
     argv = command(record.job_id)
-    destination = worker_log(record.job_id, config)
+    destination = store.worker_log(record.job_id, config)
     destination.parent.mkdir(parents=True, exist_ok=True)
     config.cache_dir.mkdir(parents=True, exist_ok=True)
     pid = (spawn or _spawn)(argv, destination, config)
