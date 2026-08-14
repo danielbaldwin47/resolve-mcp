@@ -235,6 +235,17 @@ reads_metronomic heuristic as a builder self-review gate).
 
 ## Round record
 
+- **P3·R2 · mid-song trading window · WIN 2–1 — PIECE 3 CLOSED**
+  (ours = B; pack `taurus_mid_p3r2`). Bimodal rebuild: shortest shot
+  2.04 s, bursts at front changes, 15.6 s hold through the drum-feature
+  core, accents-first placement (0.246 s mean vs R1's judged 2.06 s),
+  correlate's new shot_rhythm gate clean pre-render. G17 fixes proven.
+  Ours' recorded weaknesses for the capstone: a 25 s two-shot stall
+  after a quickening; the loudest return (win-t 66.5, ~13 dB) passing
+  unmarked inside a 10.3 s hold, cut 4.8 s late; the last crash caught
+  0.78 s late. Human's: 17 s dead-static wide through the trade's
+  middle, cuts ignoring the passage's two loudest accents.
+
 - **R3 · Taurus opening · WIN 2–1 — PIECE CLOSED** (ours = A; sealed pack
   `taurus_opening_r3`, three fresh critics, grade excluded per ruling).
   The occlusion-aware rebuild removed both confirmed blocked shots
