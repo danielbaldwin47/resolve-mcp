@@ -925,7 +925,6 @@ def measure(
     for index, shot in enumerate(shots, start=1):
         seconds = clock.seconds(shot.record_in)
         framed = None if shot.clip is None else subjects.get(shot.clip)
-        framed_kind = subject.kind(framed, voices)
         found = nearest(times, seconds)
         beat = None if found is None else music.beats[found]
         # Only rows the beat gate let through are claimed by the reach rule, so ``gated`` keeps
@@ -947,10 +946,9 @@ def measure(
                 # whole length, because a shot that outlives the solo it opened in is two
                 # facts and reading the front at the cut alone records only the first.
                 "subject": None if framed is None else framed.name,
-                "subject_kind": framed_kind,
                 **subject.reading(
                     framed,
-                    framed_kind,
+                    voices,
                     seconds,
                     seconds + shot.duration / clock.fps,
                     spans,

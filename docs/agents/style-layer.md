@@ -104,14 +104,16 @@ director confirmed this reading on 2026-08-07** — sidecars stay in the repo.
   shape.
 - **`subject`** and **`character`** are the two axes kept apart, because
   "the drummer" and "a moving shot" are different facts about the same camera
-  and the profile makes claims about each.
-- **`subject`** is the second key `correlate_timeline` consumes (#181): with a
-  solo map it answers whether a shot is on the player out front, on the
-  ensemble, or on somebody who was not soloing. It is read from `subject` where
-  an entry names one and otherwise from the subject half of a
+  and the profile makes claims about each. `subject` is also the second key
+  `correlate_timeline` consumes (#181): with a solo map it answers whether a
+  shot is on the player out front, on the ensemble, on a player who was not
+  soloing, or on neither (an audience camera, a room shot). It is read from
+  `subject` where an entry names one and otherwise from the subject half of a
   `<subject>-<character>` role — a one-word role is a *character* and labels no
   subject. `ensemble` is the whole band; `soloist` is a camera pointed at
-  whoever is out front, and its shots are on the soloist by construction.
+  whoever is out front, whose shots are on the soloist by construction rather
+  than by measurement — the reading says which of the two it was, and how many
+  of a cut's soloist seconds came from a camera taken at its word.
 - **`voice`** — optional, and only where this sidecar's subjects and the solo
   map's stems are different words for the same player: `{"subject": "mike",
   "voice": "wind"}`. The join uses it; a subject the solo map never names reads

@@ -176,6 +176,14 @@ def measure(name: str, angles: dict[str, Any]) -> dict[str, Any]:
             }
         )
     measured["spot_check"] = grabs
+    # A refusal comes back in the envelope rather than as an exception, so it never reaches
+    # the errors list: a receipt whose errors are empty while half its grabs failed reads as
+    # a clean check. Name the failures at the top of the check instead.
+    measured["spot_check_failed"] = [
+        {"clip": one["clip"], "cause": (one.get("error") or {}).get("cause")}
+        for one in grabs
+        if not one.get("ok")
+    ]
     return measured
 
 

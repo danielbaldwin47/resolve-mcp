@@ -1181,7 +1181,7 @@ def audio_class_summary(track: list[dict[str, Any]], spans: list[dict[str, Any]]
 # subject track (who the shot is on, crossed with who is soloing)
 
 
-SUBJECT_FIELDS = ("subject", "subject_kind", "on_soloist", "on_soloist_seconds")
+SUBJECT_FIELDS = ("subject", "subject_kind", "on_soloist", "on_soloist_by", "on_soloist_seconds")
 """The only fields carried over from a correlate reading.
 
 Everything else in that file names the cut -- the timeline, the camera clips, the angle
@@ -1283,6 +1283,7 @@ def attach_subjects(shot_docs: list[dict[str, Any]], placed: list[dict[str, Any]
                 "subject": best["subject"],
                 "subject_kind": best["subject_kind"],
                 "on_soloist": best["on_soloist"],
+                "on_soloist_by": best["on_soloist_by"],
                 "overlap_sec": round(held, 3),
             }
         )
@@ -1949,13 +1950,20 @@ def main(argv: list[str] | None = None) -> int:
             "lines": {
                 "soloist": "framed on the player out front",
                 "ensemble": "framed on the band rather than one player",
-                "other_player": "framed on somebody who was not soloing -- not `other`, which "
+                "other_player": "framed on a player who was not soloing -- not `other`, which "
                 "is the name of a stem",
+                "elsewhere": "framed on something that is neither a player nor the band (an "
+                "audience camera, a room shot)",
                 "unlabelled": "screen time no sidecar label reaches -- counted apart from the "
                 "shares, never in them",
                 "black": "a stretch nothing covers -- a fact about the edit rather than about "
                 "the labelling, so counted apart from unlabelled as well",
             },
+            "how_a_shot_reaches_the_soloist_line": "shots[].subject.on_soloist_by -- "
+            "`front_match` where the subject matched the front the solo map measured, "
+            "`follow_camera` where the sidecar says that camera follows whoever is out front "
+            "and the shot was taken at its word; the summary's "
+            "soloist_seconds_by_follow_camera is how much of the share is the second kind",
             "per_detected_shot": "shots[].subject -- the authored shot holding most of it, with "
             "the overlap in seconds, because the pack's boundaries are a scene scan's and the "
             "track's are the timeline's",

@@ -29,36 +29,58 @@ from typing import Any, NamedTuple
 
 from ..timing import SECONDS_PRECISION
 
+SHARE_PRECISION = 3
+"""Decimals a share is reported to. Not seconds — a fraction of a cut, rounded on its own."""
+
+# --- the sidecar's vocabulary: what a camera can be framed on ---------------------------------
+#
+# ENSEMBLE is the whole band rather than one of its players. FOLLOWS_FRONT is a camera pointed
+# at whoever is out front rather than at a fixed player: its shots are on the soloist by
+# construction — that is the camera's job — and the solo map is what says who that was. A rig
+# with one operated camera and one locked one has exactly one of these, and reading it as a
+# player named "soloist" would look for a stem nobody separated.
+
 ENSEMBLE = "ensemble"
-"""The subject that is the whole band rather than one of its players."""
-
 FOLLOWS_FRONT = "soloist"
-"""The subject of a camera pointed at whoever is out front, rather than at a fixed player.
 
-Its shots are on the soloist by construction — that is the camera's job — and the solo map
-is what says who that was. A rig with one operated camera and one locked one has exactly one
-of these, and reading it as a player named "soloist" would look for a stem nobody separated.
-"""
+# --- what kind of subject that is -------------------------------------------------------------
+#
+# One of the band, the band itself (spelled ENSEMBLE, as the subject is), or neither — an
+# audience camera, a room shot.
 
 PLAYER = "player"
 OTHER = "other"
-"""What a subject can be: one of the band, the band itself, or neither (audience, room)."""
+
+# --- the lines a shot's screen time is counted on ----------------------------------------------
+#
+# On the player out front, on the band, on a player who was not soloing, on something that is
+# neither (an audience camera, a room shot), on nobody the sidecar has named, or on nothing at
+# all. Three of these names were chosen carefully.
+# ON_OTHER is not ``other``: the residual stem is *called* ``other``, so a line by that name
+# sitting beside a solo map whose front reads ``other`` would be two things spelled the same.
+# ON_ELSEWHERE exists because a room shot is not a player: folded into ON_OTHER it would read
+# as a cut watching the wrong musician, which is a different fact about a cut than a cut
+# watching the room, and the aggregate is where that difference would otherwise be lost.
+# ON_SOLOIST *is* spelled like FOLLOWS_FRONT, and that one is a real coincidence rather than an
+# accident: a shot from the camera that follows the front is on the soloist by definition, so
+# the subject and the line it lands on are the same word about the same fact.
+# BLACK is kept apart from UNLABELLED for the reason the angle shares keep them apart: how much
+# of a cut is empty is a fact about the edit, and how much of it the sidecar has not named is a
+# fact about the sidecar. Added together neither is readable.
 
 ON_SOLOIST = "soloist"
 ON_ENSEMBLE = "ensemble"
 ON_OTHER = "other_player"
-"""Not ``other``: the residual stem is *called* ``other``, so a line by that name sitting next
-to a solo map whose front reads ``other`` is two different things spelled the same."""
+ON_ELSEWHERE = "elsewhere"
 UNLABELLED = "unlabelled"
 BLACK = "black"
-"""Where a shot's screen time is counted: on the player out front, on the band, on somebody
-else, on nobody the sidecar has named, or on nothing at all.
 
-Black is kept apart from unlabelled for the reason the angle shares keep them apart: how much
-of a cut is empty is a fact about the edit, and how much of it the sidecar has not named is a
-fact about the sidecar. Added together neither is readable."""
+FRONT_MATCH = "front_match"
+FOLLOW_CAMERA = "follow_camera"
+"""How a shot came to be on the soloist: the subject matched the front the solo map measured,
+or the sidecar says this camera follows the front and the shot was taken at its word."""
 
-ORDER = (ON_SOLOIST, ON_ENSEMBLE, ON_OTHER, UNLABELLED, BLACK)
+ORDER = (ON_SOLOIST, ON_ENSEMBLE, ON_OTHER, ON_ELSEWHERE, UNLABELLED, BLACK)
 """The order the readings are reported in, so two runs of the same cut compare line by line."""
 
 
@@ -176,13 +198,18 @@ def windows(rows: Sequence[Mapping[str, Any]] | None) -> tuple[Window, ...]:
 
 def reading(
     subject: Subject | None,
-    subject_kind: str | None,
+    known: frozenset[str],
     start: float,
     end: float,
     spans: Sequence[Window],
     black: bool = False,
 ) -> dict[str, Any]:
-    """One shot against the solo windows: where its screen time went, and the one-word verdict.
+    """One shot against the solo windows: what it is on, where its screen time went, and the
+    one-word verdict.
+
+    The kind is worked out here rather than passed in, because it is a fact about the subject
+    and the solo map's roster and about nothing else — the caller that had to compute it first
+    could only ever have computed it this way.
 
     ``on_soloist`` is the reading a critic quotes and the seconds are what it was taken from:
     the verdict is whichever line holds the most of the shot, and a shot split evenly takes
@@ -192,14 +219,37 @@ def reading(
     ``black`` is a stretch nothing covers, which is not a shot with no label on it: it is
     counted on its own line and its verdict is nothing rather than false.
     """
+    subject_kind = kind(subject, known)
     seconds = _split(subject, subject_kind, start, end, spans, black)
-    if not seconds:
-        return {"on_soloist": None, "on_soloist_seconds": None}
-    verdict = max(seconds, key=lambda line: seconds[line])
+    verdict = None if not seconds else _verdict(seconds)
+    on_soloist = None if verdict in (None, UNLABELLED, BLACK) else verdict == ON_SOLOIST
     return {
-        "on_soloist": None if verdict in (UNLABELLED, BLACK) else verdict == ON_SOLOIST,
-        "on_soloist_seconds": seconds,
+        "subject_kind": subject_kind,
+        "on_soloist": on_soloist,
+        # How the shot got onto that line, because the two ways are not equally well known: a
+        # subject that *matches* the front was joined against the solo map, while a camera
+        # whose whole job is the front was taken at the sidecar's word. Both are real readings
+        # and only one of them is a measurement — a rig with a follow camera can otherwise post
+        # a high share on the soloist without anything ever having been measured.
+        "on_soloist_by": _by(subject, subject_kind, on_soloist),
+        "on_soloist_seconds": seconds or None,
     }
+
+
+def _by(subject: Subject | None, subject_kind: str | None, on_soloist: bool | None) -> str | None:
+    """``follow_camera`` where the sidecar asserted it, ``front_match`` where the join found it."""
+    if not on_soloist or subject is None or subject_kind != PLAYER:
+        return None
+    return FOLLOW_CAMERA if subject.voice == FOLLOWS_FRONT else FRONT_MATCH
+
+
+def _verdict(seconds: Mapping[str, float]) -> str:
+    """The line a shot is called by: whichever holds most of it, ties to the one it opened on.
+
+    The dict is built in the order the windows were played, so ``max`` returning the first of
+    equal values *is* the tie-break — it does not need one of its own.
+    """
+    return max(seconds, key=lambda line: float(seconds[line]))
 
 
 def _split(
@@ -230,7 +280,9 @@ def _line(subject: Subject | None, subject_kind: str | None, front: str, black: 
         return UNLABELLED
     if subject_kind == ENSEMBLE:
         return ON_ENSEMBLE
-    if subject_kind == PLAYER and (subject.voice == FOLLOWS_FRONT or subject.voice == front):
+    if subject_kind != PLAYER:
+        return ON_ELSEWHERE
+    if subject.voice == FOLLOWS_FRONT or subject.voice == front:
         return ON_SOLOIST
     return ON_OTHER
 
@@ -244,18 +296,23 @@ def summary(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any] | None:
     """
     seconds: dict[str, float] = {}
     shots: dict[str, int] = {}
+    asserted = 0.0
     for row in rows:
         split = row.get("on_soloist_seconds")
         if not isinstance(split, Mapping) or not split:
             continue
         for line, held in split.items():
             seconds[str(line)] = round(seconds.get(str(line), 0.0) + float(held), SECONDS_PRECISION)
-        verdict = max(split, key=lambda line: float(split[line]))
-        shots[str(verdict)] = shots.get(str(verdict), 0) + 1
+        if row.get("on_soloist_by") == FOLLOW_CAMERA:
+            asserted = round(asserted + float(split.get(ON_SOLOIST, 0.0)), SECONDS_PRECISION)
+        verdict = _verdict({str(line): float(held) for line, held in split.items()})
+        shots[verdict] = shots.get(verdict, 0) + 1
     if not seconds:
         return None
     apart = (UNLABELLED, BLACK)
-    labelled = round(sum(held for line, held in seconds.items() if line not in apart), 3)
+    labelled = round(
+        sum(held for line, held in seconds.items() if line not in apart), SECONDS_PRECISION
+    )
     return {
         "solo_window_seconds": round(sum(seconds.values()), SECONDS_PRECISION),
         "labelled_seconds": labelled,
@@ -267,9 +324,14 @@ def summary(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any] | None:
         "fraction_on_soloist": _share(seconds.get(ON_SOLOIST, 0.0), labelled),
         "fraction_on_ensemble": _share(seconds.get(ON_ENSEMBLE, 0.0), labelled),
         "fraction_on_other_player": _share(seconds.get(ON_OTHER, 0.0), labelled),
+        "fraction_elsewhere": _share(seconds.get(ON_ELSEWHERE, 0.0), labelled),
+        # How much of the soloist line was asserted by a follow camera's label rather than
+        # joined against the solo map. Zero is the usual answer and the reason to print it:
+        # a share that is mostly this is a share of the sidecar's word, not of the music.
+        "soloist_seconds_by_follow_camera": asserted,
         "shots": {line: shots[line] for line in ORDER if line in shots},
     }
 
 
 def _share(held: float, total: float) -> float | None:
-    return None if total <= 0 else round(held / total, 3)
+    return None if total <= 0 else round(held / total, SHARE_PRECISION)

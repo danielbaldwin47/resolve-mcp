@@ -264,6 +264,7 @@ def test_every_shot_lands_on_disk_with_its_offsets_bar_and_section(
         "subject": None,
         "subject_kind": None,
         "on_soloist": None,
+        "on_soloist_by": None,
         "on_soloist_seconds": {"unlabelled": 1.45},
         "opening": False,
         "t": 1.033,

@@ -122,16 +122,15 @@ monophonic pitch + gating, model injected per ADR 0002; the reading `phrases`
 is a rule layer over, as `drums` is to `fills`), `music` (beats + energy + gist
 job), `phrases` (phrase boundaries: where the soloist stops, which is the
 cut-placement unit #46 named, #143),
-`records` (sliceable record files), `silence` (RMS spans), `subject` (what a
-shot is framed on crossed with who is out front: the sidecar's subject read as
-player/ensemble/other, joined to the solo windows in seconds so a shot that
-outlives its solo is split where the front changed — pure, no I/O, read by
-`correlate` #181), `solos` (front
+`records` (sliceable record files), `silence` (RMS spans), `solos` (front
 of band changes: lead off the stem energy, timbre off one stem's brightness —
 with the third pass on disk the voices are `wind`/`comp` rather than `other`
 and timbre reads `wind`, #157), `structure` (tunes + solo changes job; both
 halves read the shared beats half; its stem loader is what reaches the third
-pass), `transcribe`
+pass), `subject` (what a shot is framed on crossed with who is out front: the
+angle sidecar's subject read as player/ensemble/other, joined to the solo
+windows in seconds so a shot that outlives its solo is split where the front
+changed — pure, no I/O, read by `correlate`, #181), `transcribe`
 (job), `transcript` (document + Word/Transcription/Transcriber vocabulary),
 `virtual` (a cut file read back as the words it will contain — the P4
 self-review, warnings only, touches no Resolve handle), `whisper`

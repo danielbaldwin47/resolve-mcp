@@ -23,9 +23,9 @@
     "Taurus People Full P4 R1 v2",
     "Taurus People Full P4 R2 v3",
     "resolve-mcp-smoke v1",
-    "resolve-mcp smoke round-trip 122233",
+    "resolve-mcp smoke round-trip 125402",
     "resolve-mcp-smoke v2",
-    "resolve-mcp smoke dissolve 122238",
+    "resolve-mcp smoke dissolve 125405",
     "resolve-mcp-smoke v3",
     "resolve-mcp-smoke v4",
     "resolve-mcp-smoke v5",
@@ -78,6 +78,8 @@
           "fraction_on_soloist": 0.0,
           "fraction_on_ensemble": 0.521,
           "fraction_on_other_player": 0.479,
+          "fraction_elsewhere": 0.0,
+          "soloist_seconds_by_follow_camera": 0.0,
           "shots": {
             "ensemble": 8,
             "other_player": 7,
@@ -510,6 +512,16 @@
             "detail": {}
           }
         }
+      ],
+      "spot_check_failed": [
+        {
+          "clip": "title_[0000-0055].png",
+          "cause": "FileNotFoundError: [WinError 2] The system cannot find the file specified: 'C:\\\\Users\\\\Daniel\\\\repos\\\\resolve-mcp\\\\.claude\\\\worktrees\\\\gauntlet-loop-1\\\\projects\\\\mcp-tests-zinc\\\\cards\\\\taurus-people\\\\title\\\\title_[0000-0055].png'"
+        },
+        {
+          "clip": "personnel2_[0000-0146].png",
+          "cause": "FileNotFoundError: [WinError 2] The system cannot find the file specified: 'C:\\\\Users\\\\Daniel\\\\repos\\\\resolve-mcp\\\\.claude\\\\worktrees\\\\gauntlet-loop-1\\\\projects\\\\mcp-tests-zinc\\\\cards\\\\taurus-people\\\\personnel2\\\\personnel2_[0000-0146].png'"
+        }
       ]
     },
     {
@@ -540,6 +552,8 @@
           "fraction_on_soloist": 0.05,
           "fraction_on_ensemble": 0.53,
           "fraction_on_other_player": 0.42,
+          "fraction_elsewhere": 0.0,
+          "soloist_seconds_by_follow_camera": 0.0,
           "shots": {
             "soloist": 4,
             "ensemble": 42,
@@ -1929,6 +1943,16 @@
             "fix": "This is a bug in resolve-mcp rather than a Resolve state problem. Retry once; if it persists, work around it with run_python and report it.",
             "detail": {}
           }
+        }
+      ],
+      "spot_check_failed": [
+        {
+          "clip": "title_[0000-0055].png",
+          "cause": "FileNotFoundError: [WinError 2] The system cannot find the file specified: 'C:\\\\Users\\\\Daniel\\\\repos\\\\resolve-mcp\\\\.claude\\\\worktrees\\\\gauntlet-loop-1\\\\projects\\\\mcp-tests-zinc\\\\cards\\\\taurus-people\\\\title\\\\title_[0000-0055].png'"
+        },
+        {
+          "clip": "personnel2_[0000-0146].png",
+          "cause": "FileNotFoundError: [WinError 2] The system cannot find the file specified: 'C:\\\\Users\\\\Daniel\\\\repos\\\\resolve-mcp\\\\.claude\\\\worktrees\\\\gauntlet-loop-1\\\\projects\\\\mcp-tests-zinc\\\\cards\\\\taurus-people\\\\personnel2\\\\personnel2_[0000-0146].png'"
         }
       ]
     }

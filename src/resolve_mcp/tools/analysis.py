@@ -236,8 +236,11 @@ def correlate_timeline(
     With both a solo map and subject labels it also carries the on-soloist track: per shot,
     what it is framed on and whether that is the player out front, split in seconds where the
     front changes mid-shot; and inline, what share of the solo-window screen time went to the
-    soloist, to the ensemble and to a player who was not soloing. Screen time no label reaches
-    is counted apart rather than folded into the share.
+    soloist, to the ensemble, to a player who was not soloing and to neither (an audience
+    camera, a room shot). Screen time no label reaches, and black, are counted apart rather
+    than folded into the shares. on_soloist_by says how a shot reached the soloist line —
+    joined against the solo map, or asserted by a camera the sidecar says follows the front —
+    and soloist_seconds_by_follow_camera is how much of the share is the second kind.
 
     Nothing here judges the edit. Two frames late is reported as two frames late; what
     counts as musical belongs in your style profile, not in this server.

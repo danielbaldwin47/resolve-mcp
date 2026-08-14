@@ -125,101 +125,115 @@ def test_no_solo_map_is_no_windows() -> None:
 # --- the join ---------------------------------------------------------------------------------
 
 
+def _read(name: str | None, start: float, end: float, **rest: Any) -> dict[str, Any]:
+    """One shot, named by its subject — the roster is the fixture solo map's own."""
+    subject = None if name is None else Subject(name, name)
+    spans = rest.pop("spans", None)
+    return subject_module.reading(
+        subject,
+        subject_module.voices(SOLOS),
+        start,
+        end,
+        _windows() if spans is None else spans,
+        **rest,
+    )
+
+
 def test_a_shot_on_the_player_out_front_is_on_the_soloist() -> None:
-    reading = subject_module.reading(Subject("drums", "drums"), "player", 2.0, 6.0, _windows())
+    reading = _read("drums", 2.0, 6.0)
+    assert reading["subject_kind"] == "player"
     assert reading["on_soloist"] is True
     assert reading["on_soloist_seconds"] == {"soloist": 4.0}
 
 
 def test_a_shot_on_a_player_who_is_not_soloing_is_on_a_non_soloing_player() -> None:
-    reading = subject_module.reading(Subject("drums", "drums"), "player", 12.0, 15.0, _windows())
+    reading = _read("drums", 12.0, 15.0)
     assert reading["on_soloist"] is False
     assert reading["on_soloist_seconds"] == {"other_player": 3.0}
 
 
 def test_a_shot_on_the_ensemble_is_counted_apart_from_both() -> None:
-    reading = subject_module.reading(
-        Subject("ensemble", "ensemble"), "ensemble", 2.0, 6.0, _windows()
-    )
+    reading = _read("ensemble", 2.0, 6.0)
+    assert reading["subject_kind"] == "ensemble"
     assert reading["on_soloist"] is False
     assert reading["on_soloist_seconds"] == {"ensemble": 4.0}
 
 
 def test_a_camera_that_follows_the_front_is_on_the_soloist_whoever_that_is() -> None:
-    follower = Subject("soloist", "soloist")
-    reading = subject_module.reading(follower, "player", 12.0, 15.0, _windows())
-    assert reading["on_soloist"] is True
+    assert _read("soloist", 12.0, 15.0)["on_soloist"] is True
+
+
+def test_the_two_ways_onto_the_soloist_line_are_told_apart() -> None:
+    """One was joined against the solo map; the other is the sidecar's word about a camera."""
+    assert _read("drums", 2.0, 6.0)["on_soloist_by"] == "front_match"
+    assert _read("soloist", 12.0, 15.0)["on_soloist_by"] == "follow_camera"
+    assert _read("ensemble", 2.0, 6.0)["on_soloist_by"] is None
 
 
 def test_a_shot_that_outlives_its_solo_is_split_across_the_change() -> None:
     """The whole point of measuring seconds rather than reading the front at the cut."""
-    reading = subject_module.reading(Subject("drums", "drums"), "player", 8.0, 14.0, _windows())
+    reading = _read("drums", 8.0, 14.0)
     assert reading["on_soloist_seconds"] == {"soloist": 2.0, "other_player": 4.0}
     assert reading["on_soloist"] is False
 
 
 def test_a_shot_split_evenly_takes_the_verdict_it_opened_on() -> None:
-    reading = subject_module.reading(Subject("drums", "drums"), "player", 8.0, 12.0, _windows())
+    reading = _read("drums", 8.0, 12.0)
     assert reading["on_soloist_seconds"] == {"soloist": 2.0, "other_player": 2.0}
     assert reading["on_soloist"] is True
 
 
 def test_a_shot_with_no_subject_label_is_screen_time_nobody_can_attribute() -> None:
-    reading = subject_module.reading(None, None, 2.0, 6.0, _windows())
+    reading = _read(None, 2.0, 6.0)
+    assert reading["subject_kind"] is None
     assert reading["on_soloist"] is None
     assert reading["on_soloist_seconds"] == {"unlabelled": 4.0}
 
 
-def test_a_subject_that_is_neither_player_nor_band_is_not_on_the_soloist() -> None:
-    reading = subject_module.reading(Subject("audience", "audience"), "other", 2.0, 6.0, _windows())
+def test_a_subject_that_is_neither_player_nor_band_is_counted_as_neither() -> None:
+    """An audience camera on the ``other_player`` line would read as watching the wrong
+    musician, which is a different fact about a cut than watching the room."""
+    reading = _read("audience", 2.0, 6.0)
+    assert reading["subject_kind"] == "other"
     assert reading["on_soloist"] is False
-    assert reading["on_soloist_seconds"] == {"other_player": 4.0}
+    assert reading["on_soloist_seconds"] == {"elsewhere": 4.0}
 
 
 def test_a_stretch_with_nobody_measured_out_front_is_left_out_of_the_seconds() -> None:
     """A window whose front is unknown is not solo-window screen time — it is no measurement."""
     rows = [{"change": 1, "t": 4.0, "from": None, "to": "drums"}]
-    reading = subject_module.reading(
-        Subject("drums", "drums"), "player", 0.0, 6.0, subject_module.windows(rows)
-    )
+    reading = _read("drums", 0.0, 6.0, spans=subject_module.windows(rows))
     assert reading["on_soloist_seconds"] == {"soloist": 2.0}
 
 
 def test_a_stretch_nothing_covers_is_counted_as_black_rather_than_as_unlabelled() -> None:
     """How much of a cut is empty is a fact about the edit, not about the sidecar."""
-    reading = subject_module.reading(None, None, 2.0, 6.0, _windows(), black=True)
+    reading = _read(None, 2.0, 6.0, black=True)
     assert reading["on_soloist"] is None
     assert reading["on_soloist_seconds"] == {"black": 4.0}
 
 
 def test_a_shot_measured_against_no_solo_map_at_all_says_nothing() -> None:
-    reading = subject_module.reading(Subject("drums", "drums"), "player", 0.0, 6.0, ())
+    reading = _read("drums", 0.0, 6.0, spans=())
     assert reading["on_soloist"] is None
     assert reading["on_soloist_seconds"] is None
 
 
 def test_a_shot_of_no_length_is_no_measurement() -> None:
-    reading = subject_module.reading(Subject("drums", "drums"), "player", 4.0, 4.0, _windows())
-    assert reading["on_soloist_seconds"] is None
+    assert _read("drums", 4.0, 4.0)["on_soloist_seconds"] is None
 
 
 # --- the reading a critic quotes ---------------------------------------------------------------
 
 
 def _rows() -> list[dict[str, Any]]:
-    windows = _windows()
     return [
-        {
-            "subject": name,
-            **subject_module.reading(
-                None if name is None else Subject(name, name), kind, start, end, windows
-            ),
-        }
-        for name, kind, start, end in (
-            ("drums", "player", 0.0, 6.0),
-            ("ensemble", "ensemble", 6.0, 10.0),
-            ("drums", "player", 10.0, 12.0),
-            (None, None, 12.0, 14.0),
+        {"subject": name, **_read(name, start, end)}
+        for name, start, end in (
+            ("drums", 0.0, 6.0),
+            ("ensemble", 6.0, 10.0),
+            ("drums", 10.0, 12.0),
+            (None, 12.0, 14.0),
         )
     ]
 
@@ -243,7 +257,7 @@ def test_the_summary_counts_the_screen_time_no_label_reaches_apart() -> None:
 
 
 def test_the_summary_counts_black_apart_from_both() -> None:
-    black = subject_module.reading(None, None, 14.0, 15.0, _windows(), black=True)
+    black = _read(None, 14.0, 15.0, black=True)
     found = subject_module.summary([*_rows(), {"subject": None, **black}])
     assert found is not None
     assert found["black_seconds"] == 1.0
@@ -256,6 +270,21 @@ def test_the_summary_counts_shots_as_well_as_seconds() -> None:
     found = subject_module.summary(_rows())
     assert found is not None
     assert found["shots"] == {"soloist": 1, "ensemble": 1, "other_player": 1, "unlabelled": 1}
+
+
+def test_the_summary_says_how_much_of_the_soloist_line_nobody_measured() -> None:
+    """A rig whose camera follows the front can post a high share without a join ever running."""
+    rows = [*_rows(), {"subject": "soloist", **_read("soloist", 14.0, 18.0)}]
+
+    found = subject_module.summary(rows)
+
+    assert found is not None
+    assert found["seconds"]["soloist"] == 10.0
+    assert found["soloist_seconds_by_follow_camera"] == 4.0
+
+    joined = subject_module.summary(_rows())
+    assert joined is not None
+    assert joined["soloist_seconds_by_follow_camera"] == 0.0
 
 
 def test_nothing_measured_is_no_reading_rather_than_a_reading_of_zero() -> None:
