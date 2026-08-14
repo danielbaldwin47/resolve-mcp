@@ -796,18 +796,24 @@ def super_spans(scan: np.ndarray, lags: Sequence[int]) -> tuple[supers.Span, ...
     return supers.read_run(scan, lags=usable) if usable else ()
 
 
-def super_mask(scan: np.ndarray, span: supers.Span, lag: int) -> np.ndarray | None:
-    """The graphic's own pixels, taken from whichever pair inside the span shows most.
+def super_mask(scan: np.ndarray, span: supers.Span, lags: Sequence[int]) -> np.ndarray | None:
+    """The graphic's own pixels, taken from whichever reading inside the span shows most.
 
     Not the span's two ends: they can happen to sit in the same locked-off shot, whose
-    reading is a refusal, and a mask taken from a refusal is empty. The strongest pair
-    is the one that saw the most of the lettering, which is the mask the edge walk wants.
+    reading is a refusal, and a mask taken from a refusal is empty. The strongest reading is
+    the one that saw the most of the lettering, which is the mask the edge walk wants.
+
+    Every lag is tried, not the shortest. A span found only at the long lag has no reading at
+    the short one -- that is why it needed the long one -- and asking at one distance would
+    hand back nothing and drop the super on the floor between the scan and the refinement,
+    which is a miss no count in the report would show.
     """
     best: np.ndarray | None = None
-    for index in range(span.first, min(span.last, len(scan) - 1 - lag) + 1):
-        mask = supers.carried(scan[index], scan[index + lag])
-        if best is None or mask.sum() > best.sum():
-            best = mask
+    for lag in lags:
+        for index in range(span.first, min(span.last, len(scan) - 1 - lag) + 1):
+            mask = supers.carried(scan[index], scan[index + lag])
+            if best is None or mask.sum() > best.sum():
+                best = mask
     return None if best is None or not best.any() else best
 
 
@@ -887,7 +893,7 @@ def super_scan(clip: Path, fps: float, cuts: Sequence[float]) -> dict[str, Any]:
     )
     refined: list[supers.Span] = []
     for span in super_spans(scan, lags):
-        mask = super_mask(scan, span, min(lags))
+        mask = super_mask(scan, span, lags)
         if mask is not None:
             refined.append(refine_super(clip, span, mask, fps))
     spans = merge_supers(refined, fps)

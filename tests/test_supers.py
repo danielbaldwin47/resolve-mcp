@@ -194,12 +194,20 @@ def test_pixels_that_agree_somewhere_new_every_time_are_not_a_super() -> None:
     """The false positive this whole reading turns on: on a dark stage two frames of the
     same shot disagree pixel by pixel from noise alone, so something bright and static
     carries across every reading — but never the *same* something twice."""
-    here = caption(picture(0), top=100, left=60)
-    there = caption(picture(1), top=300, left=500)
-    frames = np.stack([here, there, caption(picture(2), top=100, left=60),
-                       caption(picture(3), top=300, left=500),
-                       caption(picture(4), top=100, left=60),
-                       caption(picture(5), top=300, left=500)])
+    spots = ((40, 60), (110, 300), (180, 90), (250, 420), (320, 150), (60, 480), (200, 200))
+    # Each frame carries the coincidence it shares backwards and the one it will share
+    # forwards, so every pair agrees on a patch, and no two pairs agree on the same patch.
+    frames = np.stack(
+        [
+            caption(
+                caption(picture(i), top=spots[i][0], left=spots[i][1], strokes=10),
+                top=spots[i + 2][0],
+                left=spots[i + 2][1],
+                strokes=10,
+            )
+            for i in range(5)
+        ]
+    )
 
     assert supers.read_run(frames, lags=(2,), bridge=0) == ()
 

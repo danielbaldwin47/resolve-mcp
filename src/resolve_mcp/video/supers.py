@@ -317,19 +317,14 @@ def read_run(
             "use 1 or more."
         )
     total = len(frames)
-    up = np.zeros(total, dtype=bool)
-    kinds: list[str] = [""] * total
-    masks: list[tuple[int, NDArray[np.bool_]]] = []
+    readings: list[_Seen] = []
     for lag in sorted(set(lags)):
         for index in range(total - lag):
             reading, mask = _read(frames[index], frames[index + lag])
-            if not reading.found:
-                continue
-            up[index : index + lag + 1] = True
-            masks.append((index, mask))
-            for at in (index, index + lag):
-                kinds[at] = reading.kind
-    spans = _spans(up, kinds, masks, bridge)
+            if reading.found:
+                readings.append(_Seen(index, index + lag, reading.kind, mask))
+    readings.sort(key=lambda one: (one.first, one.last))
+    spans = _spans(readings, bridge)
     return tuple(one for one in spans if one.kind == CARD or _outlived(frames, one))
 
 
@@ -530,33 +525,29 @@ def _regions(graphic: NDArray[np.bool_]) -> tuple[NDArray[np.bool_], tuple[Regio
     return kept, tuple(sorted(found, key=lambda one: -one.pixels))
 
 
-def _spans(
-    up: NDArray[np.bool_],
-    kinds: Sequence[str],
-    masks: Sequence[tuple[int, NDArray[np.bool_]]],
-    bridge: int,
-) -> tuple[Span, ...]:
-    """Frames a super was up on, grouped into the supers they belong to."""
-    spans: list[Span] = []
-    start: int | None = None
-    gap = 0
-    for index in range(len(up) + 1):
-        lit = index < len(up) and bool(up[index])
-        if lit:
-            if start is None:
-                start = index
-            gap = 0
-            continue
-        if start is None:
-            continue
-        gap += 1
-        if gap <= bridge and index < len(up):
-            continue
-        held = _persists(start, index - gap, masks)
-        if held is not None:
-            spans.append(_span(start, index - gap, kinds, held))
-        start, gap = None, 0
-    return tuple(spans)
+def _spans(readings: Sequence[_Seen], bridge: int) -> tuple[Span, ...]:
+    """The readings, grouped into the graphics they are readings *of*.
+
+    Grouped by the pixels rather than by the clock, which is the whole of it. Grouping by
+    the clock — every stretch of frames something was found on — merges a title card with
+    whatever is found in the seconds after it, and then the same-pixels test, asked of that
+    merged stretch, intersects a card with an unrelated region and throws both away. A span
+    is one graphic; two graphics up at once, or back to back, are two.
+
+    Two readings belong to the same graphic when they share pixels and sit near each other
+    in time. ``bridge`` is the near: a graphic can go unread for a stretch — the picture
+    under it stopped changing — without becoming a second graphic, but the same lower third
+    used again three minutes later is not this one.
+    """
+    groups: list[_Group] = []
+    for seen in readings:
+        for group in groups:
+            if seen.first <= group.last + bridge and group.shares(seen.mask):
+                group.take(seen)
+                break
+        else:
+            groups.append(_Group(seen))
+    return tuple(group.span() for group in groups if group.believable())
 
 
 def _outlived(frames: NDArray[Any], span: Span) -> bool:
@@ -582,66 +573,65 @@ def _outlived(frames: NDArray[Any], span: Span) -> bool:
     )
 
 
-def _persists(
-    first: int, last: int, masks: Sequence[tuple[int, NDArray[np.bool_]]]
-) -> NDArray[np.bool_] | None:
-    """Whether the same pixels were graphic every time this span was read.
+class _Seen(NamedTuple):
+    """One reading: the two frames it was taken across, its verdict, and its pixels."""
 
-    The test that separates a caption from a coincidence, and the only one that survives
-    this material. On a dark stage two frames of the *same* shot disagree pixel by pixel
-    from noise alone, so "the picture changed" is satisfied by footage sitting still, and
-    whatever is bright and static in it — a music stand, the lit edge of a piano — carries
-    across as reliably as lettering does. What it cannot do is carry across as the *same*
-    pixels twice: each reading picks up a different scatter, and intersecting two of them
-    leaves nothing. A graphic is drawn from the same file every frame, so the intersection
-    is the graphic.
+    first: int
+    last: int
+    kind: str
+    mask: NDArray[np.bool_]
 
-    A span with one reading behind it has nothing to intersect and is dropped: a super seen
-    once is indistinguishable from a coincidence seen once, and this measurement exists to
-    be quoted at an editor.
 
-    What comes back is the intersection itself, because it is also the best answer to
-    *where* the super is: the union of every region ever seen inside the span drifts wider
-    with every stray pixel that agreed once, while what carried in all of them is the
-    lettering.
+class _Group:
+    """The readings of one graphic, accumulating into a span.
+
+    ``held`` is the intersection of every reading taken of it, and it is what separates a
+    caption from a coincidence — the only test that survives this material. On a dark stage
+    two frames of the *same* shot disagree pixel by pixel from noise alone, so something
+    bright and static carries across as reliably as lettering does; what it cannot do is
+    carry across as the *same* pixels twice, since each reading picks up a different
+    scatter. A graphic is drawn from the same file every frame, so the intersection is the
+    graphic — which makes it the best answer to *where* the super is, too.
     """
-    inside = [mask for at, mask in masks if first <= at <= last]
-    if len(inside) < 2:
-        return None
-    held = inside[0].copy()
-    for mask in inside[1:]:
-        held &= mask
-    return held if held.sum() >= MIN_AREA * held.size else None
 
+    def __init__(self, seen: _Seen) -> None:
+        self.first = seen.first
+        self.last = seen.last
+        self.held = seen.mask.copy()
+        self.kinds = [seen.kind]
 
-def _span(
-    first: int,
-    last: int,
-    kinds: Sequence[str],
-    held: NDArray[np.bool_],
-) -> Span:
-    """One span, boxed around the pixels that were graphic in every reading of it.
+    def shares(self, mask: NDArray[np.bool_]) -> bool:
+        return bool((self.held & mask).sum() >= MIN_AREA * self.held.size)
 
-    Where a lower third and a bug are up together the box covers both, and a consumer that
-    wants them apart wants the pair readings rather than this. The kind follows the majority
-    of the readings that carried it, so one frozen pair inside a long overlay does not
-    rename it a card.
-    """
-    votes = [kinds[index] for index in range(first, last + 1) if kinds[index]]
-    kind = CARD if votes.count(CARD) > votes.count(OVERLAY) else OVERLAY
-    height, width = held.shape
-    rows, cols = np.nonzero(held)
-    return Span(
-        kind=kind,
-        first=first,
-        last=last,
-        top=round(float(rows.min()) / height, 4),
-        left=round(float(cols.min()) / width, 4),
-        bottom=round(float(rows.max() + 1) / height, 4),
-        right=round(float(cols.max() + 1) / width, 4),
-        pixels=int(held.sum()),
-        pairs=len(votes),
-    )
+    def take(self, seen: _Seen) -> None:
+        self.first = min(self.first, seen.first)
+        self.last = max(self.last, seen.last)
+        self.held &= seen.mask
+        self.kinds.append(seen.kind)
+
+    def believable(self) -> bool:
+        """A graphic read once is a coincidence read once, and this gets quoted at editors."""
+        return len(self.kinds) >= 2
+
+    def span(self) -> Span:
+        """The graphic as a span, boxed by the pixels that carried through every reading.
+
+        The kind follows the majority of those readings, so one frozen pair inside a long
+        overlay does not rename it a card.
+        """
+        height, width = self.held.shape
+        rows, cols = np.nonzero(self.held)
+        return Span(
+            kind=CARD if self.kinds.count(CARD) > self.kinds.count(OVERLAY) else OVERLAY,
+            first=self.first,
+            last=self.last,
+            top=round(float(rows.min()) / height, 4),
+            left=round(float(cols.min()) / width, 4),
+            bottom=round(float(rows.max() + 1) / height, 4),
+            right=round(float(cols.max() + 1) / width, 4),
+            pixels=int(self.held.sum()),
+            pairs=len(self.kinds),
+        )
 
 
 def _lengths(spans: Sequence[Span]) -> dict[str, Any] | None:
