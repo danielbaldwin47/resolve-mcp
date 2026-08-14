@@ -60,6 +60,14 @@ Round 1 critic, verbatim needs; each is server measurement work:
    handheld wobble invisible in stills.
 3. Per-cut visual delta (framing histogram/embedding distance across the
    boundary) + 30-degree-rule flag + match-on-action frames either side.
+   **Delta and flag done** (#184): `resolve_mcp.video.framing` reads layout,
+   content and size across each boundary; the pack carries a `delta` on every
+   cut plus a `visual_delta` block per label and a method block in the
+   manifest, and `correlate_timeline(deltas=...)` joins a catalog onto the
+   timeline's own cuts. Threshold calibrated on the five human deliverables
+   (`recon/cut_delta_calib.json`). Still open from this item: match-on-action
+   frames either side — the delta says *how far* the picture stepped, not
+   whether the movement carried through the cut.
 4. Cut-to-beat offsets at sub-100 ms, in ms and beat fractions (1-s RMS
    cannot resolve musicality).
 5. Audio class track (applause/speech/music/silence at 1 s resolution).
@@ -96,6 +104,10 @@ with acceleration and release. Server work: the events that motivate cuts
 (fills, entrances, solo changes, phrase ends) come from stems — blocked by
 G4 — plus a framing-distinctness measure so "new picture" vs "same two
 pictures" is a number (2 pictures ours vs 3 with a scale change, human's).
+The per-cut half of that measure landed with #184 (`video/framing`): each
+boundary now carries how far the picture stepped and whether it stepped far
+enough. What is still missing is the *shot-set* half — distinctness across a
+passage, not across one cut.
 
 ## G10 — separator resolution silently picked a CPU-only install (open)
 

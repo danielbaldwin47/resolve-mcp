@@ -63,6 +63,7 @@ from typing import Any, NamedTuple
 import numpy as np
 
 from resolve_mcp.analysis.correlate import RHYTHM_BINS
+from resolve_mcp.video import framing
 
 # --------------------------------------------------------------------------
 # constants
@@ -602,20 +603,44 @@ def blend_residual(pre: np.ndarray, post: np.ndarray, mid: np.ndarray) -> float:
     return blend_fit(pre, post, mid)[0]
 
 
-def classify_transition(clip: Path, cut: float, fps: float, duration: float) -> dict[str, Any]:
-    """hard | dissolve | fade for one boundary, from a native-fps window.
+def boundary_window(
+    clip: Path, cut: float, fps: float, duration: float
+) -> tuple[np.ndarray, float]:
+    """The native-fps grey window around one boundary, and where it starts.
 
-    Five-plus frames across the boundary are enough to separate the three: a
-    hard cut puts all the change in one frame pair; a dissolve spreads it over
-    several pairs whose intermediate frames are linear blends of the endpoints;
-    a fade runs the luma down to (or up from) black.
+    Split out of `classify_transition` so the transition typing and the visual
+    delta read the same decode: they ask different questions of the identical
+    frames, and decoding twice would double the slowest stage of a pack build.
     """
     half = TRANS_HALF_FRAMES / fps
     start = max(cut - half, 0.0)
     dur = max(min(cut + half, duration) - start, 0.0)
     if dur <= 0.0:
+        return np.zeros((0, TRANS_H, TRANS_W), dtype=np.float64), start
+    return decode_grey(clip, TRANS_W, TRANS_H, start=start, dur=dur), start
+
+
+def classify_transition(clip: Path, cut: float, fps: float, duration: float) -> dict[str, Any]:
+    """hard | dissolve | fade for one boundary, from a native-fps window."""
+    arr, start = boundary_window(clip, cut, fps, duration)
+    return transition_from(arr, start)
+
+
+def transition_from(arr: np.ndarray, start: float) -> dict[str, Any]:
+    """hard | dissolve | fade for one already-decoded boundary window.
+
+    Five-plus frames across the boundary are enough to separate the three: a
+    hard cut puts all the change in one frame pair; a dissolve spreads it over
+    several pairs whose intermediate frames are linear blends of the endpoints;
+    a fade runs the luma down to (or up from) black.
+
+    Also reports where in the window the boundary sits -- `out_index` is one past
+    the outgoing shot's last clean frame, `in_index` the incoming shot's first --
+    because a ramp's own ends are the only honest place to read a visual delta
+    across, and the detector's nominal cut time is not one of them.
+    """
+    if len(arr) == 0:
         return {"type": "unknown", "frames_sampled": 0}
-    arr = decode_grey(clip, TRANS_W, TRANS_H, start=start, dur=dur)
     if len(arr) < 3:
         return {"type": "unknown", "frames_sampled": int(len(arr))}
 
@@ -635,6 +660,11 @@ def classify_transition(clip: Path, cut: float, fps: float, duration: float) -> 
         "frames_sampled": int(len(arr)),
         "window_start_sec": round(start, 3),
         "peak_frame_delta": round(peak, 2),
+        # the peak pair is (peak_i, peak_i + 1): everything up to peak_i belongs to
+        # the outgoing shot, everything from peak_i + 1 to the incoming one. A ramp
+        # widens these below.
+        "out_index": peak_i + 1,
+        "in_index": peak_i + 1,
     }
 
     if peak < TRANS_NOISE_FLOOR:
@@ -667,6 +697,8 @@ def classify_transition(clip: Path, cut: float, fps: float, duration: float) -> 
         i1 += 1
     ramp_pairs = i1 - i0 + 1
     doc["ramp_frames"] = ramp_pairs
+    doc["out_index"] = i0 + 1
+    doc["in_index"] = i1 + 1
 
     if ramp_pairs >= 2:
         pre, post = arr[i0], arr[i1 + 1]
@@ -678,6 +710,38 @@ def classify_transition(clip: Path, cut: float, fps: float, duration: float) -> 
 
     doc["type"] = "hard"
     return doc
+
+
+# --------------------------------------------------------------------------
+# per-cut visual delta + 30-degree-rule flag
+
+
+def cut_delta(arr: np.ndarray, transition: dict[str, Any]) -> framing.Delta | None:
+    """How far the picture steps across one boundary, or None if it cannot be read.
+
+    The typing pass has already found where the boundary really is; this reads
+    across it. `None` is the honest answer for a cut too close to the head or tail
+    of its window to have three clean frames either side -- a delta invented from
+    one frame of a dissolve would be a number a critic could quote.
+    """
+    if len(arr) == 0:
+        return None
+    middle = len(arr) // 2
+    out_index = int(transition.get("out_index", middle))
+    in_index = int(transition.get("in_index", middle))
+    try:
+        return framing.read_across(arr, out_index, in_index)
+    except ValueError:
+        return None
+
+
+def read_cut(
+    clip: Path, cut: float, fps: float, duration: float
+) -> tuple[dict[str, Any], framing.Delta | None]:
+    """One decode, both boundary readings: what kind of transition, and how big a step."""
+    arr, start = boundary_window(clip, cut, fps, duration)
+    transition = transition_from(arr, start)
+    return transition, cut_delta(arr, transition)
 
 
 # --------------------------------------------------------------------------
@@ -1448,7 +1512,11 @@ def build_label(
     row_of = {p["cut_index"]: p for p in placement}
 
     track = motion_track(clip)
-    transitions = [classify_transition(clip, cut, fps, duration) for cut in cuts]
+    reads = [read_cut(clip, cut, fps, duration) for cut in cuts]
+    transitions = [one for one, _ in reads]
+    deltas = [one for _, one in reads]
+    delta_summary = framing.summarize([one for one in deltas if one is not None])
+    delta_summary["cuts_unread"] = sum(1 for one in deltas if one is None)
 
     # v3: the same boundaries again at multi-second scale, where a dissolve
     # the +/-12-frame window cannot hold is the obvious shape.
@@ -1484,12 +1552,14 @@ def build_label(
             for kind in sorted({str(t.get("type")) for t in transitions})
         },
         "motion_classes": motion_classes,
+        "visual_delta": delta_summary,
         "cut_times_sec": cuts,
         "cuts": [
             {
                 "index": i + 1,
                 "t": cut,
                 "transition": transitions[i],
+                "delta": deltas[i].as_record() if deltas[i] is not None else None,
                 "strip_sheet": row_of.get(i + 1, {}).get("sheet"),
                 "strip_row": row_of.get(i + 1, {}).get("row"),
             }
@@ -1540,6 +1610,7 @@ def build_label(
         "cut_strips": len(strips),
         "transition_types": cuts_doc["transition_types"],
         "motion_classes": motion_classes,
+        "visual_delta": delta_summary,
         "ending": {
             k: ending.get(k) for k in ("kind", "black_at_sec", "ramp_sec", "black_hold_sec")
         },
@@ -1723,6 +1794,32 @@ def main(argv: list[str] | None = None) -> int:
             },
             "blind_spot": f"cannot see a ramp longer than {2 * TRANS_HALF_FRAMES + 1} frames "
             "-- see slow_transition",
+        },
+        "visual_delta": {
+            "question": "how different is the picture after the cut from the picture before "
+            "it -- the step the 30-degree rule is about",
+            "method": f"three terms on a {framing.GRID_WIDTH}x{framing.GRID_HEIGHT} grey grid, "
+            f"median-stacked over {framing.STACK_FRAMES} frames each side of the boundary the "
+            "transition pass located (so a dissolve is read across its ramp, not inside it)",
+            "terms": {
+                "layout": "1 - best normalised correlation of the row/column profiles over "
+                f"a lag search of +/-{framing.MAX_SHIFT:.3f} of each axis; a picture that "
+                "merely slid sideways still matches itself",
+                "content": f"total-variation distance between {framing.HISTOGRAM_BINS}-bin "
+                "luma histograms",
+                "scale": "change in the spread of the frame's luma mass, in doublings, "
+                f"clamped at {framing.SCALE_SPAN}",
+            },
+            "composite": f"{framing.WEIGHT_LAYOUT}*layout + {framing.WEIGHT_CONTENT}*content "
+            f"+ {framing.WEIGHT_SCALE}*scale, 0 to 1",
+            "jump_cut_flag": f"composite < {framing.JUMP_DELTA}, calibrated so the human "
+            "deliverables' own cuts sit clear of it "
+            "(gauntlet/recon/cut_delta_calib.json)",
+            "reported_fields": "delta, content, layout, scale, shift_x, shift_y, jump_cut, "
+            "reason; null when the boundary is too close to the window edge to read",
+            "blind_spot": "no subject identity -- two cameras on the same soloist with "
+            "different backgrounds read as a step, so the flag is a candidate for a human "
+            "eye, not a verdict",
         },
         "slow_transition": {
             "method": f"mean luma over a {SLOW_W}x{SLOW_H} grey track at {SLOW_FPS} fps; "

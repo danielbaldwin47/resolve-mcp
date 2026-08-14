@@ -172,7 +172,7 @@ GEAR_HEURISTIC = (
 )
 """The gearing heuristic in words, carried in the report beside the numbers it was drawn from."""
 
-READING = 6
+READING = 7
 """What this measurement *is*; bumped whenever a rerun over unchanged inputs would differ.
 
 The cache is keyed on what was measured, not on the code that measured it, so a call whose
@@ -184,8 +184,18 @@ the reading count: 3 rather than 2 because the same shots now resolve to a diffe
 block now carries ``gears``, and 6 rather than 5 because ``reads_metronomic`` now reads the
 ramp as well and the gearing no longer counts shots the level curve does not reach — a
 cached hit from an earlier reading answers the self-review question with a file that never
-asked it.
+asked it. 7 rather than 6 because every record now carries ``delta`` and ``jump_cut``, which
+are ``None`` on a call that named no cut-delta catalog — and a cached reading-6 file would
+hand back a report with no such columns at all.
 """
+
+DELTA_MATCH_SEC = 0.25
+"""How near a cut-delta catalog row has to sit to count as this cut's.
+
+Six frames at 24 fps. A scene detector puts a boundary within a frame or two of the edit that
+made it, so the tolerance only has to absorb rounding; wide enough to reach the next cut and a
+missed boundary would silently borrow its neighbour's number, which is the one failure that
+would not look like one."""
 
 GIVEN = "given"
 """The alignment mode where the caller named the frame rather than the server reading it."""
@@ -264,6 +274,7 @@ def correlate_timeline(
     audio: str | None = None,
     tunes: str | None = None,
     solos: str | None = None,
+    deltas: str | None = None,
     angles: Mapping[str, Any] | None = None,
     track: int | None = None,
     audio_at: Any | None = None,
@@ -291,12 +302,19 @@ def correlate_timeline(
     ``audio_at`` is the timeline frame the analysed audio's own zero sits at, for when no
     clip on the timeline carries it and so none can be read.
 
+    ``deltas`` is a cut-delta catalog — the per-cut visual step measured off a rendered
+    picture (``gauntlet/tools/ab_pack.py`` writes one as ``cuts.json``). Its ``t`` has to be
+    in the same clock as this timeline's cuts, which is what a full-length render gives; a
+    catalog measured off a span joins nothing, and the summary says how many rows joined
+    rather than leaving a silent hole.
+
     ``onsets`` is the transient seam and ``loudness`` the level one; both defaults decode the
     audio for real.
     """
     config = config or get_config()
     roles = _roles(angles)
     music = _music(beats, audio, tunes, solos, roles)
+    pictures = _optional_rows(deltas, "cut delta catalog", "cuts")
     cut = _read_cut(connection, timeline, track, music.audio, audio_at)
 
     params: dict[str, Any] = {
@@ -307,9 +325,14 @@ def correlate_timeline(
         "audio": _named(audio),
         "tunes": _named(tunes),
         "solos": _named(solos),
+        "deltas": _named(deltas),
         "angles": dict(sorted(roles.items())) if roles is not None else None,
     }
-    watched = [{"reading": READING}, cut.fingerprint, *_fingerprints(beats, audio, tunes, solos)]
+    watched = [
+        {"reading": READING},
+        cut.fingerprint,
+        *_fingerprints(beats, audio, tunes, solos, deltas),
+    ]
     key = cache.cache_key(KIND, watched, params)
 
     def work(progress: Progress) -> JobOutput:
@@ -325,6 +348,7 @@ def correlate_timeline(
             onsets,
             loudness,
             config,
+            pictures,
         )
 
     return start_job(KIND, params, work, cache_key=key, refresh=refresh, config=config)
@@ -342,6 +366,7 @@ def correlate(
     onsets: Onsets | None = None,
     loudness: Levels | None = None,
     config: Config | None = None,
+    pictures: Sequence[Mapping[str, Any]] | None = None,
 ) -> JobOutput:
     """The worker: transients, then one record per shot on disk and the stats inline."""
     config = config or get_config()
@@ -354,9 +379,16 @@ def correlate(
 
     progress(0.7, "measuring the cut against the music")
     grid = trust(music.beats)
-    rows = measure(shots, clock, music, transients, grid)
+    rows = measure(shots, clock, music, transients, grid, pictures)
     summary = _summary(
-        rows, clock, visible, transients, [float(one["t"]) for one in music.beats], grid, levels
+        rows,
+        clock,
+        visible,
+        transients,
+        [float(one["t"]) for one in music.beats],
+        grid,
+        levels,
+        pictures,
     )
 
     target = config.analysis_dir / keyed_name(name, key, ".correlate.json", "correlate")
@@ -870,6 +902,7 @@ def measure(
     music: Music,
     transients: Sequence[float] | None,
     grid: GridTrust | None = None,
+    pictures: Sequence[Mapping[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """One record per shot: where it starts in the music, and how far off everything it is.
 
@@ -884,6 +917,7 @@ def measure(
     roles = music.roles or {}
     trusted = (grid if grid is not None else trust(music.beats)).trusted
     widths = spacing(times)
+    picture_times = [float(row["t"]) for row in (pictures or ())]
 
     rows: list[dict[str, Any]] = []
     for index, shot in enumerate(shots, start=1):
@@ -925,9 +959,35 @@ def measure(
                 "transient_offset": _offset(transients, seconds),
                 "tune": _tune_at(music.tunes, tune_times, seconds),
                 "front": _front_at(music.solos, solo_times, seconds),
+                # How far the picture steps at this cut, joined from a catalog measured off
+                # the render (#184). ``None`` when no catalog was named, and also when one
+                # was but has nothing within reach of this cut — a cut the scene detector
+                # missed has no delta, and inventing one from the nearest boundary a second
+                # away would be a number about a different edit.
+                **_delta_at(pictures, picture_times, seconds),
             }
         )
     return rows
+
+
+def _delta_at(
+    pictures: Sequence[Mapping[str, Any]] | None,
+    times: Sequence[float],
+    seconds: float,
+) -> dict[str, Any]:
+    """The catalog row that lands on this cut, as ``delta`` and ``jump_cut`` columns."""
+    if not pictures:
+        return {"delta": None, "jump_cut": None}
+    found = nearest(times, seconds)
+    if found is None or abs(times[found] - seconds) > DELTA_MATCH_SEC:
+        return {"delta": None, "jump_cut": None}
+    row = pictures[found]
+    # Two shapes reach here: the pack's ``cuts.json``, where the reading is nested under
+    # ``delta``, and a flat catalog that spreads the same fields across the row.
+    reading = row.get("delta")
+    if isinstance(reading, Mapping):
+        return {"delta": reading.get("delta"), "jump_cut": reading.get("jump_cut")}
+    return {"delta": reading, "jump_cut": row.get("jump_cut")}
 
 
 def _out_of_reach(seconds: float, beat: float, width: float | None) -> bool:
@@ -1016,6 +1076,7 @@ def _summary(
     grid: Sequence[float],
     trusted: GridTrust,
     levels: Sequence[tuple[float, float]] | None = None,
+    pictures: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """The list-free reading: what a style profile is written from, and a self-review read.
 
@@ -1063,8 +1124,35 @@ def _summary(
         "solos": _spread("front", cut_to_music) if _measured("front", rows) else None,
         "shot_seconds": _lengths([row["seconds"] for row in rows]),
         "shot_rhythm": _rhythm(rows, levels),
+        # Keyed on whether a catalog was *named*, not on whether anything joined: a catalog
+        # that lines up with nothing is the failure this block is here to make loud, and
+        # answering None would report it as a call that never asked.
+        "visual_delta": None if pictures is None else _deltas(rows, pictures),
         "clips": _usage(rows, "clip"),
         "roles": _usage(rows, "role") if _measured("role", rows) else None,
+    }
+
+
+def _deltas(
+    rows: Sequence[dict[str, Any]], pictures: Sequence[Mapping[str, Any]]
+) -> dict[str, Any]:
+    """How far the picture steps across this cut's boundaries, over the whole timeline.
+
+    ``unjoined`` is the number the reading lives or dies by. A catalog measured off a
+    different span, or off a render whose cuts the detector missed, still produces a
+    ``visual_delta`` block — one drawn from a handful of rows that happened to land. Said
+    out loud, that is a mismatch to fix; left out, it is a distribution nobody doubts.
+    """
+    found = [float(row["delta"]) for row in rows if row["delta"] is not None]
+    flagged = [row for row in rows if row["jump_cut"]]
+    return {
+        "catalog_rows": len(pictures),
+        "joined": len(found),
+        "unjoined": len(rows) - len(found),
+        "jump_cuts": len(flagged),
+        "flagged_cuts": [row["cut"] for row in flagged[:INLINE_CUTS]],
+        "delta": _lengths([round(one, 4) for one in found]) if found else None,
+        "match_tolerance_sec": DELTA_MATCH_SEC,
     }
 
 

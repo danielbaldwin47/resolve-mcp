@@ -187,6 +187,7 @@ def correlate_timeline(
     audio: str | None = None,
     tunes: str | None = None,
     solos: str | None = None,
+    deltas: str | None = None,
     angles: dict[str, Any] | None = None,
     track: int | None = None,
     audio_at: Any | None = None,
@@ -207,6 +208,14 @@ def correlate_timeline(
     just {"C0012.mp4": "drums"} — you keep the sidecar, you read it, you pass what it says.
     Each of these is optional, and each one absent means that column reads null rather than
     a guess.
+
+    deltas is a cut-delta catalog measured off a *rendered* picture — how far the picture
+    steps at each cut (0 to 1) and whether the step is small enough to read as a jump cut,
+    the 30-degree-rule check. Nothing on a timeline can answer that: it takes frames either
+    side of every boundary, so the render comes first and this joins its numbers on by time.
+    gauntlet/tools/ab_pack.py writes such a catalog as cuts.json. Render the whole timeline,
+    not a span, or the times will not line up — the visual_delta block in the result says how
+    many cuts joined and how many did not.
 
     The audio is normally located by finding it on the timeline. When it is not there at all
     — a multicam carries its own audio angle, and the mix itself was never laid down —
@@ -241,6 +250,7 @@ def correlate_timeline(
             audio=audio,
             tunes=tunes,
             solos=solos,
+            deltas=deltas,
             angles=angles,
             track=track,
             audio_at=audio_at,

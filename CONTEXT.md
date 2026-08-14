@@ -199,8 +199,11 @@ grabs — the one compute route that is not a job), `jpeg` (read back
 dimensions), `scenes` (scene-cut detection as cached job), `blocking` (how
 blocked one frame is: the near-field obstruction arithmetic, numpy + scipy,
 no I/O), `occlusion` (that arithmetic as a cached job over a sampled range —
-per-sample scores and the unusable windows to keep a cut out of), `source`
-(clip name → file path + the clip's own frame numbering).
+per-sample scores and the unusable windows to keep a cut out of), `framing`
+(how far the picture steps *across* a cut and the 30-degree-rule jump-cut
+flag: layout, content and size terms over two grey frames, numpy only, no
+I/O — the pack measures with it, `analysis/correlate` joins its catalog on),
+`source` (clip name → file path + the clip's own frame numbering).
 
 ## Test map — `tests/`
 

@@ -177,6 +177,25 @@ def solos_file(tmp_path: Path, first_from: str | None = None, first_t: float = 0
 
 
 
+def deltas_file(tmp_path: Path, rows: Sequence[dict[str, Any]], name: str = "pack") -> Path:
+    """A cut-delta catalog, in the shape gauntlet/tools/ab_pack.py writes as cuts.json."""
+    return records.write(
+        tmp_path / f"cut-deltas-{name}.json",
+        {"kind": "cut_deltas", "count": len(rows)},
+        "cuts",
+        list(rows),
+    )
+
+
+def _nested(t: float, delta: float, jump_cut: bool) -> dict[str, Any]:
+    """One pack row: the reading sits under ``delta`` beside the transition typing."""
+    return {
+        "t": t,
+        "transition": {"type": "hard"},
+        "delta": {"delta": delta, "jump_cut": jump_cut, "reason": "same angle" if jump_cut else ""},
+    }
+
+
 def _onsets(times: Sequence[float] = ONSETS) -> correlate.Onsets:
     def detect(path: Path) -> tuple[float, ...]:
         return tuple(times)
@@ -275,9 +294,87 @@ def test_every_shot_lands_on_disk_with_its_offsets_bar_and_section(
         "transient_offset": -0.017,
         "tune": 1,
         "front": "drums",
+        "delta": None,
+        "jump_cut": None,
     }
     assert cuts[2]["tune"] == 2
     assert cuts[2]["front"] == "other"
+
+
+def test_a_cut_delta_catalog_joins_onto_the_cuts(attach: Attach, tmp_path: Path) -> None:
+    """The pack measured the render; this puts its numbers on the timeline's own cuts."""
+    attach(studio(timeline=a_cut()))
+    catalog = deltas_file(tmp_path, [_nested(1.033, 0.62, False), _nested(2.483, 0.08, True)])
+
+    result = _measured(tmp_path, deltas=str(catalog))
+
+    cuts = _rows(result)
+    assert [one["delta"] for one in cuts] == [None, 0.62, 0.08]
+    assert [one["jump_cut"] for one in cuts] == [None, False, True]
+    assert result["visual_delta"]["joined"] == 2
+    assert result["visual_delta"]["unjoined"] == 1
+    assert result["visual_delta"]["jump_cuts"] == 1
+    assert result["visual_delta"]["flagged_cuts"] == [3]
+    assert result["visual_delta"]["delta"]["max"] == 0.62
+
+
+def test_a_flat_catalog_reads_the_same_as_a_nested_one(attach: Attach, tmp_path: Path) -> None:
+    """A catalog that spreads the reading across the row, as the recon pass writes it."""
+    attach(studio(timeline=a_cut()))
+    catalog = deltas_file(
+        tmp_path,
+        [{"t": 1.033, "delta": 0.62, "jump_cut": False, "reason": ""}],
+        name="flat",
+    )
+
+    cuts = _rows(_measured(tmp_path, deltas=str(catalog)))
+
+    assert cuts[1]["delta"] == 0.62
+    assert cuts[1]["jump_cut"] is False
+
+
+def test_a_catalog_row_out_of_reach_of_a_cut_does_not_join(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """A catalog off a different span borrows nobody's number — it reports nothing.
+
+    Half a second away is another shot, and taking its delta would answer for an edit
+    that is not this one. The count of what failed to join is the tell.
+    """
+    attach(studio(timeline=a_cut()))
+    catalog = deltas_file(tmp_path, [_nested(1.633, 0.62, False)], name="offset")
+
+    result = _measured(tmp_path, deltas=str(catalog))
+
+    assert [one["delta"] for one in _rows(result)] == [None, None, None]
+    assert result["visual_delta"]["joined"] == 0
+    assert result["visual_delta"]["unjoined"] == 3
+    assert result["visual_delta"]["delta"] is None
+
+
+def test_no_catalog_leaves_the_columns_null_and_the_block_out(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """An input nobody named reads as nothing measured, not as a timeline with no steps."""
+    attach(studio(timeline=a_cut()))
+
+    result = _measured(tmp_path)
+
+    assert all(one["delta"] is None for one in _rows(result))
+    assert result["visual_delta"] is None
+
+
+def test_a_named_catalog_is_part_of_the_cache_key(attach: Attach, tmp_path: Path) -> None:
+    """Rerunning with a different catalog measures again rather than answering from a file."""
+    attach(studio(timeline=a_cut()))
+    first = deltas_file(tmp_path, [_nested(1.033, 0.62, False)], name="one")
+    second = deltas_file(tmp_path, [_nested(1.033, 0.09, True)], name="two")
+
+    _measured(tmp_path, deltas=str(first))
+    again = _measured(tmp_path, deltas=str(second))
+
+    assert _rows(again)[1]["delta"] == 0.09
+    assert _rows(again)[1]["jump_cut"] is True
 
 
 def test_the_offset_is_signed_from_the_cut_to_the_nearest_beat(
