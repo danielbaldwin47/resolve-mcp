@@ -117,6 +117,18 @@ def test_a_frame_held_whole_with_lettering_on_it_is_a_card() -> None:
     assert reading.found
 
 
+def test_a_frozen_picture_with_fine_detail_in_it_reads_as_a_card_too() -> None:
+    """A known confusion, pinned rather than described. A freeze frame is held, and any
+    bright fine detail in it — a lit music stand, a cymbal edge — is detailed in exactly the
+    way lettering is. Nothing in this reading separates the two, so a deliverable that
+    freezes on a picture says ``card``, and whoever reads that has to know it can mean
+    either. A frozen picture with nothing fine in it stays ``absent``."""
+    frozen = caption(picture(0), top=100, left=300, strokes=8)
+
+    assert supers.read_pair(frozen, frozen).kind == supers.CARD
+    assert supers.read_pair(picture(0), picture(0)).kind == supers.ABSENT
+
+
 def test_a_held_black_frame_with_nothing_on_it_is_not_a_card() -> None:
     """A gap is not a title card, and the difference is whether anything is written on it."""
     black = np.zeros((HEIGHT, WIDTH), dtype=np.uint8)
@@ -147,11 +159,35 @@ def test_a_run_reports_the_span_the_caption_is_up_for() -> None:
         + [picture(i) for i in range(12, 16)]
     )
 
-    spans = supers.read_run(frames, lag=3)
+    spans = supers.read_run(frames, lags=(3,))
 
     assert len(spans) == 1
     assert spans[0].kind == supers.OVERLAY
     assert (spans[0].first, spans[0].last) == (4, 11)
+
+
+def jittered(frame: NDArray[np.uint8], seed: int) -> NDArray[np.uint8]:
+    """The same shot again, a second later: the same picture, none of the same pixels.
+
+    What a locked-off camera in a dark room actually hands over. Pixel agreement collapses
+    while the composition does not move at all, which is why agreement alone cannot be
+    allowed to prove anything.
+    """
+    noise = np.random.default_rng(seed).integers(-5, 6, size=frame.shape)
+    shot: NDArray[np.uint8] = np.clip(frame.astype(np.int16) + noise, 0, 255).astype(np.uint8)
+    return shot
+
+
+def test_a_bright_still_thing_in_a_still_shot_is_not_a_super() -> None:
+    """The measurement's whole reason for the composition test. Here the "caption" is the
+    lit keyboard of a piano with a maker's name across it: bright, static, in the same
+    place in every reading, inside one shot that never changes. It persists perfectly, and
+    it is still not a graphic."""
+    frames = np.stack([caption(jittered(picture(0), seed)) for seed in range(8)])
+
+    reading = supers.read_pair(frames[0], frames[3])
+    assert reading.kind == supers.OVERLAY  # the pair alone is fooled...
+    assert supers.read_run(frames, lags=(3,)) == ()  # ...and the span is not
 
 
 def test_pixels_that_agree_somewhere_new_every_time_are_not_a_super() -> None:
@@ -165,7 +201,7 @@ def test_pixels_that_agree_somewhere_new_every_time_are_not_a_super() -> None:
                        caption(picture(4), top=100, left=60),
                        caption(picture(5), top=300, left=500)])
 
-    assert supers.read_run(frames, lag=2, bridge=0) == ()
+    assert supers.read_run(frames, lags=(2,), bridge=0) == ()
 
 
 def test_a_caption_that_does_not_outlast_the_lag_is_not_seen() -> None:
@@ -173,12 +209,39 @@ def test_a_caption_that_does_not_outlast_the_lag_is_not_seen() -> None:
     lag apart, so a super shorter than the lag is never held at both ends of one."""
     frames = np.stack([picture(i) for i in range(4)] + [caption(picture(4))] + [picture(5)])
 
-    assert supers.read_run(frames, lag=3) == ()
+    assert supers.read_run(frames, lags=(3,)) == ()
 
 
 def test_a_lag_of_zero_is_refused() -> None:
     with pytest.raises(ValueError, match="reads a frame against itself"):
-        supers.read_run(np.stack([picture(0), picture(1)]), lag=0)
+        supers.read_run(np.stack([picture(0), picture(1)]), lags=(0,))
+
+
+def test_a_short_super_needs_the_short_lag_to_be_seen_twice() -> None:
+    """Why the scan reads two distances. A card is the shortest super there is, and at a
+    lag near its own length it fits into a single reading — which the same-pixels-twice
+    rule will not take. Read from closer in, the same card is seen three times and stands.
+
+    The other half of that trade only shows on real footage: a second apart, a locked-off
+    shot has not moved enough to disagree with itself and the overlay reading refuses the
+    pair as too still. These fixtures reframe on every frame, so they cannot pose it.
+    """
+    card = caption(np.zeros((HEIGHT, WIDTH), dtype=np.uint8), top=180, left=200, strokes=14)
+    frames = np.concatenate(
+        [
+            held_still(card, 4),
+            np.stack([picture(i) for i in range(4, 8)]),
+            np.stack([caption(picture(i)) for i in range(8, 16)]),
+        ]
+    )
+
+    near = supers.read_run(frames, lags=(1,))
+    far = supers.read_run(frames, lags=(4,))
+    both = supers.read_run(frames, lags=(1, 4))
+
+    assert supers.CARD in [one.kind for one in near]
+    assert supers.CARD not in [one.kind for one in far]
+    assert sorted({one.kind for one in both}) == [supers.CARD, supers.OVERLAY]
 
 
 def test_a_gap_of_doubt_inside_one_super_does_not_split_it() -> None:
@@ -190,7 +253,7 @@ def test_a_gap_of_doubt_inside_one_super_does_not_split_it() -> None:
         + [caption(picture(6)), caption(picture(7))]
     )
 
-    spans = supers.read_run(frames, lag=1, bridge=2)
+    spans = supers.read_run(frames, lags=(1,), bridge=2)
 
     assert len(spans) == 1
     assert (spans[0].first, spans[0].last) == (0, 5)

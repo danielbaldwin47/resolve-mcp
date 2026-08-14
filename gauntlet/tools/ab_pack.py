@@ -150,14 +150,17 @@ SLOW_RAMP_TOP_SHARE = 0.9  # the ramp starts where luma leaves that level
 SLOW_MIN_SHOT_SEC = 2.0  # shorter shots cannot hide a multi-second ramp
 SLOW_WEAK_PEAK_DELTA = 6.0  # boundary this soft is a candidate slow transition
 
-# burned-in supers. The scan reads each frame against one SUPER_LAG_SEC later:
-# a graphic is what two frames whose footage has moved on still agree about, so
-# the lag has to be long enough that it has, and short enough that the shortest
-# super in the corpus is read by *several* pairs rather than one -- the reading
-# is only believed where the same pixels carry twice, and the Taurus People title
-# card, at 2.3 s, is the shortest thing that has to survive that test.
+# burned-in supers. The scan reads each frame against the ones SUPER_LAGS_SEC
+# later, and two distances rather than one because the two shapes want opposite
+# things. A title card is read best from close together -- its frames are
+# identical -- but it is also the shortest super in the corpus at 2.3 s, and at a
+# two-second lag it fits into a single reading, which the same-pixels-twice test
+# will not take. An overlay is the reverse: a second apart the footage under it
+# has not moved enough to disagree with itself, and the pair is refused as too
+# still. Measured on the anchor: the card needs the 1 s lag, the Taurus People
+# personnel lower third needs the 2 s one.
 SUPER_RATE = 2.0  # scan rate; a whole song at the lettering grid is 280 MB here
-SUPER_LAG_SEC = 1.0
+SUPER_LAGS_SEC = (1.0, 2.0)
 SUPER_PAD_SEC = 2.0  # native-fps window either side of a scanned edge
 SUPER_MERGE_SEC = 0.5  # refined spans this close are one graphic
 
@@ -782,9 +785,15 @@ def read_cut(
 # burned-in supers: lower thirds, title cards, and the cuts that land on one
 
 
-def super_spans(scan: np.ndarray, lag: int) -> tuple[supers.Span, ...]:
+def super_lags() -> tuple[int, ...]:
+    """The scan distances in scanned frames, deduplicated and never zero."""
+    return tuple(sorted({max(1, round(one * SUPER_RATE)) for one in SUPER_LAGS_SEC}))
+
+
+def super_spans(scan: np.ndarray, lags: Sequence[int]) -> tuple[supers.Span, ...]:
     """The coarse pass: where in the scan a graphic is up at all."""
-    return () if len(scan) <= lag else supers.read_run(scan, lag=lag)
+    usable = [one for one in lags if one < len(scan)]
+    return supers.read_run(scan, lags=usable) if usable else ()
 
 
 def super_mask(scan: np.ndarray, span: supers.Span, lag: int) -> np.ndarray | None:
@@ -872,13 +881,13 @@ def super_scan(clip: Path, fps: float, cuts: Sequence[float]) -> dict[str, Any]:
     the fine one cannot. A scan of a whole song at the resolution lettering needs is a
     few hundred megabytes at two frames a second and several gigabytes at twenty-four.
     """
-    lag = max(1, round(SUPER_LAG_SEC * SUPER_RATE))
+    lags = super_lags()
     scan = decode_grey(
         clip, supers.GRID_WIDTH, supers.GRID_HEIGHT, fps=SUPER_RATE, dtype=np.uint8
     )
     refined: list[supers.Span] = []
-    for span in super_spans(scan, lag):
-        mask = super_mask(scan, span, lag)
+    for span in super_spans(scan, lags):
+        mask = super_mask(scan, span, min(lags))
         if mask is not None:
             refined.append(refine_super(clip, span, mask, fps))
     spans = merge_supers(refined, fps)
@@ -892,7 +901,7 @@ def super_scan(clip: Path, fps: float, cuts: Sequence[float]) -> dict[str, Any]:
         record["end"] = round((record["visible_last"] + 1) / fps, 3)
     review["scan"] = {
         "rate_fps": SUPER_RATE,
-        "lag_frames": lag,
+        "lag_frames": list(lags),
         "grid": f"{supers.GRID_WIDTH}x{supers.GRID_HEIGHT}",
         "frames_scanned": len(scan),
     }
@@ -2212,7 +2221,8 @@ def main(argv: list[str] | None = None) -> int:
             "question": "which burned-in graphics are on screen when -- lower thirds, "
             "title cards, bugs -- and does any cut land inside one",
             "method": f"each frame of a {SUPER_RATE} fps scan read against the one "
-            f"{SUPER_LAG_SEC} s later on a {supers.GRID_WIDTH}x{supers.GRID_HEIGHT} grey grid. "
+            f"{' and '.join(str(one) for one in SUPER_LAGS_SEC)} s later on a "
+            f"{supers.GRID_WIDTH}x{supers.GRID_HEIGHT} grey grid. "
             "A graphic is what two frames of different pictures agree about: the camera saw "
             "something else, the graphics layer drew the same thing. Every span found is then "
             "walked out at native rate so its in and out are frames rather than scan steps",
@@ -2222,7 +2232,8 @@ def main(argv: list[str] | None = None) -> int:
                 "across them anyway",
                 "card": f"the frames agree over at least {supers.HELD} of the pixels -- the "
                 "screen is holding one picture -- and that picture carries such a region, "
-                "which is what keeps a black gap or a freeze frame from reading as a card",
+                "which is what keeps a black gap from reading as a card. A freeze frame is "
+                "held and detailed in the same way and will read as one",
                 "unread": "anything else, and deliberately most of it. Pixel agreement alone "
                 "cannot prove a graphic on this material: two frames of one still shot "
                 "disagree from noise while its brightest static object -- a piano keyboard "
@@ -2237,11 +2248,12 @@ def main(argv: list[str] | None = None) -> int:
             "clears_before": "frames between a super's last visible frame and the next cut, "
             "which is the title-card convention as a number: the human's cards read 1",
             "reported_fields": "kind, first, last, ramp_in, ramp_out, visible_first, "
-            "visible_last, frames, in_sec, out_sec, clears_before, and the box in frame "
+            "visible_last, frames, t, end, clears_before, and the box in frame "
             "fractions (top, left, bottom, right)",
             "blind_spot": "a super has to outlive the lag and to see the picture actually "
-            f"change while it is up, so one held under {SUPER_LAG_SEC} s, or one held through a "
-            "single long take, comes back as nothing rather than as absence. Recall is traded "
+            f"change while it is up, so one held under {min(SUPER_LAGS_SEC)} s, or one held "
+            "through a single long take, comes back as nothing rather than as absence. "
+            "Recall is traded "
             "for precision on purpose: a graphic invented under a critic's cut misleads worse "
             "than one missed",
         },

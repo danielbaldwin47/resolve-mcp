@@ -32,20 +32,22 @@ Two shapes, told apart by how much of the frame agreed:
 * **card** — the frames agree everywhere (``HELD``), which no two frames of this footage
   ever do: the screen is holding one picture, and if that picture carries a compact
   high-contrast region it is a graphic being held rather than a shot. A title card over
-  black. The region requirement is what keeps a black gap or a freeze frame from reading
-  as one.
-* **overlay** — the pictures are genuinely different (``STEP``) and a compact
-  high-contrast region agrees across them anyway. Lower thirds and titles over footage.
+  black. The region requirement is what keeps a black gap from reading as one — but not
+  what keeps a *freeze frame* from doing so, because a frozen photograph of a stage is
+  held and detailed in exactly the way a card is. Nothing here separates those two, and
+  a deliverable that freezes on a picture will say ``card``.
+* **overlay** — a compact high-contrast region agrees across two frames that disagree
+  otherwise. Lower thirds and titles over footage.
 
-Everything else is ``unread`` — nothing is claimed. Three of this measurement's four
-guards exist to widen that answer rather than narrow it, because the failure mode here is
-not a missed caption but an invented one. On a dark stage of locked-off cameras the
-frames of one *still* shot disagree pixel by pixel from noise alone, while its brightest
-static object agrees with itself perfectly, in the same place, in every reading — and on
-this stage that object is a piano keyboard with a maker's name written across it. So a
-pair must show a real change of *composition* before what it agrees on is called a
-graphic (``STEP``), and a span must be seen twice in the same pixels before it is
-reported at all (:func:`_persists`).
+Everything else is ``unread`` — nothing is claimed. Most of it is, because the failure
+mode here is not a missed caption but an invented one. On a dark stage of locked-off
+cameras the frames of one *still* shot disagree pixel by pixel from noise alone, while its
+brightest static object agrees with itself perfectly, in the same place, in every reading
+— and on this stage that object is a piano keyboard with a maker's name written across it.
+So an overlay is believed only twice over: the same pixels have to carry in more than one
+reading (:func:`_persists`), and the picture has to genuinely change somewhere across the
+span they carried through (:func:`_outlived`). A card answers to neither, having stronger
+evidence of its own in ``HELD``.
 
 Everything is measured on a 720x405 grey grid rather than the 128x72 one a cut's
 composition is read on. Text is the subject, and text is the first thing a small grid
@@ -59,7 +61,7 @@ nothing rather than as absence, which is a floor on recall taken deliberately: s
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from typing import Any, NamedTuple
 
 import numpy as np
@@ -98,23 +100,23 @@ a *moving* shot dips to 0.55 without the picture having changed at all, which is
 whether the picture really changed is asked separately, and asked of the composition."""
 
 STEP = 0.30
-"""How far the picture must have stepped between two frames before what they agree about
-counts as a graphic.
+"""How far the picture must step across an overlay's own span before the overlay is
+believed — see :func:`_outlived`.
 
-This is the whole precision of the overlay reading. Pixel agreement says only that the
-frames differ, and on a dark stage they differ from noise; a locked-off camera then offers
-a bright static band with a maker's name across it — a piano keyboard — that agrees with
-itself in every reading, in the same place, forever. Composition is what tells a new
-picture from a still one, so the step is `video.framing`'s own reading of that.
+This is the whole precision of the overlay reading. Pixel agreement says only that two
+frames differ, and on a dark stage they differ from noise alone; a locked-off camera then
+offers a bright static band with a maker's name across it — a piano keyboard — that agrees
+with itself in every reading, in the same place, forever. Composition is what tells a new
+picture from a still one, so the step is `video.framing`'s own reading of that, on frames
+that need not be anywhere near a cut.
 
-Measured on the corpus anchor at a two-second lag: pairs inside one shot step 0.01-0.17,
+Measured on the corpus anchor at a two-second lag: pairs inside one shot step 0.01-0.17 and
 pairs across a shot change step 0.47-0.68. This sits in the empty middle, nearer the still
-population because the cost of the two errors is not symmetric — a graphic invented under a
-critic's cut is worse than one missed.
+population because the two errors do not cost the same — a graphic invented under a
+critic's cut misleads worse than one missed.
 
-What it costs: a super that never outlives a shot boundary is not reported at all. On
-Hardest Part the personnel lower third holds through one long take and comes back as
-nothing. That is a floor on *recall*, deliberately, and the receipt names it."""
+Cards are exempt, and have to be: a card's two frames are the same frame, so its step is
+zero by construction and its evidence is ``HELD`` instead."""
 
 HELD = 0.98
 """At or above this share, nothing changed at all — the screen is holding one picture.
@@ -280,52 +282,55 @@ def _read(
     mask, regions = _found(out, into, same)
     if not regions:
         return Reading(kind=ABSENT, agreement=agreement, regions=()), empty
-    if agreement >= HELD:
-        return Reading(kind=CARD, agreement=agreement, regions=regions), mask
-    if _step(out, into) < STEP:
-        # Agreeing pixels, but between two frames of the same picture: whatever is bright
-        # and static in a locked-off shot agrees with itself, and on this stage that is a
-        # piano keyboard with a maker's name written across it. Nothing is claimed.
-        return Reading(kind=UNREAD, agreement=agreement, regions=()), empty
-    return Reading(kind=OVERLAY, agreement=agreement, regions=regions), mask
+    kind = CARD if agreement >= HELD else OVERLAY
+    return Reading(kind=kind, agreement=agreement, regions=regions), mask
 
 
 def read_run(
     frames: NDArray[Any],
-    lag: int,
+    lags: Sequence[int],
     bridge: int = 1,
 ) -> tuple[Span, ...]:
     """Every super in a decoded run of frames, as spans of the run's own indices.
 
-    Each frame is read against the one ``lag`` ahead of it, and a pair that carries a
-    super marks *both* its ends and everything between: the graphic is identical at two
-    frames a lag apart, so it was up across that whole stretch. A super therefore has to
-    outlast the lag to be seen at all, which is the price of not needing a cut list — and
-    to outlast it twice over, because a span only survives :func:`_persists` if two
-    readings agree on where the graphic was.
+    Each frame is read against the one ``lag`` ahead of it, and a pair that carries a super
+    marks *both* its ends and everything between: the graphic is identical at two frames a
+    lag apart, so it was up across that whole stretch. A super therefore has to outlast a
+    lag to be seen at all, which is the price of needing no cut list.
 
-    ``bridge`` is how many scanned frames of doubt a span may contain without being cut
-    in two — a pair whose picture happened not to change is an ``unread``, not the end of
-    the graphic, and a super that outlives one long locked-off shot would otherwise come
-    back as two supers with a hole between them.
+    **More than one lag, because one distance cannot serve both shapes.** A card is two
+    frames of the same held picture, so it is read best from close together — but it is
+    also the shortest super there is, and at a long lag it fits only one reading, which
+    :func:`_persists` will not accept. An overlay is the opposite: close together, the
+    footage under it has not moved enough to disagree with itself, and the reading refuses
+    the pair as too still. Both distances are therefore read, and every reading counts
+    towards the same spans.
+
+    ``bridge`` is how many scanned frames of doubt a span may contain without being cut in
+    two — a pair whose picture happened not to change is an ``unread``, not the end of the
+    graphic, and a super that outlives one long locked-off shot would otherwise come back
+    as two supers with a hole between them.
     """
-    if lag < 1:
-        raise ValueError(f"A lag of {lag} frames reads a frame against itself; use 1 or more.")
+    if not lags or min(lags) < 1:
+        raise ValueError(
+            f"A lag of {min(lags, default=0)} frames reads a frame against itself; "
+            "use 1 or more."
+        )
     total = len(frames)
     up = np.zeros(total, dtype=bool)
     kinds: list[str] = [""] * total
-    seen: list[list[Region]] = [[] for _ in range(total)]
-    masks: dict[int, NDArray[np.bool_]] = {}
-    for index in range(total - lag):
-        reading, mask = _read(frames[index], frames[index + lag])
-        if not reading.found:
-            continue
-        up[index : index + lag + 1] = True
-        masks[index] = mask
-        for at in (index, index + lag):
-            kinds[at] = reading.kind
-            seen[at].extend(reading.regions)
-    return _spans(up, kinds, seen, masks, bridge)
+    masks: list[tuple[int, NDArray[np.bool_]]] = []
+    for lag in sorted(set(lags)):
+        for index in range(total - lag):
+            reading, mask = _read(frames[index], frames[index + lag])
+            if not reading.found:
+                continue
+            up[index : index + lag + 1] = True
+            masks.append((index, mask))
+            for at in (index, index + lag):
+                kinds[at] = reading.kind
+    spans = _spans(up, kinds, masks, bridge)
+    return tuple(one for one in spans if one.kind == CARD or _outlived(frames, one))
 
 
 def edges(window: NDArray[Any], mask: NDArray[np.bool_], anchor: int) -> Edges:
@@ -528,8 +533,7 @@ def _regions(graphic: NDArray[np.bool_]) -> tuple[NDArray[np.bool_], tuple[Regio
 def _spans(
     up: NDArray[np.bool_],
     kinds: Sequence[str],
-    seen: Sequence[Sequence[Region]],
-    masks: Mapping[int, NDArray[np.bool_]],
+    masks: Sequence[tuple[int, NDArray[np.bool_]]],
     bridge: int,
 ) -> tuple[Span, ...]:
     """Frames a super was up on, grouped into the supers they belong to."""
@@ -548,13 +552,39 @@ def _spans(
         gap += 1
         if gap <= bridge and index < len(up):
             continue
-        if _persists(start, index - gap, masks):
-            spans.append(_span(start, index - gap, kinds, seen))
+        held = _persists(start, index - gap, masks)
+        if held is not None:
+            spans.append(_span(start, index - gap, kinds, held))
         start, gap = None, 0
     return tuple(spans)
 
 
-def _persists(first: int, last: int, masks: Mapping[int, NDArray[np.bool_]]) -> bool:
+def _outlived(frames: NDArray[Any], span: Span) -> bool:
+    """Whether the picture actually changed while this overlay was up.
+
+    The guard that makes the overlay reading worth quoting, and it is asked of the span
+    rather than of each pair inside it. Asked pair by pair it costs most of the real supers
+    in the corpus: a lower third holds through one long take, every pair inside it sits in
+    the same shot, and the graphic that outlived a whole shot change at the far end of the
+    span is thrown away for the sake of the frames in the middle. Asked once, across the
+    span's own ends, it keeps them and still refuses the case it exists for — a bright
+    static thing inside a single unchanging shot, which on this stage is a piano keyboard
+    with a maker's name written across it.
+
+    Sampled at the middle as well as the ends, because two ends of a span can land on the
+    same framing by coincidence and one reading of nothing would then speak for the whole
+    super.
+    """
+    middle = (span.first + span.last) // 2
+    pairs = ((span.first, span.last), (span.first, middle), (middle, span.last))
+    return any(
+        one != other and _step(frames[one], frames[other]) >= STEP for one, other in pairs
+    )
+
+
+def _persists(
+    first: int, last: int, masks: Sequence[tuple[int, NDArray[np.bool_]]]
+) -> NDArray[np.bool_] | None:
     """Whether the same pixels were graphic every time this span was read.
 
     The test that separates a caption from a coincidence, and the only one that survives
@@ -569,41 +599,47 @@ def _persists(first: int, last: int, masks: Mapping[int, NDArray[np.bool_]]) -> 
     A span with one reading behind it has nothing to intersect and is dropped: a super seen
     once is indistinguishable from a coincidence seen once, and this measurement exists to
     be quoted at an editor.
+
+    What comes back is the intersection itself, because it is also the best answer to
+    *where* the super is: the union of every region ever seen inside the span drifts wider
+    with every stray pixel that agreed once, while what carried in all of them is the
+    lettering.
     """
-    inside = [mask for at, mask in masks.items() if first <= at <= last]
+    inside = [mask for at, mask in masks if first <= at <= last]
     if len(inside) < 2:
-        return False
+        return None
     held = inside[0].copy()
     for mask in inside[1:]:
         held &= mask
-    return bool(held.sum() >= MIN_AREA * held.size)
+    return held if held.sum() >= MIN_AREA * held.size else None
 
 
 def _span(
     first: int,
     last: int,
     kinds: Sequence[str],
-    seen: Sequence[Sequence[Region]],
+    held: NDArray[np.bool_],
 ) -> Span:
-    """One span, boxed around every graphic that showed inside it.
+    """One span, boxed around the pixels that were graphic in every reading of it.
 
-    The box is the union rather than one pair's reading: where a lower third and a bug are
-    up together the span covers both, and a consumer that wants them apart wants the pair
-    readings, not this. The kind follows the majority of the pairs that carried it, so one
-    frozen pair inside a long overlay does not rename it a card.
+    Where a lower third and a bug are up together the box covers both, and a consumer that
+    wants them apart wants the pair readings rather than this. The kind follows the majority
+    of the readings that carried it, so one frozen pair inside a long overlay does not
+    rename it a card.
     """
-    regions = [one for index in range(first, last + 1) for one in seen[index]]
     votes = [kinds[index] for index in range(first, last + 1) if kinds[index]]
     kind = CARD if votes.count(CARD) > votes.count(OVERLAY) else OVERLAY
+    height, width = held.shape
+    rows, cols = np.nonzero(held)
     return Span(
         kind=kind,
         first=first,
         last=last,
-        top=round(min((one.top for one in regions), default=0.0), 4),
-        left=round(min((one.left for one in regions), default=0.0), 4),
-        bottom=round(max((one.bottom for one in regions), default=0.0), 4),
-        right=round(max((one.right for one in regions), default=0.0), 4),
-        pixels=max((one.pixels for one in regions), default=0),
+        top=round(float(rows.min()) / height, 4),
+        left=round(float(cols.min()) / width, 4),
+        bottom=round(float(rows.max() + 1) / height, 4),
+        right=round(float(cols.max() + 1) / width, 4),
+        pixels=int(held.sum()),
         pairs=len(votes),
     )
 

@@ -99,12 +99,13 @@ def main(argv: list[str] | None = None) -> int:
         "reading": {
             "grid": f"{supers.GRID_WIDTH}x{supers.GRID_HEIGHT}",
             "scan_fps": ab_pack.SUPER_RATE,
-            "lag_sec": ab_pack.SUPER_LAG_SEC,
+            "lag_sec": list(ab_pack.SUPER_LAGS_SEC),
             "changed_at_or_below": supers.CHANGED,
             "held_at_or_above": supers.HELD,
             "contrast": supers.CONTRAST,
             "min_area_share": supers.MIN_AREA,
             "max_box_share": supers.MAX_BOX,
+            "step_across_span_at_or_above": supers.STEP,
         },
         "caveat": (
             "the cut list comes from the same per-frame scene detector the pack uses, which "
