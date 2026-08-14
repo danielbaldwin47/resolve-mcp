@@ -50,6 +50,14 @@ WAIT_TIMEOUT = 30.0
 FOLLOW_POLL = 0.1
 WAITING = "waiting for Resolve"
 
+PROGRESS_INTERVAL = 1.0
+"""How often a moving progress bar is written to the record, in seconds. See ``execute``.
+
+Comfortably below ``store.HEARTBEAT_CEILING``, which reads a record nothing has written to as
+a worker that is gone: the bar is the heartbeat, and a throttle that outran the ceiling would
+have a running job declare itself dead.
+"""
+
 RESOLVE_LOCK = threading.Lock()
 """Held for the whole of any job that drives the Resolve application."""
 
@@ -165,11 +173,25 @@ def execute(record: JobRecord, work: Work, config: Config) -> None:
     the error shaping and the guarantee that nothing escapes are the same guarantees whether
     the work is on a thread here or alone in a process of its own.
     """
+    # The bar reaches disk at most once a second. It moves several times a second and a
+    # separation moves it for half an hour, which is tens of thousands of writes to a file
+    # ``get_job`` is polling at the same time — on Windows the two sides already have to retry
+    # around each other's handles (``store._sharing``), and one write a second says everything
+    # a poller can read anyway. Two things are never throttled: a step change, which is the one
+    # line an agent reads to know what is happening and happens a dozen times in a job rather
+    # than a thousand, and the ending, which ``store.finish`` writes itself — so whichever tick
+    # the throttle skipped, the last thing the record says is the true one.
+    last_save = float("-inf")
 
     def progress(fraction: float, step: str) -> None:
+        nonlocal last_save
         record.progress = min(max(fraction, 0.0), 1.0)
+        moved_on = step != record.step
         record.step = step
-        store.save(record, config)
+        now = time.monotonic()
+        if moved_on or now - last_save >= PROGRESS_INTERVAL:
+            last_save = now
+            store.save(record, config)
 
     try:
         output = work(progress)

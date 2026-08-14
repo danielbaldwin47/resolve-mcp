@@ -102,10 +102,12 @@ as black shots, #142; `track=` measures one video track alone. Gates the beat
 statistics on `trust`, refuses as `stranded` a cut further from its beat than a
 beat is wide — the grid does not reach it, #160 — and leaves the transient ones
 ungated. Also reads the cutting itself: `shot_rhythm` bins the shot lengths,
-measures the longest strict A/B alternation run and says `reads_metronomic`
-with the heuristic that drew it, and its `gears` block splits the cut's span
-into loudness terciles off a 1 s RMS curve and reports cuts per minute in each,
-the loud/quiet `rate_ratio`, where the sub-2 s shots sit and `one_speed` —
+measures the longest strict A/B alternation run and the longest monotonic
+duration `ramp`, and says `reads_metronomic` with the heuristic that drew it,
+and its `gears` block splits the cut's span into loudness terciles off a 1 s
+RMS curve and reports cuts per minute in each, the loud/quiet `rate_ratio`,
+where the sub-2 s shots sit, `one_speed`, and `outside_shots` — shots past
+the analysed mix, counted apart rather than clamped into a tercile —
 warnings the report carries, never gates),
 `cuda` (preloads
 the CUDA runtime the `analysis` extra ships, so CTranslate2 finds it on Windows;
@@ -264,6 +266,34 @@ unless `RESOLVE_MCP_SCENE_SCAN_CLIP` names a real one. That variable is
 **unset on the live box**: its pool was checked in #135 and holds no flattened
 render, only raw continuous angles — so the generated clip is the default there,
 and the variable is for a project that does have an edit to scan.
+
+## Agent-owned trees — `gauntlet/`, `projects/`
+
+Neither is read by server code; both are the agent's own working record, and
+like `styles/` they are data, not modules.
+
+`gauntlet/` — the gauntlet loop: agent-built cuts judged blind against the
+director's own final cuts, piece by piece, where every critic loss becomes
+server or workflow work and never a hand-tuned edit. `STATE.md` (protocol,
+close rule, where each piece stands), `GAPS.md` (the gap ledger — one entry
+per critic loss or prep finding, open/in-work/fixed), `HANDOFF.md`.
+`tools/ab_pack.py` is the harness proper: a **sealed blind A/B pack builder**
+— two videos in, deterministic A/B labels out, plus contact sheets,
+cut-boundary filmstrips and a measured `cuts.json`, with the label→source
+mapping quarantined in `assignment.json` so a critic reads the pack without
+knowing whose cut is whose; it refuses to seal when its scene scan finds far
+fewer cuts than the timeline holds (G3). `recon/` is one-off instruments —
+one script plus its JSON receipt per question (plans, builds, pixel checks,
+occlusion scans). Renders, packs, frame dirs and the per-frame ffmpeg dumps
+under `recon/` are regenerable and gitignored; only scripts and receipts are
+committed.
+
+`projects/<project>/` — the agent-authored files for one Resolve project:
+`README.md` (its fixed facts — timelines, master mix, what is unverified),
+`songs.json`, the cut and titles files, and `cards/` — the PNG title-card
+route (`bake_taurus_cards.py` bakes a `%04d` RGBA frame run per card, fade
+ramps included, for a project whose media pool holds no GUI-authored Text+
+template; `titles/schema.py` §6).
 
 ## Docs
 

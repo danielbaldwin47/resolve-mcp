@@ -49,6 +49,9 @@ def separate_stems(
     directly, which is faster but does not see any level or mapping the director set. Both
     are cached by content and parameters, so a rerun on unchanged media is instant; pass
     refresh=true when you changed something no reading can see, such as a clip's level.
+    Asking again while a separation of the same audio is still running is safe: the second
+    job waits for the first and returns the stems it wrote rather than failing or separating
+    the same audio twice, so it reports "waiting" for as long as the first one takes.
     """
     return {
         "job": stems.separate_stems(

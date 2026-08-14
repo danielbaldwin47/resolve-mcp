@@ -39,6 +39,8 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy import ndimage
 
+from ..errors import OcclusionScanError
+
 GRID_WIDTH = 128
 GRID_HEIGHT = 72
 """The grid every sample is measured on, 16:9. Small enough that a scan of a whole song is
@@ -100,15 +102,31 @@ class Scan(NamedTuple):
 
 
 def read_grid(data: bytes, width: int = GRID_WIDTH, height: int = GRID_HEIGHT) -> NDArray[np.uint8]:
-    """Raw 8-bit grey bytes as ``(samples, height, width)``.
+    """Raw 8-bit grey bytes as ``(samples, height, width)``, or a refusal.
 
-    A trailing partial frame is dropped rather than reshaped into nonsense: ffmpeg killed
-    mid-write leaves one, and half a frame is not a sample.
+    A trailing partial frame fails the read rather than being dropped. ffmpeg killed mid-write
+    leaves one, and so does a second scan writing over this one's scratch file; either way the
+    frames that survived cover a shorter range than the one asked about, and scoring them
+    would answer for footage nobody decoded. The answer that gets invented is the dangerous
+    direction — a truncated tail reads as a clear stretch, so the cut goes where the blocker
+    was.
     """
     frame_bytes = width * height
-    raw = np.frombuffer(data, dtype=np.uint8)
-    usable = raw.size - raw.size % frame_bytes
-    return np.asarray(raw[:usable].reshape(-1, height, width))
+    remainder = len(data) % frame_bytes
+    if remainder:
+        raise OcclusionScanError(
+            cause=(
+                f"The sampled grey is {len(data)} bytes — {remainder} past a whole number of "
+                f"{width}x{height} frames, so the decode did not finish."
+            ),
+            fix=(
+                "Run the scan again. Half a frame is what a decode killed mid-write leaves "
+                "behind; scoring the frames that survived would report on a shorter range "
+                "than the one asked about, and report it as clear."
+            ),
+            detail={"bytes": len(data), "frame_bytes": frame_bytes, "remainder": remainder},
+        )
+    return np.asarray(np.frombuffer(data, dtype=np.uint8).reshape(-1, height, width))
 
 
 def measure(frames: NDArray[np.uint8]) -> Scan:

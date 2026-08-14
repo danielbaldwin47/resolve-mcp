@@ -186,11 +186,15 @@ def build_timeline(
     writing = tail_route.staging_name(name, existing) if round_tripped else name
 
     built = _create(pool, project, writing)
-    shots = _shots(doc, clips, timeline_read.start_frame(built))
+    # The frame the shots are positioned against. Kept, rather than re-read per check: a
+    # round-tripped build reads its placements back on a *second* timeline, whose own start
+    # is Resolve's to choose, and the comparison there is offset against offset.
+    origin = timeline_read.start_frame(built)
+    shots = _shots(doc, clips, origin)
     _make_tracks(built, shots, writing)
     _refuse_locked_tracks(built, shots, writing)
     _append(pool, shots, writing)
-    _verify(built, shots, writing)
+    _verify(built, shots, writing, origin)
     applied: dict[str, Any] | None = None
     if tail is not None and round_tripped:
         # Before takes: the round trip makes a new timeline, and a selector attached to the
@@ -205,7 +209,7 @@ def build_timeline(
             writing,
             name,
             tail,
-            verify=lambda landed: _verify(landed, shots, name),
+            verify=lambda landed: _verify(landed, shots, name, origin),
         )
     elif tail is not None:
         # Nothing was injected and nothing was round-tripped, but the cut file did ask for a
@@ -219,8 +223,11 @@ def build_timeline(
         }
     # Takes hang off placed clips, so they are attached only once every placement has been
     # read back — a selector on a shot that slid somewhere else would be alternates for a
-    # shot the cut file does not have.
-    made = takes.attach_takes(built, _selectors(doc, clips, shots), name)
+    # shot the cut file does not have. Read against the timeline actually being attached to,
+    # which after a round trip is the import and need not start where the staging cut did.
+    made = takes.attach_takes(
+        built, _selectors(doc, clips, shots, timeline_read.start_frame(built) - origin), name
+    )
     carried = _carry_markers(
         connection,
         project,
@@ -486,9 +493,16 @@ def _selectors(
     doc: dict[str, Any],
     clips: dict[str, media.LocatedClip],
     shots: list[Shot],
+    shift: int = 0,
 ) -> list[takes.Selector]:
-    """The alternates each segment carries, against the record frame its shot landed on."""
-    records = {shot.id: shot.record for shot in shots if shot.track == V1}
+    """The alternates each segment carries, against the record frame its shot landed on.
+
+    ``shift`` is how far the timeline being attached to starts from the one the shots were
+    positioned against — zero on a direct build, and whatever a round trip's import chose
+    for itself otherwise. A selector is found by its record frame, so a shift left out here
+    would look for every shot an hour before the cut that holds it.
+    """
+    records = {shot.id: shot.record + shift for shot in shots if shot.track == V1}
     found = []
     for segment in doc["segments"]:
         alternates = segment.get("alternates") or []
@@ -631,9 +645,31 @@ def _append(pool: Pool, shots: list[Shot], name: str) -> None:
     log.info("Appended %d clips to %s; Resolve returned %d", len(shots), name, len(appended))
 
 
-def _verify(timeline: Timeline, shots: list[Shot], name: str) -> None:
-    """Read the tracks back: the only way to know an append landed where it was told to."""
-    misplaced = [shot for track in _tracks(shots) for shot in _adrift(timeline, shots, track)]
+def _verify(timeline: Timeline, shots: list[Shot], name: str, origin: int) -> None:
+    """Read the tracks back: the only way to know an append landed where it was told to.
+
+    ``origin`` is the timeline start the shots were positioned against. Placement is judged
+    as an offset from each timeline's own first frame, never as an absolute frame, because
+    the cut a tail delivers is read back on a *different* timeline from the one it was
+    appended to: the round trip imports the document, and Resolve is free to start what it
+    imports at a timecode of its own choosing. Compared absolutely, an import that begins
+    one hour later than the staging cut reports every shot in a correct cut as misplaced —
+    and the build then deletes it.
+    """
+    landed_origin = timeline_read.start_frame(timeline)
+    if landed_origin != origin:
+        log.info(
+            "%s starts at frame %d, not the %d its shots were placed against; "
+            "placement is checked as offsets from each timeline's own start",
+            name,
+            landed_origin,
+            origin,
+        )
+    misplaced = [
+        shot
+        for track in _tracks(shots)
+        for shot in _adrift(timeline, shots, track, origin, landed_origin)
+    ]
     if not misplaced:
         return
     raise BuildFailedError(
@@ -650,15 +686,22 @@ def _verify(timeline: Timeline, shots: list[Shot], name: str) -> None:
     )
 
 
-def _adrift(timeline: Timeline, shots: list[Shot], track: Track) -> list[Shot]:
+def _adrift(
+    timeline: Timeline,
+    shots: list[Shot],
+    track: Track,
+    origin: int,
+    landed_origin: int,
+) -> list[Shot]:
+    """The shots this track does not hold, matched on ``(offset from start, duration)``."""
     wanted = [shot for shot in shots if shot.track == track]
     if not wanted:
         return []
     landed = {
-        (item.GetStart(), item.GetDuration())
+        (item.GetStart() - landed_origin, item.GetDuration())
         for item in timeline.GetItemListInTrack(track.type, track.index) or []
     }
-    return [shot for shot in wanted if (shot.record, shot.duration) not in landed]
+    return [shot for shot in wanted if (shot.record - origin, shot.duration) not in landed]
 
 
 def _expected(shot: Shot) -> dict[str, Any]:

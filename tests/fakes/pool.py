@@ -56,6 +56,10 @@ class FakeMediaPool:
         # An import that places every clip late. The round trip is a second placement, and
         # the return value cannot tell one that landed from one that slid.
         self.import_slides_clips = 0
+        # An import that lands on a start timecode of its own — an hour in where the
+        # document said zero — carrying its cut along unchanged. A correct round trip that
+        # a read-back comparing absolute frames would call a cut that moved.
+        self.import_starts_at: int | None = None
         self.add_track_result = True
         self.appends: list[dict[str, Any]] = []
         # The .drb route. Each knob is one outcome a real import has been seen to take:
@@ -195,6 +199,7 @@ class FakeMediaPool:
                 not self.import_drops_transitions,
                 trims_transitions_to=self.import_trims_transitions_to,
                 slides_clips=self.import_slides_clips,
+                starts_at=self.import_starts_at,
             )
         else:
             timeline = FakeTimeline(

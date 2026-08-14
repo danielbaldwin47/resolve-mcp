@@ -25,7 +25,15 @@ from resolve_mcp.resolve import tail as tail_route
 from resolve_mcp.tools.cut import build_timeline, validate_cut
 
 from .conftest import Attach
-from .cutfile import a_cut, a_pool, built, empty_project, placements, valid_doc
+from .cutfile import (
+    a_cut,
+    a_pool,
+    built,
+    doc_with_alternates,
+    empty_project,
+    placements,
+    valid_doc,
+)
 from .fakes import FakeTimeline
 
 # --- the rules ------------------------------------------------------------------------------
@@ -73,6 +81,19 @@ def test_an_unknown_tail_key_is_refused_rather_than_ignored() -> None:
     assert "audio_fade" in messages(doc, "E1")[0]
 
 
+def test_a_tail_typo_does_not_silence_the_rest_of_the_document() -> None:
+    """E1 stops the pass because the later rules stop being answerable — the tail is the leaf.
+
+    Nothing outside E12 reads ``tail``, so a typo there leaves every other rule as answerable
+    as it was, and suppressing them buys a validate/fix round trip per mistake. E12 itself
+    stays silenced: its numbers come out of the block that failed.
+    """
+    doc = with_tail(audio_fade=125)
+    doc["segments"][1]["id"] = "s001"
+
+    assert rules(doc) == ["E1", "E2"]
+
+
 def test_an_unknown_tail_type_is_refused() -> None:
     assert rules(with_tail(type="fade_up")) == ["E1"]
 
@@ -109,6 +130,71 @@ def test_a_cut_ending_on_black_has_nothing_to_dissolve() -> None:
 
     assert findings
     assert "g001" in findings[0]
+
+
+def with_overlay(offset: int, frames: int, track: int = 2, **tail: Any) -> dict[str, Any]:
+    """The corpus cut with one lower-third over ``s003``, the shot that ends it.
+
+    ``s003`` runs frames 180-240 of a 240-frame cut, so an overlay's own ending is
+    ``180 + offset + frames`` — which is what a dissolve has to agree with.
+    """
+    doc = with_tail(**tail)
+    doc["overlays"] = [
+        {
+            "id": "b01",
+            "source": "keys_wide",
+            "in": 6000,
+            "out": 6000 + frames,
+            "over": {"segment": "s003", "offset": offset},
+            "track": track,
+        }
+    ]
+    return doc
+
+
+def test_an_overlay_stopping_inside_the_dissolve_is_refused_by_the_rules() -> None:
+    """The injector's own precondition, asked before Resolve is written rather than after.
+
+    An overlay that is opaque over part of the ramp and then stops lets the picture
+    underneath come back partway through the fade — a second ending. The build refuses it,
+    but only once the shots are on a staging timeline and the delivery name holds nothing,
+    so the rule has to catch it first.
+    """
+    findings = messages(with_overlay(offset=20, frames=30), "E12")
+
+    assert findings
+    assert "b01" in findings[0]
+    assert "230" in findings[0] and "200" in findings[0]
+
+
+def test_an_overlay_gone_before_the_dissolve_starts_validates_clean() -> None:
+    """The device covers the frames it covers: a layer gone by then is not in it."""
+    assert rules(with_overlay(offset=0, frames=20)) == []
+
+
+def test_an_overlay_ending_the_cut_alongside_v1_must_carry_the_dissolve_too() -> None:
+    """Both layers reach the last frame, so both are faded — and both need the frames for it."""
+    findings = messages(with_overlay(offset=30, frames=30), "E12")
+
+    assert findings
+    assert "b01" in findings[0]
+    assert "V2" in findings[0]
+
+
+def test_an_overlay_hanging_off_the_end_of_the_cut_is_e9_alone() -> None:
+    """E9 reports the layout and the pass keeps going, so this rule does see documents it
+    can say nothing honest about.
+
+    With an overlay running past the last frame, the end of the picture would be measured
+    off a layer V1 does not reach: every other overlay judged against the wrong window, and
+    V1's own refusal — the one the injector would raise — never mirrored at all.
+    """
+    assert rules(with_overlay(offset=50, frames=30)) == ["E9"]
+
+
+def test_an_overlay_ending_the_cut_and_long_enough_to_fade_validates_clean() -> None:
+    """A full-width lower-third over the last shot is legal, and the injector fades it too."""
+    assert rules(with_overlay(offset=0, frames=60)) == []
 
 
 def test_a_hard_out_carries_no_dissolve_length() -> None:
@@ -158,11 +244,16 @@ def test_the_dry_run_reports_a_bad_tail_before_resolve_is_touched(
 # --- the document edit ----------------------------------------------------------------------
 
 
-def document(*tracks: dict[str, Any]) -> dict[str, Any]:
-    return {"OTIO_SCHEMA": "Timeline.1", "tracks": {"children": list(tracks)}}
+def document(*tracks: dict[str, Any], rate: float | None = None) -> dict[str, Any]:
+    """An exported cut. ``rate`` is the timeline's own, where Resolve puts it: the start time."""
+    doc: dict[str, Any] = {"OTIO_SCHEMA": "Timeline.1", "tracks": {"children": list(tracks)}}
+    if rate is not None:
+        doc["global_start_time"] = {"OTIO_SCHEMA": "RationalTime.1", "rate": rate, "value": 0}
+    return doc
 
 
-def track(kind: str, name: str, *frames: int) -> dict[str, Any]:
+def track(kind: str, name: str, *frames: int, rate: float = 24.0) -> dict[str, Any]:
+    """One track. ``rate`` is the *media* rate its clips are stamped in, as OTIO stamps them."""
     return {
         "OTIO_SCHEMA": "Track.1",
         "kind": kind,
@@ -172,12 +263,18 @@ def track(kind: str, name: str, *frames: int) -> dict[str, Any]:
                 "OTIO_SCHEMA": "Clip.2",
                 "name": f"{name}-{index}",
                 "source_range": {
-                    "duration": {"OTIO_SCHEMA": "RationalTime.1", "rate": 24.0, "value": length}
+                    "duration": {"OTIO_SCHEMA": "RationalTime.1", "rate": rate, "value": length}
                 },
             }
             for index, length in enumerate(frames)
         ],
     }
+
+
+def unnamed(one: dict[str, Any]) -> dict[str, Any]:
+    """A track OTIO left without a name — nothing in the format promises one."""
+    one.pop("name", None)
+    return one
 
 
 def pad(one: dict[str, Any], frames: int) -> dict[str, Any]:
@@ -304,6 +401,96 @@ def test_an_overlay_ending_before_the_dissolve_starts_is_not_reported() -> None:
     placed = tail_route.inject(doc, tail_device.Tail("dissolve_to_black", 40, 0))
 
     assert placed["unfaded_video"] == []
+
+
+def test_an_unnamed_track_is_recorded_and_read_back_under_the_same_name() -> None:
+    """One vocabulary for both sides, because ``_confirm`` matches them to each other by string.
+
+    A fallback invented separately in each direction is not cosmetic: the dissolve would be
+    recorded on ``'video'`` and read back on ``''``, so a tail that landed perfectly reads as
+    a fade on the wrong track — and the refusal deletes the correct import on its way out.
+    """
+    doc = document(unnamed(track("Video", "", 100, 80)), unnamed(track("Audio", "", 180)))
+
+    placed = tail_route.inject(doc, tail_device.Tail("dissolve_to_black", 40, 30))
+
+    assert placed["video_tracks"] == ["video"]
+    assert placed["audio_tracks"] == ["audio"]
+    assert [one["track"] for one in tail_route.transitions(doc)] == ["video", "audio"]
+
+
+def test_a_shot_at_another_media_rate_is_long_enough_for_the_dissolve() -> None:
+    """The cut counts in timeline frames; OTIO stamps each clip in its own media rate.
+
+    A mixed-rate multicam is the ordinary concert kit, and a 60-frame dissolve under an
+    80-frame shot is a legal cut — but the shot's own stamp says 40, so the raw comparison
+    refuses a build that is fine, after the shots are already on a staging timeline.
+    """
+    doc = document(track("Video", "Video 1", 50, 40, rate=12.0), rate=24.0)
+
+    placed = tail_route.inject(doc, tail_device.Tail("dissolve_to_black", 60, 0))
+
+    assert placed["video_tracks"] == ["Video 1"]
+    assert placed["unfaded_video"] == []
+    # Stamped in the timeline's rate, so the number the read-back compares is the number
+    # the cut file asked for rather than the same count in a rate nobody asked about.
+    transition = doc["tracks"]["children"][0]["children"][2]
+    assert transition["in_offset"] == {"OTIO_SCHEMA": "RationalTime.1", "rate": 24.0, "value": 60}
+    assert kinds(doc) == [("Video", 60)]
+
+
+def test_the_layer_the_cut_ends_on_is_picked_in_timeline_frames() -> None:
+    """Two layers stamped in two rates are two units, and the raw numbers pick the wrong one."""
+    doc = document(
+        track("Video", "Video 1", 50, 40, rate=12.0),
+        pad(track("Video", "Video 2", 120, rate=24.0), 60),
+        rate=24.0,
+    )
+
+    placed = tail_route.inject(doc, tail_device.Tail("dissolve_to_black", 40, 0))
+
+    # V1 runs 180 timeline frames and V2 120, so V1 ends the picture — even though V1's raw
+    # stamps sum to 90 and V2's to 120.
+    assert placed["video_tracks"] == ["Video 1"]
+    assert placed["unfaded_video"] == []
+
+
+def test_many_short_clips_at_another_rate_still_end_where_the_overlay_over_them_ends() -> None:
+    """A span is a sum, so it is rounded once — half a frame per clip is frames per song.
+
+    Twenty shots stamped at a rate the timeline does not count in come to 1008 frames
+    exactly; rounded one clip at a time they come to 1000, which is far enough back to drop
+    V1 out of the ending layers and into the window ``_inside`` refuses. The overlay ending
+    on the same frame is then the only layer left to fade, and the build refuses a correct
+    cut after the shots are already on a staging timeline.
+    """
+    doc = document(
+        track("Video", "Video 1", *([21] * 20), rate=10.0),
+        track("Video", "Video 2", 908, 100, rate=24.0),
+        rate=24.0,
+    )
+
+    placed = tail_route.inject(doc, tail_device.Tail("dissolve_to_black", 40, 0))
+
+    assert placed["video_tracks"] == ["Video 1", "Video 2"]
+    assert placed["unfaded_video"] == []
+
+
+def test_a_rate_this_cannot_read_measures_the_clip_by_its_value() -> None:
+    """Only ``value`` says how long something is; an unreadable rate is not a zero-length clip.
+
+    Reading value and rate under one guard turns a stray rate into a track measuring nothing,
+    and then every fade on it is refused for a reason that is not true of the cut.
+    """
+    doc = document(track("Video", "Video 1", 100, 80), rate=24.0)
+    for child in doc["tracks"]["children"][0]["children"]:
+        child["source_range"]["duration"]["rate"] = "twenty-four"
+
+    placed = tail_route.inject(doc, tail_device.Tail("dissolve_to_black", 40, 0))
+
+    assert placed["video_tracks"] == ["Video 1"]
+    assert placed["unfaded_video"] == []
+    assert kinds(doc) == [("Video", 40)]
 
 
 def test_an_audio_track_that_took_no_fade_while_another_did_is_reported() -> None:
@@ -523,30 +710,36 @@ def test_a_hard_out_that_fades_nothing_builds_without_the_round_trip(
     }
 
 
-def test_an_overlay_ending_inside_the_dissolve_fails_the_build(
+def test_an_overlay_ending_inside_the_dissolve_never_reaches_resolve(
     attach: Attach, tmp_path: Path
 ) -> None:
-    """An opaque V2 over the ramp is a second ending, and no fade this module places covers it."""
-    doc = with_tail()
-    doc["overlays"] = [
-        {
-            "id": "b01",
-            "source": "keys_wide",
-            "in": 6000,
-            "out": 6030,
-            "over": {"segment": "s003", "offset": 20},
-            "track": 2,
-        }
-    ]
+    """An opaque V2 over the ramp is a second ending, and no fade this module places covers it.
+
+    The injector refuses it, but only with the shots already on a staging timeline — E12 has
+    the same answer from the cut file alone, so the refusal costs nothing and leaks nothing.
+    """
     resolve = empty_project(a_pool())
     attach(resolve)
 
-    result = build_timeline(a_cut(tmp_path, doc))
+    result = build_timeline(a_cut(tmp_path, with_overlay(offset=20, frames=30)))
 
     assert result["ok"] is False
-    assert "'Video 2'" in result["error"]["cause"]
-    # Refused before the import, so the staging cut is the only thing in the project.
-    assert timeline_names(resolve) == ["sunset-set v1 (tail staging)"]
+    assert [error["rule"] for error in result["error"]["detail"]["errors"]] == ["E12"]
+    assert timeline_names(resolve) == []
+
+
+def test_an_overlay_that_ends_the_cut_is_faded_with_the_shot_under_it(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The case E12 lets through: both layers reach the last frame, so both take a dissolve."""
+    resolve = empty_project(a_pool())
+    attach(resolve)
+
+    result = build_timeline(a_cut(tmp_path, with_overlay(offset=0, frames=60)))
+
+    assert result["ok"] is True, result.get("error")
+    assert result["tail"]["video_tracks"] == ["Video 1", "Video 2"]
+    assert timeline_names(resolve) == ["sunset-set v1"]
 
 
 def test_a_round_trip_that_slid_the_shots_is_refused(attach: Attach, tmp_path: Path) -> None:
@@ -561,6 +754,49 @@ def test_a_round_trip_that_slid_the_shots_is_refused(attach: Attach, tmp_path: P
     assert result["ok"] is False
     assert "did not land where the cut puts them" in result["error"]["cause"]
     assert timeline_names(resolve) == ["sunset-set v1 (tail staging)"]
+
+
+def test_an_import_that_chose_its_own_start_timecode_is_not_a_slid_cut(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Placement is an offset from the timeline's own first frame, never an absolute frame.
+
+    The round trip delivers a *second* timeline, and Resolve is entitled to start what it
+    imports where it likes — an hour in where the staging cut began at zero. Every shot is
+    still exactly where the cut puts it; only the frame numbers moved. Compared absolutely,
+    that reads as the whole cut sliding, and the build deletes a correct import over it.
+    """
+    pool = a_pool()
+    pool.import_starts_at = 86_400
+    resolve = empty_project(pool)
+    attach(resolve)
+
+    result = build_timeline(a_cut(tmp_path, with_tail(audio_fade_frames=35)))
+
+    assert result["ok"] is True, result.get("error")
+    assert placements(built(resolve, "sunset-set v1")) == [
+        ("C0012.mp4", 86_400, 100),
+        ("C0031.mp4", 86_500, 80),
+        ("C0012.mp4", 86_580, 60),
+    ]
+    assert timeline_names(resolve) == ["sunset-set v1"]
+
+
+def test_a_selector_is_attached_on_the_started_over_cut_the_import_made(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Takes are found by record frame, so they follow the import's start rather than staging's."""
+    doc = doc_with_alternates()
+    doc["tail"] = {"type": "dissolve_to_black", "duration_frames": 40}
+    pool = a_pool()
+    pool.import_starts_at = 86_400
+    resolve = empty_project(pool)
+    attach(resolve)
+
+    result = build_timeline(a_cut(tmp_path, doc))
+
+    assert result["ok"] is True, result.get("error")
+    assert result["placed"]["selectors"] == 2
 
 
 def test_a_confirm_failure_takes_the_import_down_with_it(

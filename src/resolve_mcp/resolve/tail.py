@@ -103,16 +103,17 @@ def inject(document: Document, tail: Tail) -> dict[str, Any]:
     audio: list[str] = []
     unfaded_video: list[str] = []
     unfaded_audio: list[str] = []
+    rate = _timeline_rate(document)
     if tail.dissolves:
-        ending = _tracks(document, "Video", last_only=True)
+        ending = _tracks(document, "Video", last_only=True, rate=rate)
         for track in ending:
-            placed = video if _append_transition(track, tail.frames) else unfaded_video
-            placed.append(_name(track, "video"))
-        unfaded_video.extend(_name(track, "video") for track in _inside(document, tail, ending))
+            placed = video if _append_transition(track, rate, tail.frames) else unfaded_video
+            placed.append(_name(track))
+        unfaded_video.extend(_name(track) for track in _inside(document, tail, ending, rate))
     if tail.fades_audio:
-        for track in _tracks(document, "Audio", last_only=False):
-            placed = audio if _append_transition(track, tail.audio_frames) else unfaded_audio
-            placed.append(_name(track, "audio"))
+        for track in _tracks(document, "Audio", last_only=False, rate=rate):
+            placed = audio if _append_transition(track, rate, tail.audio_frames) else unfaded_audio
+            placed.append(_name(track))
     return {
         "video_tracks": video,
         "audio_tracks": audio,
@@ -121,11 +122,19 @@ def inject(document: Document, tail: Tail) -> dict[str, Any]:
     }
 
 
-def _name(track: Track, fallback: str) -> str:
-    return str(track.get("name") or fallback)
+def _name(track: Track) -> str:
+    """What a track is called on *both* sides of the round trip — one vocabulary, not two.
+
+    An OTIO track need not carry a name, and :func:`inject` and :func:`transitions` are
+    compared to each other, by name, in ``_confirm``. A fallback invented separately on each
+    side is therefore not a cosmetic difference: an unnamed track would have its dissolve
+    recorded under one word and read back under another, so every such build would refuse a
+    tail that landed perfectly — and take a correct import down with it on the way out.
+    """
+    return str(track.get("name") or "") or str(track.get("kind") or "").lower()
 
 
-def _inside(document: Document, tail: Tail, ending: list[Track]) -> list[Track]:
+def _inside(document: Document, tail: Tail, ending: list[Track], rate: float) -> list[Track]:
     """Video tracks whose picture stops *inside* the dissolve, which nothing here fades.
 
     Such a track is opaque over part of the ramp and then ends, so the picture underneath
@@ -136,14 +145,14 @@ def _inside(document: Document, tail: Tail, ending: list[Track]) -> list[Track]:
     """
     others = [
         track
-        for track in _tracks(document, "Video", last_only=False)
+        for track in _tracks(document, "Video", last_only=False, rate=rate)
         if not any(track is one for one in ending)
     ]
-    furthest = max((_span(track) for track in ending), default=0)
-    return [track for track in others if furthest - tail.frames < _span(track) < furthest]
+    furthest = max((_span(track, rate) for track in ending), default=0)
+    return [track for track in others if furthest - tail.frames < _span(track, rate) < furthest]
 
 
-def _tracks(document: Document, kind: str, last_only: bool) -> list[Track]:
+def _tracks(document: Document, kind: str, last_only: bool, rate: float) -> list[Track]:
     """The tracks of one kind a transition belongs on, in document order.
 
     ``last_only`` keeps the video dissolve to the layer the cut actually ends on. Ties are
@@ -157,8 +166,8 @@ def _tracks(document: Document, kind: str, last_only: bool) -> list[Track]:
     ]
     if not last_only or not found:
         return found
-    furthest = max(_span(track) for track in found)
-    return [track for track in found if _span(track) == furthest]
+    furthest = max(_span(track, rate) for track in found)
+    return [track for track in found if _span(track, rate) == furthest]
 
 
 def _clips(track: Track) -> list[Item]:
@@ -181,21 +190,35 @@ def _last_clip(track: Track) -> int:
     return -1
 
 
-def _span(track: Track) -> int:
+def _span(track: Track, rate: float) -> int:
     """Where the *picture* on this track stops — trailing black is not part of the answer.
 
     Measured to the end of the last clip rather than to the end of the track, for the same
     reason: Resolve pads every track out to the timeline's length, so track length is the
     one number that cannot tell the layer the cut ends on from a layer that stopped early.
+
+    In *timeline* frames, which is what makes the answer comparable across tracks at all: a
+    mixed-rate multicam stack carries a different media rate per clip, and summing the raw
+    numbers would measure two layers in two units and call the shorter one the end.
+
+    Summed unrounded and rounded once, because this is a sum and the comparison it feeds is
+    an equality. Rounding per clip spends up to half a frame each time, so a forty-shot V1
+    can come out two frames short of an overlay that ends on the very same frame — which
+    drops V1 out of the ending layers, straight into the window ``_inside`` refuses, and the
+    build then fails a correct mixed-rate cut with the shots already on a staging timeline.
     """
     children = list(track.get("children") or [])
     last = _last_clip(track)
-    return sum(
-        _frames(item) for item in children[: last + 1] if not _is_transition(item)
+    return round(
+        sum(
+            _exact(_duration(item), rate)
+            for item in children[: last + 1]
+            if not _is_transition(item)
+        )
     )
 
 
-def _append_transition(track: Track, frames: int) -> bool:
+def _append_transition(track: Track, rate: float, frames: int) -> bool:
     """Put a fade at the end of the track's picture, or answer False and leave it alone.
 
     The transition goes immediately after the last clip, which is a clip→gap boundary
@@ -205,12 +228,17 @@ def _append_transition(track: Track, frames: int) -> bool:
     Refused rather than trimmed when that clip is too short: the length was validated (E12)
     against the cut file, so a document that cannot carry it means the built timeline
     disagrees with the cut, and quietly shortening the device would hide that.
+
+    Both numbers are timeline frames. ``frames`` comes from the cut file, which counts in
+    the timeline's rate; the clip's own duration is stamped in its *media* rate, so on a
+    mixed-rate multicam the raw comparison asks whether a 23.976 count fits inside a 25
+    one — and answers "the shot is too short to fade" about a shot that is not.
     """
     children = list(track.get("children") or [])
     index = _last_clip(track)
-    if index < 0 or _frames(children[index]) <= frames:
+    if index < 0 or _frames(children[index], rate) <= frames:
         return False
-    children.insert(index + 1, _transition(_rate(children[index]), frames))
+    children.insert(index + 1, _transition(rate or _rate(children[index]), frames))
     track["children"] = children
     return True
 
@@ -232,17 +260,22 @@ def _transition(rate: float, frames: int) -> Item:
 
 
 def transitions(document: Document) -> list[dict[str, Any]]:
-    """Every transition in a document, as ``{track, kind, in_offset}`` — the read-back."""
+    """Every transition in a document, as ``{track, kind, in_offset}`` — the read-back.
+
+    ``track`` is named by the same helper :func:`inject` records with, and ``in_offset`` is
+    in timeline frames, because both are compared against what ``inject`` asked for.
+    """
+    rate = _timeline_rate(document)
     found = []
     for track in (document.get("tracks") or {}).get("children") or []:
         for item in track.get("children") or []:
             if _is_transition(item):
                 found.append(
                     {
-                        "track": str(track.get("name") or ""),
+                        "track": _name(track),
                         "kind": str(track.get("kind") or ""),
                         "name": str(item.get("name") or ""),
-                        "in_offset": int(float((item.get("in_offset") or {}).get("value") or 0)),
+                        "in_offset": _at_rate(item.get("in_offset"), rate),
                     }
                 )
     return found
@@ -265,11 +298,9 @@ def _duration(item: Item) -> dict[str, Any]:
     return duration
 
 
-def _frames(item: Item) -> int:
-    try:
-        return int(float(_duration(item).get("value") or 0))
-    except (TypeError, ValueError):
-        return 0
+def _frames(item: Item, rate: float) -> int:
+    """One item's duration in whole timeline frames."""
+    return _at_rate(_duration(item), rate)
 
 
 def _rate(item: Item) -> float:
@@ -277,6 +308,63 @@ def _rate(item: Item) -> float:
         return float(_duration(item).get("rate") or 0.0)
     except (TypeError, ValueError):
         return 0.0
+
+
+def _timeline_rate(document: Document) -> float:
+    """The rate the *timeline* counts in, or 0.0 when the document does not say.
+
+    Every frame count a tail carries — ``duration_frames``, ``audio_fade_frames`` — is in
+    the timeline's rate, because that is the rate the cut file counts in and the rate E12
+    validated them against. OTIO stamps each clip's ``source_range`` in its own *media*
+    rate instead, so on a mixed-rate multicam (an FX6 at 23.976 beside an A7IV at another
+    rate, the ordinary concert kit) the two units are not the same number of frames.
+
+    ``global_start_time`` is the OTIO timeline's own ``RationalTime``, and its rate is the
+    timeline's — the one number in the document that is not somebody's media. **Not yet
+    confirmed against a live mixed-rate export**; every rate in the documents seen so far is
+    the same rate, which is exactly why this cannot be told apart by looking at them.
+
+    Zero — a document that carries no start time — means "do not convert" rather than a
+    guess: the arithmetic then runs on the items' own numbers, as it did before it could ask.
+    """
+    time = document.get("global_start_time")
+    if not isinstance(time, dict):
+        return 0.0
+    try:
+        rate = float(time.get("rate") or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+    return rate if rate > 0 else 0.0
+
+
+def _at_rate(time: Any, rate: float) -> int:
+    """A ``RationalTime`` as a whole number of frames at ``rate``, its own rate if that is 0."""
+    return round(_exact(time, rate))
+
+
+def _exact(time: Any, rate: float) -> float:
+    """The same reading, unrounded — what a sum has to be built out of. See :func:`_span`.
+
+    A rate this cannot read is not a reason to measure the item as nothing. Only ``value``
+    decides how long something is; the rate decides what unit that is in, and an unreadable
+    one means the value is taken as it comes — which is what this module did before it
+    converted between rates at all. Reading the two in one ``try`` would instead turn a
+    stray rate into a zero-length clip, a track measuring zero, and every fade on it
+    refused.
+    """
+    if not isinstance(time, dict):
+        return 0.0
+    try:
+        value = float(time.get("value") or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    if rate <= 0:
+        return value
+    try:
+        own = float(time.get("rate") or 0.0)
+    except (TypeError, ValueError):
+        return value
+    return value * rate / own if own > 0 and own != rate else value
 
 
 # --- the round trip -------------------------------------------------------------------------

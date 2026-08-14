@@ -1428,6 +1428,48 @@ def test_a_cut_that_breaks_the_alternation_does_not_read_metronomic(
     assert rhythm["reads_metronomic"] is False
 
 
+def test_a_tightening_ladder_reads_metronomic_though_no_two_shots_share_a_length(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The shape the panel named and this reading used to miss (P3·R3, 9.9s down to 2.9s).
+
+    Two framings traded strictly while every shot is a second shorter than the one before it.
+    No length repeats, so the fullest bin holds half the cut and the spread sits just over its
+    floor — both length arms read it as varied — and three critics called it a mechanical
+    metronome, because a ladder is as countable as a fixed length. The ramp is what sees it.
+    """
+    ladder = [(f"{'AB'[turn % 2]}.mp4", 594 - 60 * turn) for turn in range(8)]  # 9.9s .. 2.9s
+    attach(studio(timeline=_paced(*ladder)))
+
+    rhythm = _rhythm(_measured(tmp_path))
+
+    assert rhythm["alternation"]["fraction"] == 1.0
+    assert rhythm["uniformity"]["one_bin"] == 0.5  # four of the eight in 4-8
+    assert rhythm["uniformity"]["cv"] == 0.358  # over the floor: the lengths do vary
+    assert rhythm["ramp"] == {"cuts": 7, "longest_run": 7, "fraction": 1.0}
+    assert rhythm["reads_metronomic"] is True
+
+
+def test_a_short_ladder_inside_a_varied_cut_is_not_the_finding(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Four one-way cuts and then the cut stops laddering: a run, not a rule.
+
+    Some stretch of any cut long enough shortens for a few shots — the reading is about a
+    shape held over the cut, so the run has to cover it, and here it covers four cuts of nine.
+    """
+    laddered = [594, 534, 474, 414, 354]  # 9.9s down to 5.9s, four cuts of it
+    varied = [720, 60, 840, 90, 780]  # then 12s, 1s, 14s, 1.5s, 13s
+    shots = [(f"{'AB'[turn % 2]}.mp4", frames) for turn, frames in enumerate(laddered + varied)]
+    attach(studio(timeline=_paced(*shots)))
+
+    rhythm = _rhythm(_measured(tmp_path))
+
+    assert rhythm["alternation"]["fraction"] == 1.0
+    assert rhythm["ramp"] == {"cuts": 9, "longest_run": 4, "fraction": 0.444}
+    assert rhythm["reads_metronomic"] is False
+
+
 def test_the_longest_run_is_the_longest_one_not_the_whole_sequence(
     attach: Attach, tmp_path: Path
 ) -> None:
@@ -1500,6 +1542,7 @@ def test_the_rhythm_reading_carries_the_rule_it_applied(attach: Attach, tmp_path
         "lengths",
         "alternation",
         "uniformity",
+        "ramp",
         "reads_metronomic",
         "gears",
         "heuristic",
@@ -1738,6 +1781,7 @@ def test_the_gearing_reading_carries_the_rule_it_applied(attach: Attach, tmp_pat
     assert set(gears) == {
         "window_seconds",
         "terciles",
+        "outside_shots",
         "rate_ratio",
         "sub2s_count",
         "sub2s_in_loud",
@@ -1745,6 +1789,59 @@ def test_the_gearing_reading_carries_the_rule_it_applied(attach: Attach, tmp_pat
         "one_speed",
         "heuristic",
     }
+
+
+def test_shots_past_the_end_of_the_analysed_mix_are_counted_apart_from_the_gears(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """A tail the curve never heard: thirty-six seconds of mix, forty-one seconds of cut.
+
+    The tail is the trap. Pinned into the last window it would land whole in the loud third —
+    ten fast cuts added to a tercile whose twelve seconds of music did not grow — and the
+    report would read as a build that saved every short shot for the loudest passage and
+    changed gear into it. The cut is the same two seconds a shot from end to end.
+    """
+    body = [(f"{'AB'[turn % 2]}.mp4", 2 * SECOND) for turn in range(18)]  # 0s .. 36s
+    tail = [(f"{'CD'[turn % 2]}.mp4", SECOND // 2) for turn in range(10)]  # 36s .. 41s
+    attach(studio(timeline=_paced(*body, *tail)))
+
+    gears = _gears(_measured(tmp_path, loudness=_levels(_steps(*THIRDS))))
+
+    assert gears["outside_shots"] == 10
+    assert gears["terciles"]["loud"] == {
+        "seconds": 12.0,
+        "shots": 6,
+        "cuts_per_minute": 30.0,
+        "median_seconds": 2.0,
+        "level_dbfs": -20.0,
+    }
+    assert gears["rate_ratio"] == 1.0
+    assert gears["sub2s_count"] == 0  # every short shot sits where no window does
+    assert gears["sub2s_in_loud"] == 0
+    assert gears["sub2s_loud_fraction"] is None
+    assert gears["one_speed"] is True
+
+
+def test_a_cold_open_ahead_of_the_curve_is_counted_apart_from_the_gears(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The other end of the same rule: the cut starts twelve seconds before the mix does.
+
+    Clamped into the first window those opening shots would double the quiet third's cutting
+    rate against unchanged seconds of music, and the report would hand back a gearing drawn
+    from the part of the cut nothing measured.
+    """
+    curve = tuple((start + 12.0, level) for start, level in _steps(*THIRDS))
+    opening = [(f"{'AB'[turn % 2]}.mp4", 2 * SECOND) for turn in range(6)]  # 0s .. 12s
+    body = [(f"{'CD'[turn % 2]}.mp4", 2 * SECOND) for turn in range(18)]  # 12s .. 48s
+    attach(studio(timeline=_paced(*opening, *body)))
+
+    gears = _gears(_measured(tmp_path, loudness=_levels(curve)))
+
+    assert gears["outside_shots"] == 6
+    assert gears["terciles"]["quiet"]["shots"] == 6
+    assert gears["terciles"]["quiet"]["cuts_per_minute"] == 30.0
+    assert gears["rate_ratio"] == 1.0
 
 
 def test_the_default_curve_is_read_off_the_mix_itself(attach: Attach, tmp_path: Path) -> None:

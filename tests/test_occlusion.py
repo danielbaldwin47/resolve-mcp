@@ -157,13 +157,21 @@ def test_a_wipe_can_never_lift_a_clear_frame() -> None:
     assert max(one.score for one in scan.readings) == 0.0
 
 
-def test_half_a_frame_is_not_a_sample() -> None:
-    """ffmpeg killed mid-write leaves a partial frame; reshaping it would invent a sample."""
+def test_half_a_frame_is_not_a_sample_and_not_a_verdict_either() -> None:
+    """A partial tail is a refusal: reading the frames that survived answers for a range that
+    was never decoded, and the answer it gives is that the shot is clear."""
     grid = blocking.GRID_WIDTH * blocking.GRID_HEIGHT
 
-    frames = blocking.read_grid(CLEAN + BLOCKED[: grid // 2])
+    with pytest.raises(OcclusionScanError) as raised:
+        blocking.read_grid(CLEAN + BLOCKED[: grid // 2])
 
-    assert frames.shape == (1, blocking.GRID_HEIGHT, blocking.GRID_WIDTH)
+    assert raised.value.detail["remainder"] == grid // 2
+
+
+def test_a_whole_number_of_frames_reshapes_onto_the_grid() -> None:
+    frames = blocking.read_grid(CLEAN + BLOCKED)
+
+    assert frames.shape == (2, blocking.GRID_HEIGHT, blocking.GRID_WIDTH)
 
 
 # --- the scan --------------------------------------------------------------------------------
@@ -278,6 +286,33 @@ def test_a_window_never_runs_past_the_range_that_was_scanned(
     assert record.result["worst_windows"][0]["out"]["frames"] == 100
 
 
+def test_a_sample_on_the_end_of_the_range_publishes_no_window_at_all(
+    attach: Attach,
+    fixture_video: Path,
+) -> None:
+    """Four seconds asked for, five samples back: the ``fps`` filter emits a frame on the
+    boundary, and it is dated at the range's own end. It stays in the curve, but the window it
+    would make starts where the range stops — nought frames long, and nothing to cut around."""
+    attach(_studio_holding(fixture_video))
+
+    record = wait_for(
+        analyze_occlusion(
+            get_connection(),
+            fixture_video.name,
+            start=0,
+            end=100,
+            runner=ffmpeg_sampling([], [CLEAN] * 4 + [BLOCKED]),
+        )["job_id"]
+    )
+
+    assert record.result is not None
+    catalog = json.loads(Path(record.result["path"]).read_text(encoding="utf-8"))
+    assert catalog["samples"][4]["time"]["frames"] == 100
+    assert record.result["blocked_samples"] == 1
+    assert record.result["windows"] == 0
+    assert all(one["duration_frames"] > 0 for one in catalog["windows"])
+
+
 def test_raising_the_threshold_leaves_the_partial_blocks_alone(
     attach: Attach,
     fixture_video: Path,
@@ -299,8 +334,13 @@ def test_the_gist_stays_small_however_many_windows_the_scan_found(
     attach: Attach,
     fixture_video: Path,
 ) -> None:
-    """An angle behind the crowd is blocked all night; the file on disk has the rest."""
-    attach(_studio_holding(fixture_video))
+    """An angle behind the crowd is blocked all night; the file on disk has the rest.
+
+    A minute of media, because thirty samples a second apart need a minute to sit in: the
+    stand-in writes whatever frames it is handed, and samples dated past the end of the range
+    make no window at all.
+    """
+    attach(_studio_holding(fixture_video, {"End": "1499", "Frames": "1500"}))
     frames = [BLOCKED, CLEAN, CLEAN] * 10
 
     record = wait_for(_scan([], frames)["job_id"])
@@ -365,6 +405,40 @@ def test_the_raw_grey_is_scratch_and_does_not_survive_the_scan(
     assert record.result is not None
     assert list(get_config().analysis_dir.glob("*.gray")) == []
     assert Path(record.result["path"]).exists()
+
+
+def test_two_scans_of_the_same_range_never_share_a_scratch_file(
+    attach: Attach,
+    fixture_video: Path,
+) -> None:
+    """The clip, the range and the key are the same for both, so only the run can tell them
+    apart: ffmpeg's ``-y`` would have one truncate the other's grey mid-read, and the scan
+    that read the leftovers would come back saying the footage is clear."""
+    attach(_studio_holding(fixture_video))
+    calls: list[Sequence[str]] = []
+
+    wait_for(_scan(calls, _run(2, 2, 2))["job_id"])
+    wait_for(_scan(calls, _run(2, 2, 2), refresh=True)["job_id"])
+
+    scratch = [Path(call[-1]) for call in calls]
+    assert len(scratch) == 2
+    assert scratch[0].suffix == ".gray"
+    assert scratch[0] != scratch[1]
+
+
+def test_a_grey_file_cut_short_fails_the_scan_rather_than_reading_clear(
+    attach: Attach,
+    fixture_video: Path,
+) -> None:
+    """A decode killed mid-write, or a second scan writing over this one's scratch."""
+    attach(_studio_holding(fixture_video))
+
+    record = wait_for(_scan([], [CLEAN, CLEAN, BLOCKED[:1000]])["job_id"])
+
+    assert record.state == "failed"
+    assert record.error is not None
+    assert record.error["code"] == "occlusion_scan_failed"
+    assert list(get_config().analysis_dir.glob("*.gray")) == []
 
 
 # --- the cache -------------------------------------------------------------------------------

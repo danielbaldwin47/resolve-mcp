@@ -23,6 +23,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -515,6 +516,40 @@ def test_a_detached_job_whose_worker_is_gone_is_failed_and_says_so() -> None:
     assert store.load(record.job_id).state == store.FAILED  # written back, judged once
 
 
+def test_a_worker_that_has_said_nothing_far_longer_than_any_job_takes_is_not_believed() -> None:
+    """A live pid is not an answer for ever either — and a reboot reissues every one of them.
+
+    The record left running by a worker the machine took down names a number some unrelated
+    process now wears, and liveness alone reads that as a separation still going, for the life
+    of the machine: the only escape was to delete the record file. A worker writes as it works,
+    so what is asked of the record is when it was last written rather than how long the job has
+    run.
+    """
+    record = _running_under_a_dead_server(os.getpid(), step="separating four stems (50%)")
+    _last_written(record.job_id, store.HEARTBEAT_CEILING + 60)
+
+    failed = store.load(record.job_id)
+
+    assert failed.state == store.FAILED
+    assert failed.error is not None
+    assert failed.error["code"] == "job_interrupted"
+    assert str(os.getpid()) in failed.error["cause"]
+    assert failed.error["detail"]["step"] == "separating four stems (50%)"
+    assert store.load(record.job_id).state == store.FAILED  # written back, judged once
+
+
+def test_a_separation_that_has_run_for_half_an_hour_is_not_closed_for_taking_its_time() -> None:
+    """The other side of that ceiling: the thing being measured is silence, not runtime.
+
+    A full set is half an hour of GPU work, and a ceiling that judged how long the job had been
+    running would kill exactly the jobs the detached path exists to protect.
+    """
+    record = _running_under_a_dead_server(os.getpid(), step="decomposing the drum stem")
+    _last_written(record.job_id, 30 * 60)
+
+    assert store.load(record.job_id).state == store.RUNNING
+
+
 def test_a_follower_of_a_detached_job_hears_its_worker_died_not_that_a_thread_is_missing() -> None:
     """``alive`` only knows threads. A detached job has none, and is not thereby dead."""
     record = _running_under_a_dead_server(_a_pid_that_has_exited())
@@ -549,13 +584,58 @@ def test_a_launch_that_never_happened_is_closed_rather_than_left_running_forever
 
 
 def test_a_launch_in_flight_in_this_session_is_still_a_running_job() -> None:
-    """The other half of that rule: our own hand-off must not close itself mid-flight."""
+    """The other half of that rule: our own hand-off must not close itself mid-flight.
+
+    The record is the one ``launch`` writes before it spawns — this process named as the
+    launcher, saved a moment ago — because that is the only shape a mid-flight record has.
+    """
     record = store.new_job(KIND, {})
     record.detached = True
+    record.launcher_pid = os.getpid()
     record.step = detached.HANDING_OFF
     store.save(record)
 
     assert store.load(record.job_id).state == store.RUNNING
+
+
+def test_a_launch_of_our_own_that_never_produced_a_worker_is_closed_like_anybody_elses() -> None:
+    """Our own session is not proof that a launch is still happening.
+
+    Noting the worker's pid is best-effort — a note that cannot be written is logged and
+    swallowed, because the alternative is the launcher failing a job a live worker owns — so a
+    worker that dies before it adopts leaves a pid-less record in the launching session. Read
+    as "in flight" for being ours, that record runs for the life of the server, and a chained
+    job following it polls for exactly as long.
+    """
+    record = store.new_job(KIND, {})
+    record.detached = True
+    record.launcher_pid = os.getpid()
+    record.step = detached.HANDING_OFF
+    store.save(record)
+    _last_written(record.job_id, store.LAUNCH_WINDOW + 60)
+
+    failed = store.load(record.job_id)
+
+    assert failed.session == store.SESSION
+    assert failed.state == store.FAILED
+    assert failed.error is not None
+    assert failed.error["code"] == "job_interrupted"
+    assert "never started one" in failed.error["cause"]
+
+
+def test_a_follower_of_our_own_stalled_launch_is_not_left_polling_for_ever() -> None:
+    """``follow`` skips its stalled-thread escape for a detached job, so the store is the escape."""
+    record = store.new_job(KIND, {})
+    record.detached = True
+    record.launcher_pid = os.getpid()
+    record.step = detached.HANDING_OFF
+    store.save(record)
+    _last_written(record.job_id, store.LAUNCH_WINDOW + 60)
+
+    with pytest.raises(ChainedJobError) as raised:
+        follow(record.job_id, poll=0.0, sleep=lambda seconds: None)
+
+    assert raised.value.code == "job_interrupted"
 
 
 def test_a_launch_in_flight_in_another_live_server_is_not_closed_as_one_that_never_happened() -> (
@@ -1311,6 +1391,175 @@ def test_a_finished_separation_holds_the_claim_for_the_passes_and_leaves_none_be
     assert not (Path(str(output.result["directory"])) / CLAIM).exists()
 
 
+def test_a_claim_read_the_filesystem_refused_for_an_instant_is_read_again_not_believed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A sharing violation is the file being read, not the directory being held.
+
+    Two handles land on a claim whenever anything is looking — a rival deciding whether to
+    wait, the run holding it refreshing once a minute — and Windows refuses the read that
+    arrives while the other side has it open. Believed the first time, that verdict reads an
+    unreadable claim as held and costs this run a directory whose owner is long gone. The
+    store retries its record reads for exactly this reason; a claim file is the same file.
+    """
+    directory = tmp_path / "stems-abc123"
+    _claim_held_by(directory, _a_pid_that_has_exited())
+    refused: list[int] = []
+    read_bytes = Path.read_bytes
+
+    def refuses_once(self: Path) -> bytes:
+        if self.name == CLAIM and not refused:
+            refused.append(1)
+            raise PermissionError("the file is open in another process")
+        return read_bytes(self)
+
+    monkeypatch.setattr(Path, "read_bytes", refuses_once)
+
+    with claimed(directory):
+        held = json.loads((directory / CLAIM).read_text(encoding="utf-8"))
+
+    assert refused == [1], "the refused read this test is about never happened"
+    assert held["pid"] == os.getpid(), "one refused read locked this run out of a dead run's claim"
+
+
+def test_a_refresh_whose_read_is_refused_leaves_the_separation_running(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The other half of the refresh: a claim that could not be *read* is this run's still.
+
+    The refresh runs once a minute from inside a pass that lasts half an hour, and a read the
+    filesystem refuses used to arrive as "somebody else has the directory" — ending the
+    separation, and all the GPU time in it, over a file nothing had touched. It is the same
+    verdict as a refresh that could not be written: the claim is ours, only older.
+    """
+    directory = tmp_path / "stems-abc123"
+
+    with claimed(directory) as refresh:
+        marker = directory / CLAIM
+        held = marker.read_text(encoding="utf-8")
+
+        def refuses(self: Path) -> bytes:
+            raise PermissionError("the file is open in another process")
+
+        monkeypatch.setattr(Path, "read_bytes", refuses)
+
+        refresh()  # the separation carries on
+
+        monkeypatch.undo()
+        assert marker.read_text(encoding="utf-8") == held, "an unreadable claim was written over"
+
+
+def test_a_run_waits_out_the_separation_already_under_way_rather_than_refusing_it(
+    tmp_path: Path,
+) -> None:
+    """The directory is keyed by the audio and the models, so the rival is making *these* stems.
+
+    A retry, a second agent, or the same tool call made twice all land here — and since the
+    tool detaches by default, arriving while the first run is still going is the ordinary
+    shape of asking twice. Refusing tells a caller to go away empty-handed ten minutes into
+    the production of exactly what it asked for.
+    """
+    directory = tmp_path / "stems-abc123"
+    watched: list[int | None] = []
+
+    with _a_live_process() as other:
+        marker = _claim_held_by(directory, other.pid, claimed_at=time.time())
+
+        def waiting(pid: int | None) -> None:
+            watched.append(pid)
+            if len(watched) == 2:
+                marker.unlink()  # that separation has finished and dropped its claim
+
+        with claimed(directory, waiting=waiting, poll=0.0):
+            held = json.loads(marker.read_text(encoding="utf-8"))
+
+    assert watched == [other.pid, other.pid], "the wait never reported who it was waiting for"
+    assert held["pid"] == os.getpid(), "the run that waited never got the directory"
+
+
+def test_a_wait_that_outlasts_its_budget_still_names_the_process_holding_the_directory(
+    tmp_path: Path,
+) -> None:
+    """Bounded: a rival that never finishes ends as the refusal it always was, not as a hang."""
+    directory = tmp_path / "stems-abc123"
+
+    with _a_live_process() as other:
+        _claim_held_by(directory, other.pid, claimed_at=time.time())
+
+        with pytest.raises(SeparationInProgressError) as raised, claimed(
+            directory,
+            waiting=_ignored_wait,
+            budget=0.0,
+            poll=0.0,
+        ):
+            pass  # pragma: no cover - the budget is gone before the first look
+
+        assert raised.value.detail["pid"] == other.pid
+
+
+def test_a_second_thread_waits_out_the_first_rather_than_being_refused(tmp_path: Path) -> None:
+    """Threads of one server are the other rival, and they want the same answer as a process.
+
+    The file cannot tell two of them apart — they share a pid — so the in-process lock is what
+    orders them, and a caller that can report a wait waits on that lock too.
+    """
+    directory = tmp_path / "stems-abc123"
+    waited = threading.Event()
+    won: list[int] = []
+
+    def second_thread() -> None:
+        with claimed(directory, waiting=lambda pid: waited.set(), poll=0.0):
+            won.append(os.getpid())
+
+    with claimed(directory):
+        thread = threading.Thread(target=second_thread)
+        thread.start()
+        assert waited.wait(timeout=WORKER_BUDGET), "the second thread was not waiting on the first"
+
+    thread.join(timeout=WORKER_BUDGET)
+
+    assert won == [os.getpid()], "the thread that waited never got the directory"
+
+
+def test_a_run_that_waited_out_a_separation_reuses_the_stems_that_run_wrote(
+    tmp_path: Path,
+    separating: FakeSeparator,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """What the wait is *for*: the stems it waited for, not a second half-hour on the GPU.
+
+    Whether the stems are already on disk is read before the claim is taken — it has to be,
+    since taking the claim is what the reading decides — and a run that waited was looking
+    before the run it waited for had written anything. Asking once is asking too early: the
+    answer changed while this run was waiting, which is the whole reason it waited.
+    """
+    monkeypatch.setattr(stems, "CLAIM_POLL", 0.0)
+    record = _handed_off(tmp_path)
+    first = detached_pass(record, _ignored, None, separating)
+    directory = Path(str(first.result["directory"]))
+    spare = tmp_path / "what-the-other-run-writes"
+    shutil.move(str(directory), str(spare))
+
+    def never(argv: Sequence[str], on_line: Callable[[str], None]) -> int:
+        raise AssertionError("stems another run had just written were separated a second time")
+
+    with _a_live_process() as other:
+        marker = _claim_held_by(directory, other.pid, claimed_at=time.time())
+
+        def finishing(fraction: float, step: str) -> None:
+            if "waiting" in step and marker.exists():
+                shutil.copytree(spare, directory, dirs_exist_ok=True)
+                marker.unlink()
+
+        second = detached_pass(record, finishing, None, never)
+
+    assert second.result["reused"] is True, "the waiting run separated the audio all over again"
+    assert set(second.result["stems"]) == set(FOUR_STEMS)
+    assert all(Path(str(one)).exists() for one in second.result["drums"].values())
+
+
 def test_a_hand_off_that_lost_its_audio_is_a_named_failure_not_a_crash(tmp_path: Path) -> None:
     record = _handed_off(tmp_path)
     record.plan = {"reuse": True}
@@ -1319,11 +1568,50 @@ def test_a_hand_off_that_lost_its_audio_is_a_named_failure_not_a_crash(tmp_path:
         detached_pass(record, _ignored)
 
 
+# --- what a running job writes to disk -----------------------------------------------------
+
+
+def test_a_bar_that_moves_a_thousand_times_does_not_write_the_record_a_thousand_times(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The record is a file a poller reads, not a stream — and a separation runs for half an hour.
+
+    Every reading of the bar used to be a write, several a second for the length of the job,
+    against a file ``get_job`` is opening at the same time. One a second says the same thing.
+    """
+    record = store.new_job(KIND, {})
+    saved: list[tuple[float, str]] = []
+    writing = store.save
+
+    def counted(written: JobRecord, config: Config | None = None) -> None:
+        saved.append((written.progress, written.step))
+        writing(written, config)
+
+    monkeypatch.setattr(store, "save", counted)
+
+    def work(progress: Progress) -> JobOutput:
+        for tick in range(1000):
+            progress(tick / 1000, "separating four stems")
+        progress(0.9, "decomposing the drum stem")
+        return JobOutput({})
+
+    execute(record, work, get_config())
+
+    assert len(saved) <= 5, f"the bar wrote the record {len(saved)} times: {saved}"
+    # A step change is never held back: it is the line an agent reads to know what is happening.
+    assert [step for _, step in saved].count("decomposing the drum stem") >= 1
+    assert store.load(record.job_id).state == store.COMPLETED, "the ending was throttled away"
+
+
 # --- helpers -------------------------------------------------------------------------------
 
 
 def _ignored(fraction: float, step: str) -> None:
     """A progress callback for the tests that are not about progress."""
+
+
+def _ignored_wait(pid: int | None) -> None:
+    """A wait callback for the tests that are about the budget rather than the reporting."""
 
 
 def _running_under_a_dead_server(pid: int, step: str = "") -> JobRecord:

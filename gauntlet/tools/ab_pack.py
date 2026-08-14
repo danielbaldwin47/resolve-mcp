@@ -32,7 +32,11 @@ Usage:
     uv run python gauntlet/tools/ab_pack.py \
         --a <video> --b <video> [--a-span S,E] [--b-span S,E] --out <dir>
 
-Dependencies: stdlib + numpy + ffmpeg/ffprobe on PATH.
+Dependencies: stdlib + numpy + ffmpeg/ffprobe on PATH, and the repo's own
+resolve_mcp package for the shot-length bin labels -- run it with `uv run` so
+the editable install is importable. The bins are shared rather than copied on
+purpose: a pack histogram is meant to be read against a correlate_timeline
+reading, and two spellings of the same six bins compare as zero overlap.
 
 ffmpeg-on-Windows gotcha: a colon inside a filter option value (a font path,
 a metadata output file) is parsed as an option separator, so 'C:/...' breaks the
@@ -52,10 +56,13 @@ import shutil
 import statistics
 import subprocess
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import numpy as np
+
+from resolve_mcp.analysis.correlate import RHYTHM_BINS
 
 # --------------------------------------------------------------------------
 # constants
@@ -189,14 +196,11 @@ FONT_CANDIDATES = [
     Path("/System/Library/Fonts/Supplemental/Arial.ttf"),
 ]
 
-HIST_BUCKETS = [
-    ("<2s", 0.0, 2.0),
-    ("2-4s", 2.0, 4.0),
-    ("4-8s", 4.0, 8.0),
-    ("8-15s", 8.0, 15.0),
-    ("15-30s", 15.0, 30.0),
-    (">30s", 30.0, float("inf")),
-]
+# Shot-length bins: RHYTHM_BINS, imported rather than restated. This pack's
+# histogram is read side by side with correlate_timeline's and with the style
+# profiles, and the local copy this replaced spelt the same six bins "<2s"
+# instead of "<2" -- so no key in a pack ever matched a key in a reading, and
+# every comparison between them silently compared nothing.
 
 
 # --------------------------------------------------------------------------
@@ -394,10 +398,10 @@ def shots_from_cuts(cuts: list[float], duration: float) -> list[tuple[float, flo
 
 def shot_stats(shots: list[tuple[float, float]], duration: float, n_cuts: int) -> dict[str, Any]:
     lengths = [round(e - s, 3) for s, e in shots]
-    hist = {name: 0 for name, _, _ in HIST_BUCKETS}
+    hist = {name: 0 for name, _ in RHYTHM_BINS}
     for length in lengths:
-        for name, lo, hi in HIST_BUCKETS:
-            if lo <= length < hi:
+        for name, edge in RHYTHM_BINS:
+            if length < edge:
                 hist[name] += 1
                 break
     return {
@@ -619,15 +623,18 @@ def classify_transition(clip: Path, cut: float, fps: float, duration: float) -> 
     diffs = [float(np.abs(arr[i] - arr[i - 1]).mean()) for i in range(1, len(arr))]
     peak = max(diffs)
     peak_i = diffs.index(peak)
-    min_luma = float(luma.min())
     max_luma = float(luma.max())
 
+    # The two luma extremes stay local. They are how a fade is told from a cut
+    # against black, and they were also published per boundary -- where a critic
+    # read them as a grade comparison ("boundary min_luma 39-44 vs the human's
+    # 22-26") and a round's verdict rested on it until the director ruled colour
+    # and grade out of scope. The pack reports what a boundary *does*, and the
+    # numbers that decide that are black_frames, ramp_frames and the type.
     doc: dict[str, Any] = {
         "frames_sampled": int(len(arr)),
         "window_start_sec": round(start, 3),
         "peak_frame_delta": round(peak, 2),
-        "min_luma": round(min_luma, 1),
-        "max_luma": round(max_luma, 1),
     }
 
     if peak < TRANS_NOISE_FLOOR:
@@ -922,32 +929,30 @@ def group_hits(hits: list[dict[str, Any]], merge: int) -> list[list[dict[str, An
 # --------------------------------------------------------------------------
 # loudness curve
 
-RMS_RE = re.compile(r"pts_time:([0-9]+\.?[0-9]*)\s*\n[^\n]*RMS_level=(-?[0-9]+\.?[0-9]*|-inf)")
+RMS_FLOOR_DB = -100.0  # what digital silence is reported as, in place of -inf
 
 
-def loudness_curve(clip: Path) -> list[dict[str, float]] | None:
-    """1-second-window RMS level in dBFS. Returns None if the clip has no audio."""
-    proc = run(
-        [
-            "ffmpeg",
-            "-hide_banner",
-            "-nostats",
-            "-i",
-            str(clip),
-            "-vn",
-            "-af",
-            "aresample=8000,asetnsamples=8000,astats=metadata=1:reset=1,"
-            "ametadata=print:key=lavfi.astats.Overall.RMS_level",
-            "-f",
-            "null",
-            "-",
-        ]
-    )
-    blob = proc.stdout + "\n" + proc.stderr
+def loudness_curve(samples: np.ndarray) -> list[dict[str, float]] | None:
+    """1-second-window RMS level in dBFS. Returns None if the clip has no audio.
+
+    Read off the mono PCM `decode_mono` already returned, rather than out of a
+    second ffmpeg astats pass over the same file: the whole clip's audio is in
+    memory by the time this is wanted, and decoding it twice bought nothing but
+    a second decode of every pack.
+
+    Whole windows only. A trailing part-second would be a level measured over
+    less music than every other point on the curve, and it sits exactly where a
+    reader is looking hardest -- at the ending.
+    """
+    length = int(AUDIO_RATE)
+    if len(samples) < length:
+        return None
     points: list[dict[str, float]] = []
-    for t_str, rms_str in RMS_RE.findall(blob):
-        rms = -100.0 if rms_str == "-inf" else float(rms_str)
-        points.append({"t": round(float(t_str), 2), "rms_db": round(rms, 2)})
+    for start in range(0, len(samples) - length + 1, length):
+        seg = samples[start : start + length]
+        rms = float(np.sqrt((seg**2).mean()))
+        level = 20.0 * float(np.log10(rms)) if rms > 0.0 else RMS_FLOOR_DB
+        points.append({"t": round(start / AUDIO_RATE, 2), "rms_db": round(level, 2)})
     return points or None
 
 
@@ -1173,19 +1178,20 @@ def find_font() -> Path | None:
     return None
 
 
-def grab_thumb(
-    clip: Path,
-    t: float,
-    dest: Path,
-    caption: str,
-    font: Path | None,
-    cwd: Path,
-    text_color: str = "white",
-    box_color: str = "black@0.6",
-) -> bool:
-    """Grab one frame at t, scaled to THUMB_W x THUMB_H, timestamp burned in.
+class Tile(NamedTuple):
+    """One captioned frame to grab: when, where it goes, and how it is labelled."""
 
-    `font` is a bare file name resolved against `cwd` -- never an absolute
+    t: float
+    dest: Path
+    caption: str
+    text_color: str = "white"
+    box_color: str = "black@0.6"
+
+
+def thumb_chain(caption: str, font: Path | None, text_color: str, box_color: str) -> str:
+    """The filter chain one tile is made with: fit into the tile, burn the caption.
+
+    `font` is a bare file name resolved against the run's cwd -- never an absolute
     Windows path, which the filtergraph parser would split on the drive colon.
     The caption colours carry meaning on cut strips: outgoing frames keep the
     default white-on-black, incoming frames get a loud box, so the boundary in
@@ -1199,27 +1205,50 @@ def grab_thumb(
             f"x=6:y=h-th-6:fontsize=14:fontcolor={text_color}:box=1:"
             f"boxcolor={box_color}:boxborderw=4"
         )
-    proc = run(
-        [
-            "ffmpeg",
-            "-hide_banner",
-            "-nostats",
-            "-y",
-            "-ss",
-            f"{t:.3f}",
-            "-i",
-            str(clip),
-            "-frames:v",
-            "1",
-            "-vf",
-            chain,
-            "-q:v",
-            "3",
-            str(dest),
-        ],
-        cwd=cwd,
+    return chain
+
+
+def grab_tiles(clip: Path, tiles: Sequence[Tile], font: Path | None, cwd: Path) -> list[bool]:
+    """Grab several frames of one clip in a single ffmpeg run. Returns one flag per tile.
+
+    One process, one seek per tile, one output file per tile: the frames are
+    independent, so they go in as separate inputs and come out through a
+    filter_complex with a map each. A tile per process is what this replaced --
+    six per cut and thirty-six cuts is 216 ffmpeg starts per label, nearly all
+    of it process and decoder setup for one JPEG.
+
+    Success is read off the files rather than the exit code, because a run that
+    fails on one input still writes the others, and every tile that exists is a
+    real frame. The caller stands a placeholder in for the rest.
+    """
+    if not tiles:
+        return []
+    cmd = ["ffmpeg", "-hide_banner", "-nostats", "-y"]
+    for tile in tiles:
+        cmd += ["-ss", f"{tile.t:.3f}", "-i", str(clip)]
+    chains = ";".join(
+        f"[{i}:v]{thumb_chain(tile.caption, font, tile.text_color, tile.box_color)}[t{i}]"
+        for i, tile in enumerate(tiles)
     )
-    return proc.returncode == 0 and dest.exists()
+    cmd += ["-filter_complex", chains]
+    for i, tile in enumerate(tiles):
+        cmd += ["-map", f"[t{i}]", "-frames:v", "1", "-q:v", "3", str(tile.dest)]
+    run(cmd, cwd=cwd)
+    return [tile.dest.exists() for tile in tiles]
+
+
+def grab_thumb(
+    clip: Path,
+    t: float,
+    dest: Path,
+    caption: str,
+    font: Path | None,
+    cwd: Path,
+    text_color: str = "white",
+    box_color: str = "black@0.6",
+) -> bool:
+    """Grab one frame at t, scaled to THUMB_W x THUMB_H, timestamp burned in."""
+    return grab_tiles(clip, [Tile(t, dest, caption, text_color, box_color)], font, cwd)[0]
 
 
 def build_sheets(
@@ -1351,6 +1380,7 @@ def build_cut_strips(
         tile_no = 0
         for row, cut in enumerate(chunk):
             cut_no = sheet_idx + row + 1
+            tiles: list[Tile] = []
             for k, side in offsets:
                 # ffmpeg's input -ss returns the first frame whose pts is >= the
                 # request, so aim a quarter-frame BEFORE the wanted frame. Aiming
@@ -1360,13 +1390,14 @@ def build_cut_strips(
                 t = min(max(pts - 0.25 / fps, 0.0), last_t)
                 tile_no += 1
                 caption = f"c{cut_no:02d} {side} {k:+d}f  {max(pts, 0.0):.3f}s"
-                dest = frames_dir / f"f{tile_no:04d}.jpg"
                 colors = (
                     ("white", "black@0.6") if side == "OUT" else ("black", "0x00D7FF@0.9")
                 )
-                ok = grab_thumb(clip, t, dest, caption, font, work, *colors)
+                tiles.append(Tile(t, frames_dir / f"f{tile_no:04d}.jpg", caption, *colors))
+            # The whole row in one ffmpeg run: six frames of one clip, six maps.
+            for tile, ok in zip(tiles, grab_tiles(clip, tiles, font, work), strict=True):
                 if not ok:
-                    placeholder_tile(dest, f"{caption}  (no frame)", font, work)
+                    placeholder_tile(tile.dest, f"{tile.caption}  (no frame)", font, work)
             placement.append({"cut_index": cut_no, "sheet": f"cutstrip_{n}.jpg", "row": row + 1})
 
         sheet_name = f"cutstrip_{n}.jpg"
@@ -1478,7 +1509,7 @@ def build_label(
         cuts_doc["audio_class_spans"] = spans
         cuts_doc["audio_class_thresholds"] = audio_thresholds
         cuts_doc["audio_class_summary"] = audio_class_summary(audio_track, spans)
-    curve = loudness_curve(clip)
+    curve = loudness_curve(samples)
     if curve:
         cuts_doc["loudness_1s_rms_db"] = curve
         levels = [p["rms_db"] for p in curve]
@@ -1598,9 +1629,14 @@ def main(argv: list[str] | None = None) -> int:
     # than no manifest at all. Checked before any sealed/summary file is
     # written.
     expect_by_flag = {"--a": args.expect_a, "--b": args.expect_b}
+    promised = {flag for flag, count in expect_by_flag.items() if count is not None}
+    checked: set[str] = set()
     for entry in label_entries:
         flag = flag_of.get(entry["label"])
-        expected = expect_by_flag.get(flag)
+        if flag is None:
+            continue
+        checked.add(flag)
+        expected = expect_by_flag[flag]
         if expected is None:
             continue
         detected = entry["total_cuts"]
@@ -1611,6 +1647,18 @@ def main(argv: list[str] | None = None) -> int:
                 f"expected {expected} -- below 80% ({threshold:.1f}) of expected. "
                 "Refusing to write manifest.json; the detector cannot see this cut."
             )
+
+    # A flag that was given an expectation and never matched back to a label is
+    # the guard not running, and the guard exists because a pack built on a half
+    # blind detector once voided a round's verdict. Skipping quietly there hands
+    # back exactly the pack the check was asked to refuse.
+    unchecked = promised - checked
+    if unchecked:
+        sys.exit(
+            f"error: {', '.join(sorted(unchecked))} carried an expected cut count, but no "
+            "label could be matched back to it, so the count was never checked. Refusing to "
+            "write manifest.json."
+        )
 
     # SEALED ENVELOPE -- the only file in the pack that names a source.
     assignment = {

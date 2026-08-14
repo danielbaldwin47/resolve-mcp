@@ -767,6 +767,16 @@ Free prose, first-class.
   the V1 skeleton of a cut whose character is partly in what the measurement
   cannot see; a number-only reading of the round would have missed the black
   entirely.
+- **Scene-detect count ≈ timeline item count, or the measurement is what is
+  broken.** Correlate proves the timeline; scene detection over the render
+  proves the pixels; disagreement between the two is an alarm about the
+  instrument, not a note about the edit. Read that pair before reading any
+  verdict a pack produced. The R1 round was judged on a pack whose scene
+  threshold could not see matched-grade cuts between two cameras in one dim
+  room — a 13-shot cut scanned as 1, the human's 13 as 9 — and both arms were
+  corrupt while every number in them looked answerable. A detected-cut count
+  that wildly undershoots the cut file means re-run the measurement, never
+  re-cut. `[review feedback, 2026-08]`
 - **The deliverables answered a question no timeline in the corpus can.** Six
   timelines have been correlated and not one of them says what a tune's first
   three seconds look like: `correlate_timeline` reads shots, and a title is not

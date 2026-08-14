@@ -20,10 +20,12 @@ needs to see where the score sat rather than being told a verdict.
 from __future__ import annotations
 
 import json
+import os
 import statistics
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from uuid import uuid4
 
 from ..config import Config, get_config
 from ..errors import InvalidRequestError, OcclusionScanError
@@ -126,7 +128,11 @@ def scan_occlusion(
     duration = (last - first) / fps
 
     stem = f"{slug(source.name, 'occlusion')}-{key[:12]}"
-    raw = config.analysis_dir / f"{stem}.gray"
+    # The catalog is named for the key, because that is the artifact a cache hit points at.
+    # The grey is named for the *run*: two scans of the same clip and range share a key, and
+    # ffmpeg's -y would have the second truncate the first's file while the first was reading
+    # it — a scan that answers CLEAN for footage it never decoded.
+    raw = config.analysis_dir / f"{stem}-{os.getpid()}-{uuid4().hex[:8]}.gray"
     progress(0.1, f"decoding {duration:.0f}s of {source.name} at {rate:g} samples a second")
     try:
         ffmpeg.sample(
@@ -247,14 +253,21 @@ def _windows(
 
     A window runs to one sample interval past its last blocked sample — the sample stands for
     the second it was taken from, not for an instant — clipped to the range that was scanned.
+
+    Both ends are clipped, and a window that clips to nothing is not published. The ``fps``
+    filter can emit a boundary frame dated at the range's own end: it is a real reading and it
+    stays in the curve, but the window it would make starts where the range stops. A
+    zero-length or backwards window in the catalog is a stretch no cut can be kept out of.
     """
     runs = _runs([float(one["score"]) >= threshold for one in samples])
     step = max(1, frames_from_seconds(1.0 / rate, source.fps or 1.0, IN_POINT))
     windows: list[dict[str, Any]] = []
     for begin, stop in runs:
         scores = [float(samples[one]["score"]) for one in range(begin, stop)]
-        start_frame = _sample_frame(begin, first, rate, source)
+        start_frame = max(first, min(last, _sample_frame(begin, first, rate, source)))
         end_frame = min(last, _sample_frame(stop - 1, first, rate, source) + step)
+        if end_frame <= start_frame:
+            continue
         windows.append(
             {
                 "in": dual_time(start_frame, source.fps),

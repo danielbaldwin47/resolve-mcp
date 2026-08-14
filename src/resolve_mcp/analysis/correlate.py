@@ -115,17 +115,28 @@ run is counted from three shots (A B A) up. Without this floor every two-shot ti
 as perfectly alternating, which is arithmetic rather than a fact about the edit.
 """
 
+RAMP_MIN = 4
+"""How many cuts of one direction make a ramp rather than a coincidence.
+
+Three shots that happen to shorten are two cuts, and two cuts in a row go one way in any cut
+list long enough — the shape only exists once it keeps going. Counted from five shots (four
+cuts) up, which is where a run stops being what randomness hands you.
+"""
+
 ALTERNATION_FLOOR = 0.8
 ONE_BIN_FLOOR = 0.6
 CV_FLOOR = 0.35
-"""The three numbers ``reads_metronomic`` is drawn at — see ``HEURISTIC``."""
+RAMP_FLOOR = 0.6
+"""The four numbers ``reads_metronomic`` is drawn at — see ``HEURISTIC``."""
 
 HEURISTIC = (
     "reads_metronomic is true when the longest strict A/B alternation run covers more than "
-    f"{ALTERNATION_FLOOR} of the cuts and either one length bin holds more than {ONE_BIN_FLOOR} "
-    f"of the shots or the coefficient of variation of shot lengths is under {CV_FLOOR}. It is a "
-    "warning to look at, not a verdict: a passage that genuinely wants a two-camera ping-pong "
-    "scores the same as a cut nobody varied, and only the director can tell them apart."
+    f"{ALTERNATION_FLOOR} of the cuts and the lengths are mechanical with it: either one bin "
+    f"holds more than {ONE_BIN_FLOOR} of the shots, or the coefficient of variation of shot "
+    f"lengths is under {CV_FLOOR}, or the longest run of shots that only shorten or only "
+    f"lengthen covers more than {RAMP_FLOOR} of the cuts. It is a warning to look at, not a "
+    "verdict: a passage that genuinely wants a two-camera ping-pong scores the same as a cut "
+    "nobody varied, and only the director can tell them apart."
 )
 """The heuristic in words, carried in the report so nobody has to read this file to check it."""
 
@@ -153,14 +164,15 @@ GEAR_HEURISTIC = (
     f"{RATE_RATIO_FLOOR}x as fast as the quiet third (rate_ratio) and the coefficient of "
     f"variation of shot lengths is under {GEAR_CV_FLOOR}. Terciles are thirds of the span by "
     "level, not by time: the 1 s RMS windows inside the cut are ranked and split three ways, "
-    "and each shot is counted in the window its first frame lands in. It is a warning to look "
+    "and each shot is counted in the window its first frame lands in — a shot the curve does "
+    "not reach is counted in outside_shots and in no tercile. It is a warning to look "
     "at, not a verdict — a ballad cut at one speed throughout is a real edit, and a passage "
     "whose loudness never moves has no gears to change. What it catches is the build that cut "
     "the guitar solo at the pace it cut the intro."
 )
 """The gearing heuristic in words, carried in the report beside the numbers it was drawn from."""
 
-READING = 5
+READING = 6
 """What this measurement *is*; bumped whenever a rerun over unchanged inputs would differ.
 
 The cache is keyed on what was measured, not on the code that measured it, so a call whose
@@ -168,9 +180,11 @@ inputs have not changed is otherwise answered out of a file the previous version
 #142 that is a report with no track on its records and no ``visible`` on its header, handed
 back as though it were this measurement rather than the one before it. Both the shape and
 the reading count: 3 rather than 2 because the same shots now resolve to a different strip,
-4 rather than 3 because the header now carries ``shot_rhythm``, and 5 rather than 4 because
-that block now carries ``gears`` — a cached hit from an earlier reading answers the
-self-review question with a file that never asked it.
+4 rather than 3 because the header now carries ``shot_rhythm``, 5 rather than 4 because that
+block now carries ``gears``, and 6 rather than 5 because ``reads_metronomic`` now reads the
+ramp as well and the gearing no longer counts shots the level curve does not reach — a
+cached hit from an earlier reading answers the self-review question with a file that never
+asked it.
 """
 
 GIVEN = "given"
@@ -1110,7 +1124,13 @@ def _rhythm(
     the one every critic names first: two cameras traded back and forth on a fixed length. It
     is invisible in the offsets — every cut can sit dead on its beat and still read as a
     metronome — so it needs its own reading: how the shot lengths spread, how strictly the
-    angles alternate, and how much of the cut sits in a single length bin.
+    angles alternate, how much of the cut sits in a single length bin, and how far it ramps.
+
+    The ramp is the same mechanism wearing a disguise. A two-camera trade whose lengths walk
+    steadily from ten seconds down to three varies every one of them, so the bin and the
+    spread both call it varied — and a panel called it a mechanical metronome anyway, because
+    a ladder is as countable a pattern as a fixed length (P3·R3: strict two-framing, 9.9 s to
+    2.9 s without a step back up). The run of one-way lengths is what catches it.
 
     ``gears`` asks the other half of the same question. A cut can vary its lengths and still
     run at one speed through the whole concert — the intro cut as fast as the solo — and no
@@ -1132,6 +1152,7 @@ def _rhythm(
     histogram = _bins(lengths)
     alternation = _alternation(sources)
     uniformity = _uniformity(lengths, histogram)
+    ramp = _ramp(lengths)
     return {
         "shots": len(rows),
         "lengths": {
@@ -1145,7 +1166,8 @@ def _rhythm(
         },
         "alternation": alternation,
         "uniformity": uniformity,
-        "reads_metronomic": _metronomic(alternation, uniformity),
+        "ramp": ramp,
+        "reads_metronomic": _metronomic(alternation, uniformity, ramp),
         "gears": _gears(rows, levels, uniformity),
         "heuristic": HEURISTIC,
     }
@@ -1212,14 +1234,45 @@ def _uniformity(lengths: Sequence[float], histogram: Mapping[str, int]) -> dict[
     }
 
 
-def _metronomic(alternation: Mapping[str, Any], uniformity: Mapping[str, Any]) -> bool:
+def _ramp(lengths: Sequence[float]) -> dict[str, Any]:
+    """The longest run of shots that only shorten, or only lengthen, counted in cuts.
+
+    A tightening ladder is a pattern the bin count and the spread are both blind to: every
+    length differs, so no bin holds the cut and the coefficient of variation reads as variety,
+    while what the audience sees is one rule applied over and over. Direction rather than
+    slope, because the shape is the *monotony*, not the rate — a ladder that steps 10, 8, 7,
+    3 is as mechanical as one that halves each time, and a single step back up ends both.
+
+    Equal neighbours end a run rather than continue one: a stretch of identical lengths is
+    already what ``uniformity`` reads, and letting it feed this one would count the same cut
+    twice. Measured in cuts, like ``_alternation``, so the two fractions share a denominator.
+    """
+    cuts = max(len(lengths) - 1, 0)
+    longest = 0
+    rising = falling = 0
+    for index in range(1, len(lengths)):
+        rising = rising + 1 if lengths[index] > lengths[index - 1] else 0
+        falling = falling + 1 if lengths[index] < lengths[index - 1] else 0
+        longest = max(longest, rising, falling)
+    counted = longest if longest >= RAMP_MIN else 0
+    return {
+        "cuts": cuts,
+        "longest_run": counted,
+        "fraction": _rounded(counted / cuts) if cuts else 0.0,
+    }
+
+
+def _metronomic(
+    alternation: Mapping[str, Any], uniformity: Mapping[str, Any], ramp: Mapping[str, Any]
+) -> bool:
     """``HEURISTIC``, applied. A reading it cannot take is not a reading against the cut."""
     one_bin = uniformity["one_bin"]
     cv = uniformity["cv"]
     uniform = (one_bin is not None and one_bin > ONE_BIN_FLOOR) or (
         cv is not None and cv < CV_FLOOR
     )
-    return float(alternation["fraction"]) > ALTERNATION_FLOOR and uniform
+    ramped = float(ramp["fraction"]) > RAMP_FLOOR
+    return float(alternation["fraction"]) > ALTERNATION_FLOOR and (uniform or ramped)
 
 
 def _gears(
@@ -1235,6 +1288,12 @@ def _gears(
     The span the terciles are taken over is the cut's own, not the mix's. A four-minute song
     inside a two-hour concert is quiet *in that concert* from end to end, and thirds taken
     over the whole mix would drop every shot in it into one gear and report nothing.
+
+    Where the cut runs past the curve — a tail after the analysed mix ends, a cold open ahead
+    of its start — those shots are counted in ``outside_shots`` and left out of the terciles
+    and out of the sub-2 s numbers with them. Every rate here divides by the seconds of music
+    its tercile holds, so a shot placed where no window exists is a numerator with no
+    denominator, and the one it borrows is the wrong one.
     """
     if not rows or not levels:
         return None
@@ -1251,8 +1310,13 @@ def _gears(
     placed = _terciles(windows)
     starts = [start for start, _ in windows]
     held: dict[str, list[dict[str, Any]]] = {QUIET: [], MID: [], LOUD: []}
+    outside = 0
     for row in rows:
-        held[placed[_window_at(starts, float(row["t"]))]].append(row)
+        window = _window_at(starts, float(row["t"]))
+        if window is None:
+            outside += 1
+            continue
+        held[placed[window]].append(row)
 
     terciles = {
         gear: _gear(
@@ -1265,11 +1329,13 @@ def _gears(
     # The short shots are the ones a fast passage is made of, so where they sit is the
     # gearing read in its bluntest form: a build that saves them for the loud third has
     # changed gear even if the averages move less than the ratio floor.
-    short = sum(1 for row in rows if float(row["seconds"]) < SUB_TWO_SECONDS)
+    counted = [row for gear in (QUIET, MID, LOUD) for row in held[gear]]
+    short = sum(1 for row in counted if float(row["seconds"]) < SUB_TWO_SECONDS)
     in_loud = sum(1 for row in held[LOUD] if float(row["seconds"]) < SUB_TWO_SECONDS)
     return {
         "window_seconds": GEAR_WINDOW_SECONDS,
         "terciles": terciles,
+        "outside_shots": outside,
         "rate_ratio": ratio,
         "sub2s_count": short,
         "sub2s_in_loud": in_loud,
@@ -1299,14 +1365,23 @@ def _terciles(windows: Sequence[tuple[float, float]]) -> list[str]:
     return placed
 
 
-def _window_at(starts: Sequence[float], seconds: float) -> int:
-    """The window a shot's first frame lands in — its first frame, not its span.
+def _window_at(starts: Sequence[float], seconds: float) -> int | None:
+    """The window a shot's first frame lands in, or ``None`` when the curve does not reach it.
 
     A shot is counted whole in the gear it was cut *into*: that is the decision the editor
     made at that frame. Splitting a long shot across two gears would credit the loud third
     with screen time nobody cut there.
+
+    Past the ends the answer is nothing rather than the nearest window. The rates are cuts
+    over the *music* each tercile holds, and a curve that stops before the cut does — or
+    starts after it, on a cold open — holds no music where those shots sit; clamping them
+    into the first or last window would add cuts to a numerator whose denominator never grew,
+    and a cut running a minute past the analysed mix would read as a gear change nobody made.
     """
-    return max(bisect_right(starts, seconds) - 1, 0)
+    index = bisect_right(starts, seconds) - 1
+    if index < 0 or seconds >= starts[-1] + GEAR_WINDOW_SECONDS:
+        return None
+    return index
 
 
 def _gear(shots: Sequence[dict[str, Any]], levels: Sequence[float]) -> dict[str, Any]:

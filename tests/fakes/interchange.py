@@ -92,10 +92,11 @@ def timeline_from(
     keeps_transitions: bool = True,
     trims_transitions_to: int | None = None,
     slides_clips: int = 0,
+    starts_at: int | None = None,
 ) -> FakeTimeline:
     """The timeline Resolve would materialise from ``document``, transitions and all.
 
-    Three knobs, each an outcome the return value cannot tell apart from a clean import:
+    Four knobs, each an outcome the return value cannot tell apart from a clean import:
 
     * ``keeps_transitions=False`` — the import takes the document, answers with a timeline,
       and quietly leaves the transitions out. A cut whose dissolve never landed and a cut
@@ -107,14 +108,23 @@ def timeline_from(
     * ``slides_clips`` — every clip lands this many frames later than the document puts it.
       The round trip is a second placement, and a placement that slid is the failure the
       build's own read-back exists for.
+    * ``starts_at`` — the imported timeline begins on this frame rather than on the one the
+      document names, and its cut rides along in one piece. This is *not* a slid cut: an
+      import is entitled to a start timecode of its own (a project default of an hour, a
+      preference the document does not carry), and every shot is still exactly where the cut
+      puts it relative to the first frame. A read-back comparing absolute frames cannot tell
+      this apart from a cut that moved, and would refuse a correct one.
     """
     tracks: dict[str, list[FakeTrack]] = {"video": [], "audio": []}
     transitions: list[dict[str, Any]] = []
     rate = 24.0
+    origin = int(float((document.get("global_start_time") or {}).get("value") or 0))
+    if starts_at is not None:
+        origin = starts_at
     for track in (document.get("tracks") or {}).get("children") or []:
         kind = str(track.get("kind") or "Video")
         items: list[FakeTimelineItem] = []
-        start = int(float((document.get("global_start_time") or {}).get("value") or 0))
+        start = origin
         for child in track.get("children") or []:
             schema = str(child.get("OTIO_SCHEMA", ""))
             if schema.startswith("Transition."):
@@ -151,7 +161,7 @@ def timeline_from(
     imported = FakeTimeline(
         name,
         fps=str(rate),
-        start_frame=int(float((document.get("global_start_time") or {}).get("value") or 0)),
+        start_frame=origin,
         video=tracks["video"],
         audio=tracks["audio"],
     )

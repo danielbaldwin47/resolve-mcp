@@ -43,6 +43,9 @@ DEFAULT_MIN_SEGMENT_FRAMES: Final = 12
 FPS_TOLERANCE: Final = 0.01
 """Reported rates carry float noise; real rate differences (23.976 vs 24) are far wider."""
 
+V1_TRACK: Final = 1
+"""The sequential cut's own track — the one ``segments`` lays out."""
+
 FIRST_OVERLAY_TRACK: Final = 2
 """V1 is the sequential cut's own track, so the lowest an overlay can claim is V2."""
 
@@ -146,7 +149,13 @@ def _is_number(value: Any) -> TypeGuard[int | float]:
 
 
 def _shape_errors(doc: Any) -> Iterator[Finding]:
-    """Everything that makes the document unreadable, reported as E1."""
+    """Everything that makes the document unreadable, reported as E1.
+
+    The tail block is judged by :func:`_tail_shape_errors` rather than from here, because it
+    is the one part of the schema no other rule reads: a typo in it is still an E1, but it
+    does not make the segments, the overlays or the aliases unanswerable, and it does not
+    stop the pass. See :func:`validate_structure`.
+    """
     if not isinstance(doc, dict):
         yield _finding("E1", None, f"The cut file must be a JSON object, got {_kind(doc)}.")
         return
@@ -155,7 +164,6 @@ def _shape_errors(doc: Any) -> Iterator[Finding]:
     yield from _timeline_errors(doc)
     yield from _sources_errors(doc)
     yield from _audio_shape_errors(doc)
-    yield from _tail_shape_errors(doc)
     yield from _segments_errors(doc)
     yield from _overlays_errors(doc)
 
@@ -424,18 +432,26 @@ def validate_structure(
 
     A document that fails E1 is returned with E1 findings only: the later rules read
     fields whose types they can no longer trust, so running them would report noise.
+
+    The tail is the one exception, and it is an exception because it is a leaf — no other
+    rule reads ``tail``, so a typo in it makes nothing else unreadable. Its E1 rides along
+    with whatever the rest of the document has to say instead of silencing it, which is the
+    difference between one validate/fix round trip and one per mistake. What it *does*
+    silence is E12, whose numbers it would be reading out of the block that failed.
     """
     shape = list(_shape_errors(doc))
+    tail_shape = list(_tail_shape_errors(doc)) if isinstance(doc, dict) else []
     if shape:
-        return ordered(shape)
+        return ordered(shape + tail_shape)
 
-    findings: list[Finding] = []
+    findings: list[Finding] = list(tail_shape)
     findings += _id_errors(doc)
     findings += _range_errors(doc)
     findings += _declared_alias_errors(doc)
     findings += _alternate_duration_errors(doc)
     findings += _overlay_errors(doc)
-    findings += _tail_errors(doc)
+    if not tail_shape:
+        findings += _tail_errors(doc)
     findings += _segment_length_warnings(doc, min_segment_frames)
     findings += _audio_span_warnings(doc)
     findings += _trailing_black_warnings(doc)
@@ -829,7 +845,99 @@ def _dissolve_errors(doc: dict[str, Any], tail: Tail, declared: dict[str, Any]) 
                 f"is only {length}; the dissolve would reach past the shot it fades.",
             )
         ]
-    return []
+    return _overlay_dissolve_errors(doc, tail)
+
+
+def _overlay_dissolve_errors(doc: dict[str, Any], tail: Tail) -> list[Finding]:
+    """The layers the dissolve has to agree with — the injector's own precondition, as a rule.
+
+    :mod:`resolve_mcp.resolve.tail` fades *every* video track whose picture reaches the end
+    of the cut, and refuses outright when a track stops somewhere inside the dissolve: it is
+    opaque over part of the ramp and then gone, so the picture underneath comes back partway
+    through a fade to black. Both of those are answerable from the cut file, and so they are
+    answered here. The refusal on the other side happens after Resolve has been written —
+    the shots are on a staging timeline and the delivery name holds nothing — which is a far
+    worse place to learn that a lower-third sits three frames too close to the song's end.
+
+    Judged against the *furthest* layer rather than against V1, exactly as the injector does.
+    V1 is that layer on every document that reaches the injector at all — an overlay hanging
+    off the end of the cut is E9's refusal and never gets built, and a dissolve tail has
+    already been refused a cut that ends on black — so this reports the overlays alone; the
+    shot that ends V1 is checked above.
+
+    That invariant is checked rather than assumed. ``validate_structure`` reports E9 and
+    keeps going, so a document this rule can say nothing honest about does reach it: with
+    some overlay hanging past the end, the dissolve window would be measured off a layer V1
+    does not reach, every other overlay would be judged against the wrong frames, and V1's
+    own refusal would go unmirrored. The layout is E9's to report; nothing is added here.
+    """
+    ends = _video_ends(doc)
+    if len(ends) < 2:
+        return []
+    furthest = max(end for end, _, _ in ends.values())
+    ending = ends.get(V1_TRACK)
+    if ending is None or ending[0] != furthest:
+        return []
+    findings: list[Finding] = []
+    for track in sorted(ends):
+        if track == V1_TRACK:
+            continue
+        end, id, length = ends[track]
+        if end == furthest and length <= tail.frames:
+            findings.append(
+                _finding(
+                    "E12",
+                    id,
+                    f"The dissolve runs {tail.frames} frames and V{track} ends the cut "
+                    f"alongside V1, so it is faded too — but {id!r} is only {length} "
+                    f"frames, which cannot carry the dissolve.",
+                )
+            )
+        elif furthest - tail.frames < end < furthest:
+            findings.append(
+                _finding(
+                    "E12",
+                    id,
+                    f"Overlay {id!r} on V{track} ends at frame {end}, inside the "
+                    f"{tail.frames}-frame dissolve that starts at {furthest - tail.frames}; "
+                    f"it would stay opaque over part of the fade and then stop, so the "
+                    f"picture underneath would come back out of black before the cut ends.",
+                )
+            )
+    return findings
+
+
+def _video_ends(doc: dict[str, Any]) -> dict[int, tuple[int, str, int]]:
+    """Each video track to ``(where its picture stops, what ends it, how long that runs)``.
+
+    The same measurement :mod:`resolve_mcp.resolve.tail` makes on the exported document, made
+    here on the cut file instead: a track's picture stops at the end of its last *clip*, so
+    the trailing black Resolve pads every exported track with is not part of the answer —
+    and neither is a gap the cut file itself authored at the end of V1.
+
+    Only the overlays E9 accepts are measured. One that runs past the end of the cut is a
+    layout E9 has already refused and the build will never reach, so counting it would move
+    the end of the picture somewhere no track goes.
+    """
+    ends: dict[int, tuple[int, str, int]] = {}
+    at = 0
+    for entry in _entries(doc):
+        duration = entry_duration(entry)
+        if not is_gap(entry):
+            ends[V1_TRACK] = (at + duration, str(entry["id"]), duration)
+        at += duration
+    total = total_frames(doc)
+    for overlay, resolved in _anchored(doc):
+        if resolved is None:
+            continue
+        start, duration = resolved
+        if start + duration > total:
+            continue
+        track = overlay_track(overlay)
+        current = ends.get(track)
+        if current is None or start + duration > current[0]:
+            ends[track] = (start + duration, str(overlay["id"]), duration)
+    return ends
 
 
 def _audio_fade_errors(doc: dict[str, Any], tail: Tail, declared: dict[str, Any]) -> list[Finding]:

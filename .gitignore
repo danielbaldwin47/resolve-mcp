@@ -17,3 +17,8 @@ gauntlet/recon/r2_frames/
 gauntlet/recon/super_frames/
 gauntlet/recon/openings_frames/
 gauntlet/recon/v3_calib_clips/
+# Per-frame ffmpeg metadata dumps (lavfi.astats / signalstats), tens of
+# thousands of lines each. The pixelcheck instruments write them on every run
+# and read them straight back, so they are regenerable output, never a receipt.
+gauntlet/recon/*_luma.txt
+gauntlet/recon/*_rms.txt

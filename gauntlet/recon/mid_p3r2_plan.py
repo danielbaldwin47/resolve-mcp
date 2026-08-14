@@ -16,6 +16,10 @@ import json
 import statistics
 from pathlib import Path
 
+# The bins this histogram is compared against are correlate's own, imported so that
+# this plan and the shot_rhythm reading it is checked with cannot drift apart.
+from resolve_mcp.analysis.correlate import RHYTHM_BINS
+
 HERE = Path(__file__).resolve().parent
 RECON = json.loads((HERE / "mid_p3_recon.json").read_text(encoding="utf-8"))
 ACC = json.loads((HERE / "r2_accents.json").read_text(encoding="utf-8"))["accents"]
@@ -36,8 +40,6 @@ MOVES = [(r["start"], r["end"]) for r in RECON["FX6"]["move_runs"] if r["seconds
 # 2% of frame width per second at the recon's own 192 px scale, under the 1 px/frame threshold
 # its move-run detector uses. So this arrival is a settle, not a pan being cut into.
 PAN_EXEMPT = [46.84]
-RHYTHM_BINS = (("<2", 2.0), ("2-4", 4.0), ("4-8", 8.0), ("8-15", 15.0), ("15-30", 30.0),
-               (">30", float("inf")))
 
 FIRST_ANGLE = "a7iv"
 CUTS: list[tuple[float, str, str]] = [
