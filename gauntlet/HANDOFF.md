@@ -105,11 +105,15 @@ filed via `/to-tickets` (user skill; if absent post-compact, ask or use
    set 1920×1080 pre-render — build/render should handle resolution.
 7. G10 follow-up: parse separator's device line (PyTorch/CUDA banner) in
    separator._run and surface on the job record so CPU fallback is visible.
-8. G11 follow-up: occlusion false-positive discriminator — measured truth:
-   "covers a player the shot is framed on" separates all known cases;
-   motion does NOT (ending-window evidence); score does NOT rank truth
-   (real blocking 0.416 < FP 0.469). Also detector goes blind to a body
-   once it stops moving; mid-take reframe FP signature (occlusion_mid).
+8. ~~G11 follow-up: occlusion false-positive discriminator~~ — done, #189
+   (PR #208). Every window now comes back classed `obstruction` or `scene`,
+   off `novel` (blob standing where the run is usually clear) and `hidden`
+   (blob covering what the run's median shows); all 3 true blockings and 11
+   false positives in the evidence set class correctly, live-proven on the
+   Taurus MID window. Two limits carried forward: the levels are fitted to
+   the whole evidence set, so the next round's scans are the first held-out
+   test of them; and a mid-take reframe has no class of its own until a
+   second example exists to separate it from a true blocking.
 9. Capstone remaining flank (P4R2 winning-round critique): quiet trough
    79–157 s reads static — five long locked holds + orphan 2.5 s flash;
    future rounds should make the floor breathe.
