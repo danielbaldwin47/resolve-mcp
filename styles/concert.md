@@ -88,6 +88,20 @@ that the grid is a live band's grid, so it moves.
   sax phrase has ended". No phrase detector exists in the analysis stack;
   phrase boundaries are currently readable only from the music itself.
   `[review feedback, 2026-08]`
+- **Transient-snap alone does not read as musical at phrase scale; the cut has
+  to sit near an accent too.** A cut can be 30 ms from an onset and still land
+  where the music is doing nothing: an onset is a 30 ms-scale event, while what
+  a viewer hears as *on the music* at phrase scale is the **accent** — an
+  RMS/energy event at the 0.5–1 s scale, a swell arriving, a hit that moves the
+  level, the peak of a phrase. Both scales matter, and the snap is the cheaper
+  one to satisfy. The panel behind this note measured our piece at a **mean
+  2.06 s from the nearest RMS accent, only 2 of 11 cuts within half a second**
+  — every cut transient-snapped, and the cut still read as sitting off the
+  music. So placement is two-part and in this order: choose the moment from the
+  accent curve (which phrase boundary, which swell), then snap to the nearest
+  transient a few frames from it. Snapping first and picking the accent second
+  reproduces the 17–41 ms median above while losing the thing the median is
+  evidence of. `[review feedback, 2026-08]`
 - **Trading inverts the transient rule.** When the band trades (sax and drums
   exchanging bars), the switch itself is the event, and cutting *on* the
   transient of each entrance — repeatedly, as a committed run — is the
@@ -131,6 +145,27 @@ that the grid is a live band's grid, so it moves.
   bullet above are not scattered across the cut — every one of them is on a
   camera somebody was running. See §4.
   `[measured — 3 projects, n=847 shots, concert]`
+- **The spread is bimodal, not uniform: long holds and 2–4 s bursts are the
+  same language.** A window of the director's own cutting through a mid-song
+  solo section runs 2.25 / 13.05 / 2.59 / 17.02 / 3.29 / 5.84 / 10.30 / 3.59 /
+  2.79 / 11.22 / 5.05 / 7.59 / 2.54 / 21.02 s — **six of fourteen shots in the
+  2–4 s bin, against holds of 13, 17 and 21 s in the same minute**, with almost
+  nothing in between. He holds long through the sparse trading and **clusters
+  the short cuts at the transitions**. That is one distribution with two modes,
+  not a middling rate with a few outliers, and the bullets above describe its
+  long mode only. What follows is a check on the histogram rather than on any
+  one cut: **a cut list whose lengths cluster in a single bin reads metronomic
+  however well each cut is motivated.** The panel behind this note called our
+  4.4 s-and-up band "metronomic to the point of being callable — strict
+  wide/drum alternation, no shot under 4.4 s, by 30 seconds you can call every
+  remaining cut" — all three judges, including the one who voted for us — and
+  every cut in it had a nameable cause. So: a sparse stretch may hold far past
+  the medians in this section's first bullet, and a **2–4 s burst onto new
+  pictures at a transition is corpus-measured practice, not a tic**. The
+  "never return to a framing for under ~3 s" constraint below governs
+  **returns to a picture just left**, not shot length; it never set a floor on
+  how briefly a *new* picture may be held.
+  `[measured — this window, n=14 shots + review feedback 2026-08 unanimous]`
 - Duration distributions conditioned on section type and energy band. *Open;
   the conditioning needs the structure analysis, which has not been run over
   the corpus.*
@@ -203,7 +238,9 @@ that the grid is a live band's grid, so it moves.
     picture just left reads as a tic, and returning to the *exact frame* it was
     left on reads as an error; our 2.9 s round trip did both at once. Once a
     run has tightened past ~3 s, the next shot is a new picture or the run is
-    over.
+    over. **This constrains the return, not the length**: a 2–4 s shot on a
+    picture the run has not just been on is not what this rule refuses — see
+    the bimodal bullet above.
   `[review feedback, 2026-08, unanimous 3/3 panel]` — this narrows the bullet
   rather than retiring it, and it partly settles the split above: on this
   evidence the "timer-cutting" judge was describing a real failure mode, though
@@ -211,6 +248,20 @@ that the grid is a live band's grid, so it moves.
   drawn from is not one — 7.8 / **3.8 / 2.5 / 6.1** / 3.3 steps back up in the
   middle. The non-monotonicity is the shape being asked for here, and reading
   that run as a smooth shortening is what produced the metronome.
+- **Break the alternation itself, not only the ladder.** With two cameras the
+  A/B/A/B sequence is the shape the footage falls into by default, and it is
+  the pattern a viewer learns fastest — the panel above did not only call the
+  *rate* callable, it called the *angles* callable: "strict wide/drum
+  alternation… by 30 seconds you can call every remaining cut", said by all
+  three judges including the one who voted for us. So the A/B sequence has to
+  be interrupted, and **wherever the music turns is the minimum**: at a section
+  change, a trade starting or ending, a swell landing, do something the
+  alternation cannot predict — two consecutive cuts on the same camera to
+  different framings, a reframe on a held camera ridden as a picture change
+  (the cheapest third picture — §4), or a short burst (the bimodal bullet
+  above). If a viewer can call the next angle, the pattern has become the
+  content, and no amount of per-cut motivation reads through it.
+  `[review feedback, 2026-08, unanimous 3/3 panel]`
 - **Approach a section change with acceleration; release into stillness after
   it.** Shots shorten into the turn (1.7 s, then 2.2 s, through the decay), the
   change itself lands on the section's loudest peak, and what follows is a long
