@@ -44,6 +44,12 @@ def document_of(timeline: FakeTimeline) -> Document:
     what Resolve does (verified live, 21.0.3) and is the ordinary shape of a concert cut:
     the mix outlives the picture, so V1 exports ending in black rather than in a shot. A
     fake that left tracks ragged would let a tail land after the pad and never say so.
+
+    A hole *between* two clips is a gap item for the same reason it is one in OTIO: a track
+    is contiguous, so the frame a clip starts on is the sum of what precedes it. A fake that
+    dropped interior gaps would round-trip a cut with black in it into a shorter cut whose
+    shots all slid earlier, and the read-back on the imported timeline would refuse a build
+    that is fine on the machine.
     """
     rate = _rate(timeline)
     children: list[dict[str, Any]] = []
@@ -54,7 +60,7 @@ def document_of(timeline: FakeTimeline) -> Document:
                     "OTIO_SCHEMA": "Track.1",
                     "name": track.name or f"{label} {index}",
                     "kind": label,
-                    "children": [_clip(item, rate) for item in track.items],
+                    "children": _items(track.items, rate, timeline.GetStartFrame()),
                 }
             )
     longest = max((sum(_frames(item) for item in one["children"]) for one in children), default=0)
@@ -80,13 +86,27 @@ def document_of(timeline: FakeTimeline) -> Document:
     }
 
 
-def timeline_from(document: Document, name: str, keeps_transitions: bool = True) -> FakeTimeline:
+def timeline_from(
+    document: Document,
+    name: str,
+    keeps_transitions: bool = True,
+    trims_transitions_to: int | None = None,
+    slides_clips: int = 0,
+) -> FakeTimeline:
     """The timeline Resolve would materialise from ``document``, transitions and all.
 
-    ``keeps_transitions=False`` models the import that takes the document, answers with a
-    timeline, and quietly leaves the transitions out — the one outcome nothing downstream
-    can see, since a cut whose dissolve never landed and a cut that never asked for one are
-    the same timeline.
+    Three knobs, each an outcome the return value cannot tell apart from a clean import:
+
+    * ``keeps_transitions=False`` — the import takes the document, answers with a timeline,
+      and quietly leaves the transitions out. A cut whose dissolve never landed and a cut
+      that never asked for one are the same timeline.
+    * ``trims_transitions_to`` — every transition comes back no longer than this many
+      frames. Resolve trims a dissolve to the handles the shot actually has, so a fade can
+      land *shortened* rather than missing, which a check that only counted would confirm
+      as clean.
+    * ``slides_clips`` — every clip lands this many frames later than the document puts it.
+      The round trip is a second placement, and a placement that slid is the failure the
+      build's own read-back exists for.
     """
     tracks: dict[str, list[FakeTrack]] = {"video": [], "audio": []}
     transitions: list[dict[str, Any]] = []
@@ -99,13 +119,16 @@ def timeline_from(document: Document, name: str, keeps_transitions: bool = True)
             schema = str(child.get("OTIO_SCHEMA", ""))
             if schema.startswith("Transition."):
                 if keeps_transitions:
+                    asked = int(float((child.get("in_offset") or {}).get("value") or 0))
                     transitions.append(
                         {
                             "track": str(track.get("name") or ""),
                             "kind": kind,
                             "name": RENAMED.get(kind, "Cross Dissolve"),
-                            "in_offset": int(
-                                float((child.get("in_offset") or {}).get("value") or 0)
+                            "in_offset": (
+                                asked
+                                if trims_transitions_to is None
+                                else min(asked, trims_transitions_to)
                             ),
                         }
                     )
@@ -116,7 +139,7 @@ def timeline_from(document: Document, name: str, keeps_transitions: bool = True)
                 items.append(
                     FakeTimelineItem(
                         str(child.get("name") or "clip"),
-                        start,
+                        start + slides_clips,
                         frames,
                         source_start=_source_start(child),
                     )
@@ -143,6 +166,20 @@ def read_document(path: str) -> Document | None:
     except (OSError, ValueError):
         return None
     return document if isinstance(document, dict) and "tracks" in document else None
+
+
+def _items(items: list[FakeTimelineItem], rate: float, start: int) -> list[dict[str, Any]]:
+    """One track's children: its clips, with the black between them written out as gaps."""
+    children: list[dict[str, Any]] = []
+    frame = start
+    for item in items:
+        hole = item.GetStart() - frame
+        if hole > 0:
+            children.append(_gap(rate, hole))
+            frame += hole
+        children.append(_clip(item, rate))
+        frame += item.GetDuration()
+    return children
 
 
 def _clip(item: FakeTimelineItem, rate: float) -> dict[str, Any]:

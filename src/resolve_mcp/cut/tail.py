@@ -51,6 +51,17 @@ class Tail:
     def fades_audio(self) -> bool:
         return self.audio_frames > 0
 
+    @property
+    def needs_transitions(self) -> bool:
+        """Whether anything has to be cut into the document at all.
+
+        A hard out that does not fade the mix is the ending v1 always built: nothing to
+        inject, so nothing for the OTIO round trip to do. Taking that route anyway would
+        spend an export and an import to hand back the same cut under a different timeline,
+        with every failure mode of the round trip and no device to show for it.
+        """
+        return self.dissolves or self.fades_audio
+
     def as_dict(self) -> dict[str, Any]:
         """What the build report says landed — the same names the cut file uses."""
         return {

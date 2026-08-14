@@ -42,10 +42,20 @@ class FakeMediaPool:
         self.new_timeline_locked = False
         self.new_timeline_items: list[FakeTimelineItem] = []
         self.new_timeline_export_result = True
+        # Held-open exports on the timeline a build makes for itself, which is the only
+        # timeline whose export a tail build ever rewrites.
+        self.new_timeline_locks_exports = False
         # An import that answers with a timeline and leaves the transitions out — the
         # failure a tail build cannot see from the return value, since the cut it hands
         # back is a perfectly good cut with a hard edge where its tail should be.
         self.import_drops_transitions = False
+        # Resolve trims a dissolve to the handles the shot has, so an import can answer with
+        # the fade *shortened* rather than missing — the outcome a check that only counted
+        # transitions would confirm as the device the cut asked for.
+        self.import_trims_transitions_to: int | None = None
+        # An import that places every clip late. The round trip is a second placement, and
+        # the return value cannot tell one that landed from one that slid.
+        self.import_slides_clips = 0
         self.add_track_result = True
         self.appends: list[dict[str, Any]] = []
         # The .drb route. Each knob is one outcome a real import has been seen to take:
@@ -179,7 +189,13 @@ class FakeMediaPool:
 
         document = read_document(file_path)
         if document is not None:
-            timeline = timeline_from(document, name, not self.import_drops_transitions)
+            timeline = timeline_from(
+                document,
+                name,
+                not self.import_drops_transitions,
+                trims_transitions_to=self.import_trims_transitions_to,
+                slides_clips=self.import_slides_clips,
+            )
         else:
             timeline = FakeTimeline(
                 name,
@@ -276,6 +292,7 @@ class FakeMediaPool:
         # A build that round-trips its tail exports the timeline it just created, so the
         # export failure has to be settable *before* the timeline the test never sees exists.
         timeline.export_result = self.new_timeline_export_result
+        timeline.locks_written_exports = self.new_timeline_locks_exports
         if project is not None:
             project.add_timeline(timeline)
             if self.switches_current_timeline:

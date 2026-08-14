@@ -203,7 +203,12 @@ def test_the_dissolve_goes_on_the_video_track_and_the_fade_on_the_audio() -> Non
 
     placed = tail_route.inject(doc, tail_device.Tail("dissolve_to_black", 40, 30))
 
-    assert placed == {"video_tracks": ["Video 1"], "audio_tracks": ["Audio 1"]}
+    assert placed == {
+        "video_tracks": ["Video 1"],
+        "audio_tracks": ["Audio 1"],
+        "unfaded_video": [],
+        "unfaded_audio": [],
+    }
     assert kinds(doc) == [("Video", 40), ("Audio", 30)]
 
 
@@ -231,7 +236,12 @@ def test_a_hard_out_fades_only_the_mix() -> None:
 
     placed = tail_route.inject(doc, tail_device.Tail("hard_to_black", 0, 30))
 
-    assert placed == {"video_tracks": [], "audio_tracks": ["Audio 1"]}
+    assert placed == {
+        "video_tracks": [],
+        "audio_tracks": ["Audio 1"],
+        "unfaded_video": [],
+        "unfaded_audio": [],
+    }
     assert kinds(doc) == [("Audio", 30)]
 
 
@@ -275,6 +285,35 @@ def test_a_last_clip_too_short_takes_no_transition() -> None:
 
     assert placed["video_tracks"] == []
     assert tail_route.transitions(doc) == []
+
+
+def test_an_overlay_ending_inside_the_dissolve_is_reported_unfaded() -> None:
+    """Opaque over part of the ramp, so the picture under it comes back mid-fade."""
+    doc = document(track("Video", "Video 1", 100, 80), track("Video", "Video 2", 160))
+
+    placed = tail_route.inject(doc, tail_device.Tail("dissolve_to_black", 40, 0))
+
+    assert placed["video_tracks"] == ["Video 1"]
+    assert placed["unfaded_video"] == ["Video 2"]
+
+
+def test_an_overlay_ending_before_the_dissolve_starts_is_not_reported() -> None:
+    """The device covers the frames it covers: a layer that is gone by then is not in it."""
+    doc = document(track("Video", "Video 1", 100, 80), track("Video", "Video 2", 100))
+
+    placed = tail_route.inject(doc, tail_device.Tail("dissolve_to_black", 40, 0))
+
+    assert placed["unfaded_video"] == []
+
+
+def test_an_audio_track_that_took_no_fade_while_another_did_is_reported() -> None:
+    """Half a fade is a mix that ends on a cut, which is the thing the tail exists to avoid."""
+    doc = document(track("Audio", "Audio 1", 100), track("Audio", "Audio 2", 20))
+
+    placed = tail_route.inject(doc, tail_device.Tail("hard_to_black", 0, 30))
+
+    assert placed["audio_tracks"] == ["Audio 1"]
+    assert placed["unfaded_audio"] == ["Audio 2"]
 
 
 # --- the build ------------------------------------------------------------------------------
@@ -444,3 +483,205 @@ def test_the_exported_document_is_the_one_that_gets_imported(
     path, _ = pool.timeline_imports[-1]
     document = json.loads(Path(path).read_text(encoding="utf-8"))
     assert kinds(document) == [("Video", 40), ("Audio", 35)]
+
+
+# --- what the round trip must not leave behind ------------------------------------------------
+
+
+def timeline_names(resolve: Any) -> list[str]:
+    project = resolve.current_project
+    return [
+        project.GetTimelineByIndex(index).GetName()
+        for index in range(1, project.GetTimelineCount() + 1)
+    ]
+
+
+def test_a_hard_out_that_fades_nothing_builds_without_the_round_trip(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Nothing to inject: the round trip would spend an export and an import on no device."""
+    pool = a_pool()
+    resolve = empty_project(pool)
+    attach(resolve)
+    doc = valid_doc()
+    doc["tail"] = {"type": "hard_to_black"}
+
+    result = build_timeline(a_cut(tmp_path, doc))
+
+    assert result["ok"] is True, result.get("error")
+    assert pool.timeline_imports == []
+    assert timeline_names(resolve) == ["sunset-set v1"]
+    # The cut file did ask for a tail, so the report says which one and that it took no route.
+    assert result["tail"] == {
+        "type": "hard_to_black",
+        "duration_frames": 0,
+        "audio_fade_frames": 0,
+        "video_tracks": [],
+        "audio_tracks": [],
+        "route": "direct",
+        "confirmed": [],
+    }
+
+
+def test_an_overlay_ending_inside_the_dissolve_fails_the_build(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """An opaque V2 over the ramp is a second ending, and no fade this module places covers it."""
+    doc = with_tail()
+    doc["overlays"] = [
+        {
+            "id": "b01",
+            "source": "keys_wide",
+            "in": 6000,
+            "out": 6030,
+            "over": {"segment": "s003", "offset": 20},
+            "track": 2,
+        }
+    ]
+    resolve = empty_project(a_pool())
+    attach(resolve)
+
+    result = build_timeline(a_cut(tmp_path, doc))
+
+    assert result["ok"] is False
+    assert "'Video 2'" in result["error"]["cause"]
+    # Refused before the import, so the staging cut is the only thing in the project.
+    assert timeline_names(resolve) == ["sunset-set v1 (tail staging)"]
+
+
+def test_a_round_trip_that_slid_the_shots_is_refused(attach: Attach, tmp_path: Path) -> None:
+    """The cut that ships is the imported one, so it is the one the placements are read on."""
+    pool = a_pool()
+    pool.import_slides_clips = 5
+    resolve = empty_project(pool)
+    attach(resolve)
+
+    result = build_timeline(a_cut(tmp_path, with_tail(audio_fade_frames=35)))
+
+    assert result["ok"] is False
+    assert "did not land where the cut puts them" in result["error"]["cause"]
+    assert timeline_names(resolve) == ["sunset-set v1 (tail staging)"]
+
+
+def test_a_confirm_failure_takes_the_import_down_with_it(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """A failed import left under the delivery name collides with the advice to rename staging."""
+    pool = a_pool()
+    pool.import_drops_transitions = True
+    resolve = empty_project(pool)
+    attach(resolve)
+
+    result = build_timeline(a_cut(tmp_path, with_tail()))
+
+    assert result["ok"] is False
+    assert timeline_names(resolve) == ["sunset-set v1 (tail staging)"]
+    assert "imported_timeline" not in result["error"]["detail"]
+
+
+def test_a_fade_the_import_shortened_is_refused(attach: Attach, tmp_path: Path) -> None:
+    """Resolve trims a dissolve to the handles the shot has, and the count still matches."""
+    pool = a_pool()
+    pool.import_trims_transitions_to = 12
+    resolve = empty_project(pool)
+    attach(resolve)
+
+    result = build_timeline(a_cut(tmp_path, with_tail(audio_fade_frames=35)))
+
+    assert result["ok"] is False
+    assert "came back 12 frames long rather than the 40" in result["error"]["cause"]
+    assert timeline_names(resolve) == ["sunset-set v1 (tail staging)"]
+
+
+def test_an_import_under_another_name_leaves_both_timelines_named(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """When the failed import cannot be deleted, the error is the only map of the project."""
+    pool = a_pool()
+    resolve = empty_project(pool)
+    attach(resolve)
+    pool.imported_timeline = FakeTimeline("sunset-set v1 (1)")
+
+    result = build_timeline(a_cut(tmp_path, with_tail()))
+
+    assert result["ok"] is False
+    assert result["error"]["detail"]["imported_timeline"] == "sunset-set v1 (1)"
+    assert "sunset-set v1 (tail staging)" in result["error"]["cause"]
+    # Never blamed on Resolve alone: an import is always asked for a name the project has free.
+    assert "either the project already held that name" in result["error"]["cause"]
+
+
+def test_an_import_the_project_does_not_hold_is_a_build_failure(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Looking the imported cut up is one more call that can fail, and it fails structured."""
+    pool = a_pool()
+    resolve = empty_project(pool)
+    attach(resolve)
+    pool.imported_timeline = FakeTimeline("sunset-set v1")
+
+    result = build_timeline(a_cut(tmp_path, with_tail()))
+
+    assert result["ok"] is False
+    assert result["error"]["code"] == "build_failed"
+    assert "the project holds no timeline of that name" in result["error"]["cause"]
+    assert result["error"]["detail"]["staging_timeline"] == "sunset-set v1 (tail staging)"
+
+
+def test_the_edit_lands_beside_the_export_rather_than_over_it(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Resolve holds what it exported open (#26), so the edited document takes a fresh name."""
+    pool = a_pool()
+    attach(empty_project(pool))
+
+    result = build_timeline(a_cut(tmp_path, with_tail(audio_fade_frames=35)))
+
+    edited = Path(result["tail"]["document"])
+    assert edited.stem.endswith(" (tail)")
+    original = edited.with_name(f"{edited.stem[: -len(' (tail)')]}{edited.suffix}")
+    assert original.exists()
+    # Untouched: the export is the cut before the tail, the edit is the cut after it.
+    assert kinds(json.loads(original.read_text(encoding="utf-8"))) == []
+
+
+def test_a_held_open_export_does_not_stop_the_tail(attach: Attach, tmp_path: Path) -> None:
+    """The failure #26 records: the file Resolve wrote cannot be rewritten while it holds it."""
+    guard = tmp_path / "read-only.probe"
+    guard.write_text("x", encoding="utf-8")
+    guard.chmod(0o444)
+    try:
+        guard.write_text("y", encoding="utf-8")
+    except OSError:
+        pass
+    else:
+        pytest.skip("this filesystem lets a read-only file be rewritten")
+
+    pool = a_pool()
+    pool.new_timeline_locks_exports = True
+    resolve = empty_project(pool)
+    attach(resolve)
+
+    result = build_timeline(a_cut(tmp_path, with_tail(audio_fade_frames=35)))
+
+    assert result["ok"] is True, result.get("error")
+    assert timeline_names(resolve) == ["sunset-set v1"]
+
+
+def test_a_retry_after_a_failed_round_trip_stages_under_a_free_name(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The staging name is invisible to the version scan, so a retry would ask for it again."""
+    pool = a_pool()
+    pool.new_timeline_export_result = False
+    resolve = empty_project(pool)
+    attach(resolve)
+    cut_file = a_cut(tmp_path, with_tail())
+
+    assert build_timeline(cut_file)["ok"] is False
+    pool.new_timeline_export_result = True
+    result = build_timeline(cut_file)
+
+    assert result["ok"] is True, result.get("error")
+    assert pool.created_timelines[-1] == "sunset-set v1 (tail staging) v2"
+    assert timeline_names(resolve) == ["sunset-set v1 (tail staging)", "sunset-set v1"]

@@ -165,8 +165,9 @@ queue), `camera_sidecar` (camera model off the card's own XML, for media
 Resolve reports no camera metadata for — #94; not an **angle sidecar**),
 `scripting` (`run_python` with handles pre-bound), `session`
 (session/project wrappers), `tail` (materialising a cut's tail: the OTIO
-document edit + the export/import round trip `build` takes when a cut has
-one, because the scripting API cannot cut a transition at all), `takes`
+document edit + the export/import round trip `build` takes when a tail has
+a transition to cut in — a hard out that fades nothing builds directly —
+because the scripting API cannot cut a transition at all), `takes`
 (take selectors + in-place swap), `timeline` (timeline read wrappers),
 `titles` (titles file against a project + dry run).
 

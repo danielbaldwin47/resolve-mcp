@@ -20,11 +20,13 @@ found it full of silent failures. Everything in this file exists to make one gua
   matters more for a cut with gaps than for one without.
 * **A new version every time.** The name is ``<base> v<N+1>`` scanned off the project's
   existing names, so no build ever writes into a timeline someone has already reviewed.
-* **A tail is built twice, because the API cannot cut a transition.** A cut with a ``tail``
-  is appended to ``<base> v<N+1> (tail staging)`` and round-tripped through OTIO into its
-  real name (:mod:`resolve_mcp.resolve.tail`). Everything after the round trip — takes,
-  markers — is attached to the timeline that came *back*, and a round trip that fails
-  fails the build rather than delivering a cut with a hard edge where its tail should be.
+* **A tail is built twice, because the API cannot cut a transition.** A cut whose ``tail``
+  has a transition to cut in is appended to ``<base> v<N+1> (tail staging)`` and
+  round-tripped through OTIO into its real name (:mod:`resolve_mcp.resolve.tail`); a hard
+  out that does not fade the mix has nothing to inject and builds directly. Everything
+  after the round trip — the placement read-back, takes, markers — is done on the timeline
+  that came *back*, and a round trip that fails fails the build rather than delivering a
+  cut with a hard edge where its tail should be.
 * **Resolve's answer is never the evidence.** An append onto a locked track returns
   TimelineItems and places nothing; an append that overlaps existing media slides to the
   next free frame and reports success; a still ignores ``endFrame`` until an out point has
@@ -173,12 +175,15 @@ def build_timeline(
     clips = cut.clips_by_alias(checked)
     _unlock_stills(clips)
 
-    # A cut with a tail is appended to a staging timeline and round-tripped into its own
-    # name, because the scripting API cannot cut a transition (see :mod:`.tail`). Every
-    # step below therefore names the timeline it is actually writing to, which for a tailed
-    # build is the staging one until the import lands.
+    # A cut whose tail has something to cut in is appended to a staging timeline and
+    # round-tripped into its own name, because the scripting API cannot cut a transition
+    # (see :mod:`.tail`). A hard out that does not fade the mix has nothing to inject, so it
+    # builds straight into its own name rather than paying an export and an import to hand
+    # back the same cut. Every step below therefore names the timeline it is actually
+    # writing to, which for a round-tripped build is the staging one until the import lands.
     tail = cut_tail.read(doc)
-    writing = name if tail is None else tail_route.staging_name(name)
+    round_tripped = tail is not None and tail.needs_transitions
+    writing = tail_route.staging_name(name, existing) if round_tripped else name
 
     built = _create(pool, project, writing)
     shots = _shots(doc, clips, timeline_read.start_frame(built))
@@ -187,12 +192,31 @@ def build_timeline(
     _append(pool, shots, writing)
     _verify(built, shots, writing)
     applied: dict[str, Any] | None = None
-    if tail is not None:
+    if tail is not None and round_tripped:
         # Before takes: the round trip makes a new timeline, and a selector attached to the
-        # staging one would be alternates for a cut that is about to be deleted.
+        # staging one would be alternates for a cut that is about to be deleted. ``_verify``
+        # goes with it: the timeline checked above is the staging one, and the cut that
+        # ships is the one the import made out of it.
         built, applied = tail_route.materialise(
-            connection, project, pool, built, writing, name, tail
+            connection,
+            project,
+            pool,
+            built,
+            writing,
+            name,
+            tail,
+            verify=lambda landed: _verify(landed, shots, name),
         )
+    elif tail is not None:
+        # Nothing was injected and nothing was round-tripped, but the cut file did ask for a
+        # tail — so the report says what it asked for and that it took no route.
+        applied = {
+            **tail.as_dict(),
+            "video_tracks": [],
+            "audio_tracks": [],
+            "route": "direct",
+            "confirmed": [],
+        }
     # Takes hang off placed clips, so they are attached only once every placement has been
     # read back — a selector on a shot that slid somewhere else would be alternates for a
     # shot the cut file does not have.

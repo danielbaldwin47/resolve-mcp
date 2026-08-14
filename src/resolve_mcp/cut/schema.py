@@ -178,14 +178,17 @@ dissolve (142 frames at 23.976) over a ~5.2 s audio fade.
 **How it is built, and why that matters.** The Resolve scripting API cannot cut a
 transition — there is no call for it on any object this server touches (probed live on
 21.0.3: `TimelineItem` exposes `SetProperty` for a *static* `Opacity` and nothing for
-audio level at all). So a cut with a `tail` is built twice: the shots are appended to a
-staging timeline named `<name> v<N> (tail staging)`, that timeline is exported as OTIO,
+audio level at all). So a cut whose `tail` has a transition to cut in is built twice: the
+shots are appended to a staging timeline named `<name> v<N> (tail staging)`, that timeline
+is exported as OTIO,
 the transitions are edited into the document, and the document is imported back as
-`<name> v<N>`. The staging timeline is deleted once the import lands. Two consequences
-worth stating: a build with a tail costs an export and an import, and a build that gets
-as far as the staging timeline and then cannot round-trip **fails** rather than quietly
-delivering a hard cut — the staging timeline is left in the project, named, and the error
-says so."""
+`<name> v<N>`. The staging timeline is deleted once the transitions and the shot
+placements have both been read back off the import. A `hard_to_black` tail with no
+`audio_fade_frames` has nothing to inject, so it builds directly under its own name. Two
+consequences worth stating: a build with a dissolve or a fade costs an export and an
+import, and a build that gets as far as the staging timeline and then cannot round-trip
+**fails** rather than quietly delivering a hard cut — the staging timeline is left in the
+project, named, and the error says so."""
 
 _RULES: Final = """\
 ## 7. Validation

@@ -14,6 +14,9 @@ from typing import TYPE_CHECKING, Any
 from .core import AnswersNone
 from .media import IMAGE_SUFFIXES, STILL_DEFAULT_FRAMES
 
+READ_ONLY = 0o444
+"""What a file Resolve is holding open behaves like to a rewrite — see ``Export``."""
+
 if TYPE_CHECKING:
     from .connection import FakeResolve
     from .media import FakeMediaPoolItem
@@ -99,6 +102,11 @@ class FakeTimeline(AnswersNone):
         # Paths one of those types has touched. Resolve keeps the handle for the life of
         # the process, so the name is spent whatever type asks for it next (#26, live).
         self.export_paths_held_open: set[str] = set()
+        # Every file this timeline exports comes back read-only, which is what a file
+        # Resolve is holding open looks like to anything that tries to rewrite it on
+        # Windows (#26). Modelled on the filesystem rather than in the fake because the
+        # code under test writes with ``Path.write_text`` and never asks the fake first.
+        self.locks_written_exports = False
         self.add_track_result = True
         self.set_track_name_result = True
         # A clear that answers True and leaves the clips standing is the failure a caller
@@ -319,6 +327,8 @@ class FakeTimeline(AnswersNone):
                 target.write_text(json.dumps(document_of(self), indent=1), encoding="utf-8")
             else:
                 target.write_text(f"fake-export of {self._name}", encoding="utf-8")
+            if self.locks_written_exports:
+                target.chmod(READ_ONLY)
         return True
 
     def AddTrack(self, track_type: str, *_: Any) -> bool:  # noqa: N802
