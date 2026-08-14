@@ -31,7 +31,11 @@ found it full of silent failures. Everything in this file exists to make one gua
   TimelineItems and places nothing; an append that overlaps existing media slides to the
   next free frame and reports success; a still ignores ``endFrame`` until an out point has
   been written to it once. So tracks are checked for locks before the append, stills are
-  unlocked before it, and every placement is read back off the track afterwards.
+  unlocked before it, and afterwards every placement is read back off the track *and* every
+  shot's source frames off the item — a shot on the right frame for the right length out of
+  the wrong part of its clip is a cut no return value tells apart from the one asked for.
+  The one thing the return value does say is how many items Resolve made, and fewer than
+  were asked for is counted as shots that were never placed.
 * **Record frames are absolute.** ``recordFrame`` counts from the timeline's own start
   (an hour of timecode on a normal project) and is not clamped — a cut frame of 0 would
   land before the timeline begins. Every position is the timeline start plus the cut
@@ -125,6 +129,10 @@ class Shot:
     source_in: int
     record: int
     duration: int
+    is_still: bool = False
+    """A still plays one frame of media for any duration, so it has no source frame to read
+    back: ``GetLeftOffset`` on one answers with the timeline's clock (ADR 0005). Carried here
+    because the read-back has to skip exactly the clips E5's bounds rule already exempts."""
 
     @property
     def source_out(self) -> int:
@@ -173,7 +181,7 @@ def build_timeline(
     superseded = latest_version(base, existing)
     name = next_version_name(base, existing)
     clips = cut.clips_by_alias(checked)
-    _unlock_stills(clips)
+    stills = _read_sources(clips)
 
     # A cut whose tail has something to cut in is appended to a staging timeline and
     # round-tripped into its own name, because the scripting API cannot cut a transition
@@ -190,11 +198,12 @@ def build_timeline(
     # round-tripped build reads its placements back on a *second* timeline, whose own start
     # is Resolve's to choose, and the comparison there is offset against offset.
     origin = timeline_read.start_frame(built)
-    shots = _shots(doc, clips, origin)
+    reader = timeline_read.Reader(connection)
+    shots = _shots(doc, clips, origin, stills)
     _make_tracks(built, shots, writing)
     _refuse_locked_tracks(built, shots, writing)
     _append(pool, shots, writing)
-    _verify(built, shots, writing, origin)
+    _verify(reader, built, shots, writing, origin)
     applied: dict[str, Any] | None = None
     if tail is not None and round_tripped:
         # Before takes: the round trip makes a new timeline, and a selector attached to the
@@ -209,7 +218,7 @@ def build_timeline(
             writing,
             name,
             tail,
-            verify=lambda landed: _verify(landed, shots, name, origin),
+            verify=lambda landed: _verify(reader, landed, shots, name, origin),
         )
     elif tail is not None:
         # Nothing was injected and nothing was round-tripped, but the cut file did ask for a
@@ -410,7 +419,12 @@ def _write_entry(marker: dict[str, Any], shift: int) -> dict[str, Any]:
 # --- placement ------------------------------------------------------------------------------
 
 
-def _shots(doc: dict[str, Any], clips: dict[str, media.LocatedClip], start: int) -> list[Shot]:
+def _shots(
+    doc: dict[str, Any],
+    clips: dict[str, media.LocatedClip],
+    start: int,
+    stills: frozenset[int],
+) -> list[Shot]:
     """Every append the cut asks for, positioned absolutely from the timeline start."""
     placed = placements(doc, start)
     shots = []
@@ -430,6 +444,7 @@ def _shots(doc: dict[str, Any], clips: dict[str, media.LocatedClip], start: int)
                 source_in=int(segment["in"]),
                 record=record,
                 duration=duration,
+                stills=stills,
             )
         )
     anchored = overlay_positions(doc)
@@ -446,6 +461,7 @@ def _shots(doc: dict[str, Any], clips: dict[str, media.LocatedClip], start: int)
                 source_in=int(overlay["in"]),
                 record=start + offset,
                 duration=duration,
+                stills=stills,
             )
         )
     audio = doc.get("audio")
@@ -460,6 +476,7 @@ def _shots(doc: dict[str, Any], clips: dict[str, media.LocatedClip], start: int)
                 source_in=int(audio["in"]),
                 record=start,
                 duration=int(audio["out"]) - int(audio["in"]),
+                stills=stills,
             )
         )
     return shots
@@ -472,6 +489,7 @@ def _shot(
     source_in: int,
     record: int,
     duration: int,
+    stills: frozenset[int],
 ) -> Shot:
     return Shot(
         id=id,
@@ -481,6 +499,7 @@ def _shot(
         source_in=source_in,
         record=record,
         duration=duration,
+        is_still=_handle(located.clip) in stills,
     )
 
 
@@ -623,30 +642,93 @@ def _refuse_locked_tracks(timeline: Timeline, shots: list[Shot], name: str) -> N
     )
 
 
-def _unlock_stills(clips: dict[str, media.LocatedClip]) -> None:
-    """Write each still's out point once, so its ``endFrame`` is honoured exactly (#18 (a))."""
+def _handle(clip: Clip) -> int:
+    """A clip's handle identity. Two aliases on one clip are the same object, and Resolve's
+    handles define no equality of their own, so identity is the only key that groups them."""
+    return id(clip)
+
+
+def _read_sources(clips: dict[str, media.LocatedClip]) -> frozenset[int]:
+    """Read every source clip once, before the append: the one place its properties are needed.
+
+    Two things come out of the read. Each still gets its out point written, so its
+    ``endFrame`` is honoured exactly (#18 (a)) — and the stills are named, because they are
+    the clips whose source frames cannot be read back off the timeline (ADR 0005).
+
+    A clip whose media does not start at frame 0 is logged. Nothing here rebases on it: the
+    cut file's ranges are absolute media frames — the space ``Start`` and ``End`` report and
+    E5 checks against — and ``startFrame`` is sent in that same space. Whether Resolve reads
+    it that way on a start-stamped clip has never been measured, because every clip the
+    pillar has built from starts at 0. So the assumption is not silently held: the read-back
+    in :func:`_verify` proves it per shot, and this line is what a live log needs to say
+    which project was the one that could have broken it.
+    """
+    stills: set[int] = set()
     seen: set[int] = set()
     for located in clips.values():
-        if id(located.clip) in seen:
+        if _handle(located.clip) in seen:
             continue
-        seen.add(id(located.clip))
-        if media.apply_still_workaround(located.clip, media.properties(located.clip)):
+        seen.add(_handle(located.clip))
+        reported = media.properties(located.clip)
+        start, _ = media.frame_bounds(reported)
+        if start:
+            log.info(
+                "%s counts its own frames from %d, not 0; source frames are read back per shot",
+                located.clip.GetName(),
+                start,
+            )
+        if not media.is_still(reported):
+            continue
+        stills.add(_handle(located.clip))
+        if media.apply_still_workaround(located.clip, reported):
             log.info("Unlocked exact durations on the still %s", located.clip.GetName())
+    return frozenset(stills)
 
 
 def _append(pool: Pool, shots: list[Shot], name: str) -> None:
-    """One call for the whole cut. Its return value is counted, never believed."""
+    """One call for the whole cut. Its return value is counted, never believed.
+
+    Counted, though — a short answer is the one thing the return value does say. Resolve
+    hands back the items it made, so fewer than were asked for means shots it did not make,
+    and the placement read-back that follows would report them as misplaced without ever
+    saying they were never attempted. More is not the same evidence and is not treated as
+    any: Resolve spreads a multi-channel clip over one item per track it fills, so an answer
+    longer than the request is an ordinary mix, not a drop.
+    """
     appended = pool.AppendToTimeline([shot.clip_info() for shot in shots])
     if not appended:
         raise BuildFailedError(
             cause=f"Resolve appended nothing to {name!r}.",
             detail={"timeline": name, "clips": len(shots)},
         )
+    if len(appended) < len(shots):
+        log.error(
+            "Appended %d clips to %s; Resolve made only %d", len(shots), name, len(appended)
+        )
+        raise BuildFailedError(
+            cause=f"Resolve made {len(appended)} timeline item(s) for the {len(shots)} clip(s) "
+            f"the cut appends to {name!r}, so part of the cut was never placed.",
+            fix="Delete the timeline it made, check that every source is online and that no "
+            "target track is locked, and build again.",
+            detail={"timeline": name, "clips": len(shots), "appended": len(appended)},
+        )
     log.info("Appended %d clips to %s; Resolve returned %d", len(shots), name, len(appended))
 
 
-def _verify(timeline: Timeline, shots: list[Shot], name: str, origin: int) -> None:
+def _verify(
+    reader: timeline_read.Reader,
+    timeline: Timeline,
+    shots: list[Shot],
+    name: str,
+    origin: int,
+) -> None:
     """Read the tracks back: the only way to know an append landed where it was told to.
+
+    Two questions, and a shot has to answer both. *Where* it landed comes off the track as
+    an offset and a duration. *What it plays* comes off the item itself — the frames of its
+    own media it begins on — because a shot placed on the right frame for the right length
+    out of the wrong part of the clip is a cut nothing in the return value distinguishes
+    from the one that was asked for. The build's own bookkeeping cannot answer either.
 
     ``origin`` is the timeline start the shots were positioned against. Placement is judged
     as an offset from each timeline's own first frame, never as an absolute frame, because
@@ -665,43 +747,97 @@ def _verify(timeline: Timeline, shots: list[Shot], name: str, origin: int) -> No
             landed_origin,
             origin,
         )
-    misplaced = [
-        shot
-        for track in _tracks(shots)
-        for shot in _adrift(timeline, shots, track, origin, landed_origin)
-    ]
-    if not misplaced:
+    placed = {
+        track: _landed(timeline, track, landed_origin) for track in _tracks(shots)
+    }
+    misplaced = [shot for shot in shots if _key(shot, origin) not in placed[shot.track]]
+    if misplaced:
+        log.error(
+            "%d of %d clips did not land where %s puts them", len(misplaced), len(shots), name
+        )
+        raise BuildFailedError(
+            cause=f"{len(misplaced)} of {len(shots)} clips did not land where the cut puts them "
+            f"in {name!r}, so the timeline does not match the cut file.",
+            fix="Resolve slides an append that overlaps existing media and drops one onto a "
+            "track it cannot reach, both while reporting success. Delete the timeline it made, "
+            "check the cut file's ranges, and build again.",
+            detail={
+                "timeline": name,
+                "misplaced": [_expected(shot) for shot in misplaced[:MISPLACED_CAP]],
+                "misplaced_total": len(misplaced),
+            },
+        )
+    drifted = _wrong_source(reader, shots, placed, origin)
+    if not drifted:
         return
+    log.error("%d of %d clips in %s play the wrong source frames", len(drifted), len(shots), name)
     raise BuildFailedError(
-        cause=f"{len(misplaced)} of {len(shots)} clips did not land where the cut puts them in "
-        f"{name!r}, so the timeline does not match the cut file.",
-        fix="Resolve slides an append that overlaps existing media and drops one onto a track "
-        "it cannot reach, both while reporting success. Delete the timeline it made, check "
-        "the cut file's ranges, and build again.",
+        cause=f"{len(drifted)} of {len(shots)} clips in {name!r} landed on source frames the "
+        f"cut file did not ask for, so the timeline holds the wrong footage.",
+        fix="The cut file's in and out points are frames of the clip's own media, counted the "
+        "way inspect_clip reports its bounds. Delete the timeline it made, check those bounds "
+        "against the ranges, and build again.",
         detail={
             "timeline": name,
-            "misplaced": [_expected(shot) for shot in misplaced[:MISPLACED_CAP]],
-            "misplaced_total": len(misplaced),
+            "wrong_source": [
+                {**_expected(shot), "source_frame": shot.source_in, "landed_on": landed}
+                for shot, landed in drifted[:MISPLACED_CAP]
+            ],
+            "wrong_source_total": len(drifted),
         },
     )
 
 
-def _adrift(
-    timeline: Timeline,
-    shots: list[Shot],
-    track: Track,
-    origin: int,
-    landed_origin: int,
-) -> list[Shot]:
-    """The shots this track does not hold, matched on ``(offset from start, duration)``."""
-    wanted = [shot for shot in shots if shot.track == track]
-    if not wanted:
-        return []
-    landed = {
-        (item.GetStart() - landed_origin, item.GetDuration())
+def _key(shot: Shot, origin: int) -> tuple[int, int]:
+    """How a shot is found on the track it was appended to: where it starts, and how long."""
+    return (shot.record - origin, shot.duration)
+
+
+def _landed(timeline: Timeline, track: Track, landed_origin: int) -> dict[tuple[int, int], Any]:
+    """Everything this track holds, keyed the way a shot is looked up.
+
+    Positions repeat only where Resolve spread one clip over several items at the same
+    offset — a multi-channel mix — and those items play the same frames, so keeping the
+    last is keeping one of a set of equals.
+    """
+    return {
+        (item.GetStart() - landed_origin, item.GetDuration()): item
         for item in timeline.GetItemListInTrack(track.type, track.index) or []
     }
-    return [shot for shot in wanted if (shot.record - origin, shot.duration) not in landed]
+
+
+def _wrong_source(
+    reader: timeline_read.Reader,
+    shots: list[Shot],
+    placed: dict[Track, dict[tuple[int, int], Any]],
+    origin: int,
+) -> list[tuple[Shot, int]]:
+    """Every shot that plays frames the cut file did not name, with the frame it begins on.
+
+    Stills are exempt for the same reason E5's bounds rule exempts them: one frame of media
+    held for any duration has no in point to read, and its left offset answers with the
+    timeline's clock instead (ADR 0005). A shot whose source frame Resolve will not report
+    is logged rather than convicted — an unreadable getter is not a wrong placement — and
+    the comparison allows the one frame of slip that ADR measured, so the guard fires on a
+    cut that is playing the wrong part of a clip and never on a getter's rounding.
+    """
+    drifted: list[tuple[Shot, int]] = []
+    for shot in shots:
+        if shot.is_still:
+            continue
+        item = placed[shot.track].get(_key(shot, origin))
+        landed, _ = timeline_read.source_bounds(reader, item, shot.duration)
+        if landed is None:
+            log.info(
+                "%s on %s reports no source frame, so the cut's %d could not be confirmed",
+                shot.id,
+                shot.track.label,
+                shot.source_in,
+            )
+            continue
+        if abs(landed - shot.source_in) > timeline_read.SOURCE_SLIP:
+            drifted.append((shot, landed))
+    return drifted
 
 
 def _expected(shot: Shot) -> dict[str, Any]:

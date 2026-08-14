@@ -181,8 +181,10 @@ unreadable-WAV error).
 
 `cut/` — cut-file schema v1: `document` (read off disk), `schema`
 (verbatim, served by `get_cut_schema`), `validate` (12 errors + W1, W2,
-W8 — W3-W7 are `virtual_transcript`'s over the same document — shared by
-dry run and build pre-flight), `tail` (the optional **tail** device: one
+W8, W9 — W3-W7 are `virtual_transcript`'s over the same document — shared by
+dry run and build pre-flight; W9 is the one that reports a rule that *could
+not run*, where Resolve named no media bounds for E5 or E7 to check a range
+against, #186), `tail` (the optional **tail** device: one
 reading of `{type, duration_frames, audio_fade_frames}` for both the rules
 and the build). A `segments` entry is a shot or a **gap**
 (`{"id", "gap": <frames>}`, literal black); `is_gap`/`entry_duration`/

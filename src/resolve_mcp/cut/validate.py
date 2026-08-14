@@ -1,4 +1,4 @@
-"""The cut-file validation rules: 12 hard errors, 3 warnings, one implementation.
+"""The cut-file validation rules: 12 hard errors, 4 warnings, one implementation.
 
 The list is identical in the ``validate_cut`` dry run and in ``build_timeline``'s
 pre-flight, so it lives here once and both call it. A failing file must abort before
@@ -12,8 +12,9 @@ Two passes, because they need different things:
   W8). W3-W7 are
   ``virtual_transcript``'s over this same document — one file, one numbering.
 * :func:`validate_project` takes clip facts already gathered from the media pool and
-  answers everything about the media behind the aliases (E4-E7). It is a pure function
-  over those facts, so every rule in this file is unit-testable without Resolve.
+  answers everything about the media behind the aliases (E4-E7, and W9 where a bounds
+  check could not run). It is a pure function over those facts, so every rule in this
+  file is unit-testable without Resolve.
 
 E11 is the build-time rule — a locked target track fails *silently* in the Resolve API,
 so the build checks it and reports it in the same shape as everything else.
@@ -73,6 +74,7 @@ RULE_DESCRIPTIONS: Final[dict[str, str]] = {
     "W1": "segment or gap shorter than min_segment_frames (flash-frame guard)",
     "W2": "V1 total does not match the master-audio span",
     "W8": "the cut ends on black that nothing runs under, so it materialises as nothing",
+    "W9": "a range could not be checked against its clip's media bounds (E5/E7 failed open)",
 }
 
 _FIX_HINTS: Final[dict[str, str]] = {
@@ -95,6 +97,8 @@ _FIX_HINTS: Final[dict[str, str]] = {
     "W2": "Expected when the cut opens cold or runs past the mix; otherwise check the ends.",
     "W8": "Anchor an overlay over the trailing gap, or let the master mix run past the "
     "last picture — either makes the black real. Otherwise drop the gap.",
+    "W9": "Call inspect_clip: if the bounds are blank there too, relink or re-import the "
+    "clip so the range can be checked before the build reaches Resolve.",
 }
 
 
@@ -1145,7 +1149,7 @@ def resolve_aliases(
 
 
 def _bounds_errors(doc: dict[str, Any], resolved: dict[str, ClipFacts]) -> list[Finding]:
-    """E5: every range has to name frames the media actually has."""
+    """E5: every range has to name frames the media actually has — or W9 where it cannot be said."""
     findings: list[Finding] = []
     for segment in shots(doc):
         id = str(segment["id"])
@@ -1160,6 +1164,11 @@ def _bounds_errors(doc: dict[str, Any], resolved: dict[str, ClipFacts]) -> list[
     return findings
 
 
+def _bounds_unknown(clip: ClipFacts) -> bool:
+    """Whether Resolve reported enough of the clip's extent for a range check to mean anything."""
+    return clip.start is None or clip.end_exclusive is None
+
+
 def _outside_media(item: dict[str, Any], clip: ClipFacts) -> bool:
     """Whether a half-open range asks for frames the clip's media does not have.
 
@@ -1167,7 +1176,7 @@ def _outside_media(item: dict[str, Any], clip: ClipFacts) -> bool:
     check fails open — the same stance E7's has-audio leg takes on an unreported
     channel count, because "Resolve did not say" is not evidence of an overrun.
     """
-    if clip.start is None or clip.end_exclusive is None:
+    if _bounds_unknown(clip):
         return False
     return bool(item["in"] < clip.start or item["out"] > clip.end_exclusive)
 
@@ -1176,6 +1185,13 @@ def _overrun_message(item: dict[str, Any], clip: ClipFacts, subject: str) -> str
     return (
         f"{subject} asks for frames {item['in']}-{item['out']} of {clip.name!r}, whose "
         f"media runs {clip.start}-{clip.end_exclusive}."
+    )
+
+
+def _unverifiable_message(item: dict[str, Any], clip: ClipFacts, subject: str) -> str:
+    return (
+        f"{subject} asks for frames {item['in']}-{item['out']} of {clip.name!r}, whose media "
+        f"bounds Resolve does not report, so nothing checked the range against them."
     )
 
 
@@ -1192,6 +1208,11 @@ def _bounds_error(
         # A still has one frame of media and any duration on a timeline — the
         # end-frame workaround is what makes that exact. Bounds do not apply.
         return []
+    if _bounds_unknown(clip):
+        # Failing open is right — an unreported extent is not an overrun — but a check
+        # that passed because it could not run is not the same answer as one that ran,
+        # and silence made them look alike. W9 is that difference, said out loud (#186).
+        return [_finding("W9", id, _unverifiable_message(item, clip, subject))]
     if not _outside_media(item, clip):
         return []
     return [_finding("E5", id, _overrun_message(item, clip, subject))]
@@ -1240,7 +1261,13 @@ def _audio_errors(doc: dict[str, Any], resolved: dict[str, ClipFacts]) -> list[F
         findings.append(
             _finding("E7", None, f"The audio source {alias!r} ({clip.name}) has no audio.")
         )
-    if _outside_media(audio, clip):
+    if _bounds_unknown(clip):
+        # The mix is the one clip a whole cut is laid over, and the bounds leg fails open on
+        # it exactly as E5's does — so it gets the same W9 rather than a quieter silence.
+        findings.append(
+            _finding("W9", None, _unverifiable_message(audio, clip, "The audio block"))
+        )
+    elif _outside_media(audio, clip):
         findings.append(_finding("E7", None, _overrun_message(audio, clip, "The audio block")))
     return findings
 
