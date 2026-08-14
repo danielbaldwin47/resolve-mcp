@@ -245,6 +245,15 @@ classify against the human Taurus tail as ground truth.
   Human's recorded weaknesses: 21.3 s parked master framing tail (24%
   of runtime, "stops instead of ending"), and a 4-cuts-in-6.2 s burst
   in the quietest pocket. Pack blind spots → G16.
+- **P2·R2 · Taurus ending · LOSS 0–3, unanimous** (ours = A; pack
+  `taurus_ending_p2r2`). The tail device worked (dissolve landed at the
+  deliverable's numbers, pixel-verified) and the body was the strongest
+  build yet (four pictures, ride-the-reframe, quiet pocket held) — but
+  the final cadence + applause + fade played on the A7IV drum cam:
+  "the last thing the viewer sees is a drummer's back behind a cymbal."
+  Style rule for R3: the set's last image belongs to the ensemble;
+  decelerate into a free coda. Human's 24–34 s stutter named again by
+  two judges.
 
 - **R1 · Taurus opening · VOID** (ours = A). Critic judged a corrupt pack
   (G3): ours shown as 1 cut, human's as 9 — both actually 13. Verdict
