@@ -692,3 +692,95 @@ shot length or angle share — 5 songs of head and tail is a few dozen seconds o
 film, and the rest of each deliverable was not read. One project, one night, so
 the thin-support rule applies and the tag names the weakness rather than hiding
 it.
+
+## The quiet-passage pass (#190), measured 2026-08-14
+
+Not a timeline row either, and a pair rather than a single reading: the same
+song cut twice, once by the director and once by us. The question is what
+happens *inside* a quiet passage, which the arc-gear table (`concert.md` §3)
+does not answer — that table sets the rate a passage runs at, and both cuts
+hit it.
+
+Source: `S:/Deliverables/Ryan Devlin/6-17-26 Zinc Bar/Full Videos/6-17 - Zinc
+Set 2 - Taurus People.mp4` (497.66 s, 3840×2160, 23.976 fps) for the human
+cut, and `projects/mcp-tests-zinc/taurus-people-full-r2.cut.json` for ours —
+the P4R2 capstone that won 3–0. Result: `gauntlet/recon/quiet_floor.json`;
+script `gauntlet/recon/quiet_floor.py`. The two clocks differ by 0.167 s (his
+497.664 against our 497.497); the section boundaries are his, so our cut is read
+against his song rather than against its own.
+
+The script takes every spread, orphan and passage reading by importing
+`analysis.correlate`'s own functions rather than reimplementing them, so the
+receipt cannot drift from the tool. Its `server_check` block is `gears.quiet_floor`
+run end to end over that level curve and our cut file: **`reads_locked: true`** on
+the passage, with the 2.502 s orphan named. The rule fires on the cut the ticket
+was written about — recorded, not inferred. Run over the director's cut through
+the same code the same passage comes back **`reads_locked: false`**, which is the
+half that matters more: a check that fired on everything would prove nothing.
+
+The passage is d38–195 (157 s), derived rather than named: a 1 s RMS curve off
+the deliverable's own audio, smoothed with a centred 15-window moving median,
+the quiet third of that taken by rank, contiguous runs of ≥20 s kept. It is the
+`floor` and `breath` sections of the arc-gear table plus the head of `trade`.
+
+| Cut | Shots | Cuts/min | Median shot | CV | Orphans | CV less orphans |
+| --- | --- | --- | --- | --- | --- | --- |
+| Director | 20 | 7.64 | 4.53 s | **0.783** | 0 | 0.783 |
+| Ours (P4R2) | 18 | 6.88 | 7.45 s | **0.597** | 1 (2.50 s at d109) | 0.564 |
+
+Read by the arc-gear table's own named sections rather than the derived
+passage, the same gap shows up, and the numbers want their labels read
+carefully. Mean within-section CV — the mean of the per-section CVs — is
+**0.692** for him over the eight sections it can be taken over (his `ending` is
+a single 21 s shot, so it has no spread) against **0.502** for us over nine.
+Inside `floor`+`breath` alone: pooling both sections' shots gives **0.719**
+against **0.510**, while the mean of those two sections' own CVs gives **0.718**
+against **0.468**. Pooled and mean-of-sections are different readings and the
+receipt now carries both under those names; the gap survives either.
+
+Method, so the numbers can be re-derived or disbelieved specifically:
+
+- **Human cuts** from ffmpeg scene detect at ab_pack's calibrated threshold
+  0.10 (`scale=320:-2, select gt(scene,0.10), metadata=print`) over the whole
+  deliverable: **77 cuts, 78 shots**, which is exactly what the P4R1 pack's own
+  scan of the same file found — the one cross-check available. The 0.27 run in
+  `human_cuts_taurus.json` is a different instrument and is not comparable.
+- **Our cuts** from the cut file's segment lengths at 23.976 fps, so they are
+  exact rather than detected. The asymmetry biases *against* the finding: a
+  missed detection merges two human shots into one long one, which lowers his
+  spread, not ours.
+- **Orphan** = a shot under 0.5× the passage median with both neighbours inside
+  the passage at or above that median. Two short shots side by side are a burst
+  and are not orphans — the distinction is the whole reading, since a burst is
+  something a viewer reads as cutting and a lone flash between holds is not.
+- A shot belongs to the section or passage its **head** sits in, which is
+  `full_gears.py`'s rule kept unchanged so the two receipts can be compared.
+
+Three cautions, because the interesting ones are against this row rather than
+for it.
+
+**The floor at 0.65 is one song wide.** It separates exactly two cuts of it. It
+is the number `one_speed` already uses for the whole cut, which is why it was
+chosen over anything tuned closer to the gap — a threshold fitted to a single
+pair is a threshold fitted to nothing.
+
+**The orphan rule is not what draws the verdict here.** Ours fails on the raw
+spread too: 0.597 pooled, 0.564 once the flash is dropped, both under the floor.
+The correction is worth taking because a spread held up by a lone flash is not a
+spread anybody watching sees — but on this evidence it names the flash rather
+than deciding the case, and no measurement here shows a passage that the raw CV
+would have waved through.
+
+**The 0.5× fraction is doing less work than the neighbour test.** Two of his
+shots in the passage sit under half the passage median — 1.752 s (0.387×) and
+2.253 s (0.498×) — and neither is an orphan, because each has a shortish shot
+beside it (3.879 s and 3.128 s) rather than a hold. That is the burst-versus-
+flash distinction earning its keep, and it is also a warning: had the neighbour
+test not been there, the director's own passage would have scored two orphans.
+His shortness comes in company; ours came alone.
+
+What this row supports: the quiet-passage bullet in `concert.md` §3 and the
+`gears.quiet_floor` block in `analysis/correlate.py`. What it does not: anything
+about *why* a passage reads static beyond shot length — reframes, push-ins and
+what is inside the frame are named in the style as what fills a passage, and
+nothing here measured them.

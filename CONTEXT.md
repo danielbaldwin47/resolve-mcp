@@ -109,7 +109,10 @@ duration `ramp`, and says `reads_metronomic` with the heuristic that drew it,
 and its `gears` block splits the cut's span into loudness terciles off a 1 s
 RMS curve and reports cuts per minute in each, the loud/quiet `rate_ratio`,
 where the sub-2 s shots sit, `one_speed`, and `outside_shots` — shots past
-the analysed mix, counted apart rather than clamped into a tercile —
+the analysed mix, counted apart rather than clamped into a tercile — plus
+`quiet_floor`, the passages the slow gear is held through, found by smoothing
+that curve rather than off the per-window tercile labels, each read for the
+spread its lone flashes are not holding up (#190) —
 warnings the report carries, never gates),
 `cuda` (preloads
 the CUDA runtime the `analysis` extra ships, so CTranslate2 finds it on Windows;

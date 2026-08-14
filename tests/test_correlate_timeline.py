@@ -1891,6 +1891,7 @@ def test_the_gearing_reading_carries_the_rule_it_applied(attach: Attach, tmp_pat
         "sub2s_in_loud",
         "sub2s_loud_fraction",
         "one_speed",
+        "quiet_floor",
         "heuristic",
     }
 
@@ -1965,3 +1966,217 @@ def test_the_default_curve_is_read_off_the_mix_itself(attach: Attach, tmp_path: 
     assert gears["terciles"]["quiet"]["shots"] == 2  # the first four seconds, both silent
     assert gears["terciles"]["loud"]["level_dbfs"] > -30.0
     assert gears["rate_ratio"] == 1.0  # one cut every two seconds throughout
+
+
+# --- the quiet floor (#190) -------------------------------------------------------------
+#
+# A song in three even blocks — loud, quiet, mid, thirty seconds each — so the quiet third of
+# the smoothed curve is exactly the middle block and every passage below runs 30.0 to 60.0.
+# The shots either side of it are filler at a rate nothing here asserts; the reading under
+# test is what happens between the thirtieth and the sixtieth second.
+
+BLOCKS = ((-20.0, 30), (-50.0, 30), (-35.0, 30))
+LOUD_FILLER = [("A.mp4", SECOND)] * 30
+MID_FILLER = [("B.mp4", 2 * SECOND)] * 15
+
+
+def _floor(result: dict[str, Any]) -> dict[str, Any]:
+    block = _gears(result)["quiet_floor"]
+    assert isinstance(block, dict)
+    return block
+
+
+def _passage(result: dict[str, Any]) -> dict[str, Any]:
+    runs = _floor(result)["runs"]
+    assert len(runs) == 1, f"one quiet block, so one passage: {runs}"
+    passage: dict[str, Any] = runs[0]
+    return passage
+
+
+def _through(*quiet: float) -> FakeTimeline:
+    """A cut whose middle stretch holds the given shot lengths, in seconds."""
+    held = [(f"Q{turn}.mp4", round(length * SECOND)) for turn, length in enumerate(quiet)]
+    return _paced(*LOUD_FILLER, *held, *MID_FILLER)
+
+
+def test_a_quiet_passage_is_the_stretch_of_music_it_covers(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Where the passage sits and how it was cut: the frame every other reading hangs on."""
+    attach(studio(timeline=_through(8, 7, 8, 7)))
+
+    passage = _passage(_measured(tmp_path, loudness=_levels(_steps(*BLOCKS))))
+
+    assert passage["from"] == 30.0
+    assert passage["to"] == 60.0
+    assert passage["seconds"] == 30.0
+    assert passage["shots"] == 4
+    assert passage["cuts_per_minute"] == 8.0
+    assert passage["median_seconds"] == 7.5
+
+
+def test_a_floor_of_holds_all_much_one_length_reads_locked(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Four holds inside a second of each other: the slow gear, driven at one speed.
+
+    This is the failure the block exists for. Nothing above it can see this cut: the rate is
+    the one the quiet gear asks for, the ratio against the loud third is right, and the whole
+    cut's spread is carried by the fast material either side of this passage.
+    """
+    attach(studio(timeline=_through(8, 7, 8, 7)))
+
+    floor = _floor(_measured(tmp_path, loudness=_levels(_steps(*BLOCKS))))
+
+    assert floor["runs"][0]["cv"] == 0.067
+    assert floor["runs"][0]["reads_locked"] is True
+    assert floor["reads_locked"] is True
+
+
+def test_a_floor_whose_lengths_move_does_not_read_locked(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The same passage, the same rate, lengths that travel — one second out to eighteen."""
+    attach(studio(timeline=_through(1, 3, 8, 18)))
+
+    passage = _passage(_measured(tmp_path, loudness=_levels(_steps(*BLOCKS))))
+
+    assert passage["cuts_per_minute"] == 8.0  # the rate the locked passage ran at
+    assert passage["cv"] == 0.877
+    assert passage["reads_locked"] is False
+
+
+def test_the_spread_a_lone_flash_holds_up_is_not_the_passages_spread(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Two long holds, one flash between them: the reading is the spread without the flash.
+
+    The whole reason the orphans are dropped and the question asked again. Raw, this passage
+    scores a spread over the floor — a single one-second shot beside a twelve and a thirteen
+    moves a coefficient of variation a long way. What a viewer sits through is the holds.
+    """
+    attach(studio(timeline=_through(12, 1, 13, 4)))
+
+    passage = _passage(_measured(tmp_path, loudness=_levels(_steps(*BLOCKS))))
+
+    assert passage["cv"] == 0.683  # over the floor on its own
+    assert passage["orphans"] == 1
+    assert passage["orphan_seconds"] == [1.0]
+    assert passage["cv_less_orphans"] == 0.417
+    assert passage["reads_locked"] is True
+
+
+def test_two_short_shots_side_by_side_are_a_burst_rather_than_orphans(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """A burst is a gesture the quiet floor is allowed to make, so it stays in the spread."""
+    attach(studio(timeline=_through(12, 1, 1, 16)))
+
+    passage = _passage(_measured(tmp_path, loudness=_levels(_steps(*BLOCKS))))
+
+    assert passage["orphans"] == 0
+    assert passage["cv_less_orphans"] == passage["cv"] == 0.887
+    assert passage["reads_locked"] is False
+
+
+def test_a_single_hold_across_the_passage_is_the_stillest_reading_there_is(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """One shot is a spread of zero, not an unreadable one — the most locked a floor can be."""
+    attach(studio(timeline=_paced(*[("A.mp4", 2 * SECOND)] * 15, ("H.mp4", 30 * SECOND),
+                                  *MID_FILLER)))
+
+    passage = _passage(_measured(tmp_path, loudness=_levels(_steps(*BLOCKS))))
+
+    assert passage["shots"] == 1
+    assert passage["median_seconds"] == 30.0
+    assert passage["cv"] == 0.0
+    assert passage["reads_locked"] is True
+
+
+def test_a_hold_that_runs_the_whole_passage_through_is_locked_by_that_alone(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """No shot starts inside, because one that started before it covers the lot.
+
+    The stillest floor there is, and the one a spread cannot see: with no cut inside the
+    passage there is no length to take a coefficient of variation over, and reading that as
+    "no finding" would wave through the only case where nothing whatsoever happens. The shot's
+    own length is the reading instead.
+    """
+    attach(studio(timeline=_paced(*[("A.mp4", 2 * SECOND)] * 14, ("H.mp4", 34 * SECOND),
+                                  *[("B.mp4", 2 * SECOND)] * 14)))
+
+    passage = _passage(_measured(tmp_path, loudness=_levels(_steps(*BLOCKS))))
+
+    assert passage["shots"] == 0
+    assert passage["cv"] is None  # nothing inside to take a spread over
+    assert passage["held_through_seconds"] == 34.0
+    assert passage["reads_locked"] is True
+
+
+def test_a_quiet_pocket_too_short_to_sit_in_is_not_a_passage(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Three ten-second dips: the quiet third of the music, and not one passage among them.
+
+    A pocket holds two or three shots, and a spread over three shots is a number the report
+    cannot mean anything by. The runs list is empty, which is not the same as passing — the
+    heuristic says so in as many words.
+    """
+    pockets = [level for _ in range(3) for level in ((-50.0, 10), (-20.0, 20))]
+    attach(studio(timeline=_paced(*[(f"{'AB'[turn % 2]}.mp4", 3 * SECOND) for turn in range(30)])))
+
+    floor = _floor(_measured(tmp_path, loudness=_levels(_steps(*pockets))))
+
+    assert floor["runs"] == []
+    assert floor["reads_locked"] is False
+
+
+def test_a_room_that_crosses_the_quiet_edge_and_back_is_one_passage_not_six(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The reason the passages are found on a smoothed curve rather than on the gear labels.
+
+    A live room does not go quiet and stay there: a crash, a shout, a chord puts one window
+    back over the edge every few seconds. Read window by window this is six quiet pockets,
+    none of them long enough to be anything — and the passage a viewer sat through for half a
+    minute vanishes between them.
+    """
+    spiked = [level for _ in range(6) for level in ((-50.0, 4), (-20.0, 1))]
+    attach(studio(timeline=_through(8, 7, 8, 7)))
+
+    floor = _floor(_measured(tmp_path, loudness=_levels(_steps((-20.0, 30), *spiked, (-35.0, 30)))))
+
+    assert [(run["from"], run["to"]) for run in floor["runs"]] == [(31.0, 61.0)]
+
+
+def test_the_quiet_floor_reading_carries_the_rule_it_applied(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Numbers, verdict, and the rule between them — the shape every warning here takes."""
+    attach(studio(timeline=_through(8, 7, 8, 7)))
+
+    floor = _floor(_measured(tmp_path, loudness=_levels(_steps(*BLOCKS))))
+
+    assert floor["heuristic"] == correlate.FLOOR_HEURISTIC
+    assert "warning" in floor["heuristic"]
+    assert str(correlate.FLOOR_CV_FLOOR) in floor["heuristic"]
+    assert str(correlate.ORPHAN_FRACTION) in floor["heuristic"]
+    assert str(correlate.QUIET_FLOOR_SECONDS) in floor["heuristic"]
+    assert floor["smoothing_windows"] == correlate.QUIET_SMOOTHING_WINDOWS
+    assert set(floor) == {"smoothing_windows", "runs", "reads_locked", "heuristic"}
+    assert set(floor["runs"][0]) == {
+        "from",
+        "to",
+        "seconds",
+        "shots",
+        "cuts_per_minute",
+        "median_seconds",
+        "cv",
+        "orphans",
+        "orphan_seconds",
+        "cv_less_orphans",
+        "held_through_seconds",
+        "reads_locked",
+    }
