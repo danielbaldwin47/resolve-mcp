@@ -1,0 +1,438 @@
+{
+ "kind": "occlusion_adjudication_full",
+ "song": "Taurus People",
+ "spans": {
+  "A": [
+   90.0,
+   166.68
+  ],
+  "B": [
+   256.68,
+   407.66
+  ]
+ },
+ "scan": "occl_full_scan.json",
+ "grabs": "occl_full_grabs.py -> occl_full_frames/",
+ "flagged_windows": 16,
+ "vetoes_in_new_spans": 0,
+ "verdicts": [
+  {
+   "span": "A",
+   "angle": "FX6",
+   "windows_d": [
+    [
+     91.96,
+     94.92
+    ],
+    [
+     96.97,
+     104.93
+    ],
+    [
+     106.98,
+     110.94
+    ],
+    [
+     114.98,
+     115.94
+    ],
+    [
+     117.99,
+     118.95
+    ],
+    [
+     120.99,
+     124.95
+    ],
+    [
+     128.0,
+     147.93
+    ],
+    [
+     149.98,
+     164.95
+    ]
+   ],
+   "peaks": [
+    0.4,
+    0.523,
+    0.484,
+    0.556,
+    0.425,
+    0.414,
+    0.57,
+    0.572
+   ],
+   "baseline": 0.1,
+   "verdict": "OVERRIDDEN - false positives, all eight",
+   "frames_read": [
+    93.4,
+    100.5,
+    108.5,
+    115.4,
+    118.4,
+    122.5,
+    130.0,
+    138.0,
+    145.0,
+    152.0,
+    158.0,
+    163.0
+   ],
+   "evidence": [
+    "Twelve frames spread across the two biggest windows (the 19.9 s one at 128.00 and the 15.0 s one at 149.98) and every short one: the picture is an unchanging piano-and-bass two-shot - pianist at frame left with his back to camera, bassist centre right, kit at the extreme right edge - and it is IDENTICAL in flagged and unflagged seconds (occl_full_frames/sheet_afx6_a.jpg, _b.jpg, _c.jpg).",
+    "Nothing crosses. full_motion.json independently measures moving_share 0.000 on this angle across d88-170, so neither the camera nor anything in the near field moves at all for 82 seconds - which is the opposite of the ledger's test for a true blocking.",
+    "What is being scored is the black piano lid across the left foreground plus a small dark head low in the bottom-right corner, in front of an empty part of the room."
+   ],
+   "action": "no constraint applied; the FX6 carries 48.8 s of span A.",
+   "windows": [
+    {
+     "in": {
+      "d": 91.96,
+      "sync_frame": 174164,
+      "clip_frame": 56588
+     },
+     "out": {
+      "d": 94.92,
+      "sync_frame": 174235,
+      "clip_frame": 56659
+     },
+     "peak": 0.4
+    },
+    {
+     "in": {
+      "d": 96.97,
+      "sync_frame": 174284,
+      "clip_frame": 56708
+     },
+     "out": {
+      "d": 104.93,
+      "sync_frame": 174475,
+      "clip_frame": 56899
+     },
+     "peak": 0.523
+    },
+    {
+     "in": {
+      "d": 106.98,
+      "sync_frame": 174524,
+      "clip_frame": 56948
+     },
+     "out": {
+      "d": 110.94,
+      "sync_frame": 174619,
+      "clip_frame": 57043
+     },
+     "peak": 0.484
+    },
+    {
+     "in": {
+      "d": 114.98,
+      "sync_frame": 174716,
+      "clip_frame": 57140
+     },
+     "out": {
+      "d": 115.94,
+      "sync_frame": 174739,
+      "clip_frame": 57163
+     },
+     "peak": 0.556
+    },
+    {
+     "in": {
+      "d": 117.99,
+      "sync_frame": 174788,
+      "clip_frame": 57212
+     },
+     "out": {
+      "d": 118.95,
+      "sync_frame": 174811,
+      "clip_frame": 57235
+     },
+     "peak": 0.425
+    },
+    {
+     "in": {
+      "d": 120.99,
+      "sync_frame": 174860,
+      "clip_frame": 57284
+     },
+     "out": {
+      "d": 124.95,
+      "sync_frame": 174955,
+      "clip_frame": 57379
+     },
+     "peak": 0.414
+    },
+    {
+     "in": {
+      "d": 128.0,
+      "sync_frame": 175028,
+      "clip_frame": 57452
+     },
+     "out": {
+      "d": 147.93,
+      "sync_frame": 175506,
+      "clip_frame": 57930
+     },
+     "peak": 0.57
+    },
+    {
+     "in": {
+      "d": 149.98,
+      "sync_frame": 175555,
+      "clip_frame": 57979
+     },
+     "out": {
+      "d": 164.95,
+      "sync_frame": 175914,
+      "clip_frame": 58338
+     },
+     "peak": 0.572
+    }
+   ]
+  },
+  {
+   "span": "A",
+   "angle": "A7IV",
+   "windows_d": [],
+   "peaks": [],
+   "baseline": 0.0251,
+   "verdict": "CLEAN - the scan flagged nothing",
+   "frames_read": [],
+   "evidence": [
+    "No windows returned over 82 seconds."
+   ],
+   "action": "no constraint applied.",
+   "windows": []
+  },
+  {
+   "span": "B",
+   "angle": "A7IV",
+   "windows_d": [
+    [
+     264.65,
+     265.61
+    ],
+    [
+     312.65,
+     313.61
+    ],
+    [
+     334.67,
+     335.63
+    ],
+    [
+     347.65,
+     350.61
+    ],
+    [
+     387.64,
+     388.6
+    ],
+    [
+     392.65,
+     393.61
+    ],
+    [
+     397.65,
+     400.62
+    ],
+    [
+     404.66,
+     405.62
+    ]
+   ],
+   "peaks": [
+    0.443,
+    0.461,
+    0.462,
+    0.446,
+    0.456,
+    0.446,
+    0.455,
+    0.459
+   ],
+   "baseline": 0.0,
+   "verdict": "OVERRIDDEN - false positives, all eight",
+   "frames_read": [
+    265.1,
+    312.0,
+    313.1,
+    314.5,
+    335.1,
+    348.0,
+    349.5,
+    350.5,
+    388.1,
+    393.1,
+    398.2,
+    399.5,
+    400.2,
+    401.5,
+    405.1,
+    406.5
+   ],
+   "evidence": [
+    "Sixteen frames, four per sheet so movement would show: every one is the same clean sax-and-drummer two-shot - the sax player standing at frame left PLAYING, the drummer in the near field at the right, the bassist behind between them (occl_full_frames/sheet_ba7_a.jpg through _d.jpg). Nobody crosses, nothing is covered, and the frames either side of each flag are indistinguishable from it.",
+    "The flagged band (0.443-0.462) sits inside the ledger's known false-positive band for this angle - the drummer, who is the shot's own foreground subject, scored 0.469 and 0.472 as confirmed false positives in occlusion_mid.json, where the ONE true crossing peaked LOWER at 0.416."
+   ],
+   "action": "no constraint applied. This matters most at 397.65-400.62, which is the run-in to the song's second-loudest instant (d400.02): the A7IV carries d391.10-399.94 there, and had the flag been real the whole gesture would have had to move.",
+   "windows": [
+    {
+     "in": {
+      "d": 264.65,
+      "sync_frame": 178304,
+      "clip_frame": 91998
+     },
+     "out": {
+      "d": 265.61,
+      "sync_frame": 178327,
+      "clip_frame": 92021
+     },
+     "peak": 0.443
+    },
+    {
+     "in": {
+      "d": 312.65,
+      "sync_frame": 179455,
+      "clip_frame": 93149
+     },
+     "out": {
+      "d": 313.61,
+      "sync_frame": 179478,
+      "clip_frame": 93172
+     },
+     "peak": 0.461
+    },
+    {
+     "in": {
+      "d": 334.67,
+      "sync_frame": 179983,
+      "clip_frame": 93677
+     },
+     "out": {
+      "d": 335.63,
+      "sync_frame": 180006,
+      "clip_frame": 93700
+     },
+     "peak": 0.462
+    },
+    {
+     "in": {
+      "d": 347.65,
+      "sync_frame": 180294,
+      "clip_frame": 93988
+     },
+     "out": {
+      "d": 350.61,
+      "sync_frame": 180365,
+      "clip_frame": 94059
+     },
+     "peak": 0.446
+    },
+    {
+     "in": {
+      "d": 387.64,
+      "sync_frame": 181253,
+      "clip_frame": 94947
+     },
+     "out": {
+      "d": 388.6,
+      "sync_frame": 181276,
+      "clip_frame": 94970
+     },
+     "peak": 0.456
+    },
+    {
+     "in": {
+      "d": 392.65,
+      "sync_frame": 181373,
+      "clip_frame": 95067
+     },
+     "out": {
+      "d": 393.61,
+      "sync_frame": 181396,
+      "clip_frame": 95090
+     },
+     "peak": 0.446
+    },
+    {
+     "in": {
+      "d": 397.65,
+      "sync_frame": 181493,
+      "clip_frame": 95187
+     },
+     "out": {
+      "d": 400.62,
+      "sync_frame": 181564,
+      "clip_frame": 95258
+     },
+     "peak": 0.455
+    },
+    {
+     "in": {
+      "d": 404.66,
+      "sync_frame": 181661,
+      "clip_frame": 95355
+     },
+     "out": {
+      "d": 405.62,
+      "sync_frame": 181684,
+      "clip_frame": 95378
+     },
+     "peak": 0.459
+    }
+   ]
+  },
+  {
+   "span": "B",
+   "angle": "FX6",
+   "windows_d": [],
+   "peaks": [],
+   "baseline": 0.0865,
+   "verdict": "CLEAN - the scan flagged nothing",
+   "frames_read": [],
+   "evidence": [
+    "No windows returned over 151 seconds."
+   ],
+   "action": "no constraint applied.",
+   "windows": []
+  }
+ ],
+ "carried_vetoes_from_the_won_pieces": [
+  {
+   "source": "occlusion_verdict_r3.json",
+   "angle": "FX6",
+   "veto_d": [
+    11.97,
+    18.94
+   ],
+   "note": "true near-field blocking inside the opening piece; the opening's cut list, carried here frame for frame, keeps the FX6 off screen 10.64-20.48."
+  },
+  {
+   "source": "occlusion_verdict_r3.json",
+   "angle": "A7IV",
+   "veto_d": [
+    41.96,
+    42.92
+   ],
+   "note": "true near-field blocking inside the opening piece; the opening's own release shot covers it."
+  },
+  {
+   "source": "occlusion_mid.json",
+   "angle": "A7IV",
+   "veto_d": [
+    229.58,
+    233.28
+   ],
+   "note": "the sax player crossing the near field; the mid piece's s10 leaves the A7IV 1.96 s before it and the song's peak at d233.52 is taken on the FX6. Carried here unchanged."
+  }
+ ],
+ "scan_baselines": {
+  "A:A7IV": 0.0251,
+  "A:FX6": 0.1,
+  "B:A7IV": 0.0,
+  "B:FX6": 0.0865
+ }
+}
