@@ -1239,6 +1239,237 @@ def test_a_grid_that_calls_the_whole_span_one_beat_reaches_the_cuts_inside_it(
     assert result["stranded"] == 0
 
 
+def _paced(*shots: tuple[str, int], name: str = "sunset-set v3") -> FakeTimeline:
+    """A cut of back-to-back shots given as (angle, frames) — the shape rhythm is read off.
+
+    Contiguous by construction, so nothing here becomes black by accident and every shot in
+    the reading is one this list asked for.
+    """
+    laid: list[tuple[str, int, int, int]] = []
+    start = 100
+    for clip, frames in shots:
+        laid.append((clip, start, frames, 1000))
+        start += frames
+    return a_cut(name=name, shots=laid)
+
+
+def _rhythm(result: dict[str, Any]) -> dict[str, Any]:
+    block = result["shot_rhythm"]
+    assert isinstance(block, dict)
+    return block
+
+
+def test_the_rhythm_block_bins_the_shot_lengths_and_says_how_far_they_spread(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """One shot per corpus bin: the histogram, the spread and the averages, all arithmetic."""
+    attach(
+        studio(
+            timeline=_paced(
+                ("A.mp4", 60),  # 1.0s
+                ("B.mp4", 180),  # 3.0s
+                ("C.mp4", 360),  # 6.0s
+                ("D.mp4", 600),  # 10.0s
+                ("E.mp4", 1200),  # 20.0s
+                ("F.mp4", 2400),  # 40.0s
+            )
+        )
+    )
+
+    lengths = _rhythm(_measured(tmp_path))["lengths"]
+
+    assert lengths["histogram"] == {"<2": 1, "2-4": 1, "4-8": 1, "8-15": 1, "15-30": 1, ">30": 1}
+    assert lengths["spread_ratio"] == 40.0  # 40s over 1s
+    assert lengths["mean"] == 13.333
+    assert lengths["median"] == 8.0  # between the 6s and the 10s shot
+
+
+def test_a_shot_on_a_bin_edge_falls_in_the_bin_that_opens_there(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The bins are half-open on the upper edge: exactly 4s is a 4-8 shot, never a 2-4 one.
+
+    Three shots sitting exactly on three boundaries — 2s, 4s and 30s — so every one of them
+    is a shot the neighbouring bin could have claimed.
+    """
+    attach(studio(timeline=_paced(("A.mp4", 120), ("B.mp4", 240), ("A.mp4", 1800))))
+
+    histogram = _rhythm(_measured(tmp_path))["lengths"]["histogram"]
+
+    assert histogram == {"<2": 0, "2-4": 1, "4-8": 1, "8-15": 0, "15-30": 0, ">30": 1}
+
+
+def test_two_cameras_traded_on_one_length_read_metronomic(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The failure the check exists for: strict A/B, every shot in one bin.
+
+    The lengths here vary by nearly four to one, so the coefficient of variation is well
+    clear of its floor — this arm is the bin's alone.
+    """
+    traded = [("A.mp4", 30) if turn % 2 == 0 else ("B.mp4", 114) for turn in range(8)]
+    attach(studio(timeline=_paced(*traded)))
+
+    rhythm = _rhythm(_measured(tmp_path))
+
+    assert rhythm["alternation"] == {"cuts": 7, "longest_run": 7, "fraction": 1.0}
+    assert rhythm["uniformity"]["bin"] == "<2"
+    assert rhythm["uniformity"]["one_bin"] == 1.0
+    assert rhythm["uniformity"]["cv"] == 0.583  # varied lengths, all inside the one bin
+    assert rhythm["reads_metronomic"] is True
+
+
+def test_a_metronome_that_straddles_a_bin_boundary_still_reads_metronomic(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Half the shots in one bin and half in the next, and nothing about the cut varying.
+
+    This is the arm the bin count cannot see: 3.5s and 4.5s land either side of a boundary,
+    so no bin holds more than half — but the spread around the mean is tiny and the cut is
+    the same metronome it would be if both lengths sat in one bin.
+    """
+    attach(
+        studio(
+            timeline=_paced(
+                *[("A.mp4", 210) if turn % 2 == 0 else ("B.mp4", 270) for turn in range(8)]
+            )
+        )
+    )
+
+    rhythm = _rhythm(_measured(tmp_path))
+
+    assert rhythm["uniformity"]["one_bin"] == 0.5
+    assert rhythm["uniformity"]["cv"] == 0.125
+    assert rhythm["reads_metronomic"] is True
+
+
+def test_a_cut_that_varies_its_lengths_does_not_read_metronomic(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Two cameras traded strictly is not the finding — trading them on one length is."""
+    attach(
+        studio(
+            timeline=_paced(
+                ("A.mp4", 30),  # 0.5s
+                ("B.mp4", 300),  # 5.0s
+                ("A.mp4", 120),  # 2.0s
+                ("B.mp4", 900),  # 15.0s
+                ("A.mp4", 60),  # 1.0s
+                ("B.mp4", 450),  # 7.5s
+            )
+        )
+    )
+
+    rhythm = _rhythm(_measured(tmp_path))
+
+    assert rhythm["alternation"]["fraction"] == 1.0
+    assert rhythm["uniformity"]["one_bin"] == 0.333
+    assert rhythm["uniformity"]["cv"] == 0.972
+    assert rhythm["reads_metronomic"] is False
+
+
+def test_a_cut_that_breaks_the_alternation_does_not_read_metronomic(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Every shot the same length, but the angles do not simply trade — so the run is short."""
+    attach(
+        studio(
+            timeline=_paced(
+                ("A.mp4", 90),
+                ("B.mp4", 90),
+                ("A.mp4", 90),
+                ("A.mp4", 90),
+                ("B.mp4", 90),
+                ("A.mp4", 90),
+            )
+        )
+    )
+
+    rhythm = _rhythm(_measured(tmp_path))
+
+    assert rhythm["alternation"] == {"cuts": 5, "longest_run": 2, "fraction": 0.4}
+    assert rhythm["uniformity"]["one_bin"] == 1.0
+    assert rhythm["uniformity"]["cv"] == 0.0
+    assert rhythm["reads_metronomic"] is False
+
+
+def test_the_longest_run_is_the_longest_one_not_the_whole_sequence(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """A held pair opens it and a third angle ends it; the run in between is what is counted."""
+    attach(
+        studio(
+            timeline=_paced(
+                ("A.mp4", 90),
+                ("A.mp4", 90),
+                ("B.mp4", 90),
+                ("A.mp4", 90),
+                ("B.mp4", 90),
+                ("A.mp4", 90),
+                ("B.mp4", 90),
+                ("C.mp4", 90),
+            )
+        )
+    )
+
+    assert _rhythm(_measured(tmp_path))["alternation"] == {
+        "cuts": 7,
+        "longest_run": 5,
+        "fraction": 0.714,
+    }
+
+
+def test_two_shots_are_a_cut_rather_than_an_alternation(attach: Attach, tmp_path: Path) -> None:
+    """Alternation needs the return: without it every two-shot timeline would read metronomic."""
+    attach(studio(timeline=_paced(("A.mp4", 90), ("B.mp4", 90))))
+
+    rhythm = _rhythm(_measured(tmp_path))
+
+    assert rhythm["alternation"] == {"cuts": 1, "longest_run": 0, "fraction": 0.0}
+    assert rhythm["uniformity"]["one_bin"] == 1.0  # uniform, and still not the finding
+    assert rhythm["reads_metronomic"] is False
+
+
+def test_black_is_one_of_the_angles_the_cut_alternates_with(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Cutting a camera against black is a pattern, not a hole in one."""
+    gapped = (
+        ("C0012.mp4", 100, 90, 1000),
+        ("C0012.mp4", 280, 90, 1400),
+        ("C0012.mp4", 460, 90, 1800),
+    )
+    attach(studio(timeline=a_cut(shots=gapped)))
+
+    rhythm = _rhythm(_measured(tmp_path))
+
+    assert rhythm["shots"] == 5  # three shots and the two black stretches between them
+    assert rhythm["alternation"] == {"cuts": 4, "longest_run": 4, "fraction": 1.0}
+
+
+def test_the_rhythm_reading_carries_the_rule_it_applied(attach: Attach, tmp_path: Path) -> None:
+    """A warning-shaped fact: the numbers, the verdict, and the rule that joined them.
+
+    Nothing refuses on it — the job completes and the report is written whatever it says —
+    so the agent reading it can weigh the rule against the passage rather than obey it.
+    """
+    attach(studio(timeline=_paced(("A.mp4", 90), ("B.mp4", 90), ("A.mp4", 90))))
+
+    rhythm = _rhythm(_measured(tmp_path))
+
+    assert rhythm["heuristic"] == correlate.HEURISTIC
+    assert "warning" in rhythm["heuristic"]
+    assert str(correlate.ALTERNATION_FLOOR) in rhythm["heuristic"]
+    assert set(rhythm) == {
+        "shots",
+        "lengths",
+        "alternation",
+        "uniformity",
+        "reads_metronomic",
+        "heuristic",
+    }
+
+
 def test_a_cut_that_misses_the_last_beat_by_less_than_a_beat_is_still_measured(
     attach: Attach, tmp_path: Path
 ) -> None:

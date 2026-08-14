@@ -90,14 +90,54 @@ measurement, and refusing it would be trading one wrong answer for another.
 BLACK = "black"
 """Where the stretches nothing covers are counted — a known absence, not a missing label."""
 
-READING = 3
+RHYTHM_BINS: tuple[tuple[str, float], ...] = (
+    ("<2", 2.0),
+    ("2-4", 4.0),
+    ("4-8", 8.0),
+    ("8-15", 15.0),
+    ("15-30", 30.0),
+    (">30", float("inf")),
+)
+"""The corpus shot-length bins, as label and upper edge, in seconds.
+
+Half-open on the upper edge: a shot of exactly 4 s counts in ``4-8``, and the last bin takes
+everything from 30 s up. The labels are the ones the corpus and the style profiles already
+speak, so a histogram from this report drops straight into a comparison against them; the
+edges are that vocabulary's, not a threshold this file tuned.
+"""
+
+ALTERNATION_MIN = 2
+"""How many cuts an A/B run needs before it is alternation rather than a cut.
+
+Two shots that differ are just a cut — the pattern only exists once the cut *returns*, so a
+run is counted from three shots (A B A) up. Without this floor every two-shot timeline reads
+as perfectly alternating, which is arithmetic rather than a fact about the edit.
+"""
+
+ALTERNATION_FLOOR = 0.8
+ONE_BIN_FLOOR = 0.6
+CV_FLOOR = 0.35
+"""The three numbers ``reads_metronomic`` is drawn at — see ``HEURISTIC``."""
+
+HEURISTIC = (
+    "reads_metronomic is true when the longest strict A/B alternation run covers more than "
+    f"{ALTERNATION_FLOOR} of the cuts and either one length bin holds more than {ONE_BIN_FLOOR} "
+    f"of the shots or the coefficient of variation of shot lengths is under {CV_FLOOR}. It is a "
+    "warning to look at, not a verdict: a passage that genuinely wants a two-camera ping-pong "
+    "scores the same as a cut nobody varied, and only the director can tell them apart."
+)
+"""The heuristic in words, carried in the report so nobody has to read this file to check it."""
+
+READING = 4
 """What this measurement *is*; bumped whenever a rerun over unchanged inputs would differ.
 
 The cache is keyed on what was measured, not on the code that measured it, so a call whose
 inputs have not changed is otherwise answered out of a file the previous version wrote — for
 #142 that is a report with no track on its records and no ``visible`` on its header, handed
 back as though it were this measurement rather than the one before it. Both the shape and
-the reading count: 3 rather than 2 because the same shots now resolve to a different strip.
+the reading count: 3 rather than 2 because the same shots now resolve to a different strip,
+and 4 rather than 3 because the header now carries ``shot_rhythm`` — a cached hit from 3
+would answer the self-review question with a file that never asked it.
 """
 
 GIVEN = "given"
@@ -887,6 +927,9 @@ def _summary(
     Every stat is taken over the records as they were written, not over the unrounded
     arithmetic behind them, so the gist and the file never disagree: an agent that greps the
     file and averages the column gets the number it was already told.
+
+    ``shot_rhythm`` is the one reading here that is about the cut rather than about the music
+    — the metronome check a build cannot perform on itself by looking at its offsets.
     """
     cut_to_music = [row for row in rows if not row["opening"]]
     # The gate is applied here and nowhere else (#112). Transients need no grid, so they are
@@ -923,6 +966,7 @@ def _summary(
         "tunes": _spread("tune", cut_to_music) if _measured("tune", rows) else None,
         "solos": _spread("front", cut_to_music) if _measured("front", rows) else None,
         "shot_seconds": _lengths([row["seconds"] for row in rows]),
+        "shot_rhythm": _rhythm(rows),
         "clips": _usage(rows, "clip"),
         "roles": _usage(rows, "role") if _measured("role", rows) else None,
     }
@@ -972,6 +1016,116 @@ def _lengths(seconds: Sequence[float]) -> dict[str, Any]:
         "min": _rounded(min(seconds)),
         "max": _rounded(max(seconds)),
     }
+
+
+def _rhythm(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    """How varied the cutting is, in the three shapes a metronomic cut shows up in.
+
+    A build reviews itself with this report, and the failure it cannot see from the inside is
+    the one every critic names first: two cameras traded back and forth on a fixed length. It
+    is invisible in the offsets — every cut can sit dead on its beat and still read as a
+    metronome — so it needs its own reading: how the shot lengths spread, how strictly the
+    angles alternate, and how much of the cut sits in a single length bin.
+
+    Nothing here is a gate. ``reads_metronomic`` is a sentence the report says out loud along
+    with the numbers and the rule it applied (``HEURISTIC``), so a builder can disagree with
+    it on the evidence rather than argue with a threshold. Trading two cameras for four
+    minutes is a real edit some music asks for; the point is that the builder *decided* it.
+    """
+    lengths = [float(row["seconds"]) for row in rows]
+    # The angle on screen is what alternation is about, so black counts as one source rather
+    # than as a hole: cutting camera, black, camera, black is a pattern, not an absence.
+    sources = [BLACK if row["clip"] is None else str(row["clip"]) for row in rows]
+    histogram = _bins(lengths)
+    alternation = _alternation(sources)
+    uniformity = _uniformity(lengths, histogram)
+    return {
+        "shots": len(rows),
+        "lengths": {
+            "histogram": histogram,
+            # max/min over the shots as written; ``shot_seconds`` holds the two numbers it is
+            # taken from. None when the shortest shot rounds to zero and the ratio would not
+            # divide.
+            "spread_ratio": _ratio(lengths),
+            "mean": _rounded(statistics.fmean(lengths)) if lengths else None,
+            "median": _rounded(statistics.median(lengths)) if lengths else None,
+        },
+        "alternation": alternation,
+        "uniformity": uniformity,
+        "reads_metronomic": _metronomic(alternation, uniformity),
+        "heuristic": HEURISTIC,
+    }
+
+
+def _bins(lengths: Sequence[float]) -> dict[str, int]:
+    """The corpus histogram, every bin present — a zero is a reading, not a missing key."""
+    counted = dict.fromkeys((label for label, _ in RHYTHM_BINS), 0)
+    for length in lengths:
+        for label, edge in RHYTHM_BINS:
+            if length < edge:
+                counted[label] += 1
+                break
+    return counted
+
+
+def _ratio(lengths: Sequence[float]) -> float | None:
+    if not lengths or min(lengths) <= 0:
+        return None
+    return _rounded(max(lengths) / min(lengths))
+
+
+def _alternation(sources: Sequence[str]) -> dict[str, Any]:
+    """The longest strict A/B run in the sequence of angles, counted in cuts.
+
+    Strict means each shot returns to the one before last and differs from the one before it:
+    A B A B. A third angle ends the run, and so does the same angle twice — both are variety,
+    which is the thing being looked for. The run is measured in cuts rather than shots so its
+    fraction is of the same denominator the report counts cuts in.
+    """
+    cuts = max(len(sources) - 1, 0)
+    longest = 0
+    run = 0
+    for index in range(1, len(sources)):
+        if sources[index] == sources[index - 1]:
+            run = 0
+            continue
+        returns = index >= 2 and sources[index] == sources[index - 2]
+        run = run + 1 if returns and run else 1
+        longest = max(longest, run)
+    counted = longest if longest >= ALTERNATION_MIN else 0
+    return {
+        "cuts": cuts,
+        "longest_run": counted,
+        "fraction": _rounded(counted / cuts) if cuts else 0.0,
+    }
+
+
+def _uniformity(lengths: Sequence[float], histogram: Mapping[str, int]) -> dict[str, Any]:
+    """How much of the cut is one length: the fullest bin's share, and the spread around it.
+
+    Two readings because they miss different cuts. The bin catches shots clustered at one
+    length even when the numbers wobble inside it; the coefficient of variation catches a cut
+    whose lengths drift slowly across a boundary and so land in two bins while never varying.
+    """
+    if not lengths:
+        return {"bin": None, "one_bin": None, "cv": None}
+    fullest = max(RHYTHM_BINS, key=lambda one: histogram[one[0]])[0]
+    mean = statistics.fmean(lengths)
+    return {
+        "bin": fullest,
+        "one_bin": _rounded(histogram[fullest] / len(lengths)),
+        "cv": _rounded(statistics.pstdev(lengths) / mean) if mean > 0 else None,
+    }
+
+
+def _metronomic(alternation: Mapping[str, Any], uniformity: Mapping[str, Any]) -> bool:
+    """``HEURISTIC``, applied. A reading it cannot take is not a reading against the cut."""
+    one_bin = uniformity["one_bin"]
+    cv = uniformity["cv"]
+    uniform = (one_bin is not None and one_bin > ONE_BIN_FLOOR) or (
+        cv is not None and cv < CV_FLOOR
+    )
+    return float(alternation["fraction"]) > ALTERNATION_FLOOR and uniform
 
 
 def _usage(rows: Sequence[dict[str, Any]], field: str) -> dict[str, dict[str, Any]]:

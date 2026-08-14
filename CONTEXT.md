@@ -101,7 +101,10 @@ every frame resolved to the topmost enabled video item with uncovered stretches
 as black shots, #142; `track=` measures one video track alone. Gates the beat
 statistics on `trust`, refuses as `stranded` a cut further from its beat than a
 beat is wide — the grid does not reach it, #160 — and leaves the transient ones
-ungated), `cuda` (preloads
+ungated. Also reads the cutting itself: `shot_rhythm` bins the shot lengths,
+measures the longest strict A/B alternation run and says `reads_metronomic`
+with the heuristic that drew it — a warning the report carries, never a gate),
+`cuda` (preloads
 the CUDA runtime the `analysis` extra ships, so CTranslate2 finds it on Windows;
 pure decisions, #128),
 `decode` (WAV → numpy, no third-party decoder), `drums` (hits per stem), `energy`
