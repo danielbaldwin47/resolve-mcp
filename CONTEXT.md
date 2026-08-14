@@ -93,9 +93,9 @@ Top level:
 
 `analysis/` — compute jobs that read audio and write findings to disk:
 `applause` (bursts → tune boundaries, then a beat-density floor drops the calls
-with no pulse under them, #133; on a mix the threshold finds no clapping in, the
-curve is read at its own scale and each boundary walks forward off the applause
-to where the loudness curve says the band comes in, #179), `beats` (grid + downbeats, model
+with no pulse under them, #133; every boundary then walks forward off the applause
+to where the loudness curve says the band comes in, and a mix the threshold finds
+no clapping in at all is read at its own scale instead, #179), `beats` (grid + downbeats, model
 injected per ADR 0002; `trust` says which beats the grid describes well enough
 to count, #112; `spacing` says how wide a beat is at each beat), `correlate`
 (measure a cut against its music — by default the *visible* edit,

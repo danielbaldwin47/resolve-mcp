@@ -94,13 +94,18 @@ DEFAULT_SCALE = 0.09
 
 Measured on the Zinc Set 2 board mix, whose five human-established tune starts are the only
 ground truth this rule has (`gauntlet/recon/board_boundary_sweep.json`: 35 of 140 settings
-clean, worst error 2.01 s). Every fraction from 0.06 to 0.10 finds all five and invents
-nothing; 0.12 loses one and 0.15 the same, because the quietest burst on that mix peaks at
-0.066 against a file peak of 0.298. The bottom of that range is not really a range —
-``MINIMUM_THRESHOLD`` floors 0.06 and 0.07 onto the same 0.02 — so the plateau that is
+clean, worst error 2.01 s across those 35).
+
+At the shipped margin and hold, every fraction from 0.06 to 0.10 finds all five and invents
+nothing, and 0.12 and 0.15 each lose one. The bottom of that range is not really a range —
+``MINIMUM_THRESHOLD`` floors 0.06 and 0.07 onto the same 0.02 — so the span that is
 actually about this number is 0.08, 0.09, 0.10, and 0.09 is the middle of it. It lands on a
 threshold of 0.023 here: the peak it scales is the one that lasts (see
 ``_peak_that_lasts``), 0.26 rather than the single-frame 0.298.
+
+What is lost at 0.12 is a burst rather than a level: 0.12 scales to 0.031, still well under
+the 0.066 the quietest burst on that mix peaks at, so the burst is still over the line —
+just not for the ``QUIET_BURST_SECONDS`` it has to hold it for.
 
 The Scullers room mic is why this is a fallback and not the rule: 0.09 of its peak is
 0.059, and reading it there turns the clapping after each solo into a boundary — 19 calls
@@ -140,21 +145,33 @@ DEFAULT_TUNE_SECONDS = 60.0
 DEFAULT_SETTLE_DB = 6.0
 """How far under the file's median loudness still counts as the band playing.
 
-Measured on the same set (`gauntlet/recon/board_boundary_sweep.json`): its music sits
-between -12 and -25 LUFS against a median of -17.5, and everything between the tunes —
-talking, tuning, the room — between -27 and -55. Margins of 4, 6 and 8 dB put all five
-starts within 2.01 s of the human ones at every hold tested; at 10 dB and wider the floor
-reaches down into the talk and a sixth call appears. 6.0 is the middle of the three."""
+Measured on the same set (`gauntlet/recon/board_boundary_sweep.json`, read
+``clean_settings`` and not the per-axis lists): its music sits between -12 and -25 LUFS
+against a median of -17.5, and everything between the tunes — talking, tuning, the room —
+between -27 and -55.
+
+At the shipped scale and hold, 4 and 6 dB both call the set exactly and 8 dB invents a
+sixth tune, because the floor has reached down into the talk; 10 dB and wider invent one at
+every hold tested. 6.0 rather than 4.0 because it is the wider of the two across holds: 6.0
+is clean at 5, 10 and 20 seconds and 4.0 only at 5 and 10. Neither is clean at 15 — the
+axes are not independent, and no margin here is safe at every hold."""
 
 DEFAULT_SETTLE_SECONDS = 10.0
 """How long the mix has to stay at playing level before it is the tune starting.
 
 Long enough that a shouted introduction or one loud chord of tuning is not a downbeat,
-short enough to sit well inside the shortest tune anyone plays. Every hold from 5 to 20
-seconds calls the measured set identically (`gauntlet/recon/board_boundary_sweep.json`),
-which is the widest plateau of the three numbers here. Zero turns the whole step off, and
-then a boundary is the end of the applause — which is what it was before #179, and the way
-to run the tune half with no loudness curve at all."""
+short enough to sit well inside the shortest tune anyone plays.
+
+At the shipped scale and margin, 5, 10 and 20 seconds all call the measured set exactly and
+15 does not — it puts the third start at 1926.0 against a human 1920.1, 5.9 s out
+(`gauntlet/recon/board_boundary_sweep.json`). That is not a plateau with a hole in it so
+much as a reminder of what the hold does: a longer window has to clear ``SETTLE_SHARE`` of
+itself, so it steps over a start whose first seconds are ragged and finds the next steady
+one. 10 is the middle of the three that work, and far enough from 15 to be worth trusting
+over the ones that happen to sit either side of it.
+
+Zero turns the whole step off, and then a boundary is the end of the applause — which is
+what it was before #179, and the way to run the tune half with no loudness curve at all."""
 
 SETTLE_SHARE = 0.75
 """How much of the hold window has to be over the floor. Music dips inside a phrase and

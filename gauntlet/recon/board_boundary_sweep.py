@@ -86,13 +86,20 @@ def main() -> None:
         "human_cut_starts_s": list(TRUTH),
         "tolerance_s": TOLERANCE,
         "peak_probability": round(max(curve.probability), 4),
-        "plateau": {
-            "count": len(clean),
-            "of": len(runs),
+        "clean_settings": [
+            [one["scale"], one["settle_db"], one["settle_seconds"]] for one in clean
+        ],
+        "clean_count": len(clean),
+        "of": len(runs),
+        "worst_error_s": max((one["worst_error_s"] for one in clean), default=None),
+        # Per axis, and therefore a union rather than a cross-product: a value listed here
+        # is clean *somewhere*, not everywhere. Read `clean_settings` before quoting any of
+        # these as a range — the three axes are not independent, and taking them for a box
+        # is how a docstring ends up recommending a setting that loses a boundary.
+        "clean_per_axis": {
             "scale": sorted({one["scale"] for one in clean}),
             "settle_db": sorted({one["settle_db"] for one in clean}),
             "settle_seconds": sorted({one["settle_seconds"] for one in clean}),
-            "worst_error_s": max((one["worst_error_s"] for one in clean), default=None),
         },
         "runs": runs,
     }
