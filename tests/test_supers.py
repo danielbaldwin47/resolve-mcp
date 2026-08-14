@@ -369,7 +369,8 @@ def test_read_marked_hands_back_the_pixels_it_decided_on() -> None:
     assert len(marked) == 1
     assert marked[0].span == supers.read_run(frames, lags=(3,))[0]
     rows = np.nonzero(marked[0].mask)[0]
-    assert 344 <= rows.min() and rows.max() < 360
+    assert rows.min() >= 344
+    assert rows.max() < 360
 
 
 def test_clearance_measures_the_room_a_card_leaves_its_entrance() -> None:
