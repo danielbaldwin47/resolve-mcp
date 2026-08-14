@@ -19,9 +19,10 @@ Reading the bytes is not free, so **a hash is remembered against a fingerprint**
 (``known_hash``): the first sight of a file state costs one read, and every later call for
 that same path, size and mtime costs a ``stat``. That memo is what lets a starter whose whole
 contract is to return a job id at once (#22, story 25) key on content — an audio master gets
-read end to end by the analysis it is about to start anyway. The note is only ever a shortcut:
-one that cannot be read, written, or that no longer describes the file costs a reread, never a
-wrong answer.
+read end to end by the analysis it is about to start anyway. A note that cannot be read,
+cannot be written, or no longer describes the file costs a reread. What it cannot do is be
+*more* trusting than the fingerprint it is guarded by, which is why audio under ``audio_dir``
+is hashed for real every time and never read off a note: see ``audio_identity``.
 
 A hit is only a hit if the artifacts are still on disk. The cache directory is a user's
 local app data — they are allowed to delete things in it, and the agent must get a rerun
@@ -80,20 +81,38 @@ def known_hash(path: Path | str, config: Config | None = None) -> str:
         return remembered
     log.info("Hashing %s (%d bytes): first sight of this file state", seen["path"], seen["size"])
     digest = content_hash(path)
-    _note(note, {**seen, "sha256": digest})
+    _write_note(note, {**seen, "sha256": digest})
     return digest
 
 
-def identity(path: Path | str, config: Config | None = None) -> dict[str, Any]:
+def audio_identity(path: Path | str, config: Config | None = None) -> dict[str, Any]:
     """What audio is, for cache purposes: its bytes, wherever the file happens to sit.
 
-    The rule at the top of this module, as one call — so two jobs keying off the same
-    master agree about what it is, rather than each deciding for itself.
+    The audio half of the rule at the top of this module, as one call — so two jobs keying
+    off the same master agree about what it is, rather than each deciding for itself. Named
+    for what it covers, because the other half of the rule is a different call: pointing this
+    one at a camera master would read tens of gigabytes to answer a question ``fingerprint``
+    answers with a stat.
+
+    Audio this server wrote is hashed for real every time, never off a note. The note's own
+    guard is a fingerprint, and a fingerprint can be fooled — a same-size rewrite in place, on
+    a filesystem whose mtime is granular to two seconds, is the same file state by that
+    reading and different audio in fact. Everywhere else that risk is the one this cache
+    already ran (the master used to be fingerprinted outright, with no hash behind it), so the
+    note leaves it exactly where it was. Under ``audio_dir`` it would be a new risk on the
+    substrate every later job keys off, where a false hit attributes one concert's beats to
+    another — and it buys nothing worth that, because these are the files this server sized
+    itself and can afford to read.
     """
-    return {"sha256": known_hash(path, config)}
+    config = config or get_config()
+    resolved = Path(path)
+    if resolved.resolve().is_relative_to(config.audio_dir.resolve()):
+        return {"sha256": content_hash(resolved)}
+    return {"sha256": known_hash(resolved, config)}
 
 
 def _note_path(seen: Mapping[str, Any], config: Config) -> Path:
+    """One file per file state, named after the fingerprint it remembers a hash for."""
     token = hashlib.sha256(
         json.dumps([seen["path"], seen["size"], seen["mtime_ns"]]).encode("utf-8")
     ).hexdigest()
@@ -111,12 +130,16 @@ def _remembered(note: Path, seen: Mapping[str, Any]) -> str | None:
         _discard(note)
         return None
     if not isinstance(noted, dict) or not isinstance(noted.get("sha256"), str):
+        log.warning("Discarding an identity note that is not one: %s", note)
+        _discard(note)
         return None
     describes = all(noted.get(field) == seen[field] for field in ("path", "size", "mtime_ns"))
+    # A note that no longer describes the file is not discarded: it is named after the file
+    # state it belongs to, so it can only be reached again by a file that went back to it.
     return str(noted["sha256"]) if describes else None
 
 
-def _note(note: Path, remembering: Mapping[str, Any]) -> None:
+def _write_note(note: Path, remembering: Mapping[str, Any]) -> None:
     """Write down what this file state hashed to. A memo that cannot be kept is not an error."""
     try:
         note.parent.mkdir(parents=True, exist_ok=True)

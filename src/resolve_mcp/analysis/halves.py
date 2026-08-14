@@ -70,10 +70,11 @@ def identity(source: Path, config: Config) -> dict[str, Any]:
     rendered for one song — and a half keyed on the name is a beat model run again over
     identical audio (#193). The hash is read once per file state and remembered against a
     stat, so the starter this runs in still returns a job id at once. The rule itself lives
-    in ``jobs.cache``, so jobs that key off an audio path without going through a half agree
-    with the ones that do.
+    in ``jobs.cache``; this is the door every analysis module goes through to reach it, so a
+    job that keys off an audio path without writing a half of its own still agrees with the
+    ones that do.
     """
-    return cache.identity(source, config)
+    return cache.audio_identity(source, config)
 
 
 def inside(source: Path, directory: Path) -> bool:

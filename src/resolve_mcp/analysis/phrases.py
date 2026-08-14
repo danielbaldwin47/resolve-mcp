@@ -409,7 +409,7 @@ def detect_phrases(
     halves.sane_floor(minimum_confidence, DEFAULT_MINIMUM_CONFIDENCE, writes="boundary")
 
     settings = {"stem": stem, "minimum_confidence": float(minimum_confidence)}
-    identity = cache.identity(source, config)
+    identity = halves.identity(source, config)
     key = _key(identity, stem, found, settings)
 
     def work(progress: Progress) -> JobOutput:
@@ -545,7 +545,7 @@ def detect(
     config = config or get_config()
     config.analysis_dir.mkdir(parents=True, exist_ok=True)
     described = wav.describe(source)
-    known = dict(identity) if identity is not None else cache.identity(source, config)
+    known = dict(identity) if identity is not None else halves.identity(source, config)
     label = str(settings["stem"])
     key = key or _key(known, label, stem, settings)
 

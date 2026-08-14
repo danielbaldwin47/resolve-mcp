@@ -13,8 +13,10 @@ Which route is chosen is not a preference, it is a correctness question:
   is checked first and a linked or offset source is refused with a pointer at the timeline
   route rather than quietly extracting the wrong thing.
 
-Caching follows the same split (see ``jobs.cache``): the source clip is fingerprinted
-cheaply, the acquired WAV is hashed for real, and that hash is what analysis jobs key off.
+Caching splits along the same line (see ``jobs.cache``): the clip's media file on disk is
+fingerprinted cheaply, because an acquisition is cheap to redo if that guess is ever wrong,
+while the acquired WAV is hashed for real — and that hash is what analysis jobs key off,
+wherever a copy of it turns up later (#193).
 A timeline has no bytes to fingerprint, so its identity is name, unique id, bounds, track
 counts and a digest of the shots on it — still a heuristic, because a clip's audio level is
 not readable through the scripting API at all, which is why every starter takes ``refresh``
@@ -535,9 +537,7 @@ def _clip_params(clip: str, bin_path: str, sample_rate: int, bit_depth: int) -> 
 def _result(target: Path, params: dict[str, Any]) -> dict[str, Any]:
     """What the agent — and every analysis job after it — reads off a finished acquisition."""
     reading = wav.describe(target)
-    # Through the memo rather than straight to the hash: the WAV was just written, so this is
-    # where its identity gets remembered, and the analysis job the agent starts next stats it.
-    reading["content_sha256"] = cache.known_hash(target)
+    reading["content_sha256"] = cache.content_hash(target)
     reading["scope"] = params["scope"]
     log.info(
         "Acquired %.1fs of audio for %s scope at %s",

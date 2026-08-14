@@ -442,7 +442,7 @@ def detect_drum_fills(
     halves.sane_floor(minimum_confidence, DEFAULT_MINIMUM_CONFIDENCE)
 
     settings = {"minimum_confidence": float(minimum_confidence)}
-    identity = cache.identity(source, config)
+    identity = halves.identity(source, config)
     key = _key(identity, found, settings)
 
     def work(progress: Progress) -> JobOutput:
@@ -593,7 +593,7 @@ def detect(
     config = config or get_config()
     config.analysis_dir.mkdir(parents=True, exist_ok=True)
     described = wav.describe(source)
-    known = dict(identity) if identity is not None else cache.identity(source, config)
+    known = dict(identity) if identity is not None else halves.identity(source, config)
     key = key or _key(known, stems, settings)
 
     progress(0.05, "reading the beat grid")

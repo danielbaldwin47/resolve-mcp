@@ -149,11 +149,11 @@ and the build). A `segments` entry is a shot or a **gap**
 (`{"id", "gap": <frames>}`, literal black); `is_gap`/`entry_duration`/
 `overlay_track` are the accessors every walker of that array shares.
 
-`jobs/` — `cache` (hash-keyed results; `identity` is audio's content hash
-wherever the file sits, `known_hash` reads those bytes once per file state
-and remembers it against a stat, `fingerprint` is path+size+mtime and stays
-the identity for video sources and stems — ADR 0007, ADR 0003), `runner`
-(start heavy work without
+`jobs/` — `cache` (hash-keyed results; `audio_identity` is the content hash
+wherever the file sits, read off a `known_hash` note remembered against a
+stat, except under `audio_dir` where it is always read for real;
+`fingerprint` is path+size+mtime and stays the identity for video sources
+and stems — ADR 0007, ADR 0003), `runner` (start heavy work without
 stalling stdio), `store` (one JSON record per job on disk), `detached` (hand
 a job to a process that outlives this one — flags, command, environment),
 `worker` (that process's entry point: `python -m resolve_mcp.jobs.worker
