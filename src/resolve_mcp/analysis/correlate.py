@@ -385,9 +385,10 @@ def correlate_timeline(
     rather than leaving a silent hole.
 
     ``supers`` is the other catalog off that render: when each burned-in graphic — lower
-    third, title card, bug — is on screen. Every cut is then measured against them, and a
-    cut with a graphic up either side of it is a **straddle**, which is the one fault in
-    this material a viewer reads as a mistake rather than as a choice. Same clock rule as
+    third, title card, bug — is on screen. Every cut is measured against them and carries
+    ``straddles_super`` where a graphic was up either side of it. That is a fact rather
+    than a fault, and ``super_kind`` is what tells them apart: a lower third held across
+    cuts is how titling works, a cut inside a title card is not. Same clock rule as
     ``deltas``, and the same summary.
 
     ``bars`` is the bar map ``detect_bars`` writes, and it is the file that makes a cut
@@ -1152,10 +1153,13 @@ def _super_at(
     """Whether this cut lands inside a burned-in graphic, and which kind of one.
 
     Strict at both ends on purpose. A super whose first frame *is* this cut arrived with the
-    new shot, and one whose last frame is the frame before it cleared for the shot — the
-    two edits the human's own deliverables are made of. Only a cut with the graphic already
-    up and still up afterwards is the mistake, so an inclusive test here would report the
-    convention as the violation.
+    new shot, and one whose last frame is the frame before it cleared for the shot — the two
+    edits the human's own deliverables are made of, and an inclusive test would report both
+    of those conventions as findings.
+
+    What the column means is left to the reader, which is why ``super_kind`` rides beside
+    it: measured on the corpus, a lower third held across a cut is ordinary craft and a cut
+    inside a title card is not.
     """
     if not graphics:
         return {"straddles_super": None, "super_kind": None}
@@ -1391,6 +1395,11 @@ def _supers(
         "cards": sum(1 for row in graphics if row.get("kind") == "card"),
         "overlays": sum(1 for row in graphics if row.get("kind") == "overlay"),
         "straddled": len(flagged),
+        # Split, because they are different claims. A lower third held across a cut is how
+        # titling works and the human deliverables are full of them; a cut inside a title
+        # card — a graphic that is itself the shot — is the one nothing in the corpus does.
+        "straddled_cards": sum(1 for row in flagged if row.get("super_kind") == "card"),
+        "straddled_overlays": sum(1 for row in flagged if row.get("super_kind") == "overlay"),
         "flagged_cuts": [row["cut"] for row in flagged[:INLINE_CUTS]],
         "covered_sec": round(
             sum(

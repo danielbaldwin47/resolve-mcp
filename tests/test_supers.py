@@ -282,6 +282,20 @@ def test_a_super_with_no_cut_after_it_has_no_clearance_to_report() -> None:
     assert supers.clearance(span(100, 200), cuts=[50, 100]) is None
 
 
+def test_the_two_kinds_of_straddle_are_counted_apart() -> None:
+    """Measured on the corpus and not assumed: the human deliverables hold a personnel
+    lower third across cut after cut, so a straddle is a fact whose ``kind`` decides
+    whether it is a finding. Pooling them would fail every deliverable there is."""
+    found = supers.review(
+        [span(0, 200, supers.CARD), span(400, 900)],
+        cuts=[100, 500, 700],
+    )
+
+    assert found["straddled"] == 3
+    assert found["straddled_cards"] == 1
+    assert found["straddled_overlays"] == 2
+
+
 def test_the_review_counts_the_supers_the_straddles_came_out_of() -> None:
     found = supers.review([span(0, 55, supers.CARD), span(300, 480)], cuts=[56, 400, 600])
 

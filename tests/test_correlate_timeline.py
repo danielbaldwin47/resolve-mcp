@@ -438,6 +438,10 @@ def test_a_cut_inside_a_super_is_flagged(attach: Attach, tmp_path: Path) -> None
     assert result["supers"]["straddled"] == 1
     assert result["supers"]["flagged_cuts"] == [2]
     assert result["supers"]["overlays"] == 1
+    # Counted apart because they are different claims: the human deliverables hold a lower
+    # third across cuts all night, and a cut inside a title card is the one they never make.
+    assert result["supers"]["straddled_overlays"] == 1
+    assert result["supers"]["straddled_cards"] == 0
 
 
 def test_a_super_that_arrives_with_a_shot_or_clears_for_one_passes(

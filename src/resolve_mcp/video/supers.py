@@ -2,11 +2,16 @@
 
 A **super** is anything the graphics layer put on the frame rather than something a
 camera saw: a lower third naming the band, a title card, a bug in the corner. The
-questions this answers are the two an editor asks about one — *when is it up* and
-*does a cut land inside it* — because a cut that lands inside a super is the one
-mistake in this material that no amount of musical accuracy excuses. The lower third
-is mid-word when the picture jumps, and the graphic reads as a mistake rather than as
-a caption.
+questions this answers are the two an editor asks about one — *when is it up* and *what
+do the cuts do around it* — neither of which a timeline can answer, because by the time
+anybody watches, a super is pixels.
+
+The second question is where the care goes. Measuring it on the human deliverables took
+back the assumption it started from: a lower third held across three cuts is not a
+mistake but how titling works, so what :func:`straddles` reports is a fact and its
+``kind`` is what makes it a finding. What the corpus *does* hold to, to the frame, is
+:func:`clearance` — the title card clears one frame before the entrance it announces
+(#169).
 
 **Why the obvious reading does not work here.** A super is a graphic held still over
 moving footage, so the obvious detector is "find what holds still". Measured on the
@@ -372,11 +377,17 @@ def edges(window: NDArray[Any], mask: NDArray[np.bool_], anchor: int) -> Edges:
 def straddles(spans: Sequence[Span], cuts: Sequence[int]) -> tuple[dict[str, Any], ...]:
     """Every cut that lands inside a super, counted in the clock both were measured in.
 
-    A cut *at* a super's first frame is the super arriving with the new shot, and a cut
-    one past its last frame is the super clearing for it — the two edits this exists to
-    tell apart from the mistake. Only a cut with the graphic on screen either side of it
-    is a straddle, and the record says how deep into the super it landed so that a cut
-    two frames from the end reads differently from one mid-word.
+    A cut *at* a super's first frame is the super arriving with the new shot, and a cut one
+    past its last frame is the super clearing for it. Only a cut with the graphic on screen
+    either side of it is a straddle, and the record says how deep into the super it landed
+    so that a cut two frames from the end reads differently from one mid-word.
+
+    A straddle is a measurement, not a verdict, and the ``kind`` on each record is what
+    decides which. An **overlay** straddled is ordinary craft: the human deliverables hold
+    a personnel lower third across three and four cuts at a time, because a title track is
+    laid over the edit rather than into it, and a reading that called that a fault would
+    fail every deliverable in the corpus. A **card** straddled is a different claim — a cut
+    inside a graphic that is itself the shot — and nothing in the corpus does it.
     """
     found: list[dict[str, Any]] = []
     for span in spans:
@@ -426,6 +437,10 @@ def review(spans: Sequence[Span], cuts: Sequence[int]) -> dict[str, Any]:
         "overlays": sum(1 for span in spans if span.kind == OVERLAY),
         "cuts": len(cuts),
         "straddled": len(caught),
+        # Split, because the two are different claims: a cut inside a title card is a
+        # finding, a lower third held across a cut is how titling works.
+        "straddled_cards": sum(1 for one in caught if one["kind"] == CARD),
+        "straddled_overlays": sum(1 for one in caught if one["kind"] == OVERLAY),
         "straddles": list(caught),
         "held_frames": _lengths(spans),
     }
