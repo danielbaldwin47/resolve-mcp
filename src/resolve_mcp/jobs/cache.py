@@ -134,8 +134,8 @@ def _remembered(note: Path, seen: Mapping[str, Any]) -> str | None:
         _discard(note)
         return None
     describes = all(noted.get(field) == seen[field] for field in ("path", "size", "mtime_ns"))
-    # A note that no longer describes the file is not discarded: it is named after the file
-    # state it belongs to, so it can only be reached again by a file that went back to it.
+    # A note that no longer describes the file needs no discarding of its own: it is named
+    # after the file state it answers for, so the reread it just forced overwrites it.
     return str(noted["sha256"]) if describes else None
 
 
