@@ -62,6 +62,39 @@ def sane_floor(minimum_confidence: float, default: float, writes: str = "candida
         )
 
 
+def collected(directory: Path) -> dict[str, Path]:
+    """The stems under a separation's directory — the four-stem pass, or the parent of it.
+
+    A separation writes a directory per pass — ``<directory>/mix``, ``<directory>/drums``, and
+    ``<directory>/other`` when the wind split was asked for — and the job reports the parent of
+    all of them. The melodic stems are in the first pass, so that is looked in first; the
+    parent itself is checked too, because a director who copied the stems into a folder of
+    their own should not have to name a subdirectory that is not there.
+
+    Here beside ``readable`` because more than one detector reads a stem now — phrases off the
+    line, bars off the pulse (#180) — and two answers to "where are the stems" would be two
+    conventions. What each of them says when the stem it wants is *missing* stays with the
+    detector: the advice differs, since a phrase job cannot run without one and a bar job can.
+
+    The imports are function-local: ``audio.stems`` reaches the Resolve seam, and every
+    analysis half imports this module.
+    """
+    from ..audio import separator
+    from ..audio.stems import MIX_PASS
+
+    if not directory.is_dir():
+        raise InvalidRequestError(
+            cause=f"There is no directory at {directory}.",
+            fix="Pass the directory a separate_stems job reported, or the mix pass inside it.",
+            detail={"requested": str(directory)},
+        )
+    for candidate in (directory / MIX_PASS, directory):
+        found = separator.collect(candidate)
+        if found:
+            return found
+    return {}
+
+
 def identity(source: Path, config: Config) -> dict[str, Any]:
     """Hash what this server wrote; fingerprint what the director handed over.
 

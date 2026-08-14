@@ -50,8 +50,8 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, NamedTuple
 
-from ..audio import separator, wav
-from ..audio.stems import FOUR_STEMS, MIX_PASS
+from ..audio import wav
+from ..audio.stems import FOUR_STEMS
 from ..config import Config, get_config
 from ..errors import InvalidRequestError
 from ..jobs import cache
@@ -451,7 +451,7 @@ def _stem(stems: Mapping[str, str | Path] | str | Path, wanted: str) -> Path:
     to look for it would undo exactly what separation was for.
     """
     if isinstance(stems, str | Path):
-        found = _collected(Path(stems))
+        found = halves.collected(Path(stems))
     else:
         found = {str(label): Path(path) for label, path in stems.items()}
 
@@ -485,28 +485,6 @@ def _stem(stems: Mapping[str, str | Path] | str | Path, wanted: str) -> Path:
             ", ".join(MELODY_STEMS),
         )
     return chosen
-
-
-def _collected(directory: Path) -> dict[str, Path]:
-    """The stems under a separation's directory — the four-stem pass, or the parent of it.
-
-    A separation writes a directory per pass — ``<directory>/mix``, ``<directory>/drums``, and
-    ``<directory>/other`` when the wind split was asked for — and the job reports the parent of
-    all of them. The melodic stems are in the first pass, so that is looked in
-    first; the parent itself is checked too, because a director who copied the stems into a
-    folder of their own should not have to name a subdirectory that is not there.
-    """
-    if not directory.is_dir():
-        raise InvalidRequestError(
-            cause=f"There is no directory at {directory}.",
-            fix="Pass the directory a separate_stems job reported, or the mix pass inside it.",
-            detail={"requested": str(directory)},
-        )
-    for candidate in (directory / MIX_PASS, directory):
-        found = separator.collect(candidate)
-        if found:
-            return found
-    return {}
 
 
 def _key(

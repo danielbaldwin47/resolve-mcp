@@ -10,6 +10,7 @@ from typing import Any
 
 from ..analysis import (
     applause,
+    bars,
     correlate,
     fills,
     music,
@@ -187,6 +188,7 @@ def correlate_timeline(
     audio: str | None = None,
     tunes: str | None = None,
     solos: str | None = None,
+    bars: str | None = None,
     angles: dict[str, Any] | None = None,
     track: int | None = None,
     audio_at: Any | None = None,
@@ -202,7 +204,12 @@ def correlate_timeline(
 
     beats is the beats file analyze_music wrote. audio is the same master mix it analysed,
     and naming it is what makes the transient column real — onsets are not stored by any
-    other job, so they are measured here. tunes and solos are the structure job's files.
+    other job, so they are measured here. tunes and solos are the structure job's files. bars
+    is the bar map detect_bars wrote, and it is what makes the form measurable: the in_bar
+    column comes from the beat model's own downbeats, so on material where the model commits
+    to no meter it says nothing, and the bar map is the second reading that recovers the bar
+    line. Name it and every record also carries which bar of the form the cut is on, that
+    bar's place in the four-bar group, and how far off the bar line it landed.
     angles is the angle labels themselves, not a path: {"C0012.mp4": {"role": "drums"}}, or
     just {"C0012.mp4": "drums"} — you keep the sidecar, you read it, you pass what it says.
     Each of these is optional, and each one absent means that column reads null rather than
@@ -241,6 +248,7 @@ def correlate_timeline(
             audio=audio,
             tunes=tunes,
             solos=solos,
+            bars=bars,
             angles=angles,
             track=track,
             audio_at=audio_at,
@@ -326,10 +334,60 @@ def detect_phrases(
     }
 
 
+@tool
+def detect_bars(
+    audio: str,
+    stems: str | None = None,
+    stem: str = bars.DEFAULT_STEM,
+    minimum_confidence: float = bars.DEFAULT_MINIMUM_CONFIDENCE,
+    refresh: bool = False,
+) -> dict[str, Any]:
+    """Find where the bar starts, when the beat model would not say. Returns a job to poll.
+
+    analyze_music reports the meter the beat model committed to, and on some material it does
+    not commit: over a jazz set it tracks the swung eighth as the beat and calls every one of
+    them a downbeat, so the meter reads 1 and nothing can cut on the "1". This is the second
+    pass that recovers the bar. audio is the master mix; if music analysis already ran over it
+    the beat grid comes from cache rather than the model again.
+
+    Two readings, in order. The pulse: a grid running faster than anything you would tap is a
+    subdivision, so every k-th beat is tried and the one that lands in the tapping range and
+    sits on the accents wins — a grid already in that range is kept exactly as it is. Then the
+    bar line: each meter and each phase scored by how far its beats sit above the rest, and
+    the winner carries its lead over the runner-up.
+
+    The result names one JSON file and summarises it. Every bar carries its start in seconds
+    (the downbeat time), its length, how many beats it holds, the grid beat it starts on, and
+    its place in the four-bar group. Inline you get the meter, the tempo, how the meter was
+    arrived at — model, inferred, or refused — the confidence, and the grid's own reading
+    beside it, so 214 bpm in a meter of one against 107 in four is visible rather than
+    inherited.
+
+    A reading with no accents behind it is refused rather than guessed: source reads refused,
+    meter is null, and no bars are written. That is the honest answer, and minimum_confidence
+    is where the line sits — 0 writes whatever the arithmetic found.
+
+    stems is optional: pass the directory a separate_stems job reported, and stem names which
+    one the accents are read off. Worth doing exactly when the mix will not carry the pulse —
+    brushes, a quiet room — because the bass walks quarters and is the strongest witness to
+    the beat there is. refresh redoes work the cache would answer for.
+    """
+    return {
+        "job": bars.detect_bars(
+            audio,
+            stems=stems,
+            stem=stem,
+            minimum_confidence=minimum_confidence,
+            refresh=refresh,
+        )
+    }
+
+
 TOOLS: tuple[Any, ...] = (
     transcribe_audio,
     analyze_music,
     analyze_structure,
+    detect_bars,
     detect_drum_fills,
     detect_phrases,
     correlate_timeline,
@@ -340,6 +398,7 @@ __all__ = [
     "analyze_music",
     "analyze_structure",
     "correlate_timeline",
+    "detect_bars",
     "detect_drum_fills",
     "detect_phrases",
     "transcribe_audio",
