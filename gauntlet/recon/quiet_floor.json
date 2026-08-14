@@ -4,9 +4,8 @@
  "question": "what does the human do inside the quiet sections that R2's trough does not",
  "human_source": "S:\\Deliverables\\Ryan Devlin\\6-17-26 Zinc Bar\\Full Videos\\6-17 - Zinc Set 2 - Taurus People.mp4",
  "ours_source": "projects/mcp-tests-zinc/taurus-people-full-r2.cut.json",
- "method": "human: ffmpeg scale=320:-2, select gt(scene,0.1), metadata=print over the whole deliverable, shots between consecutive detected cuts; ours: the cut file's own segment lengths at 23.976 fps. Sections are full_gears.py's, a shot belongs to the section its head sits in. Orphan = under 0.5 x the section median with both in-section neighbours at or above that median.",
+ "method": "human: ffmpeg scale=320:-2, select gt(scene,0.1), metadata=print over the whole deliverable, shots between consecutive detected cuts; ours: the cut file's own segment lengths at 23.976 fps. Sections are full_gears.py's, a shot belongs to the section its head sits in. Every spread, orphan and passage reading is taken by analysis.correlate's own functions, not by a copy of them living here.",
  "threshold": 0.1,
- "orphan_fraction": 0.5,
  "human": {
   "label": "human",
   "duration_sec": 497.664,
@@ -248,11 +247,11 @@
     "median_seconds": 21.27,
     "min_seconds": 21.27,
     "max_seconds": 21.27,
-    "cv": null,
+    "cv": 0.0,
     "orphans": 0,
     "orphan_seconds": [],
-    "cv_less_orphans": null,
-    "carried_by_orphans": null,
+    "cv_less_orphans": 0.0,
+    "carried_by_orphans": 0.0,
     "lengths": [
      21.271
     ]
@@ -265,9 +264,10 @@
    ],
    "shots": 15,
    "median_seconds": 5.34,
-   "cv": 0.719,
+   "pooled_cv": 0.719,
+   "mean_of_section_cvs": 0.718,
    "orphans": 0,
-   "cv_less_orphans": 0.719,
+   "pooled_cv_less_orphans": 0.719,
    "lengths": [
     15.808,
     7.799,
@@ -287,6 +287,7 @@
    ]
   },
   "mean_within_section_cv": 0.692,
+  "sections_it_is_taken_over": 8,
   "mean_within_section_cv_less_orphans": 0.677
  },
  "ours": {
@@ -541,8 +542,8 @@
     "orphan_seconds": [
      3.253
     ],
-    "cv_less_orphans": null,
-    "carried_by_orphans": null,
+    "cv_less_orphans": 0.0,
+    "carried_by_orphans": 0.617,
     "lengths": [
      3.253,
      13.722
@@ -556,9 +557,10 @@
    ],
    "shots": 12,
    "median_seconds": 9.09,
-   "cv": 0.51,
+   "pooled_cv": 0.51,
+   "mean_of_section_cvs": 0.468,
    "orphans": 1,
-   "cv_less_orphans": 0.447,
+   "pooled_cv_less_orphans": 0.447,
    "lengths": [
     8.258,
     9.927,
@@ -575,12 +577,15 @@
    ]
   },
   "mean_within_section_cv": 0.502,
+  "sections_it_is_taken_over": 9,
   "mean_within_section_cv_less_orphans": 0.476
  },
  "derived_quiet_runs": {
   "smoothing_windows": 15,
   "window_seconds": 1.0,
   "min_run_seconds": 20.0,
+  "orphan_fraction": 0.5,
+  "cv_floor": 0.65,
   "curve_windows": 497,
   "runs": [
    {
@@ -591,78 +596,58 @@
   ],
   "human": [
    {
-    "label": "human",
-    "d_from": 38.0,
-    "d_to": 195.0,
+    "from": 38.0,
+    "to": 195.0,
     "seconds": 157.0,
-    "cuts_per_min": 7.64,
     "shots": 20,
-    "median_seconds": 4.53,
+    "cuts_per_minute": 7.643,
+    "median_seconds": 4.525,
     "cv": 0.783,
     "orphans": 0,
     "orphan_seconds": [],
     "cv_less_orphans": 0.783,
-    "carried_by_orphans": 0.0,
-    "lengths": [
-     7.799,
-     3.754,
-     2.503,
-     6.089,
-     3.337,
-     18.602,
-     5.338,
-     3.879,
-     1.752,
-     12.095,
-     4.004,
-     20.145,
-     5.047,
-     12.596,
-     2.961,
-     3.128,
-     2.253,
-     13.054,
-     2.586,
-     17.017
-    ]
+    "held_through_seconds": null,
+    "reads_locked": false
    }
   ],
   "ours": [
    {
-    "label": "ours (P4R2)",
-    "d_from": 38.0,
-    "d_to": 195.0,
+    "from": 38.0,
+    "to": 195.0,
     "seconds": 157.0,
-    "cuts_per_min": 6.88,
     "shots": 18,
-    "median_seconds": 7.45,
+    "cuts_per_minute": 6.879,
+    "median_seconds": 7.445,
     "cv": 0.597,
     "orphans": 1,
     "orphan_seconds": [
      2.502
     ],
     "cv_less_orphans": 0.564,
-    "carried_by_orphans": 0.033,
-    "lengths": [
-     9.927,
-     7.257,
-     5.297,
-     4.963,
-     7.132,
-     17.142,
-     12.93,
-     2.502,
-     10.261,
-     20.729,
-     14.347,
-     7.633,
-     4.254,
-     10.803,
-     2.419,
-     3.67,
-     3.086,
-     15.558
-    ]
+    "held_through_seconds": null,
+    "reads_locked": true
+   }
+  ]
+ },
+ "server_check": {
+  "what": "analysis.correlate gears.quiet_floor over our P4R2 cut file",
+  "reads_locked": true,
+  "runs": [
+   {
+    "from": 38.0,
+    "to": 195.0,
+    "seconds": 157.0,
+    "shots": 18,
+    "cuts_per_minute": 6.879,
+    "median_seconds": 7.445,
+    "cv": 0.597,
+    "orphans": 1,
+    "orphan_seconds": [
+     2.502
+    ],
+    "cv_less_orphans": 0.564,
+    "held_through_seconds": null,
+    "reads_locked": true
    }
   ]
  }

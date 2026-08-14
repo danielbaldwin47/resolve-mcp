@@ -1990,14 +1990,15 @@ def test_a_single_hold_across_the_passage_is_the_stillest_reading_there_is(
     assert passage["reads_locked"] is True
 
 
-def test_a_passage_no_shot_starts_inside_takes_no_reading(
+def test_a_hold_that_runs_the_whole_passage_through_is_locked_by_that_alone(
     attach: Attach, tmp_path: Path
 ) -> None:
-    """A hold that began before the quiet music and outlasts it made no decision about it.
+    """No shot starts inside, because one that started before it covers the lot.
 
-    Different from the shot above, which is a hold cut *into* the passage. Here the passage is
-    crossed by a shot that is not about it, and there is no length inside to read — so the
-    report says so rather than calling the stretch locked on somebody else's decision.
+    The stillest floor there is, and the one a spread cannot see: with no cut inside the
+    passage there is no length to take a coefficient of variation over, and reading that as
+    "no finding" would wave through the only case where nothing whatsoever happens. The shot's
+    own length is the reading instead.
     """
     attach(studio(timeline=_paced(*[("A.mp4", 2 * SECOND)] * 14, ("H.mp4", 34 * SECOND),
                                   *[("B.mp4", 2 * SECOND)] * 14)))
@@ -2005,9 +2006,9 @@ def test_a_passage_no_shot_starts_inside_takes_no_reading(
     passage = _passage(_measured(tmp_path, loudness=_levels(_steps(*BLOCKS))))
 
     assert passage["shots"] == 0
-    assert passage["cv"] is None
-    assert passage["cv_less_orphans"] is None
-    assert passage["reads_locked"] is False
+    assert passage["cv"] is None  # nothing inside to take a spread over
+    assert passage["held_through_seconds"] == 34.0
+    assert passage["reads_locked"] is True
 
 
 def test_a_quiet_pocket_too_short_to_sit_in_is_not_a_passage(
@@ -2072,5 +2073,6 @@ def test_the_quiet_floor_reading_carries_the_rule_it_applied(
         "orphans",
         "orphan_seconds",
         "cv_less_orphans",
+        "held_through_seconds",
         "reads_locked",
     }

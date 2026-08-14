@@ -198,13 +198,15 @@ than of a fixed threshold: in a floor of ten-second holds a four-second shot is 
 shot, and a two-second one is a different device.
 """
 
-FLOOR_CV_FLOOR = GEAR_CV_FLOOR
+FLOOR_CV_FLOOR = 0.65
 """The number ``reads_locked`` is drawn at — see ``FLOOR_HEURISTIC``.
 
-The same floor the whole cut is judged at, because it is the same question asked of a smaller
-span: are these lengths varied enough to read as cutting. Measured on the one full song in the
-corpus, the director's own quiet passage runs a spread of 0.78 across 157 s and ours 0.56 —
-the floor sits between them, and the passage it fails is the one three critics called static.
+The same value ``GEAR_CV_FLOOR`` holds, and written out rather than aliased to it: it is the
+same question asked of a smaller span — are these lengths varied enough to read as cutting —
+but it is not the same knob, and retuning what a whole cut is judged at should not silently
+retune what a passage inside one is. Measured on the one full song in the corpus, the
+director's own quiet passage runs a spread of 0.78 across 157 s and ours 0.56; the floor sits
+between them, on a gap of one song, which is all it is worth.
 """
 
 FLOOR_HEURISTIC = (
@@ -216,7 +218,10 @@ FLOOR_HEURISTIC = (
     f"{ORPHAN_FRACTION}x the passage median with both neighbours inside the passage at or "
     "above it — a lone flash, as against a burst, which is short shots side by side and stays "
     "in the spread. The reading exists because cv alone is carried by whatever is most "
-    "extreme: five long holds and one flash score a spread the holds do not have. No passage "
+    "extreme: five long holds and one flash score a spread the holds do not have. A passage "
+    "no shot starts inside is held through by one, which reads locked on its own — "
+    "held_through_seconds is that shot's length, and there is no cut in the passage to take a "
+    "spread over. No passage "
     "long enough to read is an empty runs list, which is not the same as passing. It is a "
     "warning to look at, not a verdict — a passage held on a picture that develops is a real "
     "edit, and this measures lengths, not what is inside the frame."
@@ -1277,11 +1282,10 @@ def _uniformity(lengths: Sequence[float], histogram: Mapping[str, int]) -> dict[
     if not lengths:
         return {"bin": None, "one_bin": None, "cv": None}
     fullest = max(RHYTHM_BINS, key=lambda one: histogram[one[0]])[0]
-    mean = statistics.fmean(lengths)
     return {
         "bin": fullest,
         "one_bin": _rounded(histogram[fullest] / len(lengths)),
-        "cv": _rounded(statistics.pstdev(lengths) / mean) if mean > 0 else None,
+        "cv": _cv(lengths),
     }
 
 
@@ -1426,19 +1430,17 @@ def _quiet_floor(
 def _quiet_runs(windows: Sequence[tuple[float, float]]) -> list[tuple[float, float]]:
     """The stretches of music long enough, and quiet enough, to be a passage.
 
-    Quiet is the bottom third of the *smoothed* curve, taken by rank for the reason
-    ``_terciles`` takes its own that way. Runs shorter than ``QUIET_FLOOR_SECONDS`` are
-    dropped rather than measured: they hold two or three shots, and a spread over three shots
-    is a number the report cannot mean anything by.
+    Quiet is the bottom third of the *smoothed* curve — the same split ``_terciles`` takes,
+    run over a curve the outliers have been taken out of rather than the raw one, which is the
+    whole difference between a passage and a window. Runs shorter than ``QUIET_FLOOR_SECONDS``
+    are dropped rather than measured: they hold two or three shots, and a spread over three
+    shots is a number the report cannot mean anything by.
     """
     if not windows:
         return []
     levels = _smoothed([level for _, level in windows])
-    order = sorted(range(len(levels)), key=lambda index: (levels[index], windows[index][0]))
-    lower = len(order) // 3
-    quiet = [False] * len(levels)
-    for rank, index in enumerate(order):
-        quiet[index] = rank < lower
+    smoothed = [(start, level) for (start, _), level in zip(windows, levels, strict=True)]
+    quiet = [label == QUIET for label in _terciles(smoothed)]
 
     runs: list[tuple[float, float]] = []
     opened: int | None = None
@@ -1476,10 +1478,17 @@ def _passage(
     ten to twenty seconds reports a spread that no part of the passage a viewer sits through
     actually has. Dropping the orphans and asking again is the difference between a floor that
     breathes and a floor with a hole punched in it.
+
+    A passage with no shot starting inside it is not an absent reading, it is the stillest one
+    there is: a single hold runs the whole way through and there is no cut in it to measure.
+    That is reported as ``held_through_seconds`` and reads locked on its own, because a
+    spread taken over the no lengths inside would otherwise let the most parked passage
+    possible past the flag.
     """
     lengths = [
         float(row["seconds"]) for row in rows if start <= float(row["t"]) < end
     ]
+    held_through = _held_through(rows, start, end) if not lengths else None
     orphans = _orphans(lengths)
     kept = [length for index, length in enumerate(lengths) if index not in orphans]
     cv = _cv(lengths)
@@ -1496,8 +1505,26 @@ def _passage(
         "orphans": len(orphans),
         "orphan_seconds": [_rounded(lengths[index]) for index in orphans],
         "cv_less_orphans": less,
-        "reads_locked": less is not None and less < FLOOR_CV_FLOOR,
+        "held_through_seconds": held_through,
+        "reads_locked": held_through is not None or (less is not None and less < FLOOR_CV_FLOOR),
     }
+
+
+def _held_through(
+    rows: Sequence[dict[str, Any]], start: float, end: float
+) -> float | None:
+    """The length of the shot that runs the whole passage without a cut in it, if there is one.
+
+    Not every passage with nothing starting inside it is held through: a cut that ends before
+    the passage does — or one the level curve outruns — has no film there at all, and a
+    stretch with no picture in it is not an edit anybody made. The shot has to cover the
+    passage end to end for the reading to be about a decision.
+    """
+    for row in rows:
+        opens = float(row["t"])
+        if opens <= start and opens + float(row["seconds"]) >= end:
+            return _rounded(float(row["seconds"]))
+    return None
 
 
 def _orphans(lengths: Sequence[float]) -> set[int]:

@@ -102,8 +102,9 @@ same cut rate carried through loud and quiet where the music has an arc, and
 whose lengths sit on top of each other once its lone flashes are dropped (§3, #190).
 Any one of them firing means edit the cut JSON and rebuild before the director sees it;
 all three are things blind critics named unprompted in rounds that went against us.
-The third fires on a passage, so read its `runs`: the fix is that passage's lengths and
-what develops inside its pictures, not the song's rate, which the gear table already set. The server only
+The third fires on a passage, so read its `runs`: the fix is that passage's lengths
+and what develops inside its pictures, not the song's rate, which the gear table
+already set. The server only
 warns — this gate is yours. And when the cut has also been rendered and scanned, check
 scene-detect count against timeline item count before believing any of it
 (`styles/concert.md` §6): the two disagreeing is an alarm about the measurement, not a

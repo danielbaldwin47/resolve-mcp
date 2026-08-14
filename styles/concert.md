@@ -234,8 +234,12 @@ that the grid is a live band's grid, so it moves.
   the 157 s stretch the smoothed level curve puts in this song's quiet third
   (d38–195): the director cuts 20 shots there at 7.64 cuts/min, median 4.53 s,
   a shot-length CV of **0.783**, and **no orphan** — no shot under half the
-  passage median with long holds either side. Our winning capstone ran the same
-  passage at 6.88 cuts/min — the gear the table above asks for, hit — with a CV
+  passage median with long holds either side. He does go under half the median
+  twice (1.8 s and 2.3 s), and each time the shot beside it is another shortish
+  one (3.9 s, 3.1 s) rather than a hold: his short shots arrive in company. That
+  is the difference between a burst, which reads as cutting, and a flash, which
+  reads as a mistake. Our winning capstone ran the same passage at 6.88
+  cuts/min — the gear the table above asks for, hit — with a CV
   of **0.597** and one orphan: a 2.5 s flash at d109 dropped between a 12.9 s
   and a 10.3 s hold. Take the flash out and what is left spreads at **0.564**.
   The stretch the winning round still recorded as static against us
@@ -250,10 +254,17 @@ that the grid is a live band's grid, so it moves.
   cheapest third picture (§4). The check is
   `correlate_timeline`'s `gears.quiet_floor`: it finds the passages off the
   smoothed loudness curve, counts the orphans, and reports the spread without
-  them as `cv_less_orphans` with `reads_locked` under 0.65.
-  `[measured — 1 project, full song, n=78 shots (20 in the passage) + review
-  feedback 2026-08]` — the floor at 0.65 sits between two cuts of one song,
-  which is where it stays until a second full song is measured.
+  them as `cv_less_orphans` with `reads_locked` under 0.65. A passage you never
+  cut inside at all is the same finding by the shortest route — one hold
+  running the whole way through reads locked on its own, and the report names
+  that hold's length rather than a spread it has no lengths to take.
+  `[measured — 1 project, full song, n=20 shots in the director's quiet
+  passage, concert + review feedback 2026-08]` — and read the tag narrowly.
+  What is *measured* is what he did: 20 shots, spread 0.783, no orphan. The
+  numbers it is set against (0.597, one orphan, 0.564) are **our own cut**, not
+  corpus evidence, and the floor at 0.65 is `[believed, unverified]` on its own
+  — it separates two cuts of one song and nothing else has been measured
+  against it. A second full song either promotes it or moves it.
 - Duration distributions conditioned on section type and energy band. *Partly
   closed by the four bullets above — but that is one song, one director, one
   cut. What stays open is whether those gear ratios hold across the corpus, and
