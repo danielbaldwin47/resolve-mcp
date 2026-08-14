@@ -188,6 +188,57 @@ def deltas_file(tmp_path: Path, rows: Sequence[dict[str, Any]], name: str = "pac
     )
 
 
+def quality_file(
+    tmp_path: Path,
+    rows: Sequence[dict[str, Any]],
+    name: str = "scan",
+    floors: dict[str, float] | None = None,
+) -> Path:
+    """An image-quality catalog, in the shape analyze_quality writes."""
+    return records.write(
+        tmp_path / f"quality-{name}.json",
+        {
+            "kind": "image_quality",
+            "sample_fps": 4.0,
+            "floors": floors
+            if floors is not None
+            else {"min_sharpness": 0.3, "max_clipped": 0.02, "min_stability": 0.6},
+        },
+        "samples",
+        list(rows),
+    )
+
+
+def _sample(
+    t: float,
+    sharpness: float = 0.8,
+    clipped: float = 0.0,
+    stability: float | None = 1.0,
+) -> dict[str, Any]:
+    """One scan sample, in the shape the quality catalog carries."""
+    return {
+        "t": round(t, 3),
+        "sharpness": sharpness,
+        "exposure": 0.45,
+        "contrast": 0.12,
+        "clipped": clipped,
+        "crushed": 0.0,
+        "stability": stability,
+        "discontinuity": stability is None,
+        "usable": True,
+        "reasons": [],
+        "severity": 0.0,
+    }
+
+
+def _scan_of(soft: Sequence[float] = (), **overrides: Any) -> list[dict[str, Any]]:
+    """A scan across the whole cut at four samples a second, soft at the times named."""
+    times = [round(index * 0.25, 3) for index in range(14)]
+    return [
+        _sample(one, sharpness=0.1 if one in soft else 0.8, **overrides) for one in times
+    ]
+
+
 def _nested(t: float, delta: float, jump_cut: bool) -> dict[str, Any]:
     """One pack row: the reading sits under ``delta`` beside the transition typing."""
     return {
@@ -325,6 +376,11 @@ def test_every_shot_lands_on_disk_with_its_offsets_bar_and_section(
         "front": "drums",
         "delta": None,
         "jump_cut": None,
+        "sharpness": None,
+        "exposure": None,
+        "clipped": None,
+        "stability": None,
+        "quality_samples": 0,
     }
     assert cuts[2]["tune"] == 2
     assert cuts[2]["front"] == "other"
@@ -404,6 +460,114 @@ def test_a_named_catalog_is_part_of_the_cache_key(attach: Attach, tmp_path: Path
 
     assert _rows(again)[1]["delta"] == 0.09
     assert _rows(again)[1]["jump_cut"] is True
+
+
+def test_an_image_quality_scan_joins_over_each_shot(attach: Attach, tmp_path: Path) -> None:
+    """The scan measured the render; this says how each shot held up while it was on screen."""
+    attach(studio(timeline=a_cut()))
+    catalog = quality_file(tmp_path, _scan_of(soft=(1.25, 1.5, 1.75, 2.0, 2.25)))
+
+    result = _measured(tmp_path, quality=str(catalog))
+
+    cuts = _rows(result)
+    assert [one["sharpness"] for one in cuts] == [0.8, 0.1, 0.8]
+    assert [one["quality_samples"] for one in cuts] == [5, 5, 4]
+    assert result["picture_quality"]["joined"] == 3
+    assert result["picture_quality"]["unjoined"] == 0
+    assert result["picture_quality"]["soft_shots"] == [2]
+
+
+def test_a_shot_is_judged_on_its_worst_moment_not_its_first_frame(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """A take that blows out halfway through is a blown take; the cut it opens on is fine."""
+    attach(studio(timeline=a_cut()))
+    rows = _scan_of()
+    for row in rows:
+        if row["t"] in (1.75, 2.0):
+            row["clipped"] = 0.3
+    catalog = quality_file(tmp_path, rows, name="blown")
+
+    result = _measured(tmp_path, quality=str(catalog))
+
+    assert [one["clipped"] for one in _rows(result)] == [0.0, 0.3, 0.0]
+    assert result["picture_quality"]["blown_shots"] == [2]
+
+
+def test_an_unmeasurable_stability_does_not_make_a_shot_shaky(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Every cut in a render is a discontinuity; scoring them as wobble would veto the edit."""
+    attach(studio(timeline=a_cut()))
+    rows = _scan_of()
+    for row in rows:
+        if row["t"] in (1.25, 2.5):
+            row["stability"] = None
+            row["discontinuity"] = True
+    catalog = quality_file(tmp_path, rows, name="cuts")
+
+    result = _measured(tmp_path, quality=str(catalog))
+
+    assert [one["stability"] for one in _rows(result)] == [1.0, 1.0, 1.0]
+    assert result["picture_quality"]["shaky_shots"] == []
+
+
+def test_a_scan_of_a_different_span_joins_nothing_and_says_so(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """A catalog off one angle's own numbering is in a clock this timeline never shares."""
+    attach(studio(timeline=a_cut()))
+    catalog = quality_file(
+        tmp_path, [_sample(3600.0 + index * 0.25) for index in range(8)], name="angle"
+    )
+
+    result = _measured(tmp_path, quality=str(catalog))
+
+    assert [one["sharpness"] for one in _rows(result)] == [None, None, None]
+    assert result["picture_quality"]["joined"] == 0
+    assert result["picture_quality"]["unjoined"] == 3
+
+
+def test_no_quality_scan_leaves_the_columns_null_and_the_block_out(
+    attach: Attach, tmp_path: Path
+) -> None:
+    attach(studio(timeline=a_cut()))
+
+    result = _measured(tmp_path)
+
+    assert all(one["sharpness"] is None for one in _rows(result))
+    assert all(one["quality_samples"] == 0 for one in _rows(result))
+    assert result["picture_quality"] is None
+
+
+def test_a_catalog_with_no_floors_reports_no_lists_rather_than_guessed_ones(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Hand-built or older catalogs: the readings still join, the verdicts do not appear."""
+    attach(studio(timeline=a_cut()))
+    catalog = records.write(
+        tmp_path / "quality-bare.json",
+        {"kind": "image_quality"},
+        "samples",
+        _scan_of(soft=(1.25, 1.5, 1.75, 2.0, 2.25)),
+    )
+
+    result = _measured(tmp_path, quality=str(catalog))
+
+    assert _rows(result)[1]["sharpness"] == 0.1
+    assert result["picture_quality"]["floors"] is None
+    assert result["picture_quality"]["soft_shots"] is None
+
+
+def test_a_named_quality_scan_is_part_of_the_cache_key(attach: Attach, tmp_path: Path) -> None:
+    attach(studio(timeline=a_cut()))
+    first = quality_file(tmp_path, _scan_of(), name="one")
+    second = quality_file(tmp_path, _scan_of(soft=(1.25, 1.5, 1.75, 2.0, 2.25)), name="two")
+
+    _measured(tmp_path, quality=str(first))
+    again = _measured(tmp_path, quality=str(second))
+
+    assert _rows(again)[1]["sharpness"] == 0.1
 
 
 def test_a_bar_map_puts_every_cut_on_the_form(attach: Attach, tmp_path: Path) -> None:

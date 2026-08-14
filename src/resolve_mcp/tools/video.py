@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..resolve.connection import get_connection
-from ..video import frames, occlusion, scenes
+from ..video import frames, occlusion, quality, scenes
 from .envelope import tool
 
 
@@ -114,6 +114,62 @@ def analyze_occlusion(
     )
 
 
-TOOLS: tuple[Any, ...] = (grab_frames, detect_scene_cuts, analyze_occlusion)
+@tool
+def analyze_quality(
+    clip: str,
+    bin: str | None = None,  # noqa: A002 - the agent-facing word for a media pool folder
+    start: Any = None,
+    end: Any = None,
+    sample_fps: float = quality.DEFAULT_SAMPLE_FPS,
+    min_sharpness: float = quality.DEFAULT_MIN_SHARPNESS,
+    max_clipped: float = quality.DEFAULT_MAX_CLIPPED,
+    min_stability: float = quality.DEFAULT_MIN_STABILITY,
+    refresh: bool = False,
+) -> dict[str, Any]:
+    """Start a job scoring how good the picture is across a range of an angle.
 
-__all__ = ["TOOLS", "analyze_occlusion", "detect_scene_cuts", "grab_frames"]
+    The other question before you cut to a camera: is this take soft, blown out or shaky?
+    Returns a job_id to poll with get_job. Run it over a song's range on the angles you are
+    choosing between, rank them on what comes back, and keep your cuts out of its windows.
+
+    start and end are the clip's own frame numbers, dual time as everywhere — start=85653 or
+    start={"seconds": 3572.1, "snap": "floor"} — and default to the whole clip. Frames are
+    sampled a few times a second and each gets four readings, all 0 to 1: sharpness (how much
+    detail a small blur can still take away, so a low-contrast subject in focus beats a busy
+    one out of it), exposure (mean luma, with contrast beside it), clipped (the fraction of
+    the frame burned past saving, and crushed for the same at the bottom), and stability (how
+    far the frame-to-frame movement sits from the trend of its neighbours — a steady pan
+    scores 1.0, handheld wobble scores low). Stability is null wherever it cannot be
+    measured: across a cut, or on a black hold.
+
+    Inline you get the unusable windows — in, out, duration, which floors they missed and how
+    badly — plus the whole range as one block. A sample is unusable when it falls below
+    min_sharpness, above max_clipped, or below min_stability; the three are separate so a
+    style rule can set the one it cares about. path is the JSON with the per-sample curve;
+    read it to justify or dispute a window, and grab_frames the worst sample before you write
+    an angle off.
+    """
+    connection = get_connection()
+    return quality.analyze_quality(
+        connection,
+        clip,
+        bin=bin,
+        start=start,
+        end=end,
+        sample_fps=sample_fps,
+        min_sharpness=min_sharpness,
+        max_clipped=max_clipped,
+        min_stability=min_stability,
+        refresh=refresh,
+    )
+
+
+TOOLS: tuple[Any, ...] = (grab_frames, detect_scene_cuts, analyze_occlusion, analyze_quality)
+
+__all__ = [
+    "TOOLS",
+    "analyze_occlusion",
+    "analyze_quality",
+    "detect_scene_cuts",
+    "grab_frames",
+]

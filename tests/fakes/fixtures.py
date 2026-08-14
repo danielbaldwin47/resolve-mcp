@@ -363,6 +363,68 @@ def write_jpeg(path: Path, width: int = 1568, height: int = 882) -> Path:
     return path
 
 
+PICTURE_WIDTH = 320
+PICTURE_HEIGHT = 180
+"""The grid the image-quality fixtures are drawn on — the one the quality scan measures."""
+
+PICTURE_OCTAVES = (1, 2, 4, 8, 16)
+"""Detail at five scales, so a fixture frame has something for a blur to take away at each.
+A field of pure per-pixel noise would be the easiest possible sharpness case and would prove
+nothing about a picture; real footage carries structure all the way up."""
+
+
+def picture_frame(
+    blur: int = 0,
+    level: float = 0.45,
+    swing: float = 0.22,
+    clipped: float = 0.0,
+    shift: int = 0,
+    width: int = PICTURE_WIDTH,
+    height: int = PICTURE_HEIGHT,
+    seed: int = 7,
+) -> bytes:
+    """One raw 8-bit grey frame with its focus, exposure, clipping and position dialled in.
+
+    ``blur`` is the side of the box the texture is softened with — 0 is a sharp take and
+    anything from 3 up is a focus miss. ``level`` is the mean luma the texture sits around and
+    ``swing`` its contrast, so an over- or under-exposed take is one argument. ``clipped`` is
+    the fraction of the frame burned to pure white, and ``shift`` translates the whole picture,
+    which is how a run of these frames becomes a pan or a wobble.
+
+    Composed from numpy here rather than by the module under test, for the reason ``gray_frame``
+    is: a fixture that borrowed the measurement's own idea of a sharp frame could only agree
+    with it.
+    """
+    import numpy as np  # noqa: PLC0415 - a fixture builder, not an import every test pays for
+    from scipy import ndimage  # noqa: PLC0415
+
+    rng = np.random.default_rng(seed)
+    field = np.zeros((height, width), dtype=np.float64)
+    for octave in PICTURE_OCTAVES:
+        # Rounded up, so the grown octave always covers the frame rather than falling short
+        # of it on a dimension the octave does not divide.
+        coarse = rng.random((-(-height // octave), -(-width // octave)))
+        grown = np.repeat(np.repeat(coarse, octave, axis=0), octave, axis=1)
+        field += grown[:height, :width] / octave
+    field -= field.min()
+    field /= field.max() or 1.0
+
+    if blur > 1:
+        # Gaussian, because that is the shape a lens misses focus in — and because a box blur
+        # would be the same filter the sharpness reading itself uses, which would make the
+        # fixture agree with the measurement by construction.
+        field = ndimage.gaussian_filter(field, sigma=blur / 2.0)
+        field -= field.min()
+        field /= field.max() or 1.0
+    luma = np.clip(level + swing * (field - 0.5) * 2.0, 0.0, 1.0)
+    if shift:
+        luma = np.roll(luma, shift, axis=1)
+    if clipped > 0:
+        rows = max(1, round(height * clipped))
+        luma[:rows, :] = 1.0
+    return bytes(np.clip(np.rint(luma * 255.0), 0, 255).astype(np.uint8).tobytes())
+
+
 GRAY_LIGHT = 180
 GRAY_DARK = 100
 """The two values the fixture stage alternates between: bright enough that neither is 'dark'
