@@ -395,8 +395,11 @@ keep their spread with no orphan flashes; what raises it is unequal
 holds, a reframe or push-in where the footage has one, a scale change)
 + server (`gears.quiet_floor` finds the passages off a smoothed level
 curve and reports `cv_less_orphans` / `reads_locked`, a blocker in
-`docs/agents/concert.md`). **Open until a full-song build passes it** —
-the measurement and the rule exist, the proving round does not.
+`docs/agents/concert.md`), merged as PR #198. **Open until a full-song
+build passes it — #206 is that round.** The measurement and the rule
+exist; the proving round does not. Both constants the check leans on
+(the 0.65 floor, the 0.5× orphan fraction) are one song wide and
+provisional — #191 tracks graduating or moving them.
 
 ## Round record
 
