@@ -949,7 +949,12 @@ def measure(
                 "subject": None if framed is None else framed.name,
                 "subject_kind": framed_kind,
                 **subject.reading(
-                    framed, framed_kind, seconds, seconds + shot.duration / clock.fps, spans
+                    framed,
+                    framed_kind,
+                    seconds,
+                    seconds + shot.duration / clock.fps,
+                    spans,
+                    black=shot.clip is None,
                 ),
                 "opening": _opens(index, shot, shots),
                 "t": _rounded(seconds),

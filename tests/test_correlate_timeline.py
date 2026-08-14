@@ -406,7 +406,7 @@ def test_a_shot_that_outlives_the_solo_it_opened_in_is_split_where_the_front_cha
     cuts = _rows(_measured(tmp_path, angles=ANGLES, solos=str(solos_file(tmp_path))))
 
     assert cuts[1]["front"] == "drums"
-    assert cuts[1]["on_soloist_seconds"] == {"soloist": 0.967, "other": 0.483}
+    assert cuts[1]["on_soloist_seconds"] == {"soloist": 0.967, "other_player": 0.483}
 
 
 def test_the_reading_says_what_share_of_the_solo_windows_is_on_the_soloist(
@@ -420,7 +420,7 @@ def test_the_reading_says_what_share_of_the_solo_windows_is_on_the_soloist(
     assert result["on_soloist"]["seconds"] == {
         "soloist": 0.967,
         "ensemble": 1.866,
-        "other": 0.483,
+        "other_player": 0.483,
     }
     assert result["on_soloist"]["fraction_on_soloist"] == 0.292
     assert result["on_soloist"]["unlabelled_seconds"] == 0.0
@@ -642,6 +642,22 @@ def test_black_is_counted_apart_from_the_clips_nobody_labelled(
     assert result["roles"]["black"]["cuts"] == 1
     assert result["roles"]["unlabelled"]["cuts"] == 1
     assert result["roles"]["wide"]["cuts"] == 1
+
+
+def test_black_is_counted_apart_in_the_on_soloist_track_too(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The same distinction, one reading down: a cut to black is not a camera nobody named."""
+    gapped = (SHOTS[0], ("C0031.mp4", 200, 87, 4200))
+    attach(studio(timeline=a_cut(shots=gapped)))
+
+    result = _measured(tmp_path, angles=ANGLES, solos=str(solos_file(tmp_path)))
+
+    assert result["on_soloist"]["black_seconds"] == 0.633
+    assert result["on_soloist"]["unlabelled_seconds"] == 0.0
+    assert result["on_soloist"]["shots"]["black"] == 1
+    assert [one["on_soloist"] for one in _rows(result)] == [False, None, False]
+    assert _rows(result)[1]["on_soloist_seconds"] == {"black": 0.633}
 
 
 def test_a_cut_out_of_black_is_a_cut_rather_than_an_opening(

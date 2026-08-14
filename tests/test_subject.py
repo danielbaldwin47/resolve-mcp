@@ -134,7 +134,7 @@ def test_a_shot_on_the_player_out_front_is_on_the_soloist() -> None:
 def test_a_shot_on_a_player_who_is_not_soloing_is_on_a_non_soloing_player() -> None:
     reading = subject_module.reading(Subject("drums", "drums"), "player", 12.0, 15.0, _windows())
     assert reading["on_soloist"] is False
-    assert reading["on_soloist_seconds"] == {"other": 3.0}
+    assert reading["on_soloist_seconds"] == {"other_player": 3.0}
 
 
 def test_a_shot_on_the_ensemble_is_counted_apart_from_both() -> None:
@@ -154,13 +154,13 @@ def test_a_camera_that_follows_the_front_is_on_the_soloist_whoever_that_is() -> 
 def test_a_shot_that_outlives_its_solo_is_split_across_the_change() -> None:
     """The whole point of measuring seconds rather than reading the front at the cut."""
     reading = subject_module.reading(Subject("drums", "drums"), "player", 8.0, 14.0, _windows())
-    assert reading["on_soloist_seconds"] == {"soloist": 2.0, "other": 4.0}
+    assert reading["on_soloist_seconds"] == {"soloist": 2.0, "other_player": 4.0}
     assert reading["on_soloist"] is False
 
 
 def test_a_shot_split_evenly_takes_the_verdict_it_opened_on() -> None:
     reading = subject_module.reading(Subject("drums", "drums"), "player", 8.0, 12.0, _windows())
-    assert reading["on_soloist_seconds"] == {"soloist": 2.0, "other": 2.0}
+    assert reading["on_soloist_seconds"] == {"soloist": 2.0, "other_player": 2.0}
     assert reading["on_soloist"] is True
 
 
@@ -173,7 +173,7 @@ def test_a_shot_with_no_subject_label_is_screen_time_nobody_can_attribute() -> N
 def test_a_subject_that_is_neither_player_nor_band_is_not_on_the_soloist() -> None:
     reading = subject_module.reading(Subject("audience", "audience"), "other", 2.0, 6.0, _windows())
     assert reading["on_soloist"] is False
-    assert reading["on_soloist_seconds"] == {"other": 4.0}
+    assert reading["on_soloist_seconds"] == {"other_player": 4.0}
 
 
 def test_a_stretch_with_nobody_measured_out_front_is_left_out_of_the_seconds() -> None:
@@ -183,6 +183,13 @@ def test_a_stretch_with_nobody_measured_out_front_is_left_out_of_the_seconds() -
         Subject("drums", "drums"), "player", 0.0, 6.0, subject_module.windows(rows)
     )
     assert reading["on_soloist_seconds"] == {"soloist": 2.0}
+
+
+def test_a_stretch_nothing_covers_is_counted_as_black_rather_than_as_unlabelled() -> None:
+    """How much of a cut is empty is a fact about the edit, not about the sidecar."""
+    reading = subject_module.reading(None, None, 2.0, 6.0, _windows(), black=True)
+    assert reading["on_soloist"] is None
+    assert reading["on_soloist_seconds"] == {"black": 4.0}
 
 
 def test_a_shot_measured_against_no_solo_map_at_all_says_nothing() -> None:
@@ -220,10 +227,10 @@ def _rows() -> list[dict[str, Any]]:
 def test_the_summary_says_what_share_of_the_measured_screen_time_is_on_the_soloist() -> None:
     found = subject_module.summary(_rows())
     assert found is not None
-    assert found["seconds"] == {"soloist": 6.0, "ensemble": 4.0, "other": 2.0}
+    assert found["seconds"] == {"soloist": 6.0, "ensemble": 4.0, "other_player": 2.0}
     assert found["fraction_on_soloist"] == 0.5
     assert found["fraction_on_ensemble"] == pytest.approx(0.333)
-    assert found["fraction_on_other"] == pytest.approx(0.167)
+    assert found["fraction_on_other_player"] == pytest.approx(0.167)
 
 
 def test_the_summary_counts_the_screen_time_no_label_reaches_apart() -> None:
@@ -235,10 +242,20 @@ def test_the_summary_counts_the_screen_time_no_label_reaches_apart() -> None:
     assert found["solo_window_seconds"] == 14.0
 
 
+def test_the_summary_counts_black_apart_from_both() -> None:
+    black = subject_module.reading(None, None, 14.0, 15.0, _windows(), black=True)
+    found = subject_module.summary([*_rows(), {"subject": None, **black}])
+    assert found is not None
+    assert found["black_seconds"] == 1.0
+    assert found["unlabelled_seconds"] == 2.0
+    assert found["labelled_seconds"] == 12.0
+    assert found["shots"]["black"] == 1
+
+
 def test_the_summary_counts_shots_as_well_as_seconds() -> None:
     found = subject_module.summary(_rows())
     assert found is not None
-    assert found["shots"] == {"soloist": 1, "ensemble": 1, "other": 1, "unlabelled": 1}
+    assert found["shots"] == {"soloist": 1, "ensemble": 1, "other_player": 1, "unlabelled": 1}
 
 
 def test_nothing_measured_is_no_reading_rather_than_a_reading_of_zero() -> None:

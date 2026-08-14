@@ -1949,9 +1949,12 @@ def main(argv: list[str] | None = None) -> int:
             "lines": {
                 "soloist": "framed on the player out front",
                 "ensemble": "framed on the band rather than one player",
-                "other": "framed on somebody who was not soloing",
+                "other_player": "framed on somebody who was not soloing -- not `other`, which "
+                "is the name of a stem",
                 "unlabelled": "screen time no sidecar label reaches -- counted apart from the "
                 "shares, never in them",
+                "black": "a stretch nothing covers -- a fact about the edit rather than about "
+                "the labelling, so counted apart from unlabelled as well",
             },
             "per_detected_shot": "shots[].subject -- the authored shot holding most of it, with "
             "the overlap in seconds, because the pack's boundaries are a scene scan's and the "

@@ -46,12 +46,19 @@ OTHER = "other"
 
 ON_SOLOIST = "soloist"
 ON_ENSEMBLE = "ensemble"
-ON_OTHER = "other"
+ON_OTHER = "other_player"
+"""Not ``other``: the residual stem is *called* ``other``, so a line by that name sitting next
+to a solo map whose front reads ``other`` is two different things spelled the same."""
 UNLABELLED = "unlabelled"
+BLACK = "black"
 """Where a shot's screen time is counted: on the player out front, on the band, on somebody
-else, or nowhere anyone can attribute."""
+else, on nobody the sidecar has named, or on nothing at all.
 
-ORDER = (ON_SOLOIST, ON_ENSEMBLE, ON_OTHER, UNLABELLED)
+Black is kept apart from unlabelled for the reason the angle shares keep them apart: how much
+of a cut is empty is a fact about the edit, and how much of it the sidecar has not named is a
+fact about the sidecar. Added together neither is readable."""
+
+ORDER = (ON_SOLOIST, ON_ENSEMBLE, ON_OTHER, UNLABELLED, BLACK)
 """The order the readings are reported in, so two runs of the same cut compare line by line."""
 
 
@@ -173,6 +180,7 @@ def reading(
     start: float,
     end: float,
     spans: Sequence[Window],
+    black: bool = False,
 ) -> dict[str, Any]:
     """One shot against the solo windows: where its screen time went, and the one-word verdict.
 
@@ -180,13 +188,16 @@ def reading(
     the verdict is whichever line holds the most of the shot, and a shot split evenly takes
     the one it opened on — the tie is broken by time rather than by name, so renaming a
     player cannot move a verdict.
+
+    ``black`` is a stretch nothing covers, which is not a shot with no label on it: it is
+    counted on its own line and its verdict is nothing rather than false.
     """
-    seconds = _split(subject, subject_kind, start, end, spans)
+    seconds = _split(subject, subject_kind, start, end, spans, black)
     if not seconds:
         return {"on_soloist": None, "on_soloist_seconds": None}
     verdict = max(seconds, key=lambda line: seconds[line])
     return {
-        "on_soloist": None if verdict == UNLABELLED else verdict == ON_SOLOIST,
+        "on_soloist": None if verdict in (UNLABELLED, BLACK) else verdict == ON_SOLOIST,
         "on_soloist_seconds": seconds,
     }
 
@@ -197,6 +208,7 @@ def _split(
     start: float,
     end: float,
     spans: Sequence[Window],
+    black: bool,
 ) -> dict[str, float]:
     """How many seconds of this shot fall on each line, in the order they were played."""
     seconds: dict[str, float] = {}
@@ -206,12 +218,14 @@ def _split(
         overlap = min(end, span.end) - max(start, span.start)
         if overlap <= 0:
             continue
-        line = _line(subject, subject_kind, span.front)
+        line = _line(subject, subject_kind, span.front, black)
         seconds[line] = round(seconds.get(line, 0.0) + overlap, SECONDS_PRECISION)
     return seconds
 
 
-def _line(subject: Subject | None, subject_kind: str | None, front: str) -> str:
+def _line(subject: Subject | None, subject_kind: str | None, front: str, black: bool) -> str:
+    if black:
+        return BLACK
     if subject is None or subject_kind is None:
         return UNLABELLED
     if subject_kind == ENSEMBLE:
@@ -240,17 +254,19 @@ def summary(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any] | None:
         shots[str(verdict)] = shots.get(str(verdict), 0) + 1
     if not seconds:
         return None
-    labelled = round(sum(held for line, held in seconds.items() if line != UNLABELLED), 3)
+    apart = (UNLABELLED, BLACK)
+    labelled = round(sum(held for line, held in seconds.items() if line not in apart), 3)
     return {
         "solo_window_seconds": round(sum(seconds.values()), SECONDS_PRECISION),
         "labelled_seconds": labelled,
         "unlabelled_seconds": seconds.get(UNLABELLED, 0.0),
+        "black_seconds": seconds.get(BLACK, 0.0),
         "seconds": {
-            line: seconds[line] for line in ORDER if line in seconds and line != UNLABELLED
+            line: seconds[line] for line in ORDER if line in seconds and line not in apart
         },
         "fraction_on_soloist": _share(seconds.get(ON_SOLOIST, 0.0), labelled),
         "fraction_on_ensemble": _share(seconds.get(ON_ENSEMBLE, 0.0), labelled),
-        "fraction_on_other": _share(seconds.get(ON_OTHER, 0.0), labelled),
+        "fraction_on_other_player": _share(seconds.get(ON_OTHER, 0.0), labelled),
         "shots": {line: shots[line] for line in ORDER if line in shots},
     }
 

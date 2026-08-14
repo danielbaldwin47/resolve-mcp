@@ -72,7 +72,16 @@ Round 1 critic, verbatim needs; each is server measurement work:
    detected: no pixel here knows a drummer from a horn player, so the answer is
    only as good as the sidecar — a camera that roams the band is labelled by
    habit rather than by shot, and `unlabelled_seconds` is what says how much of
-   the cut no label reached.
+   the cut no label reached. Measured live on the two closed Taurus pieces
+   (`recon/subject_track.py`, receipt beside it): the R3 opening is 52% on the
+   ensemble, 48% on a non-soloing player, 0% on the soloist over 81.5 s of
+   labelled screen time; the P4 R2 capstone is 53% / 42% / 5% over 489 s. The
+   0% is real rather than a hole — this rig's only player camera is the drum
+   cam, and the solo map has nobody drumming out front in the opening. Spot
+   check against frames of both cameras: the FX6 wide holds the whole band
+   (`ensemble`) and the A7IV holds the drummer (`drums`, a player), the two
+   labels 15 of the opening's 17 shots carry; the other two are title cards,
+   which is what `unlabelled_seconds` counts.
 7. Per-shot sharpness, clipped-highlight %, exposure variance.
 8. Super/graphic presence detection with in/out timecodes + straddle check.
 9. Head/tail treatment: fade-in vs dropped frames, audio floor handling.

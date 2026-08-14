@@ -1,0 +1,1936 @@
+{
+  "errors": [],
+  "timelines": [
+    "Zinc - Set 2 Main",
+    "Mailand clip",
+    "Monkfish Main",
+    "Zinc SYNC",
+    "Taurus People Opening v1",
+    "Taurus People Opening v2",
+    "Taurus People Opening v3",
+    "Taurus People Opening R2 v1",
+    "Taurus People Opening R2 v2",
+    "Taurus People Opening R2 v3",
+    "Taurus People Opening R3 v1",
+    "Taurus People Opening R3 v2",
+    "Taurus People Opening R3 v3",
+    "Taurus People Ending P2 v1",
+    "Taurus People Ending P2 v2",
+    "Taurus People Ending P2 R3 v1",
+    "Taurus People Mid P3 R1 v1",
+    "Taurus People Mid P3 R2 v1",
+    "Taurus People Full P4 R1 v1",
+    "Taurus People Full P4 R1 v2",
+    "Taurus People Full P4 R2 v3",
+    "resolve-mcp-smoke v1",
+    "resolve-mcp smoke round-trip 122233",
+    "resolve-mcp-smoke v2",
+    "resolve-mcp smoke dissolve 122238",
+    "resolve-mcp-smoke v3",
+    "resolve-mcp-smoke v4",
+    "resolve-mcp-smoke v5",
+    "resolve-mcp-smoke v6",
+    "resolve-mcp-smoke v7",
+    "resolve-mcp-smoke v8",
+    "resolve-mcp-smoke v9",
+    "resolve-mcp-smoke v10",
+    "resolve-mcp-smoke v11"
+  ],
+  "inputs": {
+    "timelines": [
+      "Taurus People Opening R3 v3",
+      "Taurus People Full P4 R2 v3"
+    ],
+    "sidecar": "C:\\Users\\Daniel\\repos\\resolve-mcp\\.claude\\worktrees\\issue-181\\styles\\angles\\mcp-tests-zinc.json",
+    "beats": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\analysis\\Zinc-Set-2-Reaper-v4-62537c590a14-beats.json",
+    "solos": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\analysis\\Zinc-Set-2-Reaper-v4-0f3a70a16e52-solos.json",
+    "subjects": {
+      "A014C002_2606170Z.MXF": "ensemble",
+      "A015C001_2606170J.MXF": "ensemble",
+      "20260617_D_A7IV_0006.MP4": "drums"
+    }
+  },
+  "measured": [
+    {
+      "timeline": "Taurus People Opening R3 v3",
+      "job": {
+        "state": "completed",
+        "error": null
+      },
+      "reading": {
+        "alignment": {
+          "mode": "audio_clip",
+          "audio": "Zinc Set 2 Reaper v4.wav",
+          "matched": false,
+          "zero_frame": 842
+        },
+        "cuts": 17,
+        "openings": 1,
+        "on_soloist": {
+          "solo_window_seconds": 90.007,
+          "labelled_seconds": 81.54,
+          "unlabelled_seconds": 8.467,
+          "black_seconds": 0.0,
+          "seconds": {
+            "ensemble": 42.459,
+            "other_player": 39.081
+          },
+          "fraction_on_soloist": 0.0,
+          "fraction_on_ensemble": 0.521,
+          "fraction_on_other_player": 0.479,
+          "shots": {
+            "ensemble": 8,
+            "other_player": 7,
+            "unlabelled": 2
+          }
+        },
+        "subjects": {
+          "unlabelled": {
+            "cuts": 2,
+            "seconds": 8.467,
+            "share": 0.094
+          },
+          "ensemble": {
+            "cuts": 8,
+            "seconds": 42.459,
+            "share": 0.472
+          },
+          "drums": {
+            "cuts": 7,
+            "seconds": 39.081,
+            "share": 0.434
+          }
+        },
+        "roles": {
+          "unlabelled": {
+            "cuts": 2,
+            "seconds": 8.467,
+            "share": 0.094
+          },
+          "ensemble-wide": {
+            "cuts": 8,
+            "seconds": 42.459,
+            "share": 0.472
+          },
+          "drums-tight": {
+            "cuts": 7,
+            "seconds": 39.081,
+            "share": 0.434
+          }
+        },
+        "solos": {
+          "covered": 2,
+          "outside": 0,
+          "cuts": {
+            "bass": 8,
+            "other": 8
+          }
+        }
+      },
+      "cuts_file": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\analysis\\Taurus-People-Opening-R3-v3-b27ee8a933e2.correlate.json",
+      "shots": [
+        {
+          "cut": 1,
+          "clip": "title_[0000-0055].png",
+          "t": 3568.485,
+          "seconds": 2.336,
+          "role": null,
+          "subject": null,
+          "subject_kind": null,
+          "front": "other",
+          "on_soloist": null,
+          "on_soloist_seconds": {
+            "unlabelled": 2.336
+          }
+        },
+        {
+          "cut": 2,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3570.821,
+          "seconds": 8.3,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 8.3
+          }
+        },
+        {
+          "cut": 3,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3579.121,
+          "seconds": 9.843,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 9.843
+          }
+        },
+        {
+          "cut": 4,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3588.964,
+          "seconds": 0.167,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 0.167
+          }
+        },
+        {
+          "cut": 5,
+          "clip": "personnel2_[0000-0146].png",
+          "t": 3589.131,
+          "seconds": 6.131,
+          "role": null,
+          "subject": null,
+          "subject_kind": null,
+          "front": "other",
+          "on_soloist": null,
+          "on_soloist_seconds": {
+            "unlabelled": 6.131
+          }
+        },
+        {
+          "cut": 6,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3595.262,
+          "seconds": 4.838,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 4.838
+          }
+        },
+        {
+          "cut": 7,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3600.1,
+          "seconds": 2.211,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 2.211
+          }
+        },
+        {
+          "cut": 8,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3602.311,
+          "seconds": 2.252,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 2.252
+          }
+        },
+        {
+          "cut": 9,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3604.563,
+          "seconds": 8.258,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 8.258
+          }
+        },
+        {
+          "cut": 10,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3612.821,
+          "seconds": 9.927,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "bass",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 9.927
+          }
+        },
+        {
+          "cut": 11,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3622.748,
+          "seconds": 7.257,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "bass",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 7.257
+          }
+        },
+        {
+          "cut": 12,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3630.005,
+          "seconds": 5.297,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "bass",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 5.297
+          }
+        },
+        {
+          "cut": 13,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3635.302,
+          "seconds": 4.963,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "bass",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 4.963
+          }
+        },
+        {
+          "cut": 14,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3640.265,
+          "seconds": 4.046,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "bass",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 4.046
+          }
+        },
+        {
+          "cut": 15,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3644.311,
+          "seconds": 3.837,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "bass",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 3.837
+          }
+        },
+        {
+          "cut": 16,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3648.148,
+          "seconds": 2.878,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "bass",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 2.878
+          }
+        },
+        {
+          "cut": 17,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3651.026,
+          "seconds": 7.466,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "bass",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 7.466
+          }
+        }
+      ],
+      "spot_check": [
+        {
+          "clip": "title_[0000-0055].png",
+          "shots": [
+            1
+          ],
+          "shot_count": 1,
+          "claimed_subject": null,
+          "claimed_kind": null,
+          "bin": null,
+          "grabbed_at_sec": [
+            0.58,
+            1.75
+          ],
+          "frames": null,
+          "ok": false,
+          "error": {
+            "code": "internal_error",
+            "cause": "FileNotFoundError: [WinError 2] The system cannot find the file specified: 'C:\\\\Users\\\\Daniel\\\\repos\\\\resolve-mcp\\\\.claude\\\\worktrees\\\\gauntlet-loop-1\\\\projects\\\\mcp-tests-zinc\\\\cards\\\\taurus-people\\\\title\\\\title_[0000-0055].png'",
+            "fix": "This is a bug in resolve-mcp rather than a Resolve state problem. Retry once; if it persists, work around it with run_python and report it.",
+            "detail": {}
+          }
+        },
+        {
+          "clip": "A015C001_2606170J.MXF",
+          "shots": [
+            2,
+            4,
+            7,
+            9,
+            11,
+            13,
+            15,
+            17
+          ],
+          "shot_count": 8,
+          "claimed_subject": "ensemble",
+          "claimed_kind": "ensemble",
+          "bin": "Zinc Bar/Footage",
+          "grabbed_at_sec": [
+            739.03,
+            2217.09
+          ],
+          "frames": [
+            {
+              "time": {
+                "frames": 17718,
+                "seconds": 738.989,
+                "timecode": "00:12:18:06",
+                "fps": 23.976
+              },
+              "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\frames\\A015C001_2606170J.MXF-17407860bcbb.jpg",
+              "width": 1568,
+              "height": 882,
+              "bytes": 139708
+            },
+            {
+              "time": {
+                "frames": 53156,
+                "seconds": 2217.05,
+                "timecode": "00:36:54:20",
+                "fps": 23.976
+              },
+              "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\frames\\A015C001_2606170J.MXF-26db4dd00ea5.jpg",
+              "width": 1568,
+              "height": 882,
+              "bytes": 143111
+            }
+          ],
+          "ok": true,
+          "error": null
+        },
+        {
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "shots": [
+            3,
+            6,
+            8,
+            10,
+            12,
+            14,
+            16
+          ],
+          "shot_count": 7,
+          "claimed_subject": "drums",
+          "claimed_kind": "player",
+          "bin": "Zinc Bar/Footage",
+          "grabbed_at_sec": [
+            1028.9,
+            3086.71
+          ],
+          "frames": [
+            {
+              "time": {
+                "frames": 24668,
+                "seconds": 1028.862,
+                "timecode": "00:17:07:20",
+                "fps": 23.976
+              },
+              "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\frames\\20260617_D_A7IV_0006.MP4-2feb6711d864.jpg",
+              "width": 1568,
+              "height": 882,
+              "bytes": 98598
+            },
+            {
+              "time": {
+                "frames": 74006,
+                "seconds": 3086.67,
+                "timecode": "00:51:23:14",
+                "fps": 23.976
+              },
+              "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\frames\\20260617_D_A7IV_0006.MP4-75ba8d2d4762.jpg",
+              "width": 1568,
+              "height": 882,
+              "bytes": 99979
+            }
+          ],
+          "ok": true,
+          "error": null
+        },
+        {
+          "clip": "personnel2_[0000-0146].png",
+          "shots": [
+            5
+          ],
+          "shot_count": 1,
+          "claimed_subject": null,
+          "claimed_kind": null,
+          "bin": null,
+          "grabbed_at_sec": [
+            1.53,
+            4.6
+          ],
+          "frames": null,
+          "ok": false,
+          "error": {
+            "code": "internal_error",
+            "cause": "FileNotFoundError: [WinError 2] The system cannot find the file specified: 'C:\\\\Users\\\\Daniel\\\\repos\\\\resolve-mcp\\\\.claude\\\\worktrees\\\\gauntlet-loop-1\\\\projects\\\\mcp-tests-zinc\\\\cards\\\\taurus-people\\\\personnel2\\\\personnel2_[0000-0146].png'",
+            "fix": "This is a bug in resolve-mcp rather than a Resolve state problem. Retry once; if it persists, work around it with run_python and report it.",
+            "detail": {}
+          }
+        }
+      ]
+    },
+    {
+      "timeline": "Taurus People Full P4 R2 v3",
+      "job": {
+        "state": "completed",
+        "error": null
+      },
+      "reading": {
+        "alignment": {
+          "mode": "audio_clip",
+          "audio": "Zinc Set 2 Reaper v4.wav",
+          "matched": false,
+          "zero_frame": 842
+        },
+        "cuts": 85,
+        "openings": 1,
+        "on_soloist": {
+          "solo_window_seconds": 497.496,
+          "labelled_seconds": 489.029,
+          "unlabelled_seconds": 8.467,
+          "black_seconds": 0.0,
+          "seconds": {
+            "soloist": 24.312,
+            "ensemble": 259.089,
+            "other_player": 205.628
+          },
+          "fraction_on_soloist": 0.05,
+          "fraction_on_ensemble": 0.53,
+          "fraction_on_other_player": 0.42,
+          "shots": {
+            "soloist": 4,
+            "ensemble": 42,
+            "other_player": 37,
+            "unlabelled": 2
+          }
+        },
+        "subjects": {
+          "unlabelled": {
+            "cuts": 2,
+            "seconds": 8.467,
+            "share": 0.017
+          },
+          "ensemble": {
+            "cuts": 42,
+            "seconds": 259.091,
+            "share": 0.521
+          },
+          "drums": {
+            "cuts": 41,
+            "seconds": 229.939,
+            "share": 0.462
+          }
+        },
+        "roles": {
+          "unlabelled": {
+            "cuts": 2,
+            "seconds": 8.467,
+            "share": 0.017
+          },
+          "ensemble-wide": {
+            "cuts": 42,
+            "seconds": 259.091,
+            "share": 0.521
+          },
+          "drums-tight": {
+            "cuts": 41,
+            "seconds": 229.939,
+            "share": 0.462
+          }
+        },
+        "solos": {
+          "covered": 3,
+          "outside": 0,
+          "cuts": {
+            "bass": 13,
+            "drums": 9,
+            "other": 62
+          }
+        }
+      },
+      "cuts_file": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\analysis\\Taurus-People-Full-P4-R2-v3-d4bd89e16d84.correlate.json",
+      "shots": [
+        {
+          "cut": 1,
+          "clip": "title_[0000-0055].png",
+          "t": 3568.485,
+          "seconds": 2.336,
+          "role": null,
+          "subject": null,
+          "subject_kind": null,
+          "front": "other",
+          "on_soloist": null,
+          "on_soloist_seconds": {
+            "unlabelled": 2.336
+          }
+        },
+        {
+          "cut": 2,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3570.821,
+          "seconds": 8.3,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 8.3
+          }
+        },
+        {
+          "cut": 3,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3579.121,
+          "seconds": 9.843,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 9.843
+          }
+        },
+        {
+          "cut": 4,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3588.964,
+          "seconds": 0.167,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 0.167
+          }
+        },
+        {
+          "cut": 5,
+          "clip": "personnel2_[0000-0146].png",
+          "t": 3589.131,
+          "seconds": 6.131,
+          "role": null,
+          "subject": null,
+          "subject_kind": null,
+          "front": "other",
+          "on_soloist": null,
+          "on_soloist_seconds": {
+            "unlabelled": 6.131
+          }
+        },
+        {
+          "cut": 6,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3595.262,
+          "seconds": 4.838,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 4.838
+          }
+        },
+        {
+          "cut": 7,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3600.1,
+          "seconds": 2.211,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 2.211
+          }
+        },
+        {
+          "cut": 8,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3602.311,
+          "seconds": 2.252,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 2.252
+          }
+        },
+        {
+          "cut": 9,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3604.563,
+          "seconds": 8.258,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 8.258
+          }
+        },
+        {
+          "cut": 10,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3612.821,
+          "seconds": 9.927,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "bass",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 9.927
+          }
+        },
+        {
+          "cut": 11,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3622.748,
+          "seconds": 7.257,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "bass",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 7.257
+          }
+        },
+        {
+          "cut": 12,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3630.005,
+          "seconds": 5.297,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "bass",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 5.297
+          }
+        },
+        {
+          "cut": 13,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3635.302,
+          "seconds": 4.963,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "bass",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 4.963
+          }
+        },
+        {
+          "cut": 14,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3640.265,
+          "seconds": 7.132,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "bass",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 7.132
+          }
+        },
+        {
+          "cut": 15,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3647.397,
+          "seconds": 17.142,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "bass",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 17.142
+          }
+        },
+        {
+          "cut": 16,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3664.54,
+          "seconds": 12.93,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "bass",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 12.93
+          }
+        },
+        {
+          "cut": 17,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3677.469,
+          "seconds": 2.503,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "bass",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 2.503
+          }
+        },
+        {
+          "cut": 18,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3679.972,
+          "seconds": 10.26,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "bass",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 10.26
+          }
+        },
+        {
+          "cut": 19,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3690.232,
+          "seconds": 20.729,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "bass",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 20.729
+          }
+        },
+        {
+          "cut": 20,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3710.961,
+          "seconds": 14.348,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "bass",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 11.039,
+            "soloist": 3.309
+          }
+        },
+        {
+          "cut": 21,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3725.309,
+          "seconds": 7.633,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "drums",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 7.633
+          }
+        },
+        {
+          "cut": 22,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3732.941,
+          "seconds": 4.254,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "drums",
+          "on_soloist": true,
+          "on_soloist_seconds": {
+            "soloist": 4.239,
+            "other_player": 0.016
+          }
+        },
+        {
+          "cut": 23,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3737.196,
+          "seconds": 10.802,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "bass",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 10.802
+          }
+        },
+        {
+          "cut": 24,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3747.998,
+          "seconds": 2.419,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "bass",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 1.962,
+            "soloist": 0.457
+          }
+        },
+        {
+          "cut": 25,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3750.417,
+          "seconds": 3.67,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "drums",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 3.67
+          }
+        },
+        {
+          "cut": 26,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3754.087,
+          "seconds": 3.086,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "drums",
+          "on_soloist": true,
+          "on_soloist_seconds": {
+            "soloist": 3.086
+          }
+        },
+        {
+          "cut": 27,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3757.174,
+          "seconds": 15.557,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "drums",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 15.557
+          }
+        },
+        {
+          "cut": 28,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3772.731,
+          "seconds": 9.259,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "drums",
+          "on_soloist": true,
+          "on_soloist_seconds": {
+            "soloist": 9.259
+          }
+        },
+        {
+          "cut": 29,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3781.99,
+          "seconds": 10.135,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "drums",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 10.135
+          }
+        },
+        {
+          "cut": 30,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3792.125,
+          "seconds": 3.962,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "drums",
+          "on_soloist": true,
+          "on_soloist_seconds": {
+            "soloist": 3.962
+          }
+        },
+        {
+          "cut": 31,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3796.088,
+          "seconds": 10.344,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "drums",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 10.343
+          }
+        },
+        {
+          "cut": 32,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3806.431,
+          "seconds": 3.295,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 3.295
+          }
+        },
+        {
+          "cut": 33,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3809.726,
+          "seconds": 6.173,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 6.173
+          }
+        },
+        {
+          "cut": 34,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3815.899,
+          "seconds": 3.629,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 3.629
+          }
+        },
+        {
+          "cut": 35,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3819.528,
+          "seconds": 10.052,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 10.052
+          }
+        },
+        {
+          "cut": 36,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3829.58,
+          "seconds": 5.339,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 5.339
+          }
+        },
+        {
+          "cut": 37,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3834.918,
+          "seconds": 2.503,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 2.503
+          }
+        },
+        {
+          "cut": 38,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3837.421,
+          "seconds": 9.927,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 9.927
+          }
+        },
+        {
+          "cut": 39,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3847.347,
+          "seconds": 8.592,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 8.592
+          }
+        },
+        {
+          "cut": 40,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3855.939,
+          "seconds": 4.463,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 4.463
+          }
+        },
+        {
+          "cut": 41,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3860.402,
+          "seconds": 10.093,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 10.093
+          }
+        },
+        {
+          "cut": 42,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3870.495,
+          "seconds": 4.963,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 4.963
+          }
+        },
+        {
+          "cut": 43,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3875.459,
+          "seconds": 9.009,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 9.009
+          }
+        },
+        {
+          "cut": 44,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3884.468,
+          "seconds": 4.505,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 4.505
+          }
+        },
+        {
+          "cut": 45,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3888.972,
+          "seconds": 1.96,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 1.96
+          }
+        },
+        {
+          "cut": 46,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3890.933,
+          "seconds": 1.752,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 1.752
+          }
+        },
+        {
+          "cut": 47,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3892.684,
+          "seconds": 3.754,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 3.754
+          }
+        },
+        {
+          "cut": 48,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3896.438,
+          "seconds": 7.174,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 7.174
+          }
+        },
+        {
+          "cut": 49,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3903.612,
+          "seconds": 2.002,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 2.002
+          }
+        },
+        {
+          "cut": 50,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3905.614,
+          "seconds": 3.545,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 3.545
+          }
+        },
+        {
+          "cut": 51,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3909.159,
+          "seconds": 3.795,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 3.795
+          }
+        },
+        {
+          "cut": 52,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3912.955,
+          "seconds": 3.17,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 3.17
+          }
+        },
+        {
+          "cut": 53,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3916.124,
+          "seconds": 2.503,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 2.503
+          }
+        },
+        {
+          "cut": 54,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3918.627,
+          "seconds": 4.338,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 4.338
+          }
+        },
+        {
+          "cut": 55,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3922.965,
+          "seconds": 1.627,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 1.627
+          }
+        },
+        {
+          "cut": 56,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3924.591,
+          "seconds": 3.837,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 3.837
+          }
+        },
+        {
+          "cut": 57,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3928.428,
+          "seconds": 1.585,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 1.585
+          }
+        },
+        {
+          "cut": 58,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3930.013,
+          "seconds": 7.841,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 7.841
+          }
+        },
+        {
+          "cut": 59,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3937.855,
+          "seconds": 3.67,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 3.67
+          }
+        },
+        {
+          "cut": 60,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3941.525,
+          "seconds": 4.671,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 4.671
+          }
+        },
+        {
+          "cut": 61,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3946.196,
+          "seconds": 3.253,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 3.253
+          }
+        },
+        {
+          "cut": 62,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3949.449,
+          "seconds": 6.757,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 6.757
+          }
+        },
+        {
+          "cut": 63,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3956.206,
+          "seconds": 3.378,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 3.378
+          }
+        },
+        {
+          "cut": 64,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3959.585,
+          "seconds": 6.798,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 6.798
+          }
+        },
+        {
+          "cut": 65,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3966.383,
+          "seconds": 2.044,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 2.044
+          }
+        },
+        {
+          "cut": 66,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3968.427,
+          "seconds": 3.67,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 3.67
+          }
+        },
+        {
+          "cut": 67,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3972.097,
+          "seconds": 3.837,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 3.837
+          }
+        },
+        {
+          "cut": 68,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3975.934,
+          "seconds": 6.924,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 6.924
+          }
+        },
+        {
+          "cut": 69,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3982.858,
+          "seconds": 4.254,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 4.254
+          }
+        },
+        {
+          "cut": 70,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 3987.112,
+          "seconds": 8.967,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 8.967
+          }
+        },
+        {
+          "cut": 71,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 3996.079,
+          "seconds": 4.004,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 4.004
+          }
+        },
+        {
+          "cut": 72,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 4000.083,
+          "seconds": 1.627,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 1.627
+          }
+        },
+        {
+          "cut": 73,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 4001.71,
+          "seconds": 4.421,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 4.421
+          }
+        },
+        {
+          "cut": 74,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 4006.131,
+          "seconds": 3.879,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 3.879
+          }
+        },
+        {
+          "cut": 75,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 4010.01,
+          "seconds": 3.378,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 3.378
+          }
+        },
+        {
+          "cut": 76,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 4013.388,
+          "seconds": 5.756,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 5.756
+          }
+        },
+        {
+          "cut": 77,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 4019.144,
+          "seconds": 6.256,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 6.256
+          }
+        },
+        {
+          "cut": 78,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 4025.4,
+          "seconds": 2.753,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 2.753
+          }
+        },
+        {
+          "cut": 79,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 4028.153,
+          "seconds": 1.418,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 1.418
+          }
+        },
+        {
+          "cut": 80,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 4029.571,
+          "seconds": 2.336,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 2.336
+          }
+        },
+        {
+          "cut": 81,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 4031.907,
+          "seconds": 6.089,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 6.089
+          }
+        },
+        {
+          "cut": 82,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 4037.996,
+          "seconds": 4.963,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 4.963
+          }
+        },
+        {
+          "cut": 83,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 4042.96,
+          "seconds": 6.048,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 6.047
+          }
+        },
+        {
+          "cut": 84,
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "t": 4049.007,
+          "seconds": 3.253,
+          "role": "drums-tight",
+          "subject": "drums",
+          "subject_kind": "player",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "other_player": 3.253
+          }
+        },
+        {
+          "cut": 85,
+          "clip": "A015C001_2606170J.MXF",
+          "t": 4052.261,
+          "seconds": 13.722,
+          "role": "ensemble-wide",
+          "subject": "ensemble",
+          "subject_kind": "ensemble",
+          "front": "other",
+          "on_soloist": false,
+          "on_soloist_seconds": {
+            "ensemble": 13.722
+          }
+        }
+      ],
+      "spot_check": [
+        {
+          "clip": "title_[0000-0055].png",
+          "shots": [
+            1
+          ],
+          "shot_count": 1,
+          "claimed_subject": null,
+          "claimed_kind": null,
+          "bin": null,
+          "grabbed_at_sec": [
+            0.58,
+            1.75
+          ],
+          "frames": null,
+          "ok": false,
+          "error": {
+            "code": "internal_error",
+            "cause": "FileNotFoundError: [WinError 2] The system cannot find the file specified: 'C:\\\\Users\\\\Daniel\\\\repos\\\\resolve-mcp\\\\.claude\\\\worktrees\\\\gauntlet-loop-1\\\\projects\\\\mcp-tests-zinc\\\\cards\\\\taurus-people\\\\title\\\\title_[0000-0055].png'",
+            "fix": "This is a bug in resolve-mcp rather than a Resolve state problem. Retry once; if it persists, work around it with run_python and report it.",
+            "detail": {}
+          }
+        },
+        {
+          "clip": "A015C001_2606170J.MXF",
+          "shots": [
+            2,
+            4,
+            7,
+            9,
+            11,
+            13,
+            15,
+            17
+          ],
+          "shot_count": 42,
+          "claimed_subject": "ensemble",
+          "claimed_kind": "ensemble",
+          "bin": "Zinc Bar/Footage",
+          "grabbed_at_sec": [
+            739.03,
+            2217.09
+          ],
+          "frames": [
+            {
+              "time": {
+                "frames": 17718,
+                "seconds": 738.989,
+                "timecode": "00:12:18:06",
+                "fps": 23.976
+              },
+              "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\frames\\A015C001_2606170J.MXF-17407860bcbb.jpg",
+              "width": 1568,
+              "height": 882,
+              "bytes": 139708
+            },
+            {
+              "time": {
+                "frames": 53156,
+                "seconds": 2217.05,
+                "timecode": "00:36:54:20",
+                "fps": 23.976
+              },
+              "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\frames\\A015C001_2606170J.MXF-26db4dd00ea5.jpg",
+              "width": 1568,
+              "height": 882,
+              "bytes": 143111
+            }
+          ],
+          "ok": true,
+          "error": null
+        },
+        {
+          "clip": "20260617_D_A7IV_0006.MP4",
+          "shots": [
+            3,
+            6,
+            8,
+            10,
+            12,
+            14,
+            16,
+            18
+          ],
+          "shot_count": 41,
+          "claimed_subject": "drums",
+          "claimed_kind": "player",
+          "bin": "Zinc Bar/Footage",
+          "grabbed_at_sec": [
+            1028.9,
+            3086.71
+          ],
+          "frames": [
+            {
+              "time": {
+                "frames": 24668,
+                "seconds": 1028.862,
+                "timecode": "00:17:07:20",
+                "fps": 23.976
+              },
+              "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\frames\\20260617_D_A7IV_0006.MP4-2feb6711d864.jpg",
+              "width": 1568,
+              "height": 882,
+              "bytes": 98598
+            },
+            {
+              "time": {
+                "frames": 74006,
+                "seconds": 3086.67,
+                "timecode": "00:51:23:14",
+                "fps": 23.976
+              },
+              "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\frames\\20260617_D_A7IV_0006.MP4-75ba8d2d4762.jpg",
+              "width": 1568,
+              "height": 882,
+              "bytes": 99979
+            }
+          ],
+          "ok": true,
+          "error": null
+        },
+        {
+          "clip": "personnel2_[0000-0146].png",
+          "shots": [
+            5
+          ],
+          "shot_count": 1,
+          "claimed_subject": null,
+          "claimed_kind": null,
+          "bin": null,
+          "grabbed_at_sec": [
+            1.53,
+            4.6
+          ],
+          "frames": null,
+          "ok": false,
+          "error": {
+            "code": "internal_error",
+            "cause": "FileNotFoundError: [WinError 2] The system cannot find the file specified: 'C:\\\\Users\\\\Daniel\\\\repos\\\\resolve-mcp\\\\.claude\\\\worktrees\\\\gauntlet-loop-1\\\\projects\\\\mcp-tests-zinc\\\\cards\\\\taurus-people\\\\personnel2\\\\personnel2_[0000-0146].png'",
+            "fix": "This is a bug in resolve-mcp rather than a Resolve state problem. Retry once; if it persists, work around it with run_python and report it.",
+            "detail": {}
+          }
+        }
+      ]
+    }
+  ]
+}
