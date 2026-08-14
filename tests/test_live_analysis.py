@@ -172,11 +172,12 @@ def test_a_wind_split_on_the_zinc_stems_runs_that_pass_and_no_other(
     ``other`` stem the first pass wrote and labels its halves the way ``WIND_STEMS`` spells
     them, which is the half of this only a real model on a real set can answer.
 
-    The wind pass's own output is cleared first, so what the run owes is the same on the
-    hundredth run as on the first. Measuring the directory as found would make this pass while
-    proving nothing the moment the split is complete, which is a green test that has stopped
-    being an acceptance criterion. Only that pass's output is cleared, and the run rebuilds it;
-    the two passes it must *not* redo are the ones deliberately left alone.
+    A directory that owes nothing **skips** rather than passes. Measured as found, this would
+    go green on zero passes the moment the split was complete — an acceptance criterion that
+    has stopped being one. Clearing the wind output first would keep the assertion honest, but
+    it makes every run destroy stems it then has to spend half an hour rebuilding, and a run
+    killed in between leaves the director short of what it deleted (which is how this test lost
+    the Zinc split's orphan half once). A skip costs nobody anything and lies about nothing.
 
     Skips where the Zinc set is not on this machine — record the run on the ticket when it is.
     """
@@ -186,7 +187,7 @@ def test_a_wind_split_on_the_zinc_stems_runs_that_pass_and_no_other(
         pytest.skip(f"the acquired Zinc set is not in this cache at {acquired}")
     audio = {"path": str(acquired), "content_sha256": cache.content_hash(acquired)}
     params = {**stems.separation_params(config), "split_wind": True}
-    _clear_the_wind_pass(stems.stem_directory(audio, params, config))
+    _owing_the_wind_pass(stems.stem_directory(audio, params, config))
     counting = _CountingSeparator()
 
     output = stems.multi_pass(
@@ -203,16 +204,24 @@ def test_a_wind_split_on_the_zinc_stems_runs_that_pass_and_no_other(
     assert len(output.result["drums"]) >= len(stems.DRUM_STEMS)
 
 
-def _clear_the_wind_pass(directory: Path) -> None:
-    """Undo the third pass, and refuse to run at all if the first two are not there to reuse.
+def _owing_the_wind_pass(directory: Path) -> None:
+    """Run only where this directory owes exactly the third pass and nothing else.
 
-    The skip is the point: with no stems on disk this would separate a 74-minute set from
-    scratch and then assert that it did not, which is a twenty-minute way of learning nothing.
+    Both halves are skips rather than assertions because both mean the same thing — the state
+    this measures is not here — and neither is news about the code. With no first two passes
+    on disk this would separate a 74-minute set from scratch and then assert it had not, which
+    is half an hour spent learning nothing; with the split already done it would assert over a
+    run that did nothing at all.
     """
-    if not (directory / stems.MIX_PASS).is_dir() or not (directory / stems.DRUM_PASS).is_dir():
-        pytest.skip(f"the Zinc set has no two-pass separation at {directory} to add a pass to")
-    for stem in (directory / stems.OTHER_PASS).glob("*.wav"):
-        stem.unlink()
+    if separator.missing_from(directory / stems.MIX_PASS, stems.FOUR_STEMS):
+        pytest.skip(f"the Zinc set has no first pass at {directory} to add a pass to")
+    if separator.missing_from(directory / stems.DRUM_PASS, stems.DRUM_STEMS):
+        pytest.skip(f"the Zinc set has no drum pass at {directory} to reuse")
+    if not separator.missing_from(directory / stems.OTHER_PASS, stems.WIND_STEMS):
+        pytest.skip(
+            f"the wind split at {directory} is already complete, so this run would owe nothing "
+            "— delete that pass's directory to measure the split again"
+        )
 
 
 class _CountingSeparator:
