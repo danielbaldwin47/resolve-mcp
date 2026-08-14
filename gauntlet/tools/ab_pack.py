@@ -1839,25 +1839,33 @@ def main(argv: list[str] | None = None) -> int:
         "visual_delta": {
             "question": "how different is the picture after the cut from the picture before "
             "it -- the step the 30-degree rule is about",
-            "method": f"three terms on a {framing.GRID_WIDTH}x{framing.GRID_HEIGHT} grey grid, "
+            "method": f"four terms on a {framing.GRID_WIDTH}x{framing.GRID_HEIGHT} grey grid, "
             f"median-stacked over {framing.STACK_FRAMES} frames each side of the boundary the "
             "transition pass located (so a dissolve is read across its ramp, not inside it)",
             "terms": {
                 "layout": "1 - best normalised correlation of the row/column profiles over "
                 f"a lag search of +/-{framing.MAX_SHIFT:.3f} of each axis; a picture that "
-                "merely slid sideways still matches itself",
+                "merely slid sideways still matches itself, and a peak found at the edge of "
+                "the search is refused rather than credited",
+                "structure": f"1 - correlation of the frame as a {framing.BLOCK_ROWS}x"
+                f"{framing.BLOCK_COLS} grid of block means; row/column profiles are marginals "
+                "and two pictures with their bright patches at opposite corners share both, so "
+                "this is the term marginals cannot fake",
                 "content": f"total-variation distance between {framing.HISTOGRAM_BINS}-bin "
                 "luma histograms",
                 "scale": "change in the spread of the frame's luma mass, in doublings, "
                 f"clamped at {framing.SCALE_SPAN}",
             },
-            "composite": f"{framing.WEIGHT_LAYOUT}*layout + {framing.WEIGHT_CONTENT}*content "
-            f"+ {framing.WEIGHT_SCALE}*scale, 0 to 1",
+            "composite": f"{framing.WEIGHT_LAYOUT}*layout + {framing.WEIGHT_STRUCTURE}*structure "
+            f"+ {framing.WEIGHT_CONTENT}*content + {framing.WEIGHT_SCALE}*scale, 0 to 1",
             "jump_cut_flag": f"composite < {framing.JUMP_DELTA}, calibrated so the human "
             "deliverables' own cuts sit clear of it "
             "(gauntlet/recon/cut_delta_calib.json)",
-            "reported_fields": "delta, content, layout, scale, shift_x, shift_y, jump_cut, "
-            "reason; null when the boundary is too close to the window edge to read",
+            "reported_fields": "delta, layout, structure, content, scale, shift_x, shift_y, "
+            "jump_cut, reason. The whole delta is null where the boundary could not be read: "
+            "too close to the window edge, or typed none/unknown, which is a detected cut with "
+            "no frame-pair change to read across. shift_x and shift_y are null individually "
+            "where that axis found no alignment inside the lag search",
             "blind_spot": "no subject identity -- two cameras on the same soloist with "
             "different backgrounds read as a step, so the flag is a candidate for a human "
             "eye, not a verdict",

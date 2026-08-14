@@ -1,0 +1,73 @@
+{
+  "question": "is Soultrane a single-camera video, or an edit the detector cannot see?",
+  "clip": "S:\\Deliverables\\Ryan Devlin\\6-17-26 Zinc Bar\\Full Videos\\6-17 - Zinc Set 2 - Soultrane.mp4",
+  "window_sec": [
+    120.0,
+    240.0
+  ],
+  "fps": 23.976,
+  "whole_song_cuts_detected": "0 in 761.3 s -- see cut_delta_calib.json",
+  "scene_detector": {
+    "boundaries_by_threshold": {
+      "0.1": 0,
+      "0.04": 0,
+      "0.015": 0
+    },
+    "pack_threshold": 0.1
+  },
+  "frame_pairs": {
+    "max": 4.95,
+    "mean": 0.96,
+    "noise_floor": 1.5,
+    "reading": "the largest step between any two adjacent frames in two minutes"
+  },
+  "picture_steps": {
+    "gap_seconds": 3.0,
+    "max": 0.6714,
+    "median": 0.0444,
+    "largest": [
+      {
+        "at": 184.56,
+        "to": 187.57,
+        "delta": 0.6714
+      },
+      {
+        "at": 163.54,
+        "to": 166.55,
+        "delta": 0.6708
+      },
+      {
+        "at": 183.06,
+        "to": 186.07,
+        "delta": 0.6701
+      },
+      {
+        "at": 150.03,
+        "to": 153.03,
+        "delta": 0.6684
+      },
+      {
+        "at": 144.02,
+        "to": 147.03,
+        "delta": 0.657
+      },
+      {
+        "at": 222.1,
+        "to": 225.1,
+        "delta": 0.6476
+      },
+      {
+        "at": 162.04,
+        "to": 165.04,
+        "delta": 0.5987
+      },
+      {
+        "at": 213.09,
+        "to": 216.1,
+        "delta": 0.5813
+      }
+    ],
+    "reading": "the human deliverables' 200 hard cuts span 0.44 to 0.73 (cut_delta_calib.json), so a step this size across three seconds is a whole cut's worth of change"
+  },
+  "verdict": "dissolve-cut edit, not a single-camera video: the picture is completely replaced, over seconds, so no frame pair ever steps and a per-frame scene score has nothing to trip on"
+}

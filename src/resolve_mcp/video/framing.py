@@ -115,10 +115,11 @@ almost nothing, and the synthetic near-jump-cuts the fixture tier fixes score
 
 One deliverable, Soultrane, contributed none of the 200: it is cut with
 multi-second dissolves throughout, and the per-frame scene detector that finds the
-boundaries cannot see them (measured: the picture changes by 0.67 across three
-seconds while no frame pair exceeds 4.95 against a noise floor of 1.5). The
-threshold therefore rests on four hard-cut songs. Re-run the calibration before
-moving it."""
+boundaries cannot see them — measured in ``soultrane_dissolves.json``, where the
+picture steps 0.67 across three seconds while no frame pair exceeds 4.95 against a
+noise floor of 1.5, and the detector finds nothing even at a scene threshold of
+0.015 (#203). The threshold therefore rests on four hard-cut songs. Re-run the
+calibration before moving it."""
 
 LAYOUT_MATCH = 0.15
 SCALE_MATCH = 0.10
@@ -145,10 +146,17 @@ class Delta(NamedTuple):
     shift_x: int | None
     shift_y: int | None
     """Where the lag search found this axis' best match, in grid pixels — or ``None``
-    when it found none inside the search, which is the answer for two pictures that
-    are not each other slid over. On real footage the vertical axis reads ``None``
-    far more often than the horizontal one: cameras in a room differ in height by
-    less than they differ in angle, so the vertical profiles rarely align at all."""
+    when its best score sat at the edge of the search, which means no alignment was
+    found inside the distance a reframe covers, and the axis was scored where it sits.
+
+    ``None`` is therefore the *ordinary* answer at a real cut, not an unusual one: two
+    different angles are not each other slid over, so the correlation has no interior
+    peak to find. In the calibration receipt 188 of the 200 human cuts report a null
+    vertical shift and 72 a null horizontal one — the vertical axis pegs more often
+    because a club frame's vertical profile is nearly the same band of stage light in
+    every camera, so what little structure it has rarely lines up at a small offset. A
+    *number* here is the interesting case: it says these two frames are one picture,
+    moved, which is the signature of the cut this measurement exists to catch."""
 
     jump_cut: bool
     reason: str
