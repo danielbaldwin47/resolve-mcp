@@ -32,9 +32,9 @@ def main() -> None:
     report["interpreter"] = "passed"
     write()
 
+    from resolve_mcp.audio import stems as stems_module
     from resolve_mcp.jobs import runner, store
     from resolve_mcp.resolve.connection import get_connection
-    from resolve_mcp.audio import stems as stems_module
 
     began = time.time()
     record = stems_module.separate_stems(

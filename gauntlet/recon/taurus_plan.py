@@ -155,13 +155,11 @@ def main() -> None:
     total = sum(s.get("gap", 0) or (s["out"] - s["in"]) for s in segments)
     print("segments", len(segments) - 1, "total frames", total, "expected", SPAN_FRAMES)
     print(f"{'id':5} {'angle':5} {'start_s':>8} {'dur_s':>6} {'offset_ms':>9}")
-    prev = None
     durs = []
     for i, (a, b) in enumerate(zip(bounds, bounds[1:], strict=False)):
         off = "" if i == 0 else f"{cuts[i - 1]['offset_ms']:+.0f}"
         durs.append((b - a) / FPS)
         print(f"s{i + 1:02d}   {angles[i]:5} {a / FPS:8.2f} {(b - a) / FPS:6.2f} {off:>9}")
-        prev = b
     durs_sorted = sorted(durs)
     n = len(durs)
     med = durs_sorted[n // 2] if n % 2 else (durs_sorted[n // 2 - 1] + durs_sorted[n // 2]) / 2
