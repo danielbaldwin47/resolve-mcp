@@ -1,14 +1,18 @@
-"""Applause + loudness -> tune boundaries: score the candidate rules against the human spans.
+"""The calibration behind the #179 constants: which settings find the five human starts.
 
-Three rules under test, all arithmetic over two already measured tracks (the PANNs curve
-`board_curve_dump.py` wrote and the loudness curve `analyze_music` writes):
+Drives the shipped `resolve_mcp.analysis.applause` — never a copy of it — over the curve
+`board_curve_dump.py` wrote and the loudness curve `analyze_music` wrote, across the three
+numbers the two new rules turn on:
 
-* the applause threshold scales with the file's own peak rather than being absolute;
-* a call starts where the mix comes up to playing level and stays there (the announcement
-  between the clapping and the downbeat is 20-40 dB down on a board mix);
-* a call that never comes up to playing level is not a tune.
+* ``scale``, how much of the file's own applause peak counts as applause;
+* ``settle_db``, how far under the file's median loudness still counts as playing;
+* ``settle_seconds``, how long it has to stay there.
 
-Usage: python board_boundary_sweep.py <curve.npz> <energy.json>
+The receipt is the plateau: every combination that finds all five starts within the
+tolerance and invents nothing. A constant picked in the middle of a wide plateau is a
+measurement; one picked on an edge is a fit, and the difference is visible here.
+
+Usage: python board_boundary_sweep.py <curve.npz> <energy.json> <out.json> [duration]
 """
 
 from __future__ import annotations
@@ -16,12 +20,17 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
 TRUTH = (107.4405, 1373.8725, 1920.1265, 2725.014, 3568.4815)
 TOLERANCE = 5.0
 DURATION = 4450.5
+
+SCALES = (0.06, 0.07, 0.08, 0.09, 0.10, 0.12, 0.15)
+MARGINS = (4.0, 6.0, 8.0, 10.0, 12.0)
+HOLDS = (5.0, 10.0, 15.0, 20.0)
 
 
 def main() -> None:
@@ -33,66 +42,62 @@ def main() -> None:
         probability=tuple(float(one) for one in loaded["probability"]),
     )
     rows = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))["energy"]
-    times = np.asarray([row["t"] for row in rows], dtype=np.float64)
-    lufs = np.asarray([row["lufs"] for row in rows], dtype=np.float64)
-
-    print(f"applause peak={max(curve.probability):.4f}")
-    for quantile in (0.5, 0.6, 0.75, 0.9):
-        print(f"lufs q{quantile} = {np.quantile(lufs, quantile):.2f}")
-
-    playing = float(np.median(lufs))
-    for fraction in (0.08, 0.1, 0.12, 0.15):
-        threshold = max(curve.probability) * fraction
-        for burst in (1.5, 2.0, 2.5, 3.0):
-            spans = applause.spans(curve, threshold, burst, 1.5)
-            found = applause.tunes(spans, DURATION, 60.0)
-            for margin in (4.0, 6.0, 8.0, 10.0, 12.0):
-                for hold in (5.0, 10.0, 15.0, 20.0):
-                    _score(
-                        f"p*{fraction} burst{burst} -{margin}dB hold{hold}",
-                        found,
-                        times,
-                        lufs,
-                        playing - margin,
-                        hold,
-                    )
-
-
-def _score(name, found, times, lufs, floor: float, hold: float) -> None:
-    starts = []
-    for tune in found:
-        start = _settle(times, lufs, tune.start, tune.end, floor, hold)
-        if start is not None:
-            starts.append(start)
-    hits = [min((abs(one - truth) for one in starts), default=1e9) for truth in TRUTH]
-    within = sum(1 for one in hits if one <= TOLERANCE)
-    extra = len(starts) - within
-    print(
-        f"{name:<34} floor={floor:6.1f} calls={len(starts):<3} hit={within}/5 "
-        f"extra={extra:<3} err={[round(one, 1) for one in hits]}"
+    loudness = applause.Loudness(
+        seconds=tuple(float(row["t"]) for row in rows),
+        lufs=tuple(float(row["lufs"]) for row in rows),
     )
-    if within == 5:
-        print(f"{'':<34} starts={[round(one, 1) for one in starts]}")
+    out = Path(sys.argv[3])
+    duration = float(sys.argv[4]) if len(sys.argv) > 4 else DURATION
 
+    runs: list[dict[str, Any]] = []
+    for scale in SCALES:
+        read = applause.reading(curve, applause.DEFAULT_THRESHOLD, scale)
+        spans = applause.spans(
+            curve, read.threshold, read.burst_seconds, applause.DEFAULT_GAP_SECONDS
+        )
+        found = applause.tunes(spans, duration, applause.DEFAULT_TUNE_SECONDS)
+        for margin in MARGINS:
+            for hold in HOLDS:
+                settled = applause.settled(
+                    found, loudness, margin, hold, applause.DEFAULT_TUNE_SECONDS
+                )
+                starts = [one.start for one in settled.kept]
+                errors = [min((abs(one - want) for one in starts), default=1e9) for want in TRUTH]
+                within = sum(1 for one in errors if one <= TOLERANCE)
+                runs.append(
+                    {
+                        "scale": scale,
+                        "settle_db": margin,
+                        "settle_seconds": hold,
+                        "threshold_used": round(read.threshold, 4),
+                        "burst_seconds_used": read.burst_seconds,
+                        "tunes": len(starts),
+                        "within_tolerance": within,
+                        "invented": len(starts) - within,
+                        "worst_error_s": round(max(errors), 2) if within == len(TRUTH) else None,
+                        "starts_s": [round(one, 1) for one in starts],
+                    }
+                )
 
-SHARE = 0.75
-"""How much of the hold window has to be over the floor. Music dips; it does not stop."""
-
-
-def _settle(times, lufs, start: float, end: float, floor: float, hold: float) -> float | None:
-    """First moment in the call where loudness reaches the floor and mostly stays there."""
-    window = (times >= start) & (times < end)
-    inside_t = times[window]
-    over = (lufs[window] >= floor).astype(float)
-    if not len(inside_t):
-        return None
-    step = float(np.median(np.diff(inside_t))) if len(inside_t) > 1 else 0.5
-    width = max(int(round(hold / step)), 1)
-    if len(over) < width:
-        return None
-    shares = np.convolve(over, np.ones(width) / width, mode="valid")
-    hits = np.flatnonzero((shares >= SHARE) & (over[: len(shares)] > 0))
-    return float(inside_t[hits[0]]) if len(hits) else None
+    clean = [one for one in runs if one["within_tolerance"] == len(TRUTH) and not one["invented"]]
+    report = {
+        "curve": sys.argv[1],
+        "energy": sys.argv[2],
+        "human_cut_starts_s": list(TRUTH),
+        "tolerance_s": TOLERANCE,
+        "peak_probability": round(max(curve.probability), 4),
+        "plateau": {
+            "count": len(clean),
+            "of": len(runs),
+            "scale": sorted({one["scale"] for one in clean}),
+            "settle_db": sorted({one["settle_db"] for one in clean}),
+            "settle_seconds": sorted({one["settle_seconds"] for one in clean}),
+            "worst_error_s": max((one["worst_error_s"] for one in clean), default=None),
+        },
+        "runs": runs,
+    }
+    out.write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
+    print("DONE", out, "plateau", len(clean), "of", len(runs))
 
 
 if __name__ == "__main__":

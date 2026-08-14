@@ -151,6 +151,25 @@ def test_one_lucky_burst_over_the_line_is_still_a_file_read_at_its_own_scale() -
     assert read.threshold == 0.155
 
 
+def test_one_frame_the_model_liked_does_not_set_the_threshold_for_the_whole_file() -> None:
+    """A shout into a vocal mic is not a room, and everything else is scaled off this."""
+    spike = _concert((0.02, 100.0), (0.9, 0.5), (0.02, 100.0))
+
+    read = applause.reading(spike, scale=0.5, burst_seconds=3.0)
+
+    # Half of the spike would be 0.45. What the file holds for a burst's worth is 0.02, and
+    # half of that is under the floor — so the floor is the answer and the spike is not.
+    assert read.own_scale is True
+    assert read.threshold == applause.MINIMUM_THRESHOLD
+
+
+def test_a_curve_too_short_to_time_anything_in_is_read_at_the_threshold() -> None:
+    """One frame has no duration, so nothing about how long it lasted can be measured."""
+    one_frame = applause.Curve(seconds=(0.0,), probability=(0.01,))
+
+    assert applause.reading(one_frame).own_scale is False
+
+
 def test_the_fallback_never_reaches_down_into_the_model_s_own_noise() -> None:
     """A file with no applause in it at all has a peak too, and a fraction of it is dither."""
     read = applause.reading(_concert((0.0001, 200.0)), scale=0.09)
@@ -252,6 +271,25 @@ def test_with_no_loudness_curve_at_all_nothing_is_dropped_for_want_of_one() -> N
     found = applause.settled(_called((0.0, 300.0)), applause.Loudness((), ()))
 
     assert [one.start for one in found.kept] == [0.0]
+
+
+def test_a_call_too_short_to_hold_the_window_is_kept_rather_than_called_silent() -> None:
+    """Shorter than the hold is "not measured here", which is not "the band never came in".
+
+    Reachable from the tool: ``tune_seconds`` and ``settle_seconds`` are both caller-set,
+    so a caller asking for short tunes and a long hold would otherwise lose every call to a
+    reason that never happened.
+    """
+    found = applause.settled(
+        _called((0.0, 4.0)),
+        _loudness((-45.0, 4.0), (-14.0, 300.0)),
+        hold_seconds=60.0,
+        minimum_seconds=1.0,
+    )
+
+    assert [one.start for one in found.kept] == [0.0]
+    assert found.silent == ()
+    assert found.kept[0].talk_seconds is None
 
 
 def test_the_floor_is_read_off_the_file_rather_than_off_an_absolute_level() -> None:

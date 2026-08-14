@@ -93,10 +93,14 @@ DEFAULT_SCALE = 0.09
 """How much of the file's own applause peak counts as applause, when the fallback fires.
 
 Measured on the Zinc Set 2 board mix, whose five human-established tune starts are the only
-ground truth this rule has (`gauntlet/recon/board_boundary_sweep.py`). Every fraction from
-0.08 to 0.10 finds all five within 2 s; 0.12 loses two of them, because the two quietest
-bursts on that mix peak at 0.066 and 0.129 against a file peak of 0.298. 0.09 is the middle
-of that plateau.
+ground truth this rule has (`gauntlet/recon/board_boundary_sweep.json`: 35 of 140 settings
+clean, worst error 2.01 s). Every fraction from 0.06 to 0.10 finds all five and invents
+nothing; 0.12 loses one and 0.15 the same, because the quietest burst on that mix peaks at
+0.066 against a file peak of 0.298. The bottom of that range is not really a range —
+``MINIMUM_THRESHOLD`` floors 0.06 and 0.07 onto the same 0.02 — so the plateau that is
+actually about this number is 0.08, 0.09, 0.10, and 0.09 is the middle of it. It lands on a
+threshold of 0.023 here: the peak it scales is the one that lasts (see
+``_peak_that_lasts``), 0.26 rather than the single-frame 0.298.
 
 The Scullers room mic is why this is a fallback and not the rule: 0.09 of its peak is
 0.059, and reading it there turns the clapping after each solo into a boundary — 19 calls
@@ -116,9 +120,10 @@ QUIET_BURST_SECONDS = 2.0
 
 Shorter than ``DEFAULT_MINIMUM_SECONDS`` and for a reason that only applies there: a
 compressed curve clears its own threshold at the burst's peak and nowhere else, so what is
-measured is the peak of the burst rather than the burst. At 3.0 two of the five measured
-board-mix boundaries have no burst at any threshold; 1.5 through 2.5 call that set
-identically."""
+measured is the peak of the burst rather than the burst. Measured in
+`gauntlet/recon/board_curve_sweep.json`: at 3.0 the measured board mix never has a burst
+near all five of its boundaries at any threshold in the sweep, and 1.5, 2.0 and 2.5 all
+do. 2.0 is the middle of the three."""
 
 MINIMUM_THRESHOLD = 0.02
 """Below this a scaled threshold is chasing the model's own noise, not a quiet room.
@@ -135,19 +140,21 @@ DEFAULT_TUNE_SECONDS = 60.0
 DEFAULT_SETTLE_DB = 6.0
 """How far under the file's median loudness still counts as the band playing.
 
-Measured on the same set: its music sits between -12 and -25 LUFS against a median of
--17.5, and everything between the tunes — talking, tuning, the room — between -27 and -55.
-Margins of 4 to 8 dB put all five starts within 2 s of the human ones; at 10 dB and wider
-the floor reaches down into the talk and a sixth call appears."""
+Measured on the same set (`gauntlet/recon/board_boundary_sweep.json`): its music sits
+between -12 and -25 LUFS against a median of -17.5, and everything between the tunes —
+talking, tuning, the room — between -27 and -55. Margins of 4, 6 and 8 dB put all five
+starts within 2.01 s of the human ones at every hold tested; at 10 dB and wider the floor
+reaches down into the talk and a sixth call appears. 6.0 is the middle of the three."""
 
 DEFAULT_SETTLE_SECONDS = 10.0
 """How long the mix has to stay at playing level before it is the tune starting.
 
 Long enough that a shouted introduction or one loud chord of tuning is not a downbeat,
-short enough to sit well inside the shortest tune anyone plays. 5 through 20 seconds call
-the measured set identically. Zero turns the whole step off, and then a boundary is the
-end of the applause — which is what it was before #179, and the way to run the tune half
-with no loudness curve at all."""
+short enough to sit well inside the shortest tune anyone plays. Every hold from 5 to 20
+seconds calls the measured set identically (`gauntlet/recon/board_boundary_sweep.json`),
+which is the widest plateau of the three numbers here. Zero turns the whole step off, and
+then a boundary is the end of the applause — which is what it was before #179, and the way
+to run the tune half with no loudness curve at all."""
 
 SETTLE_SHARE = 0.75
 """How much of the hold window has to be over the floor. Music dips inside a phrase and
@@ -381,13 +388,21 @@ def reading(
 
     A file that does clear the ceiling is read exactly as it was before #179, threshold and
     burst both, which is what keeps material with an audible crowd where it was. So is any
-    file when ``scale`` is zero.
+    file when ``scale`` is zero, and so is a curve too short to say how long anything in it
+    lasted — one frame has no duration, and a rule that reads seconds off it would fire the
+    fallback on every degenerate curve there is.
+
+    ``own_scale`` says the fallback fired, not that the threshold came out lower than the
+    ceiling: at a ``scale`` steep enough for the file's own peak to ask for more than the
+    ceiling, the ceiling still binds and only the burst minimum moves. The gist carries both
+    numbers, so a reader is never left inferring one from the other.
     """
-    if scale <= 0 or not curve.probability:
+    if scale <= 0 or len(curve.probability) < 2 or len(curve.seconds) < 2:
         return Reading(ceiling, burst_seconds, False)
     if _seconds_over(curve, ceiling) >= QUIET_SECONDS:
         return Reading(ceiling, burst_seconds, False)
-    threshold = min(ceiling, max(MINIMUM_THRESHOLD, max(curve.probability) * scale))
+    peak = _peak_that_lasts(curve, min(burst_seconds, QUIET_BURST_SECONDS))
+    threshold = min(ceiling, max(MINIMUM_THRESHOLD, peak * scale))
     return Reading(threshold, min(burst_seconds, QUIET_BURST_SECONDS), True)
 
 
@@ -399,6 +414,29 @@ def _seconds_over(curve: Curve, threshold: float) -> float:
         for step, probability in zip(steps, curve.probability, strict=True)
         if probability >= threshold
     )
+
+
+def _peak_that_lasts(curve: Curve, seconds: float) -> float:
+    """The highest level the curve holds for ``seconds`` in total — the peak, made to last.
+
+    The plain maximum is one frame, and one frame is exactly what the first rule in this
+    module refuses to call applause: a shout into a vocal mic or a cymbal the model liked
+    would set the threshold for a whole set, and set it far too high, because everything
+    else is scaled off it. So the level the fallback scales is the one that at least a
+    burst's worth of the file reaches, which is the same evidence ``spans`` asks for and
+    costs one sort of the curve.
+    """
+    ordered = sorted(
+        zip(curve.probability, _steps(curve.seconds), strict=True),
+        key=lambda one: one[0],
+        reverse=True,
+    )
+    held = 0.0
+    for probability, step in ordered:
+        held += step
+        if held >= seconds:
+            return probability
+    return ordered[-1][0] if ordered else 0.0
 
 
 def spans(
@@ -489,6 +527,13 @@ def settled(
     A start that does not move is the ordinary case on a room mic and on any set where the
     band counts straight in: the first window of the call is already at playing level, so
     the boundary is where it always was and ``talk_seconds`` is zero.
+
+    A call the curve cannot answer for is kept exactly as it came, with ``talk_seconds``
+    left at None — too short to hold the window, or outside what the curve covers. That is
+    the same rule ``sifted`` follows for a call with no beat grid over it: unknown is not
+    zero, and a call is never dropped for want of a measurement. Dropping those as silent
+    would file "shorter than ``hold_seconds``" under "the band never came in", which is a
+    different finding and a wrong one.
     """
     if hold_seconds <= 0 or not loudness.lufs:
         return Settled(tuple(found), (), ())
@@ -497,7 +542,12 @@ def settled(
     silent: list[Tune] = []
     brief: list[Tune] = []
     for one in found:
-        came = _came_up(loudness, one.start, one.end, floor, hold_seconds)
+        inside = _inside(loudness, one.start, one.end)
+        width = _width(inside, hold_seconds)
+        if width is None:
+            kept.append(one)
+            continue
+        came = _came_up(inside, width, floor)
         if came is None:
             silent.append(one)
             continue
@@ -509,33 +559,40 @@ def settled(
     return Settled(tuple(kept), tuple(silent), tuple(brief))
 
 
-def _came_up(
-    loudness: Loudness,
-    start: float,
-    end: float,
-    floor: float,
-    hold_seconds: float,
-) -> float | None:
-    """The first window inside the call that is over the floor and mostly stays over it.
-
-    "Mostly" is ``SETTLE_SHARE`` of the next ``hold_seconds``, counted off a running sum
-    rather than a window per frame — a set is tens of thousands of windows and this runs
-    once per call. The window that starts the hold has to be over the floor itself, so the
-    boundary lands on the music rather than on the last quiet second before it.
-    """
-    inside = [
+def _inside(loudness: Loudness, start: float, end: float) -> list[tuple[float, float]]:
+    """The loudness windows that fall inside one call, in the order they were measured."""
+    return [
         (seconds, level)
         for seconds, level in zip(loudness.seconds, loudness.lufs, strict=True)
         if start <= seconds < end
     ]
+
+
+def _width(inside: Sequence[tuple[float, float]], hold_seconds: float) -> int | None:
+    """How many windows ``hold_seconds`` is, or None if this call cannot hold that many.
+
+    None is "no measurement here", not "nothing found": a call shorter than the hold, or
+    one the curve does not reach, has no window to judge and is left alone by ``settled``.
+    """
     if len(inside) < 2:
         return None
     step = statistics.median(
         later - earlier for (earlier, _), (later, _) in zip(inside, inside[1:], strict=False)
     )
-    width = max(int(round(hold_seconds / step)), 1) if step > 0 else 1
-    if len(inside) < width:
+    if step <= 0:
         return None
+    width = max(int(round(hold_seconds / step)), 1)
+    return width if len(inside) >= width else None
+
+
+def _came_up(inside: Sequence[tuple[float, float]], width: int, floor: float) -> float | None:
+    """The first window in the call that is over the floor and mostly stays over it.
+
+    "Mostly" is ``SETTLE_SHARE`` of the next ``width`` windows, counted off a running sum
+    rather than a window per frame — a set is tens of thousands of windows and this runs
+    once per call. The window that starts the hold has to be over the floor itself, so the
+    boundary lands on the music rather than on the last quiet second before it.
+    """
     over = [1 if level >= floor else 0 for _, level in inside]
     running = 0
     counts: list[int] = []

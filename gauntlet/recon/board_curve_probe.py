@@ -2,7 +2,11 @@
 
 Reads the .npz `board_curve_dump.py` wrote and answers three questions without re-tagging:
 the distribution of the curve, whether there is any excursion near each human boundary at
-all, and where the tallest excursions in the file are. Prints; writes nothing.
+all, and where the tallest excursions in the file are. This is the probe that found the
+thing #179 turned on — there *is* a burst near every human start, and every one of them
+sits 2 to 66 seconds before it, which is the announcement.
+
+Prints, and the run is kept beside it in `board_curve_probe.txt`.
 
 Usage: python board_curve_probe.py <curve.npz>
 """

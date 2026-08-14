@@ -24,7 +24,10 @@ def main() -> None:
     from resolve_mcp.jobs import runner, store
 
     began = time.time()
-    record = structure.analyze_structure(audio=MIX, tunes=True, solos=False)
+    # refresh, always: the half is keyed on the audio and the settings, neither of which
+    # changes when the rules do, so a cached answer would be the old code's and this file
+    # is meant to be evidence about this one.
+    record = structure.analyze_structure(audio=MIX, tunes=True, solos=False, refresh=True)
     job_id = record["job_id"]
     while True:
         got = runner.wait_for(job_id, timeout=60.0)

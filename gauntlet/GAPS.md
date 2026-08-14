@@ -16,29 +16,36 @@ the gauntlet measured the real spans).
 **Fixed by two rules in `analysis/applause.py`**, both arithmetic over
 measurements that already existed. First, the threshold is a ceiling: when a
 whole file holds under 10 s over it, the curve is read at 0.09 of its own
-peak and the burst minimum drops to 2.0 s with it (`reading`). It is a
-fallback and not a recalibration on purpose — scaling the room mic the same
-way turns the clapping after every solo into a boundary, 19 calls where 13
-belong. Second, the applause says a tune *ended*, not that the next one
-started: on this mix the announcement between them ran 0.3 s to 65 s at
-20-40 dB under the music, so each boundary walks forward to where the
-loudness curve `analyze_music` already wrote comes up to the file's median
-less 6 dB and holds for 10 s (`settled`), and a call the band never comes in
-on is refused.
+peak — the peak that lasts a burst's worth, not a single frame — and the
+burst minimum drops to 2.0 s with it (`reading`). It is a fallback and not a
+recalibration on purpose: scaling the room mic the same way turns the
+clapping after every solo into a boundary, 19 calls where 13 belong. Second,
+the applause says a tune *ended*, not that the next one started: on this mix
+the announcement between them ran 0.3 s to 65 s at 20-40 dB under the music,
+so each boundary walks forward to where the loudness curve `analyze_music`
+already wrote comes up to the file's median less 6 dB and holds for 10 s
+(`settled`), and a call the band never comes in on is refused.
 
-Measured, this mix, `gauntlet/recon/board_tunes_job.py` (job) and
-`board_boundary_check.py` (both mixes, before and after):
+Measured, this mix, `gauntlet/recon/board_tunes_job.json` (the real job) and
+`board_boundary_check.json` (the shipped functions, before and after):
 
 | | tunes | boundaries within 5 s of the human spans |
 |---|---|---|
 | before | 1 | 0 of 5 |
 | after | 5 | 5 of 5, worst error 1.63 s |
 
-The Scullers room mic is the no-regression control: threshold, burst count
-and burst length identical to before. Its call count goes 13 → 11 before the
-pulse check and 10 → 9 after, and the difference is honest — one call the
-settle step agrees with the pulse check about (talking, 296-440 s) and one
-whose 293 s hold only 27 s of music.
+Every constant is the middle of a measured plateau, not a fit:
+`board_boundary_sweep.json` runs 140 settings and 35 of them call this set
+correctly, worst error across all 35 of 2.01 s.
+
+`scullers_boundary_check.json` is the no-regression control — the room mic
+from #133, 13 calls at a peak of 0.65. The fallback correctly does not fire:
+threshold, burst count and burst length identical to before. The settle step
+does run there, as it does everywhere, and takes its call count 13 → 11
+before the pulse check and 10 → 9 after. Both losses are argued rather than
+accidental: one is the 296-440 s call the pulse check independently drops as
+talking, and one is an opening whose 293 s hold 27 s of music. Anyone who
+wants the old boundaries on room-mic material passes `settle_seconds=0`.
 
 ## G2 — beat grid unusable as bar map on this corpus anchor (open)
 

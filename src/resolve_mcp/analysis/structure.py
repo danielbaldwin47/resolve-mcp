@@ -107,7 +107,15 @@ def analyze_structure(
     config = config or get_config()
     source = halves.readable(audio)
     _asked_for_something(tunes, solos)
-    _sane_numbers(threshold, scale, window_seconds, hop_seconds, density_per_second)
+    _sane_numbers(
+        threshold,
+        scale,
+        settle_db,
+        settle_seconds,
+        window_seconds,
+        hop_seconds,
+        density_per_second,
+    )
     found = _stems(stems, solos)
 
     settings: dict[str, Any] = {
@@ -168,13 +176,23 @@ def _asked_for_something(tunes: bool, solos: bool) -> None:
 def _sane_numbers(
     threshold: float,
     scale: float,
+    settle_db: float,
+    settle_seconds: float,
     window_seconds: float,
     hop_seconds: float,
     density_per_second: float,
 ) -> None:
+    """Refuse the numbers that would quietly mean something other than what was asked.
+
+    ``settle_db`` is in here because a negative margin puts playing level *above* the file's
+    own median, which no set has half of itself over — every call would come back as one
+    the band never came in on, and the job would succeed while reporting no tunes at all.
+    """
     if (
         not 0.0 < threshold <= 1.0
         or not 0.0 <= scale <= 1.0
+        or settle_db < 0
+        or settle_seconds < 0
         or window_seconds <= 0
         or hop_seconds <= 0
         or density_per_second < 0
@@ -182,11 +200,15 @@ def _sane_numbers(
         raise InvalidRequestError(
             cause=(
                 "The applause threshold must be a probability, the scale a fraction of one, "
-                "the windows positive, and the beat-density floor zero or more."
+                "the windows positive, and the settle margin, settle hold and beat-density "
+                "floor zero or more."
             ),
             fix=(
                 f"Defaults are threshold={applause_module.DEFAULT_THRESHOLD}, "
                 f"scale={applause_module.DEFAULT_SCALE} (0 uses the threshold as it stands), "
+                f"settle_db={applause_module.DEFAULT_SETTLE_DB}, "
+                f"settle_seconds={applause_module.DEFAULT_SETTLE_SECONDS} "
+                "(0 turns the settle step off), "
                 f"window_seconds={solos_module.DEFAULT_WINDOW_SECONDS}, "
                 f"hop_seconds={solos_module.DEFAULT_HOP_SECONDS}, "
                 f"density_per_second={applause_module.DEFAULT_DENSITY_PER_SECOND} "
@@ -195,6 +217,8 @@ def _sane_numbers(
             detail={
                 "threshold": threshold,
                 "scale": scale,
+                "settle_db": settle_db,
+                "settle_seconds": settle_seconds,
                 "window_seconds": window_seconds,
                 "hop_seconds": hop_seconds,
                 "density_per_second": density_per_second,
@@ -410,11 +434,14 @@ def _tunes(
     calls = _with_a_pulse(
         played.kept, floor, source, described, identity, detector, refresh, config
     )
+    # The shape goes in first and the reading over it: ``threshold`` and ``burst_seconds``
+    # are what the caller asked for, and the ``_used`` pair what the file was actually read
+    # at, which are the same numbers only when the fallback did not fire.
     gist = {
         **applause_module.gist(curve, spans, calls, played),
         **shape,
-        "applause_threshold": round(read.threshold, 4),
-        "applause_burst_seconds": read.burst_seconds,
+        "threshold_used": round(read.threshold, 4),
+        "burst_seconds_used": read.burst_seconds,
         "read_at_own_scale": read.own_scale,
     }
     log.info(

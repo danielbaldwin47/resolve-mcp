@@ -98,8 +98,10 @@ def analyze_structure(
     A board mix needs two more things, and gets them by default. The tagger is far less
     sure of clapping it hears through a desk feed than of clapping in a room — a whole set
     can peak under the 0.3 an audible crowd clears easily — so the threshold you pass is a
-    ceiling and the one actually used is `scale` of this file's own peak, reported inline
-    as applause_threshold. scale=0 uses your threshold as it stands. And the applause is
+    ceiling: if the file holds almost no clapping over it, the curve is read at `scale` of
+    its own peak instead. read_at_own_scale says whether that happened and
+    applause_threshold what was used; a mix the threshold does find clapping in is read
+    exactly where it always was. scale=0 turns the fallback off. And the applause is
     not where the next tune starts: after it come the announcement, the re-tune and the
     count-in, up to a minute of them, all far below playing level. So each boundary walks
     forward to where the mix comes up and stays up for settle_seconds, and a call the band

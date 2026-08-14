@@ -1,0 +1,2588 @@
+{
+  "curve": "C:\\Users\\Daniel\\.claude\\jobs\\5d7c9b67\\tmp\\zinc_set2_curve.npz",
+  "energy": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\analysis\\Zinc-Set-2-Reaper-v4-0b66b71707de-energy.json",
+  "human_cut_starts_s": [
+    107.4405,
+    1373.8725,
+    1920.1265,
+    2725.014,
+    3568.4815
+  ],
+  "tolerance_s": 5.0,
+  "peak_probability": 0.2977,
+  "plateau": {
+    "count": 35,
+    "of": 140,
+    "scale": [
+      0.06,
+      0.07,
+      0.08,
+      0.09,
+      0.1
+    ],
+    "settle_db": [
+      4.0,
+      6.0,
+      8.0
+    ],
+    "settle_seconds": [
+      5.0,
+      10.0,
+      15.0,
+      20.0
+    ],
+    "worst_error_s": 2.01
+  },
+  "runs": [
+    {
+      "scale": 0.06,
+      "settle_db": 4.0,
+      "settle_seconds": 5.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 5,
+      "invented": 0,
+      "worst_error_s": 1.63,
+      "starts_s": [
+        107.5,
+        1373.5,
+        1918.5,
+        2724.0,
+        3569.0
+      ]
+    },
+    {
+      "scale": 0.06,
+      "settle_db": 4.0,
+      "settle_seconds": 10.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 5,
+      "invented": 0,
+      "worst_error_s": 1.63,
+      "starts_s": [
+        107.5,
+        1373.5,
+        1918.5,
+        2724.0,
+        3569.0
+      ]
+    },
+    {
+      "scale": 0.06,
+      "settle_db": 4.0,
+      "settle_seconds": 15.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 4,
+      "invented": 1,
+      "worst_error_s": null,
+      "starts_s": [
+        107.5,
+        1373.5,
+        1926.0,
+        2724.0,
+        3569.0
+      ]
+    },
+    {
+      "scale": 0.06,
+      "settle_db": 4.0,
+      "settle_seconds": 20.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 4,
+      "invented": 1,
+      "worst_error_s": null,
+      "starts_s": [
+        226.5,
+        1373.5,
+        1918.5,
+        2724.0,
+        3569.0
+      ]
+    },
+    {
+      "scale": 0.06,
+      "settle_db": 6.0,
+      "settle_seconds": 5.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 5,
+      "invented": 0,
+      "worst_error_s": 1.63,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1918.5,
+        2724.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.06,
+      "settle_db": 6.0,
+      "settle_seconds": 10.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 5,
+      "invented": 0,
+      "worst_error_s": 1.63,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1918.5,
+        2724.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.06,
+      "settle_db": 6.0,
+      "settle_seconds": 15.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 4,
+      "invented": 1,
+      "worst_error_s": null,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1926.0,
+        2724.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.06,
+      "settle_db": 6.0,
+      "settle_seconds": 20.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 5,
+      "invented": 0,
+      "worst_error_s": 1.63,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1918.5,
+        2724.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.06,
+      "settle_db": 8.0,
+      "settle_seconds": 5.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1918.5,
+        2723.0,
+        3568.5,
+        4331.5
+      ]
+    },
+    {
+      "scale": 0.06,
+      "settle_db": 8.0,
+      "settle_seconds": 10.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1918.5,
+        2723.0,
+        3568.5,
+        4331.5
+      ]
+    },
+    {
+      "scale": 0.06,
+      "settle_db": 8.0,
+      "settle_seconds": 15.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 5,
+      "invented": 0,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1918.5,
+        2723.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.06,
+      "settle_db": 8.0,
+      "settle_seconds": 20.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 5,
+      "invented": 0,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1918.5,
+        2723.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.06,
+      "settle_db": 10.0,
+      "settle_seconds": 5.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.5,
+        4297.5
+      ]
+    },
+    {
+      "scale": 0.06,
+      "settle_db": 10.0,
+      "settle_seconds": 10.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.5,
+        4297.5
+      ]
+    },
+    {
+      "scale": 0.06,
+      "settle_db": 10.0,
+      "settle_seconds": 15.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.5,
+        4297.5
+      ]
+    },
+    {
+      "scale": 0.06,
+      "settle_db": 10.0,
+      "settle_seconds": 20.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.5,
+        4297.5
+      ]
+    },
+    {
+      "scale": 0.06,
+      "settle_db": 12.0,
+      "settle_seconds": 5.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.0,
+        4295.0
+      ]
+    },
+    {
+      "scale": 0.06,
+      "settle_db": 12.0,
+      "settle_seconds": 10.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.0,
+        4293.0
+      ]
+    },
+    {
+      "scale": 0.06,
+      "settle_db": 12.0,
+      "settle_seconds": 15.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.0,
+        4293.0
+      ]
+    },
+    {
+      "scale": 0.06,
+      "settle_db": 12.0,
+      "settle_seconds": 20.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.0,
+        4293.0
+      ]
+    },
+    {
+      "scale": 0.07,
+      "settle_db": 4.0,
+      "settle_seconds": 5.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 5,
+      "invented": 0,
+      "worst_error_s": 1.63,
+      "starts_s": [
+        107.5,
+        1373.5,
+        1918.5,
+        2724.0,
+        3569.0
+      ]
+    },
+    {
+      "scale": 0.07,
+      "settle_db": 4.0,
+      "settle_seconds": 10.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 5,
+      "invented": 0,
+      "worst_error_s": 1.63,
+      "starts_s": [
+        107.5,
+        1373.5,
+        1918.5,
+        2724.0,
+        3569.0
+      ]
+    },
+    {
+      "scale": 0.07,
+      "settle_db": 4.0,
+      "settle_seconds": 15.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 4,
+      "invented": 1,
+      "worst_error_s": null,
+      "starts_s": [
+        107.5,
+        1373.5,
+        1926.0,
+        2724.0,
+        3569.0
+      ]
+    },
+    {
+      "scale": 0.07,
+      "settle_db": 4.0,
+      "settle_seconds": 20.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 4,
+      "invented": 1,
+      "worst_error_s": null,
+      "starts_s": [
+        226.5,
+        1373.5,
+        1918.5,
+        2724.0,
+        3569.0
+      ]
+    },
+    {
+      "scale": 0.07,
+      "settle_db": 6.0,
+      "settle_seconds": 5.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 5,
+      "invented": 0,
+      "worst_error_s": 1.63,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1918.5,
+        2724.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.07,
+      "settle_db": 6.0,
+      "settle_seconds": 10.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 5,
+      "invented": 0,
+      "worst_error_s": 1.63,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1918.5,
+        2724.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.07,
+      "settle_db": 6.0,
+      "settle_seconds": 15.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 4,
+      "invented": 1,
+      "worst_error_s": null,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1926.0,
+        2724.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.07,
+      "settle_db": 6.0,
+      "settle_seconds": 20.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 5,
+      "invented": 0,
+      "worst_error_s": 1.63,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1918.5,
+        2724.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.07,
+      "settle_db": 8.0,
+      "settle_seconds": 5.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1918.5,
+        2723.0,
+        3568.5,
+        4331.5
+      ]
+    },
+    {
+      "scale": 0.07,
+      "settle_db": 8.0,
+      "settle_seconds": 10.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1918.5,
+        2723.0,
+        3568.5,
+        4331.5
+      ]
+    },
+    {
+      "scale": 0.07,
+      "settle_db": 8.0,
+      "settle_seconds": 15.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 5,
+      "invented": 0,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1918.5,
+        2723.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.07,
+      "settle_db": 8.0,
+      "settle_seconds": 20.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 5,
+      "invented": 0,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1918.5,
+        2723.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.07,
+      "settle_db": 10.0,
+      "settle_seconds": 5.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.5,
+        4297.5
+      ]
+    },
+    {
+      "scale": 0.07,
+      "settle_db": 10.0,
+      "settle_seconds": 10.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.5,
+        4297.5
+      ]
+    },
+    {
+      "scale": 0.07,
+      "settle_db": 10.0,
+      "settle_seconds": 15.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.5,
+        4297.5
+      ]
+    },
+    {
+      "scale": 0.07,
+      "settle_db": 10.0,
+      "settle_seconds": 20.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.5,
+        4297.5
+      ]
+    },
+    {
+      "scale": 0.07,
+      "settle_db": 12.0,
+      "settle_seconds": 5.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.0,
+        4295.0
+      ]
+    },
+    {
+      "scale": 0.07,
+      "settle_db": 12.0,
+      "settle_seconds": 10.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.0,
+        4293.0
+      ]
+    },
+    {
+      "scale": 0.07,
+      "settle_db": 12.0,
+      "settle_seconds": 15.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.0,
+        4293.0
+      ]
+    },
+    {
+      "scale": 0.07,
+      "settle_db": 12.0,
+      "settle_seconds": 20.0,
+      "threshold_used": 0.02,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.0,
+        4293.0
+      ]
+    },
+    {
+      "scale": 0.08,
+      "settle_db": 4.0,
+      "settle_seconds": 5.0,
+      "threshold_used": 0.0208,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 5,
+      "invented": 0,
+      "worst_error_s": 1.63,
+      "starts_s": [
+        107.5,
+        1373.5,
+        1918.5,
+        2724.0,
+        3569.0
+      ]
+    },
+    {
+      "scale": 0.08,
+      "settle_db": 4.0,
+      "settle_seconds": 10.0,
+      "threshold_used": 0.0208,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 5,
+      "invented": 0,
+      "worst_error_s": 1.63,
+      "starts_s": [
+        107.5,
+        1373.5,
+        1918.5,
+        2724.0,
+        3569.0
+      ]
+    },
+    {
+      "scale": 0.08,
+      "settle_db": 4.0,
+      "settle_seconds": 15.0,
+      "threshold_used": 0.0208,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 4,
+      "invented": 1,
+      "worst_error_s": null,
+      "starts_s": [
+        107.5,
+        1373.5,
+        1926.0,
+        2724.0,
+        3569.0
+      ]
+    },
+    {
+      "scale": 0.08,
+      "settle_db": 4.0,
+      "settle_seconds": 20.0,
+      "threshold_used": 0.0208,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 4,
+      "invented": 1,
+      "worst_error_s": null,
+      "starts_s": [
+        226.5,
+        1373.5,
+        1918.5,
+        2724.0,
+        3569.0
+      ]
+    },
+    {
+      "scale": 0.08,
+      "settle_db": 6.0,
+      "settle_seconds": 5.0,
+      "threshold_used": 0.0208,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 5,
+      "invented": 0,
+      "worst_error_s": 1.63,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1918.5,
+        2724.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.08,
+      "settle_db": 6.0,
+      "settle_seconds": 10.0,
+      "threshold_used": 0.0208,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 5,
+      "invented": 0,
+      "worst_error_s": 1.63,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1918.5,
+        2724.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.08,
+      "settle_db": 6.0,
+      "settle_seconds": 15.0,
+      "threshold_used": 0.0208,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 4,
+      "invented": 1,
+      "worst_error_s": null,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1926.0,
+        2724.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.08,
+      "settle_db": 6.0,
+      "settle_seconds": 20.0,
+      "threshold_used": 0.0208,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 5,
+      "invented": 0,
+      "worst_error_s": 1.63,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1918.5,
+        2724.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.08,
+      "settle_db": 8.0,
+      "settle_seconds": 5.0,
+      "threshold_used": 0.0208,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1918.5,
+        2723.0,
+        3568.5,
+        4331.5
+      ]
+    },
+    {
+      "scale": 0.08,
+      "settle_db": 8.0,
+      "settle_seconds": 10.0,
+      "threshold_used": 0.0208,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1918.5,
+        2723.0,
+        3568.5,
+        4331.5
+      ]
+    },
+    {
+      "scale": 0.08,
+      "settle_db": 8.0,
+      "settle_seconds": 15.0,
+      "threshold_used": 0.0208,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 5,
+      "invented": 0,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1918.5,
+        2723.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.08,
+      "settle_db": 8.0,
+      "settle_seconds": 20.0,
+      "threshold_used": 0.0208,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 5,
+      "invented": 0,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1918.5,
+        2723.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.08,
+      "settle_db": 10.0,
+      "settle_seconds": 5.0,
+      "threshold_used": 0.0208,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.5,
+        4297.5
+      ]
+    },
+    {
+      "scale": 0.08,
+      "settle_db": 10.0,
+      "settle_seconds": 10.0,
+      "threshold_used": 0.0208,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.5,
+        4297.5
+      ]
+    },
+    {
+      "scale": 0.08,
+      "settle_db": 10.0,
+      "settle_seconds": 15.0,
+      "threshold_used": 0.0208,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.5,
+        4297.5
+      ]
+    },
+    {
+      "scale": 0.08,
+      "settle_db": 10.0,
+      "settle_seconds": 20.0,
+      "threshold_used": 0.0208,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.5,
+        4297.5
+      ]
+    },
+    {
+      "scale": 0.08,
+      "settle_db": 12.0,
+      "settle_seconds": 5.0,
+      "threshold_used": 0.0208,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.0,
+        4295.0
+      ]
+    },
+    {
+      "scale": 0.08,
+      "settle_db": 12.0,
+      "settle_seconds": 10.0,
+      "threshold_used": 0.0208,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.0,
+        4293.0
+      ]
+    },
+    {
+      "scale": 0.08,
+      "settle_db": 12.0,
+      "settle_seconds": 15.0,
+      "threshold_used": 0.0208,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.0,
+        4293.0
+      ]
+    },
+    {
+      "scale": 0.08,
+      "settle_db": 12.0,
+      "settle_seconds": 20.0,
+      "threshold_used": 0.0208,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.0,
+        4293.0
+      ]
+    },
+    {
+      "scale": 0.09,
+      "settle_db": 4.0,
+      "settle_seconds": 5.0,
+      "threshold_used": 0.0234,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 5,
+      "invented": 0,
+      "worst_error_s": 1.63,
+      "starts_s": [
+        107.5,
+        1373.5,
+        1918.5,
+        2724.0,
+        3569.0
+      ]
+    },
+    {
+      "scale": 0.09,
+      "settle_db": 4.0,
+      "settle_seconds": 10.0,
+      "threshold_used": 0.0234,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 5,
+      "invented": 0,
+      "worst_error_s": 1.63,
+      "starts_s": [
+        107.5,
+        1373.5,
+        1918.5,
+        2724.0,
+        3569.0
+      ]
+    },
+    {
+      "scale": 0.09,
+      "settle_db": 4.0,
+      "settle_seconds": 15.0,
+      "threshold_used": 0.0234,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 4,
+      "invented": 1,
+      "worst_error_s": null,
+      "starts_s": [
+        107.5,
+        1373.5,
+        1926.0,
+        2724.0,
+        3569.0
+      ]
+    },
+    {
+      "scale": 0.09,
+      "settle_db": 4.0,
+      "settle_seconds": 20.0,
+      "threshold_used": 0.0234,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 4,
+      "invented": 1,
+      "worst_error_s": null,
+      "starts_s": [
+        226.5,
+        1373.5,
+        1918.5,
+        2724.0,
+        3569.0
+      ]
+    },
+    {
+      "scale": 0.09,
+      "settle_db": 6.0,
+      "settle_seconds": 5.0,
+      "threshold_used": 0.0234,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 5,
+      "invented": 0,
+      "worst_error_s": 1.63,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1918.5,
+        2724.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.09,
+      "settle_db": 6.0,
+      "settle_seconds": 10.0,
+      "threshold_used": 0.0234,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 5,
+      "invented": 0,
+      "worst_error_s": 1.63,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1918.5,
+        2724.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.09,
+      "settle_db": 6.0,
+      "settle_seconds": 15.0,
+      "threshold_used": 0.0234,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 4,
+      "invented": 1,
+      "worst_error_s": null,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1926.0,
+        2724.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.09,
+      "settle_db": 6.0,
+      "settle_seconds": 20.0,
+      "threshold_used": 0.0234,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 5,
+      "invented": 0,
+      "worst_error_s": 1.63,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1918.5,
+        2724.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.09,
+      "settle_db": 8.0,
+      "settle_seconds": 5.0,
+      "threshold_used": 0.0234,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1918.5,
+        2723.0,
+        3568.5,
+        4331.5
+      ]
+    },
+    {
+      "scale": 0.09,
+      "settle_db": 8.0,
+      "settle_seconds": 10.0,
+      "threshold_used": 0.0234,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1918.5,
+        2723.0,
+        3568.5,
+        4331.5
+      ]
+    },
+    {
+      "scale": 0.09,
+      "settle_db": 8.0,
+      "settle_seconds": 15.0,
+      "threshold_used": 0.0234,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 5,
+      "invented": 0,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1918.5,
+        2723.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.09,
+      "settle_db": 8.0,
+      "settle_seconds": 20.0,
+      "threshold_used": 0.0234,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 5,
+      "invented": 0,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1918.5,
+        2723.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.09,
+      "settle_db": 10.0,
+      "settle_seconds": 5.0,
+      "threshold_used": 0.0234,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.5,
+        4297.5
+      ]
+    },
+    {
+      "scale": 0.09,
+      "settle_db": 10.0,
+      "settle_seconds": 10.0,
+      "threshold_used": 0.0234,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.5,
+        4297.5
+      ]
+    },
+    {
+      "scale": 0.09,
+      "settle_db": 10.0,
+      "settle_seconds": 15.0,
+      "threshold_used": 0.0234,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.5,
+        4297.5
+      ]
+    },
+    {
+      "scale": 0.09,
+      "settle_db": 10.0,
+      "settle_seconds": 20.0,
+      "threshold_used": 0.0234,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.5,
+        4297.5
+      ]
+    },
+    {
+      "scale": 0.09,
+      "settle_db": 12.0,
+      "settle_seconds": 5.0,
+      "threshold_used": 0.0234,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.0,
+        4295.0
+      ]
+    },
+    {
+      "scale": 0.09,
+      "settle_db": 12.0,
+      "settle_seconds": 10.0,
+      "threshold_used": 0.0234,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.0,
+        4293.0
+      ]
+    },
+    {
+      "scale": 0.09,
+      "settle_db": 12.0,
+      "settle_seconds": 15.0,
+      "threshold_used": 0.0234,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.0,
+        4293.0
+      ]
+    },
+    {
+      "scale": 0.09,
+      "settle_db": 12.0,
+      "settle_seconds": 20.0,
+      "threshold_used": 0.0234,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.0,
+        4293.0
+      ]
+    },
+    {
+      "scale": 0.1,
+      "settle_db": 4.0,
+      "settle_seconds": 5.0,
+      "threshold_used": 0.026,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 5,
+      "invented": 0,
+      "worst_error_s": 1.63,
+      "starts_s": [
+        107.5,
+        1373.5,
+        1918.5,
+        2724.0,
+        3569.0
+      ]
+    },
+    {
+      "scale": 0.1,
+      "settle_db": 4.0,
+      "settle_seconds": 10.0,
+      "threshold_used": 0.026,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 5,
+      "invented": 0,
+      "worst_error_s": 1.63,
+      "starts_s": [
+        107.5,
+        1373.5,
+        1918.5,
+        2724.0,
+        3569.0
+      ]
+    },
+    {
+      "scale": 0.1,
+      "settle_db": 4.0,
+      "settle_seconds": 15.0,
+      "threshold_used": 0.026,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 4,
+      "invented": 1,
+      "worst_error_s": null,
+      "starts_s": [
+        107.5,
+        1373.5,
+        1926.0,
+        2724.0,
+        3569.0
+      ]
+    },
+    {
+      "scale": 0.1,
+      "settle_db": 4.0,
+      "settle_seconds": 20.0,
+      "threshold_used": 0.026,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 4,
+      "invented": 1,
+      "worst_error_s": null,
+      "starts_s": [
+        226.5,
+        1373.5,
+        1918.5,
+        2724.0,
+        3569.0
+      ]
+    },
+    {
+      "scale": 0.1,
+      "settle_db": 6.0,
+      "settle_seconds": 5.0,
+      "threshold_used": 0.026,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 5,
+      "invented": 0,
+      "worst_error_s": 1.63,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1918.5,
+        2724.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.1,
+      "settle_db": 6.0,
+      "settle_seconds": 10.0,
+      "threshold_used": 0.026,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 5,
+      "invented": 0,
+      "worst_error_s": 1.63,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1918.5,
+        2724.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.1,
+      "settle_db": 6.0,
+      "settle_seconds": 15.0,
+      "threshold_used": 0.026,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 4,
+      "invented": 1,
+      "worst_error_s": null,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1926.0,
+        2724.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.1,
+      "settle_db": 6.0,
+      "settle_seconds": 20.0,
+      "threshold_used": 0.026,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 5,
+      "invented": 0,
+      "worst_error_s": 1.63,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1918.5,
+        2724.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.1,
+      "settle_db": 8.0,
+      "settle_seconds": 5.0,
+      "threshold_used": 0.026,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1918.5,
+        2723.0,
+        3568.5,
+        4331.5
+      ]
+    },
+    {
+      "scale": 0.1,
+      "settle_db": 8.0,
+      "settle_seconds": 10.0,
+      "threshold_used": 0.026,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1918.5,
+        2723.0,
+        3568.5,
+        4331.5
+      ]
+    },
+    {
+      "scale": 0.1,
+      "settle_db": 8.0,
+      "settle_seconds": 15.0,
+      "threshold_used": 0.026,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 5,
+      "invented": 0,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1918.5,
+        2723.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.1,
+      "settle_db": 8.0,
+      "settle_seconds": 20.0,
+      "threshold_used": 0.026,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 5,
+      "invented": 0,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1373.0,
+        1918.5,
+        2723.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.1,
+      "settle_db": 10.0,
+      "settle_seconds": 5.0,
+      "threshold_used": 0.026,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.5,
+        4297.5
+      ]
+    },
+    {
+      "scale": 0.1,
+      "settle_db": 10.0,
+      "settle_seconds": 10.0,
+      "threshold_used": 0.026,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.5,
+        4297.5
+      ]
+    },
+    {
+      "scale": 0.1,
+      "settle_db": 10.0,
+      "settle_seconds": 15.0,
+      "threshold_used": 0.026,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.5,
+        4297.5
+      ]
+    },
+    {
+      "scale": 0.1,
+      "settle_db": 10.0,
+      "settle_seconds": 20.0,
+      "threshold_used": 0.026,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.5,
+        4297.5
+      ]
+    },
+    {
+      "scale": 0.1,
+      "settle_db": 12.0,
+      "settle_seconds": 5.0,
+      "threshold_used": 0.026,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.0,
+        4295.0
+      ]
+    },
+    {
+      "scale": 0.1,
+      "settle_db": 12.0,
+      "settle_seconds": 10.0,
+      "threshold_used": 0.026,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.0,
+        4293.0
+      ]
+    },
+    {
+      "scale": 0.1,
+      "settle_db": 12.0,
+      "settle_seconds": 15.0,
+      "threshold_used": 0.026,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.0,
+        4293.0
+      ]
+    },
+    {
+      "scale": 0.1,
+      "settle_db": 12.0,
+      "settle_seconds": 20.0,
+      "threshold_used": 0.026,
+      "burst_seconds_used": 2.0,
+      "tunes": 6,
+      "within_tolerance": 5,
+      "invented": 1,
+      "worst_error_s": 2.01,
+      "starts_s": [
+        107.0,
+        1372.5,
+        1918.5,
+        2723.0,
+        3568.0,
+        4293.0
+      ]
+    },
+    {
+      "scale": 0.12,
+      "settle_db": 4.0,
+      "settle_seconds": 5.0,
+      "threshold_used": 0.0312,
+      "burst_seconds_used": 2.0,
+      "tunes": 4,
+      "within_tolerance": 4,
+      "invented": 0,
+      "worst_error_s": null,
+      "starts_s": [
+        107.5,
+        1373.5,
+        2724.0,
+        3569.0
+      ]
+    },
+    {
+      "scale": 0.12,
+      "settle_db": 4.0,
+      "settle_seconds": 10.0,
+      "threshold_used": 0.0312,
+      "burst_seconds_used": 2.0,
+      "tunes": 4,
+      "within_tolerance": 4,
+      "invented": 0,
+      "worst_error_s": null,
+      "starts_s": [
+        107.5,
+        1373.5,
+        2724.0,
+        3569.0
+      ]
+    },
+    {
+      "scale": 0.12,
+      "settle_db": 4.0,
+      "settle_seconds": 15.0,
+      "threshold_used": 0.0312,
+      "burst_seconds_used": 2.0,
+      "tunes": 4,
+      "within_tolerance": 4,
+      "invented": 0,
+      "worst_error_s": null,
+      "starts_s": [
+        107.5,
+        1373.5,
+        2724.0,
+        3569.0
+      ]
+    },
+    {
+      "scale": 0.12,
+      "settle_db": 4.0,
+      "settle_seconds": 20.0,
+      "threshold_used": 0.0312,
+      "burst_seconds_used": 2.0,
+      "tunes": 4,
+      "within_tolerance": 3,
+      "invented": 1,
+      "worst_error_s": null,
+      "starts_s": [
+        226.5,
+        1373.5,
+        2724.0,
+        3569.0
+      ]
+    },
+    {
+      "scale": 0.12,
+      "settle_db": 6.0,
+      "settle_seconds": 5.0,
+      "threshold_used": 0.0312,
+      "burst_seconds_used": 2.0,
+      "tunes": 4,
+      "within_tolerance": 4,
+      "invented": 0,
+      "worst_error_s": null,
+      "starts_s": [
+        107.0,
+        1373.0,
+        2724.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.12,
+      "settle_db": 6.0,
+      "settle_seconds": 10.0,
+      "threshold_used": 0.0312,
+      "burst_seconds_used": 2.0,
+      "tunes": 4,
+      "within_tolerance": 4,
+      "invented": 0,
+      "worst_error_s": null,
+      "starts_s": [
+        107.0,
+        1373.0,
+        2724.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.12,
+      "settle_db": 6.0,
+      "settle_seconds": 15.0,
+      "threshold_used": 0.0312,
+      "burst_seconds_used": 2.0,
+      "tunes": 4,
+      "within_tolerance": 4,
+      "invented": 0,
+      "worst_error_s": null,
+      "starts_s": [
+        107.0,
+        1373.0,
+        2724.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.12,
+      "settle_db": 6.0,
+      "settle_seconds": 20.0,
+      "threshold_used": 0.0312,
+      "burst_seconds_used": 2.0,
+      "tunes": 4,
+      "within_tolerance": 4,
+      "invented": 0,
+      "worst_error_s": null,
+      "starts_s": [
+        107.0,
+        1373.0,
+        2724.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.12,
+      "settle_db": 8.0,
+      "settle_seconds": 5.0,
+      "threshold_used": 0.0312,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 4,
+      "invented": 1,
+      "worst_error_s": null,
+      "starts_s": [
+        107.0,
+        1373.0,
+        2723.0,
+        3568.5,
+        4331.5
+      ]
+    },
+    {
+      "scale": 0.12,
+      "settle_db": 8.0,
+      "settle_seconds": 10.0,
+      "threshold_used": 0.0312,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 4,
+      "invented": 1,
+      "worst_error_s": null,
+      "starts_s": [
+        107.0,
+        1373.0,
+        2723.0,
+        3568.5,
+        4331.5
+      ]
+    },
+    {
+      "scale": 0.12,
+      "settle_db": 8.0,
+      "settle_seconds": 15.0,
+      "threshold_used": 0.0312,
+      "burst_seconds_used": 2.0,
+      "tunes": 4,
+      "within_tolerance": 4,
+      "invented": 0,
+      "worst_error_s": null,
+      "starts_s": [
+        107.0,
+        1373.0,
+        2723.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.12,
+      "settle_db": 8.0,
+      "settle_seconds": 20.0,
+      "threshold_used": 0.0312,
+      "burst_seconds_used": 2.0,
+      "tunes": 4,
+      "within_tolerance": 4,
+      "invented": 0,
+      "worst_error_s": null,
+      "starts_s": [
+        107.0,
+        1373.0,
+        2723.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.12,
+      "settle_db": 10.0,
+      "settle_seconds": 5.0,
+      "threshold_used": 0.0312,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 4,
+      "invented": 1,
+      "worst_error_s": null,
+      "starts_s": [
+        107.0,
+        1372.5,
+        2723.0,
+        3568.5,
+        4297.5
+      ]
+    },
+    {
+      "scale": 0.12,
+      "settle_db": 10.0,
+      "settle_seconds": 10.0,
+      "threshold_used": 0.0312,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 4,
+      "invented": 1,
+      "worst_error_s": null,
+      "starts_s": [
+        107.0,
+        1372.5,
+        2723.0,
+        3568.5,
+        4297.5
+      ]
+    },
+    {
+      "scale": 0.12,
+      "settle_db": 10.0,
+      "settle_seconds": 15.0,
+      "threshold_used": 0.0312,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 4,
+      "invented": 1,
+      "worst_error_s": null,
+      "starts_s": [
+        107.0,
+        1372.5,
+        2723.0,
+        3568.5,
+        4297.5
+      ]
+    },
+    {
+      "scale": 0.12,
+      "settle_db": 10.0,
+      "settle_seconds": 20.0,
+      "threshold_used": 0.0312,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 4,
+      "invented": 1,
+      "worst_error_s": null,
+      "starts_s": [
+        107.0,
+        1372.5,
+        2723.0,
+        3568.5,
+        4297.5
+      ]
+    },
+    {
+      "scale": 0.12,
+      "settle_db": 12.0,
+      "settle_seconds": 5.0,
+      "threshold_used": 0.0312,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 4,
+      "invented": 1,
+      "worst_error_s": null,
+      "starts_s": [
+        107.0,
+        1372.5,
+        2723.0,
+        3568.0,
+        4295.0
+      ]
+    },
+    {
+      "scale": 0.12,
+      "settle_db": 12.0,
+      "settle_seconds": 10.0,
+      "threshold_used": 0.0312,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 4,
+      "invented": 1,
+      "worst_error_s": null,
+      "starts_s": [
+        107.0,
+        1372.5,
+        2723.0,
+        3568.0,
+        4293.0
+      ]
+    },
+    {
+      "scale": 0.12,
+      "settle_db": 12.0,
+      "settle_seconds": 15.0,
+      "threshold_used": 0.0312,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 4,
+      "invented": 1,
+      "worst_error_s": null,
+      "starts_s": [
+        107.0,
+        1372.5,
+        2723.0,
+        3568.0,
+        4293.0
+      ]
+    },
+    {
+      "scale": 0.12,
+      "settle_db": 12.0,
+      "settle_seconds": 20.0,
+      "threshold_used": 0.0312,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 4,
+      "invented": 1,
+      "worst_error_s": null,
+      "starts_s": [
+        107.0,
+        1372.5,
+        2723.0,
+        3568.0,
+        4293.0
+      ]
+    },
+    {
+      "scale": 0.15,
+      "settle_db": 4.0,
+      "settle_seconds": 5.0,
+      "threshold_used": 0.039,
+      "burst_seconds_used": 2.0,
+      "tunes": 4,
+      "within_tolerance": 4,
+      "invented": 0,
+      "worst_error_s": null,
+      "starts_s": [
+        107.5,
+        1373.5,
+        2724.0,
+        3569.0
+      ]
+    },
+    {
+      "scale": 0.15,
+      "settle_db": 4.0,
+      "settle_seconds": 10.0,
+      "threshold_used": 0.039,
+      "burst_seconds_used": 2.0,
+      "tunes": 4,
+      "within_tolerance": 4,
+      "invented": 0,
+      "worst_error_s": null,
+      "starts_s": [
+        107.5,
+        1373.5,
+        2724.0,
+        3569.0
+      ]
+    },
+    {
+      "scale": 0.15,
+      "settle_db": 4.0,
+      "settle_seconds": 15.0,
+      "threshold_used": 0.039,
+      "burst_seconds_used": 2.0,
+      "tunes": 4,
+      "within_tolerance": 4,
+      "invented": 0,
+      "worst_error_s": null,
+      "starts_s": [
+        107.5,
+        1373.5,
+        2724.0,
+        3569.0
+      ]
+    },
+    {
+      "scale": 0.15,
+      "settle_db": 4.0,
+      "settle_seconds": 20.0,
+      "threshold_used": 0.039,
+      "burst_seconds_used": 2.0,
+      "tunes": 4,
+      "within_tolerance": 3,
+      "invented": 1,
+      "worst_error_s": null,
+      "starts_s": [
+        226.5,
+        1373.5,
+        2724.0,
+        3569.0
+      ]
+    },
+    {
+      "scale": 0.15,
+      "settle_db": 6.0,
+      "settle_seconds": 5.0,
+      "threshold_used": 0.039,
+      "burst_seconds_used": 2.0,
+      "tunes": 4,
+      "within_tolerance": 4,
+      "invented": 0,
+      "worst_error_s": null,
+      "starts_s": [
+        107.0,
+        1373.0,
+        2724.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.15,
+      "settle_db": 6.0,
+      "settle_seconds": 10.0,
+      "threshold_used": 0.039,
+      "burst_seconds_used": 2.0,
+      "tunes": 4,
+      "within_tolerance": 4,
+      "invented": 0,
+      "worst_error_s": null,
+      "starts_s": [
+        107.0,
+        1373.0,
+        2724.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.15,
+      "settle_db": 6.0,
+      "settle_seconds": 15.0,
+      "threshold_used": 0.039,
+      "burst_seconds_used": 2.0,
+      "tunes": 4,
+      "within_tolerance": 4,
+      "invented": 0,
+      "worst_error_s": null,
+      "starts_s": [
+        107.0,
+        1373.0,
+        2724.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.15,
+      "settle_db": 6.0,
+      "settle_seconds": 20.0,
+      "threshold_used": 0.039,
+      "burst_seconds_used": 2.0,
+      "tunes": 4,
+      "within_tolerance": 4,
+      "invented": 0,
+      "worst_error_s": null,
+      "starts_s": [
+        107.0,
+        1373.0,
+        2724.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.15,
+      "settle_db": 8.0,
+      "settle_seconds": 5.0,
+      "threshold_used": 0.039,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 4,
+      "invented": 1,
+      "worst_error_s": null,
+      "starts_s": [
+        106.5,
+        1373.0,
+        2723.0,
+        3568.5,
+        4331.5
+      ]
+    },
+    {
+      "scale": 0.15,
+      "settle_db": 8.0,
+      "settle_seconds": 10.0,
+      "threshold_used": 0.039,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 4,
+      "invented": 1,
+      "worst_error_s": null,
+      "starts_s": [
+        106.5,
+        1373.0,
+        2723.0,
+        3568.5,
+        4331.5
+      ]
+    },
+    {
+      "scale": 0.15,
+      "settle_db": 8.0,
+      "settle_seconds": 15.0,
+      "threshold_used": 0.039,
+      "burst_seconds_used": 2.0,
+      "tunes": 4,
+      "within_tolerance": 4,
+      "invented": 0,
+      "worst_error_s": null,
+      "starts_s": [
+        106.5,
+        1373.0,
+        2723.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.15,
+      "settle_db": 8.0,
+      "settle_seconds": 20.0,
+      "threshold_used": 0.039,
+      "burst_seconds_used": 2.0,
+      "tunes": 4,
+      "within_tolerance": 4,
+      "invented": 0,
+      "worst_error_s": null,
+      "starts_s": [
+        106.5,
+        1373.0,
+        2723.0,
+        3568.5
+      ]
+    },
+    {
+      "scale": 0.15,
+      "settle_db": 10.0,
+      "settle_seconds": 5.0,
+      "threshold_used": 0.039,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 4,
+      "invented": 1,
+      "worst_error_s": null,
+      "starts_s": [
+        106.5,
+        1372.5,
+        2723.0,
+        3568.5,
+        4297.5
+      ]
+    },
+    {
+      "scale": 0.15,
+      "settle_db": 10.0,
+      "settle_seconds": 10.0,
+      "threshold_used": 0.039,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 4,
+      "invented": 1,
+      "worst_error_s": null,
+      "starts_s": [
+        106.5,
+        1372.5,
+        2723.0,
+        3568.5,
+        4297.5
+      ]
+    },
+    {
+      "scale": 0.15,
+      "settle_db": 10.0,
+      "settle_seconds": 15.0,
+      "threshold_used": 0.039,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 4,
+      "invented": 1,
+      "worst_error_s": null,
+      "starts_s": [
+        106.5,
+        1372.5,
+        2723.0,
+        3568.5,
+        4297.5
+      ]
+    },
+    {
+      "scale": 0.15,
+      "settle_db": 10.0,
+      "settle_seconds": 20.0,
+      "threshold_used": 0.039,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 4,
+      "invented": 1,
+      "worst_error_s": null,
+      "starts_s": [
+        106.5,
+        1372.5,
+        2723.0,
+        3568.5,
+        4297.5
+      ]
+    },
+    {
+      "scale": 0.15,
+      "settle_db": 12.0,
+      "settle_seconds": 5.0,
+      "threshold_used": 0.039,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 4,
+      "invented": 1,
+      "worst_error_s": null,
+      "starts_s": [
+        106.5,
+        1372.5,
+        2723.0,
+        3568.0,
+        4295.0
+      ]
+    },
+    {
+      "scale": 0.15,
+      "settle_db": 12.0,
+      "settle_seconds": 10.0,
+      "threshold_used": 0.039,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 4,
+      "invented": 1,
+      "worst_error_s": null,
+      "starts_s": [
+        106.5,
+        1372.5,
+        2723.0,
+        3568.0,
+        4293.0
+      ]
+    },
+    {
+      "scale": 0.15,
+      "settle_db": 12.0,
+      "settle_seconds": 15.0,
+      "threshold_used": 0.039,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 4,
+      "invented": 1,
+      "worst_error_s": null,
+      "starts_s": [
+        106.5,
+        1372.5,
+        2723.0,
+        3568.0,
+        4293.0
+      ]
+    },
+    {
+      "scale": 0.15,
+      "settle_db": 12.0,
+      "settle_seconds": 20.0,
+      "threshold_used": 0.039,
+      "burst_seconds_used": 2.0,
+      "tunes": 5,
+      "within_tolerance": 4,
+      "invented": 1,
+      "worst_error_s": null,
+      "starts_s": [
+        106.5,
+        1372.5,
+        2723.0,
+        3568.0,
+        4293.0
+      ]
+    }
+  ]
+}

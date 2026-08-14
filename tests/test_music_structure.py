@@ -345,18 +345,40 @@ def test_a_mix_the_threshold_finds_no_clapping_in_is_read_at_its_own_scale(board
     result = _result(_started(audio=board, tagger=_barely_heard()))
 
     assert result["tunes"]["read_at_own_scale"] is True
-    assert result["tunes"]["applause_threshold"] < applause_module.DEFAULT_THRESHOLD
+    assert result["tunes"]["threshold_used"] < applause_module.DEFAULT_THRESHOLD
+    assert result["tunes"]["threshold"] == applause_module.DEFAULT_THRESHOLD
     assert result["tunes"]["applause_count"] == 1
     assert result["tunes"]["count"] == 2
 
 
 def test_a_mix_with_an_audible_crowd_is_read_where_it_always_was(room: Path) -> None:
-    """The regression that matters: nothing about a mix the tagger is sure of moves."""
+    """The regression that matters: the fallback stays off for a mix the tagger is sure of."""
     result = _result(_started(audio=room, tagger=_room_heard()))
 
     assert result["tunes"]["read_at_own_scale"] is False
-    assert result["tunes"]["applause_threshold"] == applause_module.DEFAULT_THRESHOLD
-    assert result["tunes"]["applause_burst_seconds"] == 1.0
+    assert result["tunes"]["threshold_used"] == applause_module.DEFAULT_THRESHOLD
+    assert result["tunes"]["burst_seconds_used"] == 1.0
+
+
+def test_an_audible_crowd_gets_the_boundaries_the_applause_alone_would_have_given(
+    room: Path,
+) -> None:
+    """The other half of the same regression: the tunes, not just the numbers they were read at.
+
+    The band plays either side of the clapping with no announcement between, which is what a
+    room mic sounds like — so the settle step has nothing to move and every boundary has to
+    come back exactly where the applause put it.
+    """
+    settled = _result(_started(audio=room, tagger=_room_heard()))
+    unsettled = _result(_started(audio=room, tagger=_room_heard(), settle_seconds=0.0))
+
+    written = json.loads(Path(settled["tunes"]["path"]).read_text(encoding="utf-8"))
+    before = json.loads(Path(unsettled["tunes"]["path"]).read_text(encoding="utf-8"))
+
+    assert [(one["t"], one["end"]) for one in written["tunes"]] == [(0.0, 6.0), (18.0, 24.0)]
+    assert [one["t"] for one in written["tunes"]] == [one["t"] for one in before["tunes"]]
+    assert settled["tunes"]["count"] == unsettled["tunes"]["count"] == 2
+    assert settled["tunes"]["settled_seconds"] == 0.0
 
 
 def test_a_boundary_lands_where_the_band_comes_in_not_where_the_clapping_stopped(
@@ -756,6 +778,21 @@ def test_an_impossible_threshold_is_refused(concert: Path) -> None:
 def test_a_negative_density_floor_is_refused(concert: Path) -> None:
     with pytest.raises(Exception, match="density"):
         _started(audio=concert, density_per_second=-1.0)
+
+    assert store.load_all() == []
+
+
+def test_a_negative_settle_margin_is_refused(concert: Path) -> None:
+    """It would put playing level above the file's median and call every tune silent."""
+    with pytest.raises(Exception, match="settle"):
+        _started(audio=concert, settle_db=-6.0)
+
+    assert store.load_all() == []
+
+
+def test_a_scale_that_is_not_a_fraction_is_refused(concert: Path) -> None:
+    with pytest.raises(Exception, match="scale"):
+        _started(audio=concert, scale=1.5)
 
     assert store.load_all() == []
 
