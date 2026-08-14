@@ -233,6 +233,24 @@ alternation; accents matter at 0.5–1 s scale, not just onsets at 30 ms)
 + server (correlate report gains a shot_rhythm block with a
 reads_metronomic heuristic as a builder self-review gate).
 
+## G18 — the quiet floor reads locked-off even when its gear is right (in-work)
+
+P4R2's remaining flank, carried out of a round we won 3–0 (STATE.md).
+Ours holds the quiet passage (derived d38–195) at 6.88 cuts/min — the
+0.74× gear the arc table asks for, hit — and still parks: shot-length
+CV 0.597 against the human's 0.783 over the same passage, and the
+trough at 79–157 s is five holds (17.1|12.9|10.3|20.7|14.4) with one
+2.5 s flash punched through them. The flash is what makes this its own
+gap rather than G17's: a lone short shot lifts a spread number without
+lifting anything a viewer sees, so a CV floor alone can be passed by a
+cut that reads locked. Fixed both sides (#190): style (quiet passages
+keep their spread with no orphan flashes; what raises it is unequal
+holds, a reframe or push-in where the footage has one, a scale change)
++ server (`gears.quiet_floor` finds the passages off a smoothed level
+curve and reports `cv_less_orphans` / `reads_locked`, a blocker in
+`docs/agents/concert.md`). **Open until a full-song build passes it** —
+the measurement and the rule exist, the proving round does not.
+
 ## Round record
 
 - **P3·R2 · mid-song trading window · WIN 2–1 — PIECE 3 CLOSED**
