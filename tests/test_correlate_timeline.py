@@ -261,6 +261,11 @@ def test_every_shot_lands_on_disk_with_its_offsets_bar_and_section(
         "clip": "C0031.mp4",
         "track": 1,
         "role": None,
+        "subject": None,
+        "subject_kind": None,
+        "on_soloist": None,
+        "on_soloist_by": None,
+        "on_soloist_seconds": {"unlabelled": 1.45},
         "opening": False,
         "t": 1.033,
         "in": {"frames": 162, "seconds": 2.7, "timecode": "00:00:02:42", "fps": 60.0},
@@ -368,6 +373,89 @@ def test_an_entry_with_no_role_in_it_is_dropped_rather_than_refused(
     result = _measured(tmp_path, angles={"C0012.mp4": {"subject": "the room"}})
 
     assert result["roles"] is None
+
+
+ANGLES: dict[str, Any] = {
+    "C0012.mp4": {"role": "ensemble-wide"},
+    "C0031.mp4": {"role": "drums-tight", "subject": "drums"},
+}
+"""The fixture rig: a wide on the band and a tight one on the drummer, as a sidecar labels them.
+
+The solo fixture puts drums out front from the top and hands over at 2.0 s, so the drum cam's
+shot — 1.033 s to 2.483 s — straddles the change and is the case the seconds exist for.
+"""
+
+
+def test_each_shot_says_what_it_is_framed_on_and_whether_that_is_the_soloist(
+    attach: Attach, tmp_path: Path
+) -> None:
+    attach(studio(timeline=a_cut()))
+
+    cuts = _rows(_measured(tmp_path, angles=ANGLES, solos=str(solos_file(tmp_path))))
+
+    assert [one["subject"] for one in cuts] == ["ensemble", "drums", "ensemble"]
+    assert [one["subject_kind"] for one in cuts] == ["ensemble", "player", "ensemble"]
+    assert [one["on_soloist"] for one in cuts] == [False, True, False]
+
+
+def test_a_shot_that_outlives_the_solo_it_opened_in_is_split_where_the_front_changed(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Reading the front at the cut alone would call this shot 1.45 s on the soloist."""
+    attach(studio(timeline=a_cut()))
+
+    cuts = _rows(_measured(tmp_path, angles=ANGLES, solos=str(solos_file(tmp_path))))
+
+    assert cuts[1]["front"] == "drums"
+    assert cuts[1]["on_soloist_seconds"] == {"soloist": 0.967, "other_player": 0.483}
+
+
+def test_the_reading_says_what_share_of_the_solo_windows_is_on_the_soloist(
+    attach: Attach, tmp_path: Path
+) -> None:
+    attach(studio(timeline=a_cut()))
+
+    result = _measured(tmp_path, angles=ANGLES, solos=str(solos_file(tmp_path)))
+
+    assert result["subjects"]["drums"]["cuts"] == 1
+    assert result["on_soloist"]["seconds"] == {
+        "soloist": 0.967,
+        "ensemble": 1.866,
+        "other_player": 0.483,
+    }
+    assert result["on_soloist"]["fraction_on_soloist"] == 0.292
+    assert result["on_soloist"]["unlabelled_seconds"] == 0.0
+    assert result["on_soloist"]["shots"] == {"soloist": 1, "ensemble": 2}
+
+
+def test_without_a_solo_map_a_shot_is_labelled_but_nothing_is_on_the_soloist(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Who is out front is the other document's answer; absent it, the join reads nothing."""
+    attach(studio(timeline=a_cut()))
+
+    result = _measured(tmp_path, angles=ANGLES)
+
+    assert [one["subject"] for one in _rows(result)] == ["ensemble", "drums", "ensemble"]
+    assert [one["on_soloist"] for one in _rows(result)] == [None, None, None]
+    assert result["on_soloist"] is None
+
+
+def test_screen_time_no_sidecar_label_reaches_is_counted_apart_from_the_fractions(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Folded into the denominator it reads as a cut ignoring the soloist; it is not that."""
+    attach(studio(timeline=a_cut()))
+
+    result = _measured(
+        tmp_path,
+        angles={"C0031.mp4": {"role": "drums-tight"}},
+        solos=str(solos_file(tmp_path)),
+    )
+
+    assert result["on_soloist"]["unlabelled_seconds"] == 1.866
+    assert result["on_soloist"]["labelled_seconds"] == 1.45
+    assert result["on_soloist"]["shots"]["unlabelled"] == 2
 
 
 def test_a_dissolve_is_not_a_shot(attach: Attach, tmp_path: Path) -> None:
@@ -555,6 +643,22 @@ def test_black_is_counted_apart_from_the_clips_nobody_labelled(
     assert result["roles"]["black"]["cuts"] == 1
     assert result["roles"]["unlabelled"]["cuts"] == 1
     assert result["roles"]["wide"]["cuts"] == 1
+
+
+def test_black_is_counted_apart_in_the_on_soloist_track_too(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The same distinction, one reading down: a cut to black is not a camera nobody named."""
+    gapped = (SHOTS[0], ("C0031.mp4", 200, 87, 4200))
+    attach(studio(timeline=a_cut(shots=gapped)))
+
+    result = _measured(tmp_path, angles=ANGLES, solos=str(solos_file(tmp_path)))
+
+    assert result["on_soloist"]["black_seconds"] == 0.633
+    assert result["on_soloist"]["unlabelled_seconds"] == 0.0
+    assert result["on_soloist"]["shots"]["black"] == 1
+    assert [one["on_soloist"] for one in _rows(result)] == [False, None, False]
+    assert _rows(result)[1]["on_soloist_seconds"] == {"black": 0.633}
 
 
 def test_a_cut_out_of_black_is_a_cut_rather_than_an_opening(

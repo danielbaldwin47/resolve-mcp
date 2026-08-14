@@ -64,7 +64,32 @@ Round 1 critic, verbatim needs; each is server measurement work:
    cannot resolve musicality).
 5. Audio class track (applause/speech/music/silence at 1 s resolution).
 6. Per-shot subject labeling × who-is-soloing track — the core concert
-   question.
+   question. **Fixed in #181** (`analysis/subject.py`): the sidecar's subject
+   read as player/ensemble/other and joined to the solo windows in seconds, so
+   `correlate_timeline` carries `subject`/`subject_kind`/`on_soloist` per shot
+   and an `on_soloist` share inline, and `ab_pack.py` carries the same track
+   into a pack (`--a-subjects`/`--b-subjects`, both or neither). Authored, not
+   detected: no pixel here knows a drummer from a horn player, so the answer is
+   only as good as the sidecar — a camera that roams the band is labelled by
+   habit rather than by shot, and `unlabelled_seconds` is what says how much of
+   the cut no label reached. Measured live on the two closed Taurus pieces
+   (`recon/subject_track.py`, receipt beside it): the R3 opening is 52% on the
+   ensemble, 48% on a non-soloing player, 0% on the soloist over 81.5 s of
+   labelled screen time; the P4 R2 capstone is 53% / 42% / 5% over 489 s. The
+   0% is real rather than a hole — this rig's only player camera is the drum
+   cam, and the solo map has nobody drumming out front in the opening. Spot
+   check against frames of both cameras: the FX6 wide holds the whole band
+   (`ensemble`) and the A7IV holds the drummer (`drums`, a player), the two
+   labels 15 of the opening's 17 shots carry; the other two are title cards,
+   which is what `unlabelled_seconds` counts. Two things the reading refuses to
+   round off: a camera on neither a player nor the band (audience, room) has its
+   own `elsewhere` line rather than counting as a player nobody was watching,
+   and `soloist_seconds_by_follow_camera` says how much of the soloist share
+   came from a camera whose sidecar label asserts it follows the front rather
+   than from a subject the solo map matched. Pack side verified on the same two
+   cuts (`recon/subject_pack.py`): the pack's share equals correlate's exactly,
+   nothing but the four subject columns crosses into the pack, and a span that
+   cuts through shots counts the part inside where the front held through it.
 7. Per-shot sharpness, clipped-highlight %, exposure variance.
 8. Super/graphic presence detection with in/out timecodes + straddle check.
 9. Head/tail treatment: fade-in vs dropped frames, audio floor handling.

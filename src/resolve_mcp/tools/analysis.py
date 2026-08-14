@@ -205,6 +205,10 @@ def correlate_timeline(
     other job, so they are measured here. tunes and solos are the structure job's files.
     angles is the angle labels themselves, not a path: {"C0012.mp4": {"role": "drums"}}, or
     just {"C0012.mp4": "drums"} — you keep the sidecar, you read it, you pass what it says.
+    An entry's subject — what that camera is framed on — is read from "subject", or from a
+    role written the way the corpus writes them, "drums-tight" or "ensemble-wide"; a one-word
+    role names a character rather than a subject and labels nothing. Add "voice" where your
+    sidecar names people and the solo map names stems: {"subject": "mike", "voice": "wind"}.
     Each of these is optional, and each one absent means that column reads null rather than
     a guess.
 
@@ -228,6 +232,15 @@ def correlate_timeline(
     histogram of where in the bar the cuts land, shot-duration stats, and how much of the
     cut each angle and role holds (black counted on its own line, apart from the angles the
     sidecar has not named).
+
+    With both a solo map and subject labels it also carries the on-soloist track: per shot,
+    what it is framed on and whether that is the player out front, split in seconds where the
+    front changes mid-shot; and inline, what share of the solo-window screen time went to the
+    soloist, to the ensemble, to a player who was not soloing and to neither (an audience
+    camera, a room shot). Screen time no label reaches, and black, are counted apart rather
+    than folded into the shares. on_soloist_by says how a shot reached the soloist line —
+    joined against the solo map, or asserted by a camera the sidecar says follows the front —
+    and soloist_seconds_by_follow_camera is how much of the share is the second kind.
 
     Nothing here judges the edit. Two frames late is reported as two frames late; what
     counts as musical belongs in your style profile, not in this server.

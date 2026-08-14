@@ -67,8 +67,10 @@ timelines. The server measures; Claude decides.
   `[measured — N projects, n=…, context]`, `[review feedback, YYYY-MM]`,
   `[believed, unverified]`.
 - **angle sidecar** — one JSON file per Resolve project labelling each camera
-  by subject × character; `role` is the only key `correlate_timeline` reads,
-  and it arrives as a mapping the agent lifted, never as a path.
+  by subject × character; `correlate_timeline` reads `role` and `subject`
+  (falling back to the subject half of a `subject-character` role) plus the
+  optional `voice`, which says what the solo map calls that subject, and it
+  arrives as a mapping the agent lifted, never as a path.
   _Avoid_: `camera_sidecar` for this — that module reads a camera model off
   the card's own XML (#94) and is not an angle sidecar.
 
@@ -125,7 +127,10 @@ of band changes: lead off the stem energy, timbre off one stem's brightness —
 with the third pass on disk the voices are `wind`/`comp` rather than `other`
 and timbre reads `wind`, #157), `structure` (tunes + solo changes job; both
 halves read the shared beats half; its stem loader is what reaches the third
-pass), `transcribe`
+pass), `subject` (what a shot is framed on crossed with who is out front: the
+angle sidecar's subject read as player/ensemble/other, joined to the solo
+windows in seconds so a shot that outlives its solo is split where the front
+changed — pure, no I/O, read by `correlate`, #181), `transcribe`
 (job), `transcript` (document + Word/Transcription/Transcriber vocabulary),
 `virtual` (a cut file read back as the words it will contain — the P4
 self-review, warnings only, touches no Resolve handle), `whisper`
@@ -286,7 +291,10 @@ per critic loss or prep finding, open/in-work/fixed), `HANDOFF.md`.
 cut-boundary filmstrips and a measured `cuts.json`, with the label→source
 mapping quarantined in `assignment.json` so a critic reads the pack without
 knowing whose cut is whose; it refuses to seal when its scene scan finds far
-fewer cuts than the timeline holds (G3). `recon/` is one-off instruments —
+fewer cuts than the timeline holds (G3). Given each label's own
+`correlate_timeline` cuts file (`--a-subjects`/`--b-subjects`, both or
+neither) it also carries the on-soloist track, stripped to four columns so no
+timeline or clip name reaches the pack (#181). `recon/` is one-off instruments —
 one script plus its JSON receipt per question (plans, builds, pixel checks,
 occlusion scans). Renders, packs, frame dirs and the per-frame ffmpeg dumps
 under `recon/` are regenerable and gitignored; only scripts and receipts are
