@@ -70,10 +70,15 @@ Round 1 critic, verbatim needs; each is server measurement work:
 9. Head/tail treatment: fade-in vs dropped frames, audio floor handling.
 10. Audio feel across cuts (balance/room-tone jumps) beyond RMS level.
 
-## G6 — angle sidecar A7IV zero off by one (open, trivial)
+## G6 — angle sidecar A7IV zero off by one (closed)
 
-Builder measured A7IV record zero 86306 live; sidecar says 86307.
-Correct the sidecar datum.
+Builder measured A7IV record zero 86306 live; sidecar said 86307.
+Fixed 2026-08-14 (#185): the second A7IV item in
+`styles/angles/mcp-tests-zinc.json` carried source in 31269 against record
+117576; it is 31270, and the entry now records why (live `GetLeftOffset`,
+frame proof, and the entry's own duration arithmetic). No test fixture
+encoded the old datum, and the cut files under `projects/mcp-tests-zinc/`
+were already on 86306.
 
 ## G8 — song-opening title card convention absent from our workflow (open)
 
