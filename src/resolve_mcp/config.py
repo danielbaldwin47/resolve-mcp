@@ -138,6 +138,11 @@ class Config:
         return self.cache_dir / "results"
 
     @property
+    def identity_dir(self) -> Path:
+        """One note per file state, remembering the content hash a stat stands in for."""
+        return self.cache_dir / "identity"
+
+    @property
     def audio_dir(self) -> Path:
         """Acquired WAVs. Analysis workers key off the content hash of what lands here."""
         return self.cache_dir / "audio"

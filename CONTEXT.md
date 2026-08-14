@@ -149,7 +149,11 @@ and the build). A `segments` entry is a shot or a **gap**
 (`{"id", "gap": <frames>}`, literal black); `is_gap`/`entry_duration`/
 `overlay_track` are the accessors every walker of that array shares.
 
-`jobs/` — `cache` (hash-keyed results), `runner` (start heavy work without
+`jobs/` — `cache` (hash-keyed results; `audio_identity` is the content hash
+wherever the file sits, read off a `known_hash` note remembered against a
+stat, except under `audio_dir` where it is always read for real;
+`fingerprint` is path+size+mtime and stays the identity for video sources
+and stems — ADR 0007, ADR 0003), `runner` (start heavy work without
 stalling stdio), `store` (one JSON record per job on disk), `detached` (hand
 a job to a process that outlives this one — flags, command, environment),
 `worker` (that process's entry point: `python -m resolve_mcp.jobs.worker
@@ -301,7 +305,8 @@ template; `titles/schema.py` §6).
   analysis models are injected; 0003 stems fingerprinted (path is a
   content hash); 0004 editor-state getters answer only for the current
   timeline; 0005 source frames are read off the left offset, not the
-  source start.
+  source start; 0006 markers ride the mix across a rebuild; 0007 audio is
+  identified by content, the hash remembered against a stat.
 - `docs/agents/` — issue-tracker conventions (wayfinder map ops), triage
   labels, domain-docs usage, the style layer (sidecar + profile formats,
   provenance tags, how a corpus pass is run), the concert pillar
