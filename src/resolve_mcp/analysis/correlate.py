@@ -230,7 +230,7 @@ FLOOR_HEURISTIC = (
 )
 """The floor heuristic in words, carried in the report beside the numbers it was drawn from."""
 
-READING = 9
+READING = 10
 """What this measurement *is*; bumped whenever a rerun over unchanged inputs would differ.
 
 The cache is keyed on what was measured, not on the code that measured it, so a call whose
@@ -246,7 +246,8 @@ every record now carries its place in the bar map, and 9 rather than 8 because e
 now carries ``delta`` and ``jump_cut``, which are ``None`` on a call that named no cut-delta
 catalog — a cached hit from an earlier reading answers the self-review question with a file
 that never asked it, and a cached reading-8 file would hand back a report with no such
-columns at all.
+columns at all. 10 rather than 9 because every record now carries ``straddles_super`` and
+``super_kind`` on the same terms.
 """
 
 DELTA_MATCH_SEC = 0.25
@@ -256,6 +257,17 @@ Six frames at 24 fps. A scene detector puts a boundary within a frame or two of 
 made it, so the tolerance only has to absorb rounding — and it is kept too narrow to reach the
 next cut on purpose. Were it wide enough to, a boundary the detector missed would silently
 borrow its neighbour's number, which is the one failure here that would not look like one."""
+
+SUPER_EDGE_FRAMES = 0.5
+"""How close to a super's own edge a cut may sit and still count as outside it, in frames.
+
+The catalog is measured off a render and the cuts are read off a timeline, so the two agree
+to the frame rather than to the millisecond: the super that ended *on* the entrance it
+cleared for is one rounding away from reading as landing just past it, which would report
+the convention as the violation it exists to be told apart from. Half a frame rather than a
+whole one so that a super genuinely carrying one frame over a cut is still a straddle —
+which is why it is counted in frames of the timeline's own clock instead of in seconds, a
+tolerance in seconds being a different number of frames on every project."""
 
 GIVEN = "given"
 """The alignment mode where the caller named the frame rather than the server reading it."""
@@ -337,6 +349,7 @@ def correlate_timeline(
     tunes: str | None = None,
     solos: str | None = None,
     deltas: str | None = None,
+    supers: str | None = None,
     bars: str | None = None,
     angles: Mapping[str, Any] | None = None,
     track: int | None = None,
@@ -371,6 +384,12 @@ def correlate_timeline(
     catalog measured off a span joins nothing, and the summary says how many rows joined
     rather than leaving a silent hole.
 
+    ``supers`` is the other catalog off that render: when each burned-in graphic — lower
+    third, title card, bug — is on screen. Every cut is then measured against them, and a
+    cut with a graphic up either side of it is a **straddle**, which is the one fault in
+    this material a viewer reads as a mistake rather than as a choice. Same clock rule as
+    ``deltas``, and the same summary.
+
     ``bars`` is the bar map ``detect_bars`` writes, and it is the file that makes a cut
     measurable against the *form* rather than only against the pulse (#180). The beat grid
     already carries a bar number, but only the one the beat model committed to — on material
@@ -386,6 +405,12 @@ def correlate_timeline(
     subjects = _subjects(angles)
     music = _music(beats, audio, tunes, solos, bars, roles, subjects)
     pictures = _optional_rows(deltas, "cut delta catalog", "cuts")
+    graphics = _optional_rows(
+        supers,
+        "supers catalog",
+        "supers",
+        "gauntlet/tools/ab_pack.py writes one beside its cuts.json",
+    )
     cut = _read_cut(connection, timeline, track, music.audio, audio_at)
 
     params: dict[str, Any] = {
@@ -397,6 +422,7 @@ def correlate_timeline(
         "tunes": _named(tunes),
         "solos": _named(solos),
         "deltas": _named(deltas),
+        "supers": _named(supers),
         "bars": _named(bars),
         "angles": dict(sorted(roles.items())) if roles is not None else None,
         # Carried apart from the roles so that relabelling a camera's subject — the one edit
@@ -407,7 +433,7 @@ def correlate_timeline(
     watched = [
         {"reading": READING},
         cut.fingerprint,
-        *_fingerprints(beats, audio, tunes, solos, deltas, bars),
+        *_fingerprints(beats, audio, tunes, solos, deltas, supers, bars),
     ]
     key = cache.cache_key(KIND, watched, params)
 
@@ -425,6 +451,7 @@ def correlate_timeline(
             loudness,
             config,
             pictures,
+            graphics,
         )
 
     return start_job(KIND, params, work, cache_key=key, refresh=refresh, config=config)
@@ -443,6 +470,7 @@ def correlate(
     loudness: Levels | None = None,
     config: Config | None = None,
     pictures: Sequence[Mapping[str, Any]] | None = None,
+    graphics: Sequence[Mapping[str, Any]] | None = None,
 ) -> JobOutput:
     """The worker: transients, then one record per shot on disk and the stats inline."""
     config = config or get_config()
@@ -455,7 +483,7 @@ def correlate(
 
     progress(0.7, "measuring the cut against the music")
     grid = trust(music.beats)
-    rows = measure(shots, clock, music, transients, grid, pictures)
+    rows = measure(shots, clock, music, transients, grid, pictures, graphics)
     summary = _summary(
         rows,
         clock,
@@ -465,6 +493,7 @@ def correlate(
         grid,
         levels,
         pictures,
+        graphics,
     )
 
     target = config.analysis_dir / keyed_name(name, key, ".correlate.json", "correlate")
@@ -1011,6 +1040,7 @@ def measure(
     transients: Sequence[float] | None,
     grid: GridTrust | None = None,
     pictures: Sequence[Mapping[str, Any]] | None = None,
+    graphics: Sequence[Mapping[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """One record per shot: where it starts in the music, and how far off everything it is.
 
@@ -1104,9 +1134,39 @@ def measure(
                 # missed has no delta, and inventing one from the nearest boundary a second
                 # away would be a number about a different edit.
                 **_delta_at(pictures, picture_times, seconds),
+                # Whether a burned-in graphic is on screen either side of this cut (#183).
+                # Not "is a super up here": a super that arrives with this shot, or clears
+                # for it, is the convention rather than the fault, and the interval is read
+                # strictly at both ends so those two land outside it.
+                **_super_at(graphics, seconds, SUPER_EDGE_FRAMES / clock.fps),
             }
         )
     return rows
+
+
+def _super_at(
+    graphics: Sequence[Mapping[str, Any]] | None,
+    seconds: float,
+    guard: float,
+) -> dict[str, Any]:
+    """Whether this cut lands inside a burned-in graphic, and which kind of one.
+
+    Strict at both ends on purpose. A super whose first frame *is* this cut arrived with the
+    new shot, and one whose last frame is the frame before it cleared for the shot — the
+    two edits the human's own deliverables are made of. Only a cut with the graphic already
+    up and still up afterwards is the mistake, so an inclusive test here would report the
+    convention as the violation.
+    """
+    if not graphics:
+        return {"straddles_super": None, "super_kind": None}
+    for row in graphics:
+        end = row.get("end")
+        if not isinstance(end, int | float):
+            continue
+        if float(row["t"]) + guard < seconds < float(end) - guard:
+            kind = row.get("kind")
+            return {"straddles_super": True, "super_kind": str(kind) if kind else None}
+    return {"straddles_super": False, "super_kind": None}
 
 
 def _delta_at(
@@ -1216,6 +1276,7 @@ def _summary(
     trusted: GridTrust,
     levels: Sequence[tuple[float, float]] | None = None,
     pictures: Sequence[Mapping[str, Any]] | None = None,
+    graphics: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """The list-free reading: what a style profile is written from, and a self-review read.
 
@@ -1281,6 +1342,7 @@ def _summary(
         # that lines up with nothing is the failure this block is here to make loud, and
         # answering None would report it as a call that never asked.
         "visual_delta": None if pictures is None else _deltas(rows, pictures),
+        "supers": None if graphics is None else _supers(rows, graphics),
         "clips": _usage(rows, "clip"),
         "roles": _usage(rows, "role") if _measured("role", rows) else None,
         "subjects": _usage(rows, "subject") if _measured("subject", rows) else None,
@@ -1310,6 +1372,34 @@ def _deltas(
         "flagged_cuts": [row["cut"] for row in flagged[:INLINE_CUTS]],
         "delta": _lengths([round(one, 4) for one in found]) if found else None,
         "match_tolerance_sec": DELTA_MATCH_SEC,
+    }
+
+
+def _supers(
+    rows: Sequence[dict[str, Any]], graphics: Sequence[Mapping[str, Any]]
+) -> dict[str, Any]:
+    """The burned-in graphics this cut was measured against, and what it did to them.
+
+    ``straddled`` is the finding; the rest is what says whether to believe it. A catalog
+    measured off a different render joins nothing and would report a clean bill of health
+    from a measurement that never met this timeline, so the number of supers it holds and
+    the span they cover are reported beside the count of violations.
+    """
+    flagged = [row for row in rows if row.get("straddles_super")]
+    return {
+        "catalog_rows": len(graphics),
+        "cards": sum(1 for row in graphics if row.get("kind") == "card"),
+        "overlays": sum(1 for row in graphics if row.get("kind") == "overlay"),
+        "straddled": len(flagged),
+        "flagged_cuts": [row["cut"] for row in flagged[:INLINE_CUTS]],
+        "covered_sec": round(
+            sum(
+                float(row["end"]) - float(row["t"])
+                for row in graphics
+                if isinstance(row.get("end"), int | float)
+            ),
+            3,
+        ),
     }
 
 

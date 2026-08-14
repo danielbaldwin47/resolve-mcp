@@ -209,6 +209,7 @@ def correlate_timeline(
     tunes: str | None = None,
     solos: str | None = None,
     deltas: str | None = None,
+    supers: str | None = None,
     bars: str | None = None,
     angles: dict[str, Any] | None = None,
     track: int | None = None,
@@ -247,6 +248,13 @@ def correlate_timeline(
     gauntlet/tools/ab_pack.py writes such a catalog as cuts.json. Render the whole timeline,
     not a span, or the times will not line up — the visual_delta block in the result says how
     many cuts joined and how many did not.
+
+    supers is the other catalog off that render: when each burned-in graphic — lower third,
+    title card, bug — is on screen, which again nothing on a timeline can answer. Every cut is
+    measured against them and gets straddles_super: true where a graphic is up on both sides
+    of it, which reads to a viewer as a mistake rather than as a choice. A super that arrives
+    with the shot, or clears the frame before it, is not a straddle. ab_pack.py writes this
+    one as supers.json beside its cuts.json; same clock rule as deltas.
 
     The audio is normally located by finding it on the timeline. When it is not there at all
     — a multicam carries its own audio angle, and the mix itself was never laid down —
@@ -291,6 +299,7 @@ def correlate_timeline(
             tunes=tunes,
             solos=solos,
             deltas=deltas,
+            supers=supers,
             bars=bars,
             angles=angles,
             track=track,
