@@ -81,7 +81,7 @@ def test_the_schema_lists_every_rule_with_its_severity(attach: Attach) -> None:
     rules = {rule["rule"]: rule["severity"] for rule in get_cut_schema()["rules"]}
 
     assert [rule for rule, severity in rules.items() if severity == "error"] == [
-        f"E{number}" for number in range(1, 12)
+        f"E{number}" for number in range(1, 13)
     ]
     # W3-W7 are virtual_transcript's over the same document, so this list skips to W8.
     assert [rule for rule, severity in rules.items() if severity == "warning"] == [

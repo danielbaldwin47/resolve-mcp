@@ -132,9 +132,11 @@ accompaniment, never a piano stem), `wav` (header facts + the one
 unreadable-WAV error).
 
 `cut/` — cut-file schema v1: `document` (read off disk), `schema`
-(verbatim, served by `get_cut_schema`), `validate` (11 errors + W1, W2,
+(verbatim, served by `get_cut_schema`), `validate` (12 errors + W1, W2,
 W8 — W3-W7 are `virtual_transcript`'s over the same document — shared by
-dry run and build pre-flight). A `segments` entry is a shot or a **gap**
+dry run and build pre-flight), `tail` (the optional **tail** device: one
+reading of `{type, duration_frames, audio_fade_frames}` for both the rules
+and the build). A `segments` entry is a shot or a **gap**
 (`{"id", "gap": <frames>}`, literal black); `is_gap`/`entry_duration`/
 `overlay_track` are the accessors every walker of that array shares.
 
@@ -162,9 +164,11 @@ mix sits under a timeline — the one axis a rebuild does not move; read by
 queue), `camera_sidecar` (camera model off the card's own XML, for media
 Resolve reports no camera metadata for — #94; not an **angle sidecar**),
 `scripting` (`run_python` with handles pre-bound), `session`
-(session/project wrappers), `takes` (take selectors + in-place swap),
-`timeline` (timeline read wrappers), `titles` (titles file against a
-project + dry run).
+(session/project wrappers), `tail` (materialising a cut's tail: the OTIO
+document edit + the export/import round trip `build` takes when a cut has
+one, because the scripting API cannot cut a transition at all), `takes`
+(take selectors + in-place swap), `timeline` (timeline read wrappers),
+`titles` (titles file against a project + dry run).
 
 `titles/` — `document` (read off disk), `schema` (verbatim, served by
 `get_titles_schema`), `validate` (9 errors + 2 warnings).
@@ -239,7 +243,10 @@ exceptions: it covers no single module, walking the P4 pillar across `cut`,
 per-module test cannot see. `test_cut_devices.py` (#141) is the second, for the
 same reason: gaps and overlay tracks are one device each across `cut/validate`,
 `resolve/build`, `resolve/takes` and `analysis/virtual`, and the interesting
-failures are the disagreements between them. Live tier: `test_live_smoke.py` (module-level
+failures are the disagreements between them. `test_cut_tail.py` is the third: the
+tail is one device across `cut/tail`, `cut/validate`, `resolve/tail` and
+`resolve/build`, and a dissolve that did not land looks exactly like a cut that
+never asked for one. Live tier: `test_live_smoke.py` (module-level
 `pytest.mark.live`) and two `@pytest.mark.live` tests in
 `test_live_analysis.py`; everything else is fake-tier. The live tier assumes no
 project state it can build itself (#135): a session-scoped sweep clears the last

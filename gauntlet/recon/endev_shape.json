@@ -1,0 +1,39 @@
+[
+ {
+  "kind": "Video",
+  "name": "Video 1",
+  "children": [
+   {
+    "schema": "Clip.2",
+    "name": "A015C001_2606170J.MXF",
+    "frames": 120.0
+   },
+   {
+    "schema": "Clip.2",
+    "name": "20260617_D_A7IV_0006.MP4",
+    "frames": 160.0
+   },
+   {
+    "schema": "Clip.2",
+    "name": "A015C001_2606170J.MXF",
+    "frames": 200.0
+   },
+   {
+    "schema": "Gap.1",
+    "name": "",
+    "frames": 40.0
+   }
+  ]
+ },
+ {
+  "kind": "Audio",
+  "name": "Audio 1",
+  "children": [
+   {
+    "schema": "Clip.2",
+    "name": "Zinc Set 2 Reaper v4.wav",
+    "frames": 520.0
+   }
+  ]
+ }
+]

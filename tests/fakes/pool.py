@@ -41,6 +41,11 @@ class FakeMediaPool:
         self.new_timeline_tracks: tuple[int, int] = (1, 1)
         self.new_timeline_locked = False
         self.new_timeline_items: list[FakeTimelineItem] = []
+        self.new_timeline_export_result = True
+        # An import that answers with a timeline and leaves the transitions out — the
+        # failure a tail build cannot see from the return value, since the cut it hands
+        # back is a perfectly good cut with a hard edge where its tail should be.
+        self.import_drops_transitions = False
         self.add_track_result = True
         self.appends: list[dict[str, Any]] = []
         # The .drb route. Each knob is one outcome a real import has been seen to take:
@@ -165,10 +170,21 @@ class FakeMediaPool:
             return None
         if self.imported_timeline is not None:
             return self.imported_timeline
-        timeline = FakeTimeline(
-            str(asked.get("timelineName") or Path(file_path).stem),
-            video=[[FakeTimelineItem("C0012.mp4", 0, 60, source_start=1000)]],
-        )
+        name = str(asked.get("timelineName") or Path(file_path).stem)
+        # An OTIO document is rebuilt into the cut it describes rather than replaced by a
+        # canned one: the tail is built by editing a document between an export and an
+        # import, so an import that ignored what it was given could not tell a landed
+        # dissolve from a lost one.
+        from .interchange import read_document, timeline_from
+
+        document = read_document(file_path)
+        if document is not None:
+            timeline = timeline_from(document, name, not self.import_drops_transitions)
+        else:
+            timeline = FakeTimeline(
+                name,
+                video=[[FakeTimelineItem("C0012.mp4", 0, 60, source_start=1000)]],
+            )
         if self._owner is not None:
             timeline.adopt(self._owner)
             project = self._owner.current_project
@@ -257,6 +273,9 @@ class FakeMediaPool:
             owner=self._owner,
         )
         timeline.add_track_result = self.add_track_result
+        # A build that round-trips its tail exports the timeline it just created, so the
+        # export failure has to be settable *before* the timeline the test never sees exists.
+        timeline.export_result = self.new_timeline_export_result
         if project is not None:
             project.add_timeline(timeline)
             if self.switches_current_timeline:

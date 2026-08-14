@@ -1,0 +1,446 @@
+"""The tail device: what the rules refuse, what lands in the document, what the build does.
+
+Three seams, one device. The rules decide whether a tail can be placed at all (E1 shape,
+E12 lengths); :mod:`resolve_mcp.resolve.tail` decides what goes into the exported OTIO;
+and the build decides that a cut with a tail is round-tripped rather than delivered with a
+hard edge where its tail should be.
+
+The last of those is the one worth being explicit about. A dissolve that did not land and a
+cut that never asked for one produce the *same* timeline, so nothing downstream can tell
+them apart — which is exactly how the ending piece lost a round 0-3. Every refusal below
+exists so that difference is loud somewhere.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from resolve_mcp.cut import tail as tail_device
+from resolve_mcp.cut.validate import validate_structure
+from resolve_mcp.resolve import tail as tail_route
+from resolve_mcp.tools.cut import build_timeline, validate_cut
+
+from .conftest import Attach
+from .cutfile import a_cut, a_pool, built, empty_project, placements, valid_doc
+from .fakes import FakeTimeline
+
+# --- the rules ------------------------------------------------------------------------------
+
+
+def with_tail(**tail: Any) -> dict[str, Any]:
+    """The shared three-shot cut, ending the way the corpus ends: dissolve plus a fade."""
+    doc = valid_doc()
+    doc["tail"] = {"type": "dissolve_to_black", "duration_frames": 40, **tail}
+    return doc
+
+
+def rules(doc: dict[str, Any]) -> list[str]:
+    return [finding.rule for finding in validate_structure(doc)]
+
+
+def messages(doc: dict[str, Any], rule: str) -> list[str]:
+    return [finding.message for finding in validate_structure(doc) if finding.rule == rule]
+
+
+def test_a_tail_the_corpus_would_author_validates_clean() -> None:
+    """A dissolve shorter than the last shot, over a fade shorter than the mix."""
+    assert rules(with_tail(audio_fade_frames=35)) == []
+
+
+def test_a_cut_with_no_tail_is_still_the_ordinary_shape() -> None:
+    """Every cut written before this device stays valid and stays a hard out."""
+    assert rules(valid_doc()) == []
+    assert tail_device.read(valid_doc()) is None
+
+
+def test_a_tail_that_is_not_an_object_is_unreadable() -> None:
+    doc = valid_doc()
+    doc["tail"] = "dissolve_to_black"
+
+    assert rules(doc) == ["E1"]
+
+
+def test_an_unknown_tail_key_is_refused_rather_than_ignored() -> None:
+    """``audio_fade`` for ``audio_fade_frames`` would build a dissolve over a hot mix."""
+    doc = with_tail()
+    doc["tail"]["audio_fade"] = 125
+
+    assert "E1" in rules(doc)
+    assert "audio_fade" in messages(doc, "E1")[0]
+
+
+def test_an_unknown_tail_type_is_refused() -> None:
+    assert rules(with_tail(type="fade_up")) == ["E1"]
+
+
+@pytest.mark.parametrize("field", ["duration_frames", "audio_fade_frames"])
+def test_a_tail_frame_count_must_be_an_integer(field: str) -> None:
+    assert "E1" in rules(with_tail(**{field: 5.9}))
+
+
+def test_a_dissolve_needs_a_length() -> None:
+    doc = valid_doc()
+    doc["tail"] = {"type": "dissolve_to_black"}
+
+    assert rules(doc) == ["E12"]
+
+
+def test_a_dissolve_of_no_frames_is_refused() -> None:
+    assert rules(with_tail(duration_frames=0)) == ["E12"]
+
+
+def test_a_dissolve_longer_than_the_shot_it_fades_is_refused() -> None:
+    """The transition reaches back into the last shot, so it cannot outrun it."""
+    findings = messages(with_tail(duration_frames=60), "E12")
+
+    assert findings
+    assert "s003" in findings[0]
+
+
+def test_a_cut_ending_on_black_has_nothing_to_dissolve() -> None:
+    doc = with_tail()
+    doc["segments"].append({"id": "g001", "gap": 30})
+
+    findings = messages(doc, "E12")
+
+    assert findings
+    assert "g001" in findings[0]
+
+
+def test_a_hard_out_carries_no_dissolve_length() -> None:
+    doc = valid_doc()
+    doc["tail"] = {"type": "hard_to_black", "duration_frames": 40}
+
+    assert rules(doc) == ["E12"]
+
+
+def test_a_hard_out_that_only_fades_the_mix_is_the_corpus_shape() -> None:
+    """Two of the five surveyed deliverables cut hard and let the mix fade under black."""
+    doc = valid_doc()
+    doc["tail"] = {"type": "hard_to_black", "audio_fade_frames": 100}
+
+    assert rules(doc) == []
+
+
+def test_an_audio_fade_needs_a_mix_to_fade() -> None:
+    doc = with_tail(audio_fade_frames=100)
+    del doc["audio"]
+
+    assert "E12" in rules(doc)
+
+
+def test_an_audio_fade_longer_than_the_mix_is_refused() -> None:
+    findings = messages(with_tail(audio_fade_frames=240), "E12")
+
+    assert findings
+    assert "240" in findings[0]
+
+
+def test_an_audio_fade_of_no_frames_is_refused() -> None:
+    assert "E12" in rules(with_tail(audio_fade_frames=0))
+
+
+def test_the_dry_run_reports_a_bad_tail_before_resolve_is_touched(
+    attach: Attach, tmp_path: Path
+) -> None:
+    attach(empty_project(a_pool()))
+
+    result = validate_cut(a_cut(tmp_path, with_tail(duration_frames=600)))
+
+    assert result["ok"] is True
+    assert [error["rule"] for error in result["errors"]] == ["E12"]
+
+
+# --- the document edit ----------------------------------------------------------------------
+
+
+def document(*tracks: dict[str, Any]) -> dict[str, Any]:
+    return {"OTIO_SCHEMA": "Timeline.1", "tracks": {"children": list(tracks)}}
+
+
+def track(kind: str, name: str, *frames: int) -> dict[str, Any]:
+    return {
+        "OTIO_SCHEMA": "Track.1",
+        "kind": kind,
+        "name": name,
+        "children": [
+            {
+                "OTIO_SCHEMA": "Clip.2",
+                "name": f"{name}-{index}",
+                "source_range": {
+                    "duration": {"OTIO_SCHEMA": "RationalTime.1", "rate": 24.0, "value": length}
+                },
+            }
+            for index, length in enumerate(frames)
+        ],
+    }
+
+
+def pad(one: dict[str, Any], frames: int) -> dict[str, Any]:
+    """The trailing black Resolve pads a short track with, out to the timeline's length."""
+    one["children"].append(
+        {
+            "OTIO_SCHEMA": "Gap.1",
+            "name": "",
+            "source_range": {
+                "duration": {"OTIO_SCHEMA": "RationalTime.1", "rate": 24.0, "value": frames}
+            },
+        }
+    )
+    return one
+
+
+def kinds(doc: dict[str, Any]) -> list[tuple[str, int]]:
+    return [(item["kind"], item["in_offset"]) for item in tail_route.transitions(doc)]
+
+
+def test_the_dissolve_goes_on_the_video_track_and_the_fade_on_the_audio() -> None:
+    doc = document(track("Video", "Video 1", 100, 80), track("Audio", "Audio 1", 180))
+
+    placed = tail_route.inject(doc, tail_device.Tail("dissolve_to_black", 40, 30))
+
+    assert placed == {"video_tracks": ["Video 1"], "audio_tracks": ["Audio 1"]}
+    assert kinds(doc) == [("Video", 40), ("Audio", 30)]
+
+
+def test_the_transition_ends_the_track_and_appends_no_black_after_it() -> None:
+    """A trailing gap is the cut file's own device, and Resolve drops one on import anyway."""
+    doc = document(track("Video", "Video 1", 100))
+
+    tail_route.inject(doc, tail_device.Tail("dissolve_to_black", 40, 0))
+
+    children = doc["tracks"]["children"][0]["children"]
+    assert [child["OTIO_SCHEMA"] for child in children] == ["Clip.2", "Transition.1"]
+
+
+def test_an_overlay_that_stopped_earlier_keeps_its_own_ending() -> None:
+    """V2 covering a seam in the middle has nothing to do with how the picture leaves."""
+    doc = document(track("Video", "Video 1", 100, 80), track("Video", "Video 2", 30))
+
+    placed = tail_route.inject(doc, tail_device.Tail("dissolve_to_black", 40, 0))
+
+    assert placed["video_tracks"] == ["Video 1"]
+
+
+def test_a_hard_out_fades_only_the_mix() -> None:
+    doc = document(track("Video", "Video 1", 100), track("Audio", "Audio 1", 100))
+
+    placed = tail_route.inject(doc, tail_device.Tail("hard_to_black", 0, 30))
+
+    assert placed == {"video_tracks": [], "audio_tracks": ["Audio 1"]}
+    assert kinds(doc) == [("Audio", 30)]
+
+
+def test_the_fade_goes_before_the_black_a_longer_mix_pads_in() -> None:
+    """The corpus shape: the mix outlives the picture, so Resolve exports V1 ending on a gap.
+
+    A transition appended to the end of *that* track would dissolve black into black — the
+    failure this case was found by, live, on the first build of the real ending.
+    """
+    doc = document(pad(track("Video", "Video 1", 120, 200), 40), track("Audio", "Audio 1", 360))
+
+    placed = tail_route.inject(doc, tail_device.Tail("dissolve_to_black", 142, 0))
+
+    assert placed["video_tracks"] == ["Video 1"]
+    children = doc["tracks"]["children"][0]["children"]
+    assert [child["OTIO_SCHEMA"] for child in children] == [
+        "Clip.2",
+        "Clip.2",
+        "Transition.1",
+        "Gap.1",
+    ]
+
+
+def test_the_pad_does_not_make_a_short_overlay_look_like_the_end_of_the_picture() -> None:
+    """Every track is padded to the same length, so track length cannot pick the layer."""
+    doc = document(
+        pad(track("Video", "Video 1", 120, 200), 40),
+        pad(track("Video", "Video 2", 60), 300),
+    )
+
+    placed = tail_route.inject(doc, tail_device.Tail("dissolve_to_black", 142, 0))
+
+    assert placed["video_tracks"] == ["Video 1"]
+
+
+def test_a_last_clip_too_short_takes_no_transition() -> None:
+    """Refused, never trimmed: a shortened device is a device the report would lie about."""
+    doc = document(track("Video", "Video 1", 100, 40))
+
+    placed = tail_route.inject(doc, tail_device.Tail("dissolve_to_black", 40, 0))
+
+    assert placed["video_tracks"] == []
+    assert tail_route.transitions(doc) == []
+
+
+# --- the build ------------------------------------------------------------------------------
+
+
+def test_a_tailed_cut_lands_under_its_version_name(attach: Attach, tmp_path: Path) -> None:
+    resolve = empty_project(a_pool())
+    attach(resolve)
+
+    result = build_timeline(a_cut(tmp_path, with_tail(audio_fade_frames=35)))
+
+    assert result["ok"] is True, result.get("error")
+    assert result["timeline"]["name"] == "sunset-set v1"
+    assert placements(built(resolve, "sunset-set v1")) == [
+        ("C0012.mp4", 0, 100),
+        ("C0031.mp4", 100, 80),
+        ("C0012.mp4", 180, 60),
+    ]
+
+
+def test_the_build_reports_the_tail_it_placed(attach: Attach, tmp_path: Path) -> None:
+    attach(empty_project(a_pool()))
+
+    result = build_timeline(a_cut(tmp_path, with_tail(audio_fade_frames=35)))
+
+    document = result["tail"].pop("document")
+    result["tail"].pop("confirmed")
+    assert result["tail"] == {
+        "type": "dissolve_to_black",
+        "duration_frames": 40,
+        "audio_fade_frames": 35,
+        "video_tracks": ["Video 1"],
+        "audio_tracks": ["Audio 1"],
+        "route": "otio_round_trip",
+    }
+    # The edited document is the evidence for what the tail did, so the report says where it is.
+    assert Path(document).suffix == ".otio"
+
+
+def test_the_transitions_are_on_the_timeline_that_came_back(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Read off the imported cut, because the API has no getter for a transition at all."""
+    resolve = empty_project(a_pool())
+    attach(resolve)
+
+    build_timeline(a_cut(tmp_path, with_tail(audio_fade_frames=35)))
+
+    landed = built(resolve, "sunset-set v1")
+    assert [(one["kind"], one["in_offset"]) for one in landed.transitions] == [
+        ("Video", 40),
+        ("Audio", 35),
+    ]
+
+
+def test_the_staging_timeline_is_gone_once_the_import_lands(
+    attach: Attach, tmp_path: Path
+) -> None:
+    resolve = empty_project(a_pool())
+    attach(resolve)
+
+    build_timeline(a_cut(tmp_path, with_tail()))
+
+    project = resolve.current_project
+    names = [
+        project.GetTimelineByIndex(index).GetName()
+        for index in range(1, project.GetTimelineCount() + 1)
+    ]
+    assert names == ["sunset-set v1"]
+
+
+def test_a_mix_outliving_the_picture_still_gets_its_dissolve(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The ordinary concert shape, and the one the live build failed on before the fix."""
+    doc = with_tail(audio_fade_frames=35)
+    doc["audio"]["out"] = 300  # 60 frames of black under the mix after the last shot
+    resolve = empty_project(a_pool())
+    attach(resolve)
+
+    result = build_timeline(a_cut(tmp_path, doc))
+
+    assert result["ok"] is True, result.get("error")
+    assert result["tail"]["video_tracks"] == ["Video 1"]
+    assert [
+        (one["kind"], one["in_offset"]) for one in built(resolve, "sunset-set v1").transitions
+    ] == [("Video", 40), ("Audio", 35)]
+
+
+def test_a_cut_with_no_tail_never_takes_the_round_trip(attach: Attach, tmp_path: Path) -> None:
+    """The route costs an export and an import; a hard out must not pay for them."""
+    pool = a_pool()
+    resolve = empty_project(pool)
+    attach(resolve)
+
+    result = build_timeline(a_cut(tmp_path, valid_doc()))
+
+    assert result["tail"] is None
+    assert pool.timeline_imports == []
+
+
+def test_a_build_that_cannot_export_refuses_and_names_the_staging_cut(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The shots exist somewhere; a caller told only 'export failed' would never find them."""
+    pool = a_pool()
+    pool.new_timeline_export_result = False
+    resolve = empty_project(pool)
+    attach(resolve)
+
+    result = build_timeline(a_cut(tmp_path, with_tail()))
+
+    assert result["ok"] is False
+    assert result["error"]["detail"]["staging_timeline"] == "sunset-set v1 (tail staging)"
+    assert "sunset-set v1 (tail staging)" in result["error"]["fix"]
+
+
+def test_a_build_whose_import_is_renamed_refuses(attach: Attach, tmp_path: Path) -> None:
+    """A tail that landed under a name nobody asked for is a cut nobody will look at."""
+    pool = a_pool()
+    resolve = empty_project(pool)
+    attach(resolve)
+    pool.imported_timeline = FakeTimeline("sunset-set v1 (1)")
+
+    result = build_timeline(a_cut(tmp_path, with_tail()))
+
+    assert result["ok"] is False
+    assert "sunset-set v1 (1)" in result["error"]["cause"]
+
+
+def test_an_import_that_dropped_the_tail_is_refused(attach: Attach, tmp_path: Path) -> None:
+    """The point of the whole device: a lost dissolve must not look like a cut without one."""
+    pool = a_pool()
+    pool.import_drops_transitions = True
+    resolve = empty_project(pool)
+    attach(resolve)
+
+    result = build_timeline(a_cut(tmp_path, with_tail(audio_fade_frames=35)))
+
+    assert result["ok"] is False
+    assert "kept 0 of the 1 video fade(s)" in result["error"]["cause"]
+
+
+def test_the_confirmed_tail_is_read_off_the_cut_that_landed(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Not the document that was imported — the timeline Resolve made out of it."""
+    attach(empty_project(a_pool()))
+
+    result = build_timeline(a_cut(tmp_path, with_tail(audio_fade_frames=35)))
+
+    assert [(one["kind"], one["name"]) for one in result["tail"]["confirmed"]] == [
+        ("Video", "Cross Dissolve"),
+        ("Audio", "Cross Fade 0 dB"),
+    ]
+
+
+def test_the_exported_document_is_the_one_that_gets_imported(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The edit is on disk, not in memory — an import reads the file, never the caller."""
+    pool = a_pool()
+    attach(empty_project(pool))
+
+    build_timeline(a_cut(tmp_path, with_tail(audio_fade_frames=35)))
+
+    path, _ = pool.timeline_imports[-1]
+    document = json.loads(Path(path).read_text(encoding="utf-8"))
+    assert kinds(document) == [("Video", 40), ("Audio", 35)]

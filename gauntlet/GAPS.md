@@ -155,24 +155,60 @@ is visible in one glance instead of being inferred from a rate. The same
 seam would have made this gap a five-second read rather than a process-tree
 excavation.
 
-## G14 — cut-file schema cannot express a dissolve (open)
+## G14 — cut-file schema cannot express a dissolve (CLOSED 2026-08-13)
 
 Piece 2 R1, unanimous 0–3 loss. The measured Taurus tail is a 5.923 s
 dissolve to black starting 0.51 s after the last note (4-frame black
 tail); the schema's only black device is a literal-black gap, so the
 builder shipped a hard cut to black + 6.6 s of nothing — "the piece
-doesn't punctuate, it runs out." Server work: a transition device
-(dissolve/fade with duration) through schema → validate → build; the
-OTIO fixture (tests/otio.py) already models a dissolve — interchange may
-be the build route if the scripting API can't place transitions
-directly.
+doesn't punctuate, it runs out."
 
-## G15 — no audio fade device (open)
+**Fixed together with G15** by one schema device: an optional `tail`
+object on the cut file, `{type: dissolve_to_black|hard_to_black,
+duration_frames, audio_fade_frames}` — `get_cut_schema` §8. Wired
+through `cut/tail.py` (one reading), `cut/validate.py` (E12: a dissolve
+cannot outrun the shot it fades, a fade cannot outrun the mix, a cut
+ending on a gap has no picture to dissolve) and `resolve/tail.py`.
+
+Route, probed live on 21.0.3 read-only first: **the scripting API has no
+transition call at all** (`Timeline` has none; `TimelineItem.SetProperty`
+offers a *static* `Opacity` and nothing for audio level —
+`gauntlet/recon/endev_probe.json`). So a tailed build appends to
+`<name> v<N> (tail staging)`, exports OTIO, edits the transitions in, and
+imports back as `<name> v<N>`, deleting the staging timeline. Resolve
+takes both and renames them: `Cross Dissolve` on video, `Cross Fade
+0 dB` on audio.
+
+Resolve's "ok" is not evidence, so the build **reads the tail back** off
+the landed timeline before deleting the staging one — a second export,
+because the API has no getter for a transition. Live confirm on the
+proof run: `Cross Dissolve in_offset 142` on Video 1, `Cross Fade 0 dB
+in_offset 125` on Audio 1. A round trip that silently drops them fails
+the build instead of shipping a hard cut.
+
+One thing the spike only found by failing on the real cut: Resolve pads
+every exported track with a trailing `Gap` out to the *timeline's*
+length, so the ordinary concert shape — mix outliving the picture —
+exports a V1 ending in black. The fade goes after the last **clip**, not
+the last child.
+
+Live proof: `gauntlet/recon/ending_devices_proof.json`. 20 s cut, 142-frame
+(5.923 s) dissolve + 125-frame (5.21 s) audio fade, built and rendered on
+a scratch timeline. Luma ramps monotonically 59.1 → studio black across
+5.25 s of measured intermediate levels (43 samples strictly between 8 %
+and 92 %; a hard cut scores 0) and lands on exact black at the last
+picture frame; RMS falls −12.0 → −13.0 → −19.6 → −25.3 → −25.4 → −36.4 dB
+per second and ends at −48.5 dB. All six bars pass; scratch timelines
+deleted.
+
+## G15 — no audio fade device (CLOSED 2026-08-13)
 
 Piece 2 R1. The deliverable's audio rides a ~5.2 s fade to −72 dB under
 the tail dissolve, never muted; our render leaves the mix hot to the
-last frame. Needs an audio-fade device on the cut file's audio clip
-(Resolve clip audio level keyframes or fade handles).
+last frame. Closed with G14 above: `tail.audio_fade_frames` fades the
+master mix's last N frames, ending where the mix ends — independent of
+the dissolve's length, which is what makes the measured shape (fade
+starting under the dissolve, finishing after it) expressible at all.
 
 ## G16 — pack blind spots the ending exposed (open)
 

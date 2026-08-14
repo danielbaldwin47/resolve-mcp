@@ -20,6 +20,11 @@ found it full of silent failures. Everything in this file exists to make one gua
   matters more for a cut with gaps than for one without.
 * **A new version every time.** The name is ``<base> v<N+1>`` scanned off the project's
   existing names, so no build ever writes into a timeline someone has already reviewed.
+* **A tail is built twice, because the API cannot cut a transition.** A cut with a ``tail``
+  is appended to ``<base> v<N+1> (tail staging)`` and round-tripped through OTIO into its
+  real name (:mod:`resolve_mcp.resolve.tail`). Everything after the round trip — takes,
+  markers — is attached to the timeline that came *back*, and a round trip that fails
+  fails the build rather than delivering a cut with a hard edge where its tail should be.
 * **Resolve's answer is never the evidence.** An append onto a locked track returns
   TimelineItems and places nothing; an append that overlaps existing media slides to the
   next free frame and reports success; a still ignores ``endFrame`` until an out point has
@@ -37,6 +42,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Final
 
+from ..cut import tail as cut_tail
 from ..cut.validate import gaps as cut_gaps
 from ..cut.validate import (
     is_gap,
@@ -49,6 +55,7 @@ from ..errors import BuildFailedError, CutInvalidError, TimelineNotFoundError
 from ..logging_config import get_logger
 from ..naming import latest_version, next_version_name, version_name
 from . import cut, markers, media, mix, takes
+from . import tail as tail_route
 from . import timeline as timeline_read
 from .connection import ResolveConnection
 from .session import frame_rate
@@ -166,12 +173,26 @@ def build_timeline(
     clips = cut.clips_by_alias(checked)
     _unlock_stills(clips)
 
-    built = _create(pool, project, name)
+    # A cut with a tail is appended to a staging timeline and round-tripped into its own
+    # name, because the scripting API cannot cut a transition (see :mod:`.tail`). Every
+    # step below therefore names the timeline it is actually writing to, which for a tailed
+    # build is the staging one until the import lands.
+    tail = cut_tail.read(doc)
+    writing = name if tail is None else tail_route.staging_name(name)
+
+    built = _create(pool, project, writing)
     shots = _shots(doc, clips, timeline_read.start_frame(built))
-    _make_tracks(built, shots, name)
-    _refuse_locked_tracks(built, shots, name)
-    _append(pool, shots, name)
-    _verify(built, shots, name)
+    _make_tracks(built, shots, writing)
+    _refuse_locked_tracks(built, shots, writing)
+    _append(pool, shots, writing)
+    _verify(built, shots, writing)
+    applied: dict[str, Any] | None = None
+    if tail is not None:
+        # Before takes: the round trip makes a new timeline, and a selector attached to the
+        # staging one would be alternates for a cut that is about to be deleted.
+        built, applied = tail_route.materialise(
+            connection, project, pool, built, writing, name, tail
+        )
     # Takes hang off placed clips, so they are attached only once every placement has been
     # read back — a selector on a shot that slid somewhere else would be alternates for a
     # shot the cut file does not have.
@@ -201,6 +222,10 @@ def build_timeline(
             "audio": bool(_count(shots, A1)),
             "selectors": made,
         },
+        # None when the cut has no tail — the hard out v1 always built. Never a bare
+        # "false": what landed is the frame counts, and the report is where a review round
+        # reads back whether the device it asked for is the device that arrived.
+        "tail": applied,
         "markers": carried,
         "warnings": [finding.as_dict() for finding in checked.warnings],
     }

@@ -1,4 +1,4 @@
-"""The cut-file validation rules: 11 hard errors, 3 warnings, one implementation.
+"""The cut-file validation rules: 12 hard errors, 3 warnings, one implementation.
 
 The list is identical in the ``validate_cut`` dry run and in ``build_timeline``'s
 pre-flight, so it lives here once and both call it. A failing file must abort before
@@ -7,8 +7,9 @@ Resolve is touched — a half-built timeline is the outcome this file exists to 
 Two passes, because they need different things:
 
 * :func:`validate_structure` reads the document alone — no project, no connection. It
-  answers everything about shape, ids, ranges, takes and overlay anchoring (E1-E4 for
-  undeclared aliases, E7 for an undeclared audio alias, E8-E10, W1-W2, W8). W3-W7 are
+  answers everything about shape, ids, ranges, takes, overlay anchoring and the tail
+  (E1-E4 for undeclared aliases, E7 for an undeclared audio alias, E8-E10, E12, W1-W2,
+  W8). W3-W7 are
   ``virtual_transcript``'s over this same document — one file, one numbering.
 * :func:`validate_project` takes clip facts already gathered from the media pool and
   answers everything about the media behind the aliases (E4-E7). It is a pure function
@@ -30,7 +31,9 @@ from typing import Any, Final, TypeGuard
 from ..findings import Finding, ordered
 from ..logging_config import get_logger
 from ..timing import duration_frames, ranges_overlap
+from . import tail as tail_device
 from .schema import SCHEMA_VERSION
+from .tail import Tail
 
 log = get_logger("cut")
 
@@ -63,6 +66,7 @@ RULE_DESCRIPTIONS: Final[dict[str, str]] = {
     "E9": "overlay anchor exists; offset inside anchor; span inside the total V1",
     "E10": "overlays on one track do not overlap each other",
     "E11": "build-time: target tracks unlocked; connection and creation failures",
+    "E12": "tail durations fit what they fade: the last shot, and the master mix",
     "W1": "segment or gap shorter than min_segment_frames (flash-frame guard)",
     "W2": "V1 total does not match the master-audio span",
     "W8": "the cut ends on black that nothing runs under, so it materialises as nothing",
@@ -82,6 +86,8 @@ _FIX_HINTS: Final[dict[str, str]] = {
     "E10": "Move one overlay, shorten it, or put it on its own 'track' — one track holds "
     "one clip per frame.",
     "E11": "Unlock the track in Resolve's timeline header and build again.",
+    "E12": "A dissolve reaches back into the last shot on V1 and the audio fade back into "
+    "the mix, so each must be shorter than what it fades. Call get_cut_schema §8.",
     "W1": "Lengthen the segment or gap, or keep it if the flash is deliberate.",
     "W2": "Expected when the cut opens cold or runs past the mix; otherwise check the ends.",
     "W8": "Anchor an overlay over the trailing gap, or let the master mix run past the "
@@ -149,6 +155,7 @@ def _shape_errors(doc: Any) -> Iterator[Finding]:
     yield from _timeline_errors(doc)
     yield from _sources_errors(doc)
     yield from _audio_shape_errors(doc)
+    yield from _tail_shape_errors(doc)
     yield from _segments_errors(doc)
     yield from _overlays_errors(doc)
 
@@ -214,6 +221,46 @@ def _audio_shape_errors(doc: dict[str, Any]) -> Iterator[Finding]:
     if not isinstance(audio.get("source"), str):
         yield _finding("E1", None, "'audio.source' must be a source alias.")
     yield from _range_shape_errors(audio, "audio", None)
+
+
+def _tail_shape_errors(doc: dict[str, Any]) -> Iterator[Finding]:
+    """E1 for the tail block: an unreadable one is worse than none, because it fades nothing.
+
+    Unknown keys are refused rather than ignored. Every field here is optional-looking and
+    silent when missing — ``"audio_fade": 125`` instead of ``"audio_fade_frames"`` would
+    build a picture dissolve over a mix that stays hot to the last frame and report
+    success, which is the exact failure the ending piece already lost a round to.
+    """
+    if "tail" not in doc:
+        return
+    tail = doc["tail"]
+    if not isinstance(tail, dict):
+        yield _finding("E1", None, "'tail' must be an object with a 'type'.")
+        return
+
+    unknown = sorted(key for key in tail if key not in tail_device.KEYS)
+    if unknown:
+        yield _finding(
+            "E1",
+            None,
+            f"'tail' carries {_listed(unknown)}, which the schema does not define; "
+            f"it takes {_listed(list(tail_device.KEYS))}.",
+        )
+
+    kind = tail.get("type")
+    if kind not in tail_device.TYPES:
+        yield _finding(
+            "E1",
+            None,
+            f"'tail.type' must be one of {_listed(list(tail_device.TYPES))}, got {kind!r}.",
+        )
+    for field in ("duration_frames", "audio_fade_frames"):
+        if field in tail and not _is_int(tail[field]):
+            yield _finding(
+                "E1",
+                None,
+                f"'tail.{field}' must be an integer frame count, got {tail[field]!r}.",
+            )
 
 
 def _range_shape_errors(item: dict[str, Any], where: str, id: str | None) -> Iterator[Finding]:
@@ -388,6 +435,7 @@ def validate_structure(
     findings += _declared_alias_errors(doc)
     findings += _alternate_duration_errors(doc)
     findings += _overlay_errors(doc)
+    findings += _tail_errors(doc)
     findings += _segment_length_warnings(doc, min_segment_frames)
     findings += _audio_span_warnings(doc)
     findings += _trailing_black_warnings(doc)
@@ -708,6 +756,116 @@ def _overlap_errors(spans: list[tuple[str, int, int]], track: int) -> list[Findi
         if furthest is None or span[2] > furthest[2]:
             furthest = span
     return findings
+
+
+def _tail_errors(doc: dict[str, Any]) -> list[Finding]:
+    """E12: a tail can only fade something that is there and long enough to give the frames.
+
+    An error rather than a warning, and that is the whole point of the rule. The device is
+    invisible in the report either way — a dissolve that could not be placed and a build
+    that never had one both hand back a timeline — so a tail that cannot land has to stop
+    the build, or it becomes a hard cut nobody notices until the round is lost.
+    """
+    tail = tail_device.read(doc)
+    if tail is None:
+        return []
+
+    findings: list[Finding] = []
+    declared = doc["tail"]
+    if tail.kind == tail_device.HARD_TO_BLACK and "duration_frames" in declared:
+        findings.append(
+            _finding(
+                "E12",
+                None,
+                "A hard_to_black tail has no dissolve, so 'tail.duration_frames' means "
+                "nothing on it.",
+            )
+        )
+    if tail.kind == tail_device.DISSOLVE_TO_BLACK:
+        findings += _dissolve_errors(doc, tail, declared)
+    findings += _audio_fade_errors(doc, tail, declared)
+    return findings
+
+
+def _dissolve_errors(doc: dict[str, Any], tail: Tail, declared: dict[str, Any]) -> list[Finding]:
+    """The dissolve reaches back into the last thing on V1, so that thing has to be a shot."""
+    if "duration_frames" not in declared:
+        return [
+            _finding(
+                "E12",
+                None,
+                "A dissolve_to_black tail needs 'tail.duration_frames' — the dissolve has "
+                "no default length.",
+            )
+        ]
+    if tail.frames < 1:
+        return [
+            _finding(
+                "E12",
+                None,
+                f"'tail.duration_frames' is {tail.frames}; a dissolve runs at least "
+                f"one frame.",
+            )
+        ]
+
+    entries = _entries(doc)
+    last = entries[-1]
+    if is_gap(last):
+        return [
+            _finding(
+                "E12",
+                str(last["id"]),
+                f"The cut ends on the gap {last['id']!r}, so a dissolve to black has no "
+                f"picture to dissolve.",
+            )
+        ]
+    length = entry_duration(last)
+    if tail.frames >= length:
+        return [
+            _finding(
+                "E12",
+                str(last["id"]),
+                f"The dissolve runs {tail.frames} frames but the last shot {last['id']!r} "
+                f"is only {length}; the dissolve would reach past the shot it fades.",
+            )
+        ]
+    return []
+
+
+def _audio_fade_errors(doc: dict[str, Any], tail: Tail, declared: dict[str, Any]) -> list[Finding]:
+    """The fade reaches back into the master mix, so there has to be one to reach into."""
+    if "audio_fade_frames" not in declared:
+        return []
+    audio = doc.get("audio")
+    if not isinstance(audio, dict):
+        return [
+            _finding(
+                "E12",
+                None,
+                "'tail.audio_fade_frames' fades the master mix, and this cut has no "
+                "'audio' block to fade.",
+            )
+        ]
+    if tail.audio_frames < 1:
+        return [
+            _finding(
+                "E12",
+                None,
+                f"'tail.audio_fade_frames' is {tail.audio_frames}; a fade runs at least "
+                f"one frame.",
+            )
+        ]
+    span = duration_frames(audio["in"], audio["out"])
+    if tail.audio_frames >= span:
+        return [
+            _finding(
+                "E12",
+                None,
+                f"The audio fade runs {tail.audio_frames} frames over a {span}-frame "
+                f"master-audio span; it would reach past the mix it fades.",
+            )
+        ]
+    return []
 
 
 def _segment_length_warnings(doc: dict[str, Any], minimum: int) -> list[Finding]:
