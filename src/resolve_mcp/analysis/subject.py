@@ -159,6 +159,11 @@ def kind(subject: Subject | None, known: frozenset[str]) -> str | None:
     as a player away from the front would make a cut look like it was watching the wrong
     person. With no solo map there is no roster to contradict the sidecar, so a named subject
     is taken at its word.
+
+    Where that rule is wrong it is wrong in one direction, and the sidecar is what fixes it: a
+    player who never took the front all night is on no roster either, and reads as neither.
+    Naming that camera's ``voice`` — the stem the solo map would have called them — is the
+    escape hatch, and a solo map that covers the whole night is what makes it unnecessary.
     """
     if subject is None:
         return None
