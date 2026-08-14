@@ -31,6 +31,10 @@ PICTURE, DISSOLVE, MIX, AUDIO_FADE = 11928, 142, 11932, 125
 CADENCE, NEAR_GAP = 491.06, 490.38
 """The ending piece's last note and its near-gap, in whole-song deliverable seconds."""
 
+LUMA_NAME, RMS_NAME = "full_luma.txt", "full_rms.txt"
+"""Where the ffmpeg metadata dumps land. Named rather than inlined so a later round can point
+this instrument at its own render without overwriting the receipts of the round before it."""
+
 
 def run(cmd: list[str]) -> str:
     p = subprocess.run(cmd, capture_output=True, text=True)
@@ -191,16 +195,16 @@ def main() -> None:
     luma = series(
         RENDER,
         ["-vf", "fps=8,signalstats,metadata=print:key=lavfi.signalstats.YAVG:"
-                "file=full_luma.txt"],
+                f"file={LUMA_NAME}"],
         "lavfi.signalstats.YAVG=",
-        HERE / "full_luma.txt",
+        HERE / LUMA_NAME,
     )
     rms = series(
         RENDER,
         ["-af", "astats=metadata=1:reset=24,ametadata=print:"
-                "key=lavfi.astats.Overall.RMS_level:file=full_rms.txt"],
+                f"key=lavfi.astats.Overall.RMS_level:file={RMS_NAME}"],
         "lavfi.astats.Overall.RMS_level=",
-        HERE / "full_rms.txt",
+        HERE / RMS_NAME,
     )
     rep["tail"] = tail_verdict(luma, rms)
     print("TAIL VERDICT:", json.dumps(rep["tail"]["passes"], indent=1), flush=True)
