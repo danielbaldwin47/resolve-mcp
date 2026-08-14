@@ -46,7 +46,21 @@ energy arc, ending. Per piece, per round:
   cut: final 13.7 s on the ensemble wide. Carry-forward critiques:
   3.3 s climax jab reads as a cliff; long-short alternation predictable
   by 40 s.
-- Piece 3 · Cut timing + angle choice, mid-song solo section: next.
+- **Piece 3 · Cut timing + angle choice (mid-song trading window):
+  CLOSED — WON 2–1** (P3R2, pack `taurus_mid_p3r2`, render
+  `gauntlet/renders/taurus_mid_p3r2.mp4`).
+- **Piece 4 · Energy arc, FULL SONG: CLOSED — WON 3–0 UNANIMOUS**
+  (P4R2, 2026-08-14, pack `taurus_full_p4r2`, render
+  `gauntlet/renders/taurus_full_p4r2.mp4`, 497.7 s). All three fresh
+  critics picked ours; all three read the human's arc as inverted
+  (fastest in quiet, parked in loud). Ours' remaining flank: the quiet
+  trough (79–157 s) reads static — carry into any future round.
+- **GAUNTLET COMPLETE: every named piece won blind.** Remaining
+  engineering debt before a PR to main: /code-review two-axis over the
+  full branch diff per CLAUDE.md (tail device, detached jobs, occlusion,
+  shot_rhythm/gears all reviewed piecewise in-branch; a final
+  Review: line is still owed), G13 (4K default), G6 (sidecar datum),
+  G7 tickets, G1/G2 detector gaps.
 - Iteration 0 (2026-08-13): setup done. Recon workflow launched
   (live probe, docs survey, human cut stats, Emmet refs) → results land in
   `gauntlet/recon/`.
