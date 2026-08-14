@@ -220,6 +220,22 @@ that the grid is a live band's grid, so it moves.
   the same rate before and after — spends the transition without showing it.
   `[review feedback, 2026-08]` — this is the response half of the "section
   boundary" item left open in §5; its timing signature is still unmeasured.
+- **Into a free or rubato coda, the cutting decelerates.** As the pulse
+  dissolves the shots grow and the cuts thin out, so a tune's last shots are
+  among its longest. A steady alternation carried through a coda reads
+  metronomic **even when every cut is event-motivated** — the panel behind this
+  note said the piece "never decelerates for the coda", with the same rate
+  running from the last in-tempo chorus straight through the free ending. That
+  is §5's motivation test meeting its limit: across a coda a nameable cause per
+  cut stays necessary and stops being sufficient, because what the viewer is
+  reading is the *rate* against a pulse that is going away. This is the mirror
+  of the gesture above — into a section change the pulse tightens and the
+  cutting tightens with it; into a coda the pulse dissolves and the cutting has
+  to dissolve too, which makes the ending's long shots earned rather than a
+  stall. `[review feedback, 2026-08]` — two of three judges said it. Nothing
+  measured stands behind it and nothing can yet: §1 gates rubato out of the
+  cut-placement evidence, so the corpus is silent about exactly the regions
+  this bullet governs.
 - The variation instinct and "spectacle earns a hold" are base claims, and a
   concert changes nothing about them — they carry their tags in `base.md` and
   are named here only so this section is not read as silent on them.
@@ -515,6 +531,31 @@ is in `corpus.md`, "The deliverable head/tail survey".
   entirely and ends 10 s before the agent cut did: black beats any frame in
   which the players have visibly stopped playing. `[review feedback,
   2026-08]`
+- **The set's last image belongs to the ensemble.** The final cadence, the
+  applause where any is kept, and the fade all play on the **widest framing
+  that holds the band**. A tight or foreground-heavy angle never carries the
+  last picture, however strong the drum event that would otherwise pull a cut
+  there — a last shot is not a reaction shot. In the round behind this note the
+  piece cut to the drum cam (cymbal in the foreground, the drummer's back) 0.69 s
+  before the final cadence and faded out on it, and all three judges wrote the
+  same sentence: "the last thing the viewer sees is a drummer's back behind a
+  cymbal, not the band finishing the tune." The practical form is a deadline
+  rather than a rule about the last cut: by the approach to the cadence the
+  picture is already where it means to finish, so nothing arriving in the last
+  couple of seconds can be answered by cutting away.
+  `[review feedback, 2026-08, unanimous 3/3 panel]`
+  - **This constrains which framing, not when the picture leaves.** "End inside
+    the performance" and the deliverables' 6–10 s dissolve-out over players who
+    are still playing are untouched; the wide is what those seconds land on.
+  - **And it is not a licence to park.** The human's own tail in an earlier
+    round sat 21+ s on the master wide and was judged "stops instead of ending"
+    in that round — then, in the next, the same wide was preferred as a final
+    image. Both readings are right about different things: **the park is the
+    flaw, the wide is not.** Arrive at the wide late and let it carry the
+    cadence and the fade, rather than arriving early and waiting on it. The
+    deceleration bullet in §3 is what fills the approach; a long final shot
+    reads as an ending when the shots before it were already growing, and as a
+    stall when they were not.
 - **Black is a device.** A false ending gets literal black ("this sounds like
   it could be the end of the tune") so the surprise stinger lands as a
   surprise, a "landing" shot shows the pickup, and the final crash cuts to
