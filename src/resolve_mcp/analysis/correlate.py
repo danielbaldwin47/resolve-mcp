@@ -1145,10 +1145,11 @@ def _quality_over(
 ) -> dict[str, Any]:
     """The image-quality catalog rows this shot covers, as four columns and a count.
 
-    Middles for what describes the picture and extremes for what vetoes it, the same way
-    ``video.picture`` summarises a stretch: what a builder wants to know about clipping is
-    the worst moment of the shot, and about stability the shakiest, while sharpness and
-    exposure are asked about the take as a whole.
+    Aggregated the same way ``video.picture`` summarises a stretch, and for the reasons given
+    there: middles for sharpness, exposure and stability, and the worst moment for clipping.
+    A blown frame is visible the instant it is on screen; a quarter-second dip in stability is
+    a whip pan or an unlucky correlation, and reading it as the shot's own number would call a
+    five-second hold shaky.
 
     A shot no sample landed inside is left null rather than borrowing its neighbour's
     reading. A scan is sampled several times a second, so the only shots this loses are ones
@@ -1172,7 +1173,7 @@ def _quality_over(
         "sharpness": _median_of(inside, "sharpness"),
         "exposure": _median_of(inside, "exposure"),
         "clipped": _rounded(max(float(one["clipped"]) for one in inside)) if inside else None,
-        "stability": _rounded(min(steady)) if steady else None,
+        "stability": _rounded(statistics.median(steady)) if steady else None,
         "quality_samples": len(inside),
     }
 

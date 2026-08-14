@@ -50,6 +50,7 @@ pillar); the taste the concert cut is measured against lives in `styles/`.
 | `grab_frames` | Grabs chosen moments on a clip as JPEGs (≤1568px) the agent reads off disk |
 | `detect_scene_cuts` | Job: catalogs where a clip changes shot, gist inline and the full list on disk |
 | `analyze_occlusion` | Job: scores how much of an angle a near-field body blocks, and returns the windows to keep a cut out of |
+| `analyze_quality` | Job: scores an angle for sharpness, exposure, clipped highlights and stability, and returns the windows that miss the floors |
 | `separate_stems` | GPU stem separation: mix → 4 stems, drums → kick/snare/toms/ride/crash, and on `split_wind` other → wind/comp |
 | `transcribe_audio` | Job: word-level transcript of a source clip or the timeline mix, with confidence and measured silence spans |
 | `analyze_music` | Job: beats, downbeats and energy of a mix WAV |
@@ -127,7 +128,14 @@ many cuts, the shot lengths, the first few times, the path) comes back inline.
 `analyze_occlusion` answers the question that comes before either: is anyone's head, hat or
 back between this camera and the stage? It samples a range at about a frame a second, scores
 each sample on near-field blocking, and returns the *windows* — the stretches to keep a cut
-out of — with the whole per-sample curve on disk behind them.
+out of — with the whole per-sample curve on disk behind them. `analyze_quality` is its
+sibling and answers the other half: not whether something is in the way, but whether the
+picture the camera got is worth cutting to. Four readings a sample — sharpness, exposure,
+clipped highlights and stability — three floors that decide what is unusable, and windows in
+the same shape, each saying which floor it missed. A steady pan scores as stable and a cut is
+unmeasurable rather than unstable; the floors are calibrated on real deliverables
+(`docs/reference/image-quality-calibration.md`). `correlate_timeline` takes a scan of a
+rendered cut and puts the four readings on that cut's own shots.
 
 Deliverables come off one timeline the same way: `render_timeline` renders with a **preset**
 — what a preset renders was decided in the Deliver page and saved there, so the server

@@ -57,15 +57,23 @@ anybody is choosing between."""
 MIN_SAMPLE_FPS = 0.5
 MAX_SAMPLE_FPS = 12.0
 
-DEFAULT_MIN_SHARPNESS = 0.30
-"""Below this a take is soft enough to be a focus miss rather than a soft subject.
-Calibrated on the corpus: `docs/reference/image-quality-calibration.md`."""
+DEFAULT_MIN_SHARPNESS = 0.40
+DEFAULT_MAX_CLIPPED = 0.015
+DEFAULT_MIN_STABILITY = 0.75
+"""What makes a sample unusable: soft, blown, or moving in a way nothing about the shot
+predicted. All three are derived rather than chosen, by one rule — each sits midway between
+the delivered corpus's 5th percentile and the median of the mildest version of that failure
+applied to the same footage, moved to the neighbouring grid point that vetoes less of the
+corpus (0.05 for the two 0-to-1 readings, 0.005 for clipping, which lives near zero).
 
-DEFAULT_MAX_CLIPPED = 0.02
-"""Above this fraction of the frame burned to white, a stage light has taken the shot."""
-
-DEFAULT_MIN_STABILITY = 0.60
-"""Below this the camera is moving in a way nothing predicted — wobble rather than a move."""
+Percentiles rather than extremes on both sides: the tails of a 3600-sample scan are whip pans
+and strobe frames, and a floor set on those is a floor set on the estimator's worst moment.
+What the rule buys, measured: no sample of the corpus is vetoed on sharpness or clipping and
+1.1% on stability, while a one-sigma defocus is caught in full, a stop-and-a-half of
+overexposure 94% of the time and a 1%-of-frame wobble 99.9%. The whole sweep either side —
+including what each candidate floor would have let past — is in
+`gauntlet/recon/image_quality_calib.json`, read in
+`docs/reference/image-quality-calibration.md`."""
 
 MAX_RANGE_SECONDS = 900.0
 """Fifteen minutes of samples in one scan: this answers 'is this angle usable through this
@@ -79,6 +87,14 @@ grey. A range that needs more is a survey, and the answer wanted from a survey i
 GAP_SAMPLES = 1
 """How many clean samples a window tolerates before it is two windows — one, as with
 occlusion: a shot that comes good for a quarter of a second has not come good."""
+
+MIN_WINDOW_SAMPLES = 2
+"""How many unusable samples in a row make a window. A lone one does not: on the delivered
+corpus about one sample in a hundred dips under the stability floor inside footage that is
+locked off either side of it — a whip pan, a strobe frame, an unlucky correlation. Published
+as windows, those would bury the stretches that are really unusable under a scatter of
+quarter-second flags. The samples themselves stay in the curve and in ``unusable_samples``,
+so nothing is hidden; what they do not do is become a stretch to keep a cut out of."""
 
 INLINE_WINDOWS = 8
 """How many windows the gist carries, worst first. The file on disk has the rest."""
@@ -328,9 +344,12 @@ def _windows(
 ) -> list[dict[str, Any]]:
     """The stretches to keep a cut out of: runs of unusable samples, one good one tolerated.
 
-    Shaped exactly like an occlusion window — a window runs to one sample interval past its
-    last unusable sample, clipped to the range that was scanned, and one that clips to nothing
-    is not published. What it adds is ``reasons``: a window a builder can act on has to say
+    Shaped almost exactly like an occlusion window — a window runs to one sample interval
+    past its last unusable sample, clipped to the range that was scanned, and one that clips
+    to nothing is not published. It also has to be ``MIN_WINDOW_SAMPLES`` long: a lone dip is
+    a flicker, and this measurement has more of them than the occlusion one does.
+
+    What it adds is ``reasons``: a window a builder can act on has to say
     whether the shot is soft, blown or shaky, because those are three different fixes and only
     one of them is 'use another angle'.
     """
@@ -338,6 +357,8 @@ def _windows(
     step = max(1, frames_from_seconds(1.0 / rate, source.fps or 1.0, IN_POINT))
     windows: list[dict[str, Any]] = []
     for begin, stop in runs:
+        if stop - begin < MIN_WINDOW_SAMPLES:
+            continue
         inside = samples[begin:stop]
         start_frame = max(first, min(last, _sample_frame(begin, first, rate, source)))
         end_frame = min(last, _sample_frame(stop - 1, first, rate, source) + step)

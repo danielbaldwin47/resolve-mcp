@@ -94,6 +94,13 @@ separate timelines.
   angle whose frame is blocked at the moment you want it is out, whatever the role
   chart says. It samples rather than reads every frame, so treat its windows as where
   to look and confirm the marginal ones with `grab_frames`.
+- **A soft, blown or shaky take is a veto on the same terms.** `analyze_quality` over the
+  same range returns the four readings per sample and the windows that miss the floors,
+  each saying which one it missed. Use it to rank candidate takes rather than only to
+  reject: a shot that is in focus and locked off is a better hold than one that merely is
+  not blocked. Two readings it will not give you — a shallow-focus close-up scores soft
+  and is not wrong, and stability is null across a cut and on a black hold — so treat a
+  low score as a frame to look at, not as a verdict.
 - **A song's ending is authored, not left.** The last segment takes the cut file's
   `tail` — `dissolve_to_black` with `duration_frames`, or `hard_to_black` — plus
   `audio_fade_frames`, so the picture's release and the mix's are one decision instead

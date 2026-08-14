@@ -174,10 +174,21 @@ def read_grid(data: bytes, width: int = GRID_WIDTH, height: int = GRID_HEIGHT) -
 
 
 def measure(frames: NDArray[np.uint8]) -> Scan:
-    """Score every frame: the four still readings, then stability across the neighbours."""
-    lumas = [np.asarray(one, dtype=np.float64) / 255.0 for one in frames]
-    looks = [look(one) for one in lumas]
-    moves = [travel(lumas[index - 1], lumas[index]) for index in range(1, len(lumas))]
+    """Score every frame: the four still readings, then stability across the neighbours.
+
+    One pass, holding two frames' worth of floats at a time rather than the whole scan's.
+    A song-length range is a hundred megabytes of 8-bit grey and eight times that as doubles,
+    and the arithmetic never needs more than a frame and its neighbour.
+    """
+    looks: list[Frame] = []
+    moves: list[Move] = []
+    previous: NDArray[np.float64] | None = None
+    for one in frames:
+        luma = np.asarray(one, dtype=np.float64) / 255.0
+        looks.append(look(luma))
+        if previous is not None:
+            moves.append(travel(previous, luma))
+        previous = luma
     scores = stability(moves, frames.shape[2] if frames.ndim == 3 else GRID_WIDTH)
     readings = [
         Reading(
@@ -251,16 +262,36 @@ def stability(moves: list[Move], width: int) -> list[float | None]:
         if move is None:
             scores.append(None)
             continue
-        window = [
-            one
-            for one in good[max(0, index - SMOOTH_WINDOW // 2) : index + SMOOTH_WINDOW // 2 + 1]
-            if one is not None
-        ]
+        window = _neighbours(good, index)
         trend_x = statistics.fmean([one.dx for one in window])
         trend_y = statistics.fmean([one.dy for one in window])
         residual = float(np.hypot(move.dx - trend_x, move.dy - trend_y))
         scores.append(round(max(0.0, 1.0 - residual / (SHAKE_SPAN * width)), 4))
     return scores
+
+
+def _neighbours(good: list[Move | None], index: int) -> list[Move]:
+    """The moves the trend at ``index`` is taken over: its own run, and no further.
+
+    A window is not allowed to reach across a discontinuity, and this is the difference
+    between a stability score and a report on where the cuts are. Half a second either side
+    of a boundary is a window holding shifts from two different shots — a locked-off camera
+    next to a panning one — and their average predicts neither, so both sides would come back
+    reading as unpredicted movement. The trend a shot's movement is judged against has to be
+    that shot's own.
+    """
+    window = [good[index]]
+    for step in range(1, SMOOTH_WINDOW // 2 + 1):
+        for at in (index - step, index + step):
+            if 0 <= at < len(good) and good[at] is not None and _unbroken(good, index, at):
+                window.append(good[at])
+    return [one for one in window if one is not None]
+
+
+def _unbroken(good: list[Move | None], index: int, at: int) -> bool:
+    """Whether every move between the two is measurable — no cut sits in between."""
+    first, last = (index, at) if index < at else (at, index)
+    return all(good[one] is not None for one in range(first, last + 1))
 
 
 def failures(reading: Reading, floors: Floors) -> tuple[str, ...]:
@@ -283,10 +314,20 @@ def failures(reading: Reading, floors: Floors) -> tuple[str, ...]:
 def summarize(readings: list[Reading], floors: Floors | None = None) -> dict[str, Any]:
     """One block describing a stretch of samples — a shot, a window, a whole scan.
 
-    Medians for the readings that describe the picture and extremes for the two that veto
-    it: what a builder wants to know about clipping is the worst moment, not the typical one,
-    and the same goes for the shakiest. A stretch nothing could be measured over reports
-    ``samples: 0`` rather than a block of zeroes.
+    Middles for what describes the picture, and the worst moment for clipping: a frame with a
+    stage light burned through it is visible the instant it is on screen, so the maximum is
+    what a veto is about.
+
+    Stability is the exception in the other direction — a median, with the worst single
+    sample beside it rather than in place of it. A quarter-second dip is what a whip pan, a
+    strobe frame or an unlucky correlation looks like, and on the delivered corpus about one
+    sample in a hundred dips below the floor while the footage around it is locked off. Taken
+    as a minimum, that one sample would call a five-second hold shaky, so shots would be
+    vetoed at a rate that says more about the estimator than about the camera. Wobble is a
+    property of a hold, not of an instant, so the middle of the hold is what says whether it
+    held. ``stability_min`` keeps the dip visible for anyone who wants to look at it.
+
+    A stretch nothing could be measured over reports ``samples: 0`` rather than zeroes.
     """
     if not readings:
         return {"samples": 0}
@@ -298,15 +339,33 @@ def summarize(readings: list[Reading], floors: Floors | None = None) -> dict[str
         "contrast": _rounded(statistics.median(one.contrast for one in readings)),
         "clipped": _rounded(max(one.clipped for one in readings)),
         "crushed": _rounded(max(one.crushed for one in readings)),
-        # The worst of the run, not its middle: one second of wobble is what the viewer sees.
-        "stability": _rounded(min(steady)) if steady else None,
+        "stability": _rounded(statistics.median(steady)) if steady else None,
+        "stability_min": _rounded(min(steady)) if steady else None,
         "stability_samples": len(steady),
     }
     if floors is not None:
         missed = [name for one in readings for name in failures(one, floors)]
+        # Two different questions, and both are worth an answer. ``failures`` counts the
+        # samples that missed each floor — the raw evidence. ``usable`` is the verdict on the
+        # stretch as a whole, taken against the aggregate rather than against its unluckiest
+        # sample, because a stretch is not unusable for having had one bad quarter-second.
         summary["failures"] = {name: missed.count(name) for name in sorted(set(missed))}
-        summary["usable"] = not missed
+        summary["verdict"] = list(failures(_aggregate(summary), floors))
+        summary["usable"] = not summary["verdict"]
     return summary
+
+
+def _aggregate(summary: dict[str, Any]) -> Reading:
+    """The stretch read back as though it were one frame, for a verdict on the whole of it."""
+    return Reading(
+        sharpness=float(summary["sharpness"]),
+        exposure=float(summary["exposure"]),
+        contrast=float(summary["contrast"]),
+        clipped=float(summary["clipped"]),
+        crushed=float(summary["crushed"]),
+        stability=None if summary["stability"] is None else float(summary["stability"]),
+        discontinuity=False,
+    )
 
 
 def _sharpness(luma: NDArray[np.float64]) -> float:

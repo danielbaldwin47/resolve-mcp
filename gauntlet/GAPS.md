@@ -143,7 +143,12 @@ Round 1 critic, verbatim needs; each is server measurement work:
 1. Per-shot motion metric (optical-flow magnitude, global-vs-local split) —
    locked wide vs slow developing wide.
 2. Per-shot stability score (residual after global motion compensation) —
-   handheld wobble invisible in stills.
+   handheld wobble invisible in stills. **Fixed in #182**
+   (`resolve_mcp.video.picture`): the global shift between neighbouring samples by
+   phase correlation, less the trend of its neighbours, scored 0 to 1. A steady pan
+   scores 1.0 — movement is not instability — and a pair the correlator cannot align
+   is unmeasurable rather than unstable, which is what keeps every cut in a render
+   from reading as a wobble. See item 7 for the surfaces and the calibration.
 3. Per-cut visual delta (framing histogram/embedding distance across the
    boundary) + 30-degree-rule flag + match-on-action frames either side.
    **Delta and flag done** (#184): `resolve_mcp.video.framing` reads layout,
@@ -199,7 +204,29 @@ Round 1 critic, verbatim needs; each is server measurement work:
    cuts (`recon/subject_pack.py`): the pack's share equals correlate's exactly,
    nothing but the four subject columns crosses into the pack, and a span that
    cuts through shots counts the part inside where the front held through it.
-7. Per-shot sharpness, clipped-highlight %, exposure variance.
+7. Per-shot sharpness, clipped-highlight %, exposure variance. **Fixed in #182**
+   with item 2, as one reading. `resolve_mcp.video.picture` scores a frame on
+   sharpness (acutance — the detail a small blur can still take away, so a busy
+   frame out of focus does not out-score a clean one in it), exposure and contrast,
+   clipped highlights and crushed shadows, and stability. `analyze_quality` is that
+   over a sampled range of an angle, cached against the media, with three floors and
+   the unusable windows inline; `correlate_timeline(quality=...)` joins a scan of a
+   *render* onto the cut's own shots, aggregated over each shot rather than at its
+   boundary, and names the shots that missed a floor; `ab_pack.py` carries the same
+   block per shot and per label, with its method in the manifest.
+
+   Calibrated on the five deliverables against the same footage degraded three ways
+   (`recon/image_quality_calib.json`, read in
+   `docs/reference/image-quality-calibration.md`): 3600 samples, floors at
+   sharpness 0.40 / clipped 0.015 / stability 0.75 by one stated rule, vetoing none
+   of the corpus on sharpness or clipping and catching a one-sigma defocus in full.
+   Found while calibrating, and fixed in the same ticket: the guard that refuses to
+   score a frame pair across a cut was too loose, so one cut in the Taurus People
+   deliverable (correlation peak 0.02 against an in-shot floor of 0.01) was scored
+   as movement and dragged six samples of a locked-off shot to zero — a delivered
+   shot the report called shaky. The guard is now calibrated too
+   (`recon/quality_cut_guard.json`). Still open from this item: nothing measures the
+   *raw angles*, so how often a source fails these floors is unknown.
 8. Super/graphic presence detection with in/out timecodes + straddle check.
 9. Head/tail treatment: fade-in vs dropped frames, audio floor handling.
 10. Audio feel across cuts (balance/room-tone jumps) beyond RMS level.
