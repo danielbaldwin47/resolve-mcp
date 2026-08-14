@@ -1,0 +1,127 @@
+{
+  "schema": 1,
+  "timeline": {
+    "name": "Taurus People Ending P2",
+    "fps": 23.976
+  },
+  "sources": {
+    "fx6_wide": {
+      "clip": "A015C001_2606170J.MXF",
+      "bin": "Zinc Bar/Footage/FX6/Set 2",
+      "sync_offset": 117576
+    },
+    "a7iv_kit": {
+      "clip": "20260617_D_A7IV_0006.MP4",
+      "bin": "Zinc Bar/Footage/A7IV/Set 2",
+      "sync_offset": 86306
+    },
+    "master_mix": {
+      "clip": "Zinc Set 2 Reaper v4.wav",
+      "bin": "Zinc Bar/Audio",
+      "sync_offset": 86401
+    }
+  },
+  "audio": {
+    "source": "master_mix",
+    "in": 95332,
+    "out": 97490
+  },
+  "segments": [
+    {
+      "id": "s01",
+      "source": "fx6_wide",
+      "in": 64157,
+      "out": 64318,
+      "note": "open on the wide, the whole quartet in one frame: the piece starts inside the tune's last full-energy stretch, so the establishing picture is the band, not a detail"
+    },
+    {
+      "id": "s02",
+      "source": "a7iv_kit",
+      "in": 95588,
+      "out": 95715,
+      "note": "drum fill 6.59 (1.88 s, 81 hits) - the first real fill of the piece; arrive on the drummer around its start (sec 5) after the wide has established the quartet"
+    },
+    {
+      "id": "s03",
+      "source": "fx6_wide",
+      "in": 64445,
+      "out": 64744,
+      "note": "the fill at 12.05 (1.38 s) and a downbeat phrase boundary on the same frame (conf 0.702, score 1.25) - leave the kit as the fill resolves, and the wide takes the loudest second in the whole window (13.85, -9.38 LUFS)"
+    },
+    {
+      "id": "s04",
+      "source": "a7iv_kit",
+      "in": 96014,
+      "out": 96147,
+      "note": "downbeat phrase boundary 24.47 with the window's biggest drum event 0.54 s behind it (fill 25.01, 3.86 s, 118 hits) - the kit angle holds the fill, and it is what keeps the FX6's 24.75-28.75 reframe off the screen (sec 4: the moving camera is a second editor; do not cut into its move)"
+    },
+    {
+      "id": "s05",
+      "source": "fx6_wide",
+      "in": 64877,
+      "out": 65050,
+      "note": "fill 29.99 (2.26 s) with a downbeat phrase boundary on the same frame (0.702). The wide comes back 1.2 s after its reframe settles and it is a DIFFERENT PICTURE - the pianist, who is the front here, was outside the old framing and is inside this one. That reframe is the piece's third picture (sec 4)"
+    },
+    {
+      "id": "s06",
+      "source": "a7iv_kit",
+      "in": 96320,
+      "out": 96445,
+      "note": "the strongest downbeat phrase boundary of the middle of the piece (0.803, score 1.15); it also carries the FX6's second reframe run (37.25-41.08) off screen"
+    },
+    {
+      "id": "s07",
+      "source": "fx6_wide",
+      "in": 65175,
+      "out": 65338,
+      "note": "energy peak +2.64 dB at 42.35 with a phrase boundary 0.12 s ahead of it - and 1.27 s after the FX6 settles, so the wide returns on an event rather than on the edge of a move"
+    },
+    {
+      "id": "s08",
+      "source": "a7iv_kit",
+      "in": 96608,
+      "out": 96723,
+      "note": "drum fill 49.23 (1.68 s): arrive at the fill's start and ride it into the +2.99 dB energy peak at 49.85 (sec 5)"
+    },
+    {
+      "id": "s09",
+      "source": "fx6_wide",
+      "in": 65453,
+      "out": 65665,
+      "note": "phrase boundary 53.77 with the 53.47 fill resolving into it - back to the band for the last build"
+    },
+    {
+      "id": "s10",
+      "source": "a7iv_kit",
+      "in": 96935,
+      "out": 97029,
+      "note": "the strongest phrase boundary in the entire window (62.33: conf 0.846, downbeat, rest 0.11 s, held ratio 5.2, score 1.396) - and the cut is placed at the far side of its rest, 37 ms before the music resumes at 62.93, which is the corpus's own mechanism rather than an offset chased for its own sake (sec 1: the phrase is the placement unit). The onset list is empty for 0.66 s here, so this is the quietest frame in the neighbourhood to change picture on; the 66.41 fill lands inside the shot"
+    },
+    {
+      "id": "s11",
+      "source": "fx6_wide",
+      "in": 65759,
+      "out": 65904,
+      "note": "SOLO CHANGE 66.97 (downbeat, timbre step inside the melodic stem) with its own phrase boundary and the 66.41 fill just behind - the front changes, so the angle that holds the whole band takes it (sec 4: follow the audience's gaze at a structure change)"
+    },
+    {
+      "id": "s12",
+      "source": "a7iv_kit",
+      "in": 97174,
+      "out": 97252,
+      "note": "THE LAST CLIMAX: energy peak +6.46 dB, the biggest-prominence event anywhere in the 90 s, and onset density peaks at 9.7-10.3/s over the three seconds after it - the drums are what is happening, so the cut goes to the drums"
+    },
+    {
+      "id": "s13",
+      "source": "fx6_wide",
+      "in": 65982,
+      "out": 66158,
+      "note": "phrase boundary 76.08 at the top of the decay (-13.4 dB here falling to -25.1 dB by 80.35). RELEASE: one long wide holds the ritard, the free coda and the three-hit final figure. Over decaying audio the style layer's 3/3 panel says hold rather than shrink, so this shot takes 7.4 s and no cut is spent on the coda's thinning pulse"
+    },
+    {
+      "id": "g14",
+      "gap": 157,
+      "note": "BLACK ON THE LAST NOTE: the final figure lands 82.91 / 83.18 / 83.43 and 83.43 is the last note of the set (+15.7 dB lift, sample peak 1.106). The picture leaves one frame after it is struck - band still playing in the last frame, no release, no applause tail (sec 5b) - and 6.55 s of literal black runs under the master mix to the end of the window, which is where the deliverable's own 5.9 s dissolve-to-black sits"
+    }
+  ]
+}

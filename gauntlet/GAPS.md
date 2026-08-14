@@ -155,6 +155,35 @@ is visible in one glance instead of being inferred from a rate. The same
 seam would have made this gap a five-second read rather than a process-tree
 excavation.
 
+## G14 — cut-file schema cannot express a dissolve (open)
+
+Piece 2 R1, unanimous 0–3 loss. The measured Taurus tail is a 5.923 s
+dissolve to black starting 0.51 s after the last note (4-frame black
+tail); the schema's only black device is a literal-black gap, so the
+builder shipped a hard cut to black + 6.6 s of nothing — "the piece
+doesn't punctuate, it runs out." Server work: a transition device
+(dissolve/fade with duration) through schema → validate → build; the
+OTIO fixture (tests/otio.py) already models a dissolve — interchange may
+be the build route if the scripting API can't place transitions
+directly.
+
+## G15 — no audio fade device (open)
+
+Piece 2 R1. The deliverable's audio rides a ~5.2 s fade to −72 dB under
+the tail dissolve, never muted; our render leaves the mix hot to the
+last frame. Needs an audio-fade device on the cut file's audio clip
+(Resolve clip audio level keyframes or fade handles).
+
+## G16 — pack blind spots the ending exposed (open)
+
+Piece 2 R1 critics: (a) no audio-class track — judges could not tell
+the −34 dB tail was applause ("if that tail is a crowd, A's black is a
+defensible applause bed... the verdict narrows"); the
+flatness/centroid method from the ending prep measures exactly this.
+(b) the transition typer reports the human's visible 5.9 s dissolves as
+hard — ±12-frame window cannot see a multi-second dissolve; must
+classify against the human Taurus tail as ground truth.
+
 ## Round record
 
 - **R3 · Taurus opening · WIN 2–1 — PIECE CLOSED** (ours = A; sealed pack
@@ -171,6 +200,15 @@ excavation.
   suggested fixes recorded in `gauntlet/recon/occlusion_verdict_r3.json`.
   Recurring nit → G13: built timelines inherit the project's 4K default
   and every round manually sets 1920×1080 before render.
+- **P2·R1 · Taurus ending · LOSS 0–3, unanimous** (ours = A; sealed pack
+  `taurus_ending_p2r1`). Root cause is a server limitation: the tail
+  convention (5.9 s dissolve + audio fade) is inexpressible in schema
+  v1, so ours hard-cut to black on the last note and sat 6.6 s dark →
+  G14/G15. Critic 2 also read our body as "13 near-metronomic ~6 s
+  cuts" — the ladder critique again, style not yet landing in builds.
+  Human's recorded weaknesses: 21.3 s parked master framing tail (24%
+  of runtime, "stops instead of ending"), and a 4-cuts-in-6.2 s burst
+  in the quietest pocket. Pack blind spots → G16.
 
 - **R1 · Taurus opening · VOID** (ours = A). Critic judged a corrupt pack
   (G3): ours shown as 1 cut, human's as 9 — both actually 13. Verdict
