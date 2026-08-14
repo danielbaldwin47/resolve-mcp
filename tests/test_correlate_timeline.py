@@ -480,6 +480,36 @@ def test_a_super_carrying_one_frame_over_a_cut_is_still_a_straddle(
     assert _rows(result)[1]["straddles_super"] is True
 
 
+def test_a_cut_inside_both_a_card_and_an_overlay_is_named_for_the_card(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The card is the finding and the overlay is ordinary titling, so catalog order must
+    not decide which one the cut is reported under."""
+    attach(studio(timeline=a_cut()))
+    catalog = supers_file(
+        tmp_path,
+        [_super(0.5, 2.0), _super(0.6, 1.8, "card")],
+        name="both",
+    )
+
+    cuts = _rows(_measured(tmp_path, supers=str(catalog)))
+
+    assert cuts[1]["straddles_super"] is True
+    assert cuts[1]["super_kind"] == "card"
+
+
+def test_overlapping_supers_are_not_counted_twice_over(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """A bug over a lower third is two supers and one stretch of covered timeline."""
+    attach(studio(timeline=a_cut()))
+    catalog = supers_file(tmp_path, [_super(1.0, 3.0), _super(2.0, 4.0)], name="overlap")
+
+    result = _measured(tmp_path, supers=str(catalog))
+
+    assert result["supers"]["covered_sec"] == 3.0
+
+
 def test_no_supers_catalog_leaves_the_columns_null(attach: Attach, tmp_path: Path) -> None:
     """A timeline nobody checked for graphics must not read as one that has none."""
     attach(studio(timeline=a_cut()))

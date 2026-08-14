@@ -300,8 +300,8 @@ def read_run(
 
     **More than one lag, because one distance cannot serve both shapes.** A card is two
     frames of the same held picture, so it is read best from close together — but it is
-    also the shortest super there is, and at a long lag it fits only one reading, which
-    :func:`_persists` will not accept. An overlay is the opposite: close together, the
+    also the shortest super there is, and at a long lag it fits only one reading, which the
+    same-pixels-twice rule will not accept. An overlay is the opposite: close together, the
     footage under it has not moved enough to disagree with itself, and the reading refuses
     the pair as too still. Both distances are therefore read, and every reading counts
     towards the same spans.
@@ -311,6 +311,27 @@ def read_run(
     graphic, and a super that outlives one long locked-off shot would otherwise come back
     as two supers with a hole between them.
     """
+    return tuple(one.span for one in read_marked(frames, lags, bridge))
+
+
+class Marked(NamedTuple):
+    """One super and the pixels it was found on — what a caller needs to go back to it.
+
+    The mask is why this exists. A consumer that wants to walk the super's edges at full
+    rate needs the graphic's own pixels, and recovering them by reading the whole span
+    again is both slower and a second implementation of the thing that already decided it.
+    """
+
+    span: Span
+    mask: NDArray[np.bool_]
+
+
+def read_marked(
+    frames: NDArray[Any],
+    lags: Sequence[int],
+    bridge: int = 1,
+) -> tuple[Marked, ...]:
+    """:func:`read_run`, keeping each super's pixels beside it."""
     if not lags or min(lags) < 1:
         raise ValueError(
             f"A lag of {min(lags, default=0)} frames reads a frame against itself; "
@@ -324,8 +345,11 @@ def read_run(
             if reading.found:
                 readings.append(_Seen(index, index + lag, reading.kind, mask))
     readings.sort(key=lambda one: (one.first, one.last))
-    spans = _spans(readings, bridge)
-    return tuple(one for one in spans if one.kind == CARD or _outlived(frames, one))
+    return tuple(
+        Marked(group.span(), group.held)
+        for group in _spans(readings, bridge)
+        if group.span().kind == CARD or _outlived(frames, group)
+    )
 
 
 def edges(window: NDArray[Any], mask: NDArray[np.bool_], anchor: int) -> Edges:
@@ -374,6 +398,23 @@ def edges(window: NDArray[Any], mask: NDArray[np.bool_], anchor: int) -> Edges:
     return Edges(first=first, last=last, ramp_in=ramp_in, ramp_out=ramp_out)
 
 
+def inside(opens: float, closes: float, at: float, guard: float = 0.0) -> bool:
+    """Whether a cut lands *within* a super rather than on either of its edges.
+
+    The straddle rule itself, in one place and in whatever unit the caller counts in —
+    frames here, seconds where a catalog is joined onto a timeline. Two clocks measuring the
+    same thing to two different rules is how the convention starts reading as the violation
+    in one report and not the other.
+
+    ``closes`` is exclusive. Strict at both ends: a super whose first frame *is* the cut
+    arrived with the new shot, and one that ends the frame before it cleared for that shot,
+    and those are the two edits this exists to tell apart from the mistake. ``guard`` widens
+    both edges for a caller whose two numbers came from different clocks and so agree only
+    to about a frame.
+    """
+    return opens + guard < at < closes - guard
+
+
 def straddles(spans: Sequence[Span], cuts: Sequence[int]) -> tuple[dict[str, Any], ...]:
     """Every cut that lands inside a super, counted in the clock both were measured in.
 
@@ -392,7 +433,7 @@ def straddles(spans: Sequence[Span], cuts: Sequence[int]) -> tuple[dict[str, Any
     found: list[dict[str, Any]] = []
     for span in spans:
         for cut in cuts:
-            if span.visible_first < cut <= span.visible_last:
+            if inside(span.visible_first, span.visible_last + 1, cut):
                 found.append(
                     {
                         "cut": int(cut),
@@ -525,7 +566,7 @@ def _regions(graphic: NDArray[np.bool_]) -> tuple[NDArray[np.bool_], tuple[Regio
     return kept, tuple(sorted(found, key=lambda one: -one.pixels))
 
 
-def _spans(readings: Sequence[_Seen], bridge: int) -> tuple[Span, ...]:
+def _spans(readings: Sequence[_Seen], bridge: int) -> tuple[_Group, ...]:
     """The readings, grouped into the graphics they are readings *of*.
 
     Grouped by the pixels rather than by the clock, which is the whole of it. Grouping by
@@ -547,27 +588,29 @@ def _spans(readings: Sequence[_Seen], bridge: int) -> tuple[Span, ...]:
                 break
         else:
             groups.append(_Group(seen))
-    return tuple(group.span() for group in groups if group.believable())
+    return tuple(group for group in groups if group.believable())
 
 
-def _outlived(frames: NDArray[Any], span: Span) -> bool:
+def _outlived(frames: NDArray[Any], group: _Group) -> bool:
     """Whether the picture actually changed while this overlay was up.
 
-    The guard that makes the overlay reading worth quoting, and it is asked of the span
+    The guard that makes the overlay reading worth quoting, and it is asked of the group
     rather than of each pair inside it. Asked pair by pair it costs most of the real supers
     in the corpus: a lower third holds through one long take, every pair inside it sits in
-    the same shot, and the graphic that outlived a whole shot change at the far end of the
-    span is thrown away for the sake of the frames in the middle. Asked once, across the
-    span's own ends, it keeps them and still refuses the case it exists for — a bright
-    static thing inside a single unchanging shot, which on this stage is a piano keyboard
-    with a maker's name written across it.
+    the same shot, and the graphic that outlived a whole shot change at the far end is
+    thrown away for the sake of the frames in the middle. Asked once, across the whole
+    group, it keeps them and still refuses the case it exists for — a bright static thing
+    inside a single unchanging shot, which on this stage is a piano keyboard with a maker's
+    name written across it.
 
-    Sampled at the middle as well as the ends, because two ends of a span can land on the
-    same framing by coincidence and one reading of nothing would then speak for the whole
-    super.
+    Only frames the graphic was actually *seen* on may be compared. Sampling the span's
+    outer edges instead lets the step come from a shot change the graphic did not survive —
+    which is how that same keyboard passed this test on the corpus anchor, its readings all
+    inside one shot and its span reaching a frame past the cut at the end of it.
     """
-    middle = (span.first + span.last) // 2
-    pairs = ((span.first, span.last), (span.first, middle), (middle, span.last))
+    seen = sorted(group.seen)
+    middle = seen[len(seen) // 2]
+    pairs = ((seen[0], seen[-1]), (seen[0], middle), (middle, seen[-1]))
     return any(
         one != other and _step(frames[one], frames[other]) >= STEP for one, other in pairs
     )
@@ -599,6 +642,9 @@ class _Group:
         self.last = seen.last
         self.held = seen.mask.copy()
         self.kinds = [seen.kind]
+        self.seen = {seen.first, seen.last}
+        """Every frame the graphic was actually seen on — the only frames another reading
+        of these two is entitled to be taken between."""
 
     def shares(self, mask: NDArray[np.bool_]) -> bool:
         return bool((self.held & mask).sum() >= MIN_AREA * self.held.size)
@@ -608,6 +654,7 @@ class _Group:
         self.last = max(self.last, seen.last)
         self.held &= seen.mask
         self.kinds.append(seen.kind)
+        self.seen |= {seen.first, seen.last}
 
     def believable(self) -> bool:
         """A graphic read once is a coincidence read once, and this gets quoted at editors."""

@@ -162,7 +162,7 @@ SLOW_WEAK_PEAK_DELTA = 6.0  # boundary this soft is a candidate slow transition
 SUPER_RATE = 2.0  # scan rate; a whole song at the lettering grid is 280 MB here
 SUPER_LAGS_SEC = (1.0, 2.0)
 SUPER_PAD_SEC = 2.0  # native-fps window either side of a scanned edge
-SUPER_MERGE_SEC = 0.5  # refined spans this close are one graphic
+SUPER_MERGE_SEC = 0.5  # refined spans of the same kind this close are one graphic
 
 # mid-shot blended double-image ("ghosting"): two pictures on screen at once,
 # inside what scene detection calls a single shot. The reliable signature is
@@ -790,45 +790,35 @@ def super_lags() -> tuple[int, ...]:
     return tuple(sorted({max(1, round(one * SUPER_RATE)) for one in SUPER_LAGS_SEC}))
 
 
-def super_spans(scan: np.ndarray, lags: Sequence[int]) -> tuple[supers.Span, ...]:
-    """The coarse pass: where in the scan a graphic is up at all."""
+def super_spans(scan: np.ndarray, lags: Sequence[int]) -> tuple[supers.Marked, ...]:
+    """The coarse pass: where in the scan a graphic is up, and which pixels it is.
+
+    The pixels come back with the span rather than being read out of the scan again. The
+    walk that follows needs the graphic's own pixels, and the scan has already decided what
+    they are -- recovering them a second way would be a second answer to the same question.
+    """
     usable = [one for one in lags if one < len(scan)]
-    return supers.read_run(scan, lags=usable) if usable else ()
+    return supers.read_marked(scan, lags=usable) if usable else ()
 
 
-def super_mask(scan: np.ndarray, span: supers.Span, lags: Sequence[int]) -> np.ndarray | None:
-    """The graphic's own pixels, taken from whichever reading inside the span shows most.
+def refine_edge(
+    clip: Path, mask: np.ndarray, fps: float, scanned: float, inside: float
+) -> supers.Edges | None:
+    """One end of a super at native rate: a short window around it, walked frame by frame.
 
-    Not the span's two ends: they can happen to sit in the same locked-off shot, whose
-    reading is a refusal, and a mask taken from a refusal is empty. The strongest reading is
-    the one that saw the most of the lettering, which is the mask the edge walk wants.
+    One end at a time, and never the whole span. A lower third can hold for two minutes,
+    and decoding two minutes of 4K at native rate to find out which frame it started on
+    reads a gigabyte to answer a question about its first six -- the middle of a super is
+    the part nobody is asking about.
 
-    Every lag is tried, not the shortest. A span found only at the long lag has no reading at
-    the short one -- that is why it needed the long one -- and asking at one distance would
-    hand back nothing and drop the super on the floor between the scan and the refinement,
-    which is a miss no count in the report would show.
+    `scanned` is where the coarse pass put this end and `inside` is a moment the graphic is
+    known to be up, both in seconds; the window spans the two with a pad either side. It is
+    cut on frame boundaries so the index the walk returns is a source frame number rather
+    than a rounding of one.
     """
-    best: np.ndarray | None = None
-    for lag in lags:
-        for index in range(span.first, min(span.last, len(scan) - 1 - lag) + 1):
-            mask = supers.carried(scan[index], scan[index + lag])
-            if best is None or mask.sum() > best.sum():
-                best = mask
-    return None if best is None or not best.any() else best
-
-
-def refine_super(clip: Path, span: supers.Span, mask: np.ndarray, fps: float) -> supers.Span:
-    """The same super again at native rate, so its in and out are frames rather than
-    scan steps.
-
-    The scan runs at a couple of frames a second, which places a boundary to within half
-    a second -- useless for the convention this exists to check, where a card clearing one
-    frame before its entrance and a card clearing over it are the same reading half a
-    second wide. The window is cut on frame boundaries so the index the walk returns is a
-    source frame number and not a rounding of one.
-    """
-    lead = max(0, int(round(span.first / SUPER_RATE * fps)) - int(round(SUPER_PAD_SEC * fps)))
-    tail = int(round(span.last / SUPER_RATE * fps)) + int(round(SUPER_PAD_SEC * fps))
+    pad = int(round(SUPER_PAD_SEC * fps))
+    lead = max(0, int(round(min(scanned, inside) * fps)) - pad)
+    tail = int(round(max(scanned, inside) * fps)) + pad
     window = decode_grey(
         clip,
         supers.GRID_WIDTH,
@@ -837,16 +827,43 @@ def refine_super(clip: Path, span: supers.Span, mask: np.ndarray, fps: float) ->
         dur=(tail - lead + 1) / fps,
         dtype=np.uint8,
     )
-    middle = int(round((span.first + span.last) / 2 / SUPER_RATE * fps)) - lead
-    anchor = max(0, min(middle, len(window) - 1))
     if len(window) == 0:
-        return span
+        return None
+    anchor = max(0, min(int(round(inside * fps)) - lead, len(window) - 1))
     found = supers.edges(window, mask, anchor)
-    return span._replace(
+    return supers.Edges(
         first=lead + found.first,
         last=lead + found.last,
         ramp_in=found.ramp_in,
         ramp_out=found.ramp_out,
+    )
+
+
+def refine_super(clip: Path, span: supers.Span, mask: np.ndarray, fps: float) -> supers.Span:
+    """The same super again at native rate, so its in and out are frames rather than scan
+    steps.
+
+    The scan runs at a couple of frames a second, which places a boundary to within half a
+    second -- useless for the convention this exists to check, where a card clearing one
+    frame before its entrance and a card clearing over it are the same reading half a second
+    wide. Each end is walked out of its own short window; an end whose window could not be
+    decoded keeps the coarse pass's answer rather than inventing one.
+    """
+    step = 1.0 / SUPER_RATE
+    opens = span.first * step
+    closes = span.last * step
+    # A moment the graphic is certainly up, to walk out from: one scan step inside the end,
+    # or the span's middle when it is too short to have an inside.
+    from_head = min(opens + step, (opens + closes) / 2)
+    from_tail = max(closes - step, (opens + closes) / 2)
+
+    head = refine_edge(clip, mask, fps, opens, from_head)
+    tail = refine_edge(clip, mask, fps, closes, from_tail)
+    return span._replace(
+        first=int(round(opens * fps)) if head is None else head.first,
+        last=int(round(closes * fps)) if tail is None else tail.last,
+        ramp_in=0 if head is None else head.ramp_in,
+        ramp_out=0 if tail is None else tail.ramp_out,
     )
 
 
@@ -857,11 +874,19 @@ def merge_supers(spans: Sequence[supers.Span], fps: float) -> list[supers.Span]:
     unread stretch between them; refined, both walk out to the same frames. Merging on
     the refined frames rather than bridging harder in the scan keeps the coarse pass
     honest about what it actually saw.
+
+    Only spans of the same kind are merged. A title card that ends where a lower third
+    begins is two graphics, and folding them together would keep one kind for both -- so
+    the report would name a card that was half an overlay, or lose the card entirely.
     """
     merged: list[supers.Span] = []
     gap = max(1, int(round(SUPER_MERGE_SEC * fps)))
     for span in sorted(spans, key=lambda one: one.visible_first):
-        if merged and span.visible_first <= merged[-1].visible_last + gap:
+        if (
+            merged
+            and merged[-1].kind == span.kind
+            and span.visible_first <= merged[-1].visible_last + gap
+        ):
             last = merged[-1]
             merged[-1] = last._replace(
                 first=min(last.first, span.first),
@@ -891,11 +916,9 @@ def super_scan(clip: Path, fps: float, cuts: Sequence[float]) -> dict[str, Any]:
     scan = decode_grey(
         clip, supers.GRID_WIDTH, supers.GRID_HEIGHT, fps=SUPER_RATE, dtype=np.uint8
     )
-    refined: list[supers.Span] = []
-    for span in super_spans(scan, lags):
-        mask = super_mask(scan, span, lags)
-        if mask is not None:
-            refined.append(refine_super(clip, span, mask, fps))
+    refined = [
+        refine_super(clip, marked.span, marked.mask, fps) for marked in super_spans(scan, lags)
+    ]
     spans = merge_supers(refined, fps)
     frames = [int(round(cut * fps)) for cut in cuts]
     review = supers.review(spans, frames)
@@ -914,9 +937,20 @@ def super_scan(clip: Path, fps: float, cuts: Sequence[float]) -> dict[str, Any]:
     return review
 
 
-def straddled_cuts(review: dict[str, Any]) -> set[int]:
-    """The source frames of the cuts that land inside a super, for tagging the cut list."""
-    return {int(one["cut"]) for one in review["straddles"]}
+def straddled_cuts(review: dict[str, Any]) -> dict[int, str]:
+    """Cut frame -> the kind of super it lands inside, for tagging the cut list.
+
+    The kind travels with the flag rather than being left in the summary. A blind judge
+    reads `cuts[]` row by row, and `straddles_super: true` alone says "fault" about the
+    lower third a human deliberately held across the cut. Where a cut is inside both, the
+    card is the one named: it is the finding, and the overlay would hide it.
+    """
+    found: dict[int, str] = {}
+    for one in review["straddles"]:
+        cut, kind = int(one["cut"]), str(one["kind"])
+        if kind == supers.CARD or cut not in found:
+            found[cut] = kind
+    return found
 
 
 # --------------------------------------------------------------------------
@@ -1889,10 +1923,13 @@ def build_label(
                 "t": cut,
                 "transition": transitions[i],
                 "delta": deltas[i].as_record() if deltas[i] is not None else None,
-                # Whether a graphic was on screen either side of this cut (#183). The
-                # straddle is the fault; a super arriving with the shot or clearing for
-                # it is not, and the review has already told those apart.
+                # Whether a graphic was on screen either side of this cut, and which kind
+                # (#183). Not on its own a fault: a lower third held across cut after cut
+                # is how the human deliverables are titled, while a cut inside a card is
+                # the thing none of them does. A super arriving with the shot, or clearing
+                # the frame before it, is neither -- the review told those apart already.
                 "straddles_super": int(round(cut * fps)) in straddled,
+                "super_kind": straddled.get(int(round(cut * fps))),
                 "strip_sheet": row_of.get(i + 1, {}).get("sheet"),
                 "strip_row": row_of.get(i + 1, {}).get("row"),
             }
@@ -1962,7 +1999,16 @@ def build_label(
         "visual_delta": delta_summary,
         "supers": {
             key: supers_review[key]
-            for key in ("cards", "overlays", "straddled", "held_frames")
+            for key in (
+                "cards",
+                "overlays",
+                "straddled",
+                # Both halves, because the total alone cannot be read: a straddled overlay
+                # is ordinary titling and a straddled card is the finding.
+                "straddled_cards",
+                "straddled_overlays",
+                "held_frames",
+            )
         },
         "ending": {
             k: ending.get(k) for k in ("kind", "black_at_sec", "ramp_sec", "black_hold_sec")

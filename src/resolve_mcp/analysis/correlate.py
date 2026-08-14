@@ -64,6 +64,7 @@ from ..resolve.timeline import (
     track_enabled,
 )
 from ..timing import SECONDS_PRECISION, dual_time, to_frames
+from ..video import supers
 from . import decode, energy, records, subject
 from .beats import GridTrust, nearest, spacing, trust
 
@@ -1163,14 +1164,20 @@ def _super_at(
     """
     if not graphics:
         return {"straddles_super": None, "super_kind": None}
+    kinds = []
     for row in graphics:
-        end = row.get("end")
-        if not isinstance(end, int | float):
+        start, end = row.get("t"), row.get("end")
+        if not isinstance(start, int | float) or not isinstance(end, int | float):
             continue
-        if float(row["t"]) + guard < seconds < float(end) - guard:
-            kind = row.get("kind")
-            return {"straddles_super": True, "super_kind": str(kind) if kind else None}
-    return {"straddles_super": False, "super_kind": None}
+        if supers.inside(float(start), float(end), seconds, guard):
+            kinds.append(str(row.get("kind") or ""))
+    if not kinds:
+        return {"straddles_super": False, "super_kind": None}
+    # A cut can sit inside two supers at once, and then the card is the one worth naming:
+    # taking whichever row came first would let catalog order decide whether a report shows
+    # the finding or the lower third that happened to be up over it.
+    kind = supers.CARD if supers.CARD in kinds else kinds[0]
+    return {"straddles_super": True, "super_kind": kind or None}
 
 
 def _delta_at(
@@ -1392,24 +1399,37 @@ def _supers(
     flagged = [row for row in rows if row.get("straddles_super")]
     return {
         "catalog_rows": len(graphics),
-        "cards": sum(1 for row in graphics if row.get("kind") == "card"),
-        "overlays": sum(1 for row in graphics if row.get("kind") == "overlay"),
+        "cards": sum(1 for row in graphics if row.get("kind") == supers.CARD),
+        "overlays": sum(1 for row in graphics if row.get("kind") == supers.OVERLAY),
         "straddled": len(flagged),
         # Split, because they are different claims. A lower third held across a cut is how
         # titling works and the human deliverables are full of them; a cut inside a title
         # card — a graphic that is itself the shot — is the one nothing in the corpus does.
-        "straddled_cards": sum(1 for row in flagged if row.get("super_kind") == "card"),
-        "straddled_overlays": sum(1 for row in flagged if row.get("super_kind") == "overlay"),
-        "flagged_cuts": [row["cut"] for row in flagged[:INLINE_CUTS]],
-        "covered_sec": round(
-            sum(
-                float(row["end"]) - float(row["t"])
-                for row in graphics
-                if isinstance(row.get("end"), int | float)
-            ),
-            3,
+        "straddled_cards": sum(1 for row in flagged if row.get("super_kind") == supers.CARD),
+        "straddled_overlays": sum(
+            1 for row in flagged if row.get("super_kind") == supers.OVERLAY
         ),
+        "flagged_cuts": [row["cut"] for row in flagged[:INLINE_CUTS]],
+        "covered_sec": _covered(graphics),
     }
+
+
+def _covered(graphics: Sequence[Mapping[str, Any]]) -> float:
+    """How much of the timeline has a graphic on it, counting overlap once.
+
+    Summed row by row it would not be that: two supers up together — a bug over a lower
+    third — would report more seconds of graphic than the piece has seconds.
+    """
+    spans = sorted(
+        (float(row["t"]), float(row["end"]))
+        for row in graphics
+        if isinstance(row.get("t"), int | float) and isinstance(row.get("end"), int | float)
+    )
+    total, reached = 0.0, float("-inf")
+    for opens, closes in spans:
+        total += max(0.0, closes - max(opens, reached))
+        reached = max(reached, closes)
+    return round(total, 3)
 
 
 def _outside(rows: Sequence[dict[str, Any]], grid: Sequence[float]) -> int:

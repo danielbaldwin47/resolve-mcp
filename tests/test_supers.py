@@ -320,6 +320,17 @@ def span(first: int, last: int, kind: str = supers.OVERLAY) -> supers.Span:
     )
 
 
+def test_the_step_is_only_read_between_frames_the_graphic_was_seen_on() -> None:
+    """How the piano keyboard passed on the corpus anchor. Its readings all sat inside one
+    unchanging shot, but the span reached a frame past the cut at the end of it, and a step
+    sampled at the span's outer edge found that cut and vouched for a graphic that never
+    survived it. Only frames the graphic was actually seen on may speak for it."""
+    still = [caption(jittered(picture(0), seed)) for seed in range(6)]
+    elsewhere = [picture(3), picture(4)]
+
+    assert supers.read_run(np.stack(still + elsewhere), lags=(2,)) == ()
+
+
 def test_a_cut_inside_a_super_is_a_straddle() -> None:
     caught = supers.straddles([span(100, 200)], cuts=[50, 150, 400])
 
@@ -342,6 +353,23 @@ def test_a_fading_super_is_straddled_through_its_fade() -> None:
 
     assert len(caught) == 1
     assert caught[0]["out"] == 206
+
+
+def test_read_marked_hands_back_the_pixels_it_decided_on() -> None:
+    """So a caller walking the edges at full rate asks the reading that found the super,
+    rather than reading the whole span again and arriving at a second answer."""
+    frames = np.stack(
+        [picture(i) for i in range(3)]
+        + [caption(picture(i)) for i in range(3, 11)]
+        + [picture(i) for i in range(11, 14)]
+    )
+
+    marked = supers.read_marked(frames, lags=(3,))
+
+    assert len(marked) == 1
+    assert marked[0].span == supers.read_run(frames, lags=(3,))[0]
+    rows = np.nonzero(marked[0].mask)[0]
+    assert 344 <= rows.min() and rows.max() < 360
 
 
 def test_clearance_measures_the_room_a_card_leaves_its_entrance() -> None:
