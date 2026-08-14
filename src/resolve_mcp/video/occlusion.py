@@ -320,9 +320,10 @@ def _windows(
     step = max(1, frames_from_seconds(1.0 / rate, source.fps or 1.0, IN_POINT))
     windows: list[dict[str, Any]] = []
     for begin, stop in runs:
-        scores = [float(samples[one]["score"]) for one in range(begin, stop)]
-        novel = max(float(samples[one]["novel"]) for one in range(begin, stop))
-        hidden = max(float(samples[one]["hidden"]) for one in range(begin, stop))
+        run = samples[begin:stop]
+        scores = [float(one["score"]) for one in run]
+        novel = max(float(one["novel"]) for one in run)
+        hidden = max(float(one["hidden"]) for one in run)
         start_frame = max(first, min(last, _sample_frame(begin, first, rate, source)))
         end_frame = min(last, _sample_frame(stop - 1, first, rate, source) + step)
         if end_frame <= start_frame:

@@ -46,9 +46,16 @@ reading sits beside the first, and it is the one the *windows* are classed on:
 
 Either one clearing its level makes the sample an obstruction, because they measure the same
 claim from two sides and a body that only one of them catches is still a body. On the whole
-adjudicated evidence set — three true blockings, ten false positives across two angles and
+adjudicated evidence set — three true blockings, eleven false positives across two angles and
 three pieces — the worst false positive reads 0.018 novel and 0.007 hidden against a weakest
 true blocking of 0.066 and 0.049.
+
+Both readings are *spatial*, and that is why the subject labelling of #181 is not what answers
+this. ``analysis/subject`` says which player an angle is framed on by name, off the sidecar and
+the solo map; it holds no idea of where in the frame that player is, so it cannot say whether a
+blob is in front of one. What the run's own occupancy and median give instead is the same claim
+measured where it happens: the stage is what this shot shows at that spot when nothing is in
+the way, and on this stage what is on the stage is players.
 
 **What this does not measure**, because it was tried and it does not separate: the detector
 goes blind to a body once it stops moving, and nothing here recovers it. In the one adjudicated
@@ -60,6 +67,12 @@ got. A separate class for the mid-take reframe was tried too — the settle test
 drift both overlap the true blockings — so a reframe is reported as what it measurably is,
 scene rather than obstruction, on the one example the evidence set holds.
 
+**And both readings are only as wide as the range asked about**, because the occupancy and the
+median are the scanned range's own. Scan a stretch a body dominates and that body becomes the
+shot's furniture — the same shape as the failure the ending ledger named, where a baseline taken
+over a stretch the piano lid filled produced five false windows in the piece next door. Scanning
+per song, which is what the tool is for, keeps a crossing a small share of its range.
+
 Numbers are the frame's own: coverage is a fraction of frame area, luma is 0 to 1. scipy
 does the labelling and the box filter — it is already a dependency for the loudness filter,
 and hand-rolling connected components in Python would be slower and less correct.
@@ -67,7 +80,7 @@ and hand-rolling connected components in Python would be slower and less correct
 
 from __future__ import annotations
 
-from typing import NamedTuple
+from typing import Literal, NamedTuple
 
 import numpy as np
 from numpy.typing import NDArray
@@ -118,12 +131,15 @@ WIPE_BONUS = 0.15
 """A rise of ``WIPE_DELTA`` in coverage between neighbouring samples earns the full bonus,
 and only on a sample that is already blocked."""
 
-OBSTRUCTION = "obstruction"
-SCENE = "scene"
-"""The two classes a blocked window comes back as. ``obstruction`` is the veto — something is
-between the lens and a player. ``scene`` is everything the near-field heuristic finds that the
-shot was framed to include: furniture, a parked head, the shot's own foreground subject, and a
-mid-take reframe carrying the furniture to a new place in frame."""
+Verdict = Literal["obstruction", "scene"]
+"""What a blocked sample or window is. ``obstruction`` is the veto — something is between the
+lens and a player. ``scene`` is everything the near-field heuristic finds that the shot was
+framed to include: furniture, a parked head, the shot's own foreground subject, and a mid-take
+reframe carrying the furniture to a new place in frame."""
+
+OBSTRUCTION: Verdict = "obstruction"
+SCENE: Verdict = "scene"
+"""The two verdicts by name, for the callers that compare against them."""
 
 OCCUPANCY_LEVEL = 0.25
 """Share of the run's samples a pixel has to be near-field in before that spot counts as part
@@ -201,16 +217,22 @@ def measure(frames: NDArray[np.uint8]) -> Scan:
 
     Two passes, because both readings that separate an obstruction from the shot's own
     furniture are against the whole run and neither is known while the first frame is being
-    looked at. The pass is cheap and the frames are not: a scan of an hour at four samples a
-    second is 130 MB of grey, and holding a mask per sample to save a second pass would treble
-    that to say nothing new.
+    looked at. The second pass labels each frame again rather than keeping the first pass's
+    masks, and that is the deliberate end of the trade: a scan of an hour at four samples a
+    second is 130 MB of grey and a mask per sample would add as much again, while the labelling
+    is milliseconds against a 4K decode that is minutes.
     """
     covers: list[tuple[float, float, int]] = []
+    # Occupancy counts the raw candidate pixels, not the ones that survived the size and
+    # anchor filters: the question it answers is whether this *spot* is near-field most of the
+    # time, and a lid that only qualifies as a blob in the frames where a head joins it is
+    # furniture in all of them.
     occupied = np.zeros(frames.shape[1:], dtype=np.int32)
     for one in frames:
         candidate = _candidate(_luma(one))
         occupied += candidate
-        covers.append(_geometry(candidate))
+        _, weighted, largest, blobs = _qualifying(candidate)
+        covers.append((weighted, largest, blobs))
 
     occupancy = occupied / max(1, len(frames))
     reference = _reference(frames)
@@ -218,16 +240,7 @@ def measure(frames: NDArray[np.uint8]) -> Scan:
     return score(covers, signals)
 
 
-def coverage(frame: NDArray[np.uint8]) -> tuple[float, float, int]:
-    """``(coverage, largest, blobs)`` for one frame — the geometry, before any baseline.
-
-    ``coverage`` is the weighted area fraction of every qualifying blob, ``largest`` the
-    plain area fraction of the biggest one, ``blobs`` how many qualified.
-    """
-    return _geometry(_candidate(_luma(frame)))
-
-
-def verdict(novel: float, hidden: float) -> str:
+def verdict(novel: float, hidden: float) -> Verdict:
     """``OBSTRUCTION`` or ``SCENE`` for one sample's discriminator readings.
 
     Either signal clearing its level is enough. They measure the same claim — this mass is
@@ -246,12 +259,13 @@ def score(covers: list[tuple[float, float, int]], signals: list[tuple[float, flo
     areas = [one[0] for one in covers]
     baseline = _baseline(areas)
     readings: list[Reading] = []
-    for index, (area, largest, blobs) in enumerate(covers):
+    for index, ((area, largest, blobs), (novel, hidden)) in enumerate(
+        zip(covers, signals, strict=True)
+    ):
         excess = max(0.0, area - baseline)
         base = min(1.0, excess / SATURATION_AREA)
         rise = area - areas[index - 1] if index else 0.0
         bonus = WIPE_BONUS * min(1.0, max(0.0, rise) / WIPE_DELTA) if base > 0.0 else 0.0
-        novel, hidden = signals[index]
         readings.append(
             Reading(
                 coverage=round(area, 4),
@@ -270,20 +284,15 @@ def _luma(frame: NDArray[np.uint8]) -> NDArray[np.float32]:
     return np.asarray(frame, dtype=np.float32) / 255.0
 
 
-def _geometry(candidate: NDArray[np.bool_]) -> tuple[float, float, int]:
-    """``(coverage, largest, blobs)`` for a frame's candidate mask."""
-    _, weighted, largest, blobs = _qualifying(candidate)
-    return weighted, largest, blobs
-
-
 def _qualifying(
     candidate: NDArray[np.bool_],
 ) -> tuple[NDArray[np.bool_], float, float, int]:
     """The candidate pixels that are a body: labelled, size-filtered and anchor-filtered.
 
-    Comes back as the mask of everything that qualified plus the same three numbers
-    ``coverage`` reports, because the discriminator reads the mask and the score reads the
-    numbers and both are the same walk over the same labels.
+    Comes back as the mask of everything that qualified plus ``(coverage, largest, blobs)`` —
+    the weighted area fraction of every qualifying blob, the plain area fraction of the biggest
+    one, and how many qualified. Both callers want one of the two halves and neither wants to
+    walk the labels twice inside its own pass.
     """
     labels, found = ndimage.label(candidate)
     keep = np.zeros_like(candidate)

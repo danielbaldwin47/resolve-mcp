@@ -758,7 +758,7 @@ def test_a_true_blocking_in_the_evidence_set_reads_as_an_obstruction(
 def test_a_false_positive_in_the_evidence_set_reads_as_scene(
     scan: str, window: tuple[int, int]
 ) -> None:
-    """The ten the gauntlet overrode: a piano lid, a parked head, a drummer, and a reframe."""
+    """The eleven the gauntlet overrode: a piano lid, a parked head, a drummer, a reframe."""
     novel, hidden = _peaks(scan, window)
 
     assert blocking.verdict(novel, hidden) == blocking.SCENE
@@ -792,6 +792,13 @@ def test_the_ending_the_adjudication_found_clean_flags_nothing_to_class() -> Non
     readings = _measured("ending-fx6").readings
 
     assert max(one.score for one in readings) < DEFAULT_THRESHOLD
+
+
+def test_the_evidence_set_is_every_window_the_three_adjudications_judged() -> None:
+    """A transcription guard: the levels are fitted to these windows, so a window quietly
+    dropped from the table would widen the gap they were chosen to sit in."""
+    assert len(_adjudicated(blocking.OBSTRUCTION)) == 3
+    assert len(_adjudicated(blocking.SCENE)) == 11
 
 
 def test_the_evidence_set_separates_with_room_either_side_of_both_levels() -> None:

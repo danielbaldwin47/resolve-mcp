@@ -15,8 +15,16 @@ item's source out).
 
 Every scan is re-scored here and checked against the catalog the original run left in the
 analysis dir: if the per-sample scores match, the grid is the same footage the ledgers judged.
-A mismatch means the decode landed somewhere else and the fixture is worthless, so it is
-recorded rather than glossed.
+A mismatch would mean the decode landed somewhere else, so it is recorded rather than glossed.
+
+What it records: the three FX6 scans and the A7IV ending reproduce their catalogs exactly, and
+the two other A7IV scans differ on isolated samples — 0.007 at worst on the mid, 0.14 on the
+opening. The FX6 is intra-frame MXF and the A7IV is long-GOP, and an input seek into long-GOP
+does not have to land on the same decoded frame twice; the original runs also predate the
+hardware-decode work of #202, so their catalogs carry no ``decode`` field to compare against.
+The consequence is one number: the opening A7IV's blocking peaks at 0.572 here against the
+ledger's 0.604. It is the same blocking, the same window and the same verdict — the frames are
+the footage the eye judged, and the fixture is used for what the eye said about it.
 """
 
 from __future__ import annotations
@@ -55,7 +63,20 @@ SCANS = [
     {"name": "ending-a7iv", "clip": "20260617_D_A7IV_0006.MP4", "path": A7IV, "first": 95427},
 ]
 
-report: dict[str, Any] = {"kind": "occlusion_fixture_grids", "scans": [], "errors": []}
+NOTE = (
+    "The FX6 (intra-frame MXF) scans and the A7IV ending reproduce their original catalogs "
+    "exactly. The A7IV opening and mid differ on isolated samples (0.14 and 0.007 at worst): "
+    "long-GOP input seek does not have to land on the same decoded frame twice. Same footage, "
+    "same windows, same verdicts — the opening blocking peaks 0.572 here against the ledger's "
+    "0.604."
+)
+
+report: dict[str, Any] = {
+    "kind": "occlusion_fixture_grids",
+    "note": NOTE,
+    "scans": [],
+    "errors": [],
+}
 
 
 def write() -> None:
@@ -69,6 +90,14 @@ def catalog_for(clip: str, first: int) -> dict[str, Any] | None:
         if int(loaded["range"]["in"]["frames"]) == first:
             return dict(loaded)
     return None
+
+
+def _already_there(target: Path, frames: Any) -> bool:
+    """Whether ``target`` already holds exactly these frames."""
+    if not target.exists():
+        return False
+    with np.load(target) as loaded:
+        return bool(np.array_equal(loaded["frames"], frames))
 
 
 def decode(source: str, first: int, target: Path) -> None:
@@ -127,8 +156,13 @@ def main() -> None:
                 entry["worst_score_delta"] = round(worst, 4)
                 entry["matches_catalog"] = bool(worst <= 0.02 and shared == len(scores))
 
+            # Only write when the grid actually changed: a zip carries the hour it was made,
+            # so re-running to refresh this receipt would otherwise land three megabytes of
+            # byte-different, pixel-identical fixtures in the history.
             target = DATA / f"{scan['name']}.npz"
-            np.savez_compressed(target, frames=frames)
+            entry["rewritten"] = not _already_there(target, frames)
+            if entry["rewritten"]:
+                np.savez_compressed(target, frames=frames)
             entry["fixture"] = str(target.relative_to(REPO)).replace("\\", "/")
             entry["fixture_bytes"] = target.stat().st_size
             write()

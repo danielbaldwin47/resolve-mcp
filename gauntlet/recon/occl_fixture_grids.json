@@ -1,5 +1,6 @@
 {
   "kind": "occlusion_fixture_grids",
+  "note": "The FX6 (intra-frame MXF) scans and the A7IV ending reproduce their original catalogs exactly. The A7IV opening and mid differ on isolated samples (0.14 and 0.007 at worst): long-GOP input seek does not have to land on the same decoded frame twice. Same footage, same windows, same verdicts \u2014 the opening blocking peaks 0.572 here against the ledger's 0.604.",
   "scans": [
     {
       "name": "opening-fx6",
@@ -14,6 +15,7 @@
       "catalog_samples": 90,
       "worst_score_delta": 0.0,
       "matches_catalog": true,
+      "rewritten": false,
       "fixture": "tests/data/occlusion/opening-fx6.npz",
       "fixture_bytes": 542698
     },
@@ -30,6 +32,7 @@
       "catalog_samples": 90,
       "worst_score_delta": 0.14,
       "matches_catalog": false,
+      "rewritten": false,
       "fixture": "tests/data/occlusion/opening-a7iv.npz",
       "fixture_bytes": 535677
     },
@@ -46,6 +49,7 @@
       "catalog_samples": 90,
       "worst_score_delta": 0.0,
       "matches_catalog": true,
+      "rewritten": false,
       "fixture": "tests/data/occlusion/mid-fx6.npz",
       "fixture_bytes": 531058
     },
@@ -62,6 +66,7 @@
       "catalog_samples": 90,
       "worst_score_delta": 0.007,
       "matches_catalog": true,
+      "rewritten": false,
       "fixture": "tests/data/occlusion/mid-a7iv.npz",
       "fixture_bytes": 543751
     },
@@ -78,6 +83,7 @@
       "catalog_samples": 90,
       "worst_score_delta": 0.0,
       "matches_catalog": true,
+      "rewritten": false,
       "fixture": "tests/data/occlusion/ending-fx6.npz",
       "fixture_bytes": 570227
     },
@@ -94,6 +100,7 @@
       "catalog_samples": 90,
       "worst_score_delta": 0.0,
       "matches_catalog": true,
+      "rewritten": false,
       "fixture": "tests/data/occlusion/ending-a7iv.npz",
       "fixture_bytes": 551645
     }
