@@ -166,9 +166,74 @@ that the grid is a live band's grid, so it moves.
   **returns to a picture just left**, not shot length; it never set a floor on
   how briefly a *new* picture may be held.
   `[measured — this window, n=14 shots + review feedback 2026-08 unanimous]`
-- Duration distributions conditioned on section type and energy band. *Open;
-  the conditioning needs the structure analysis, which has not been run over
-  the corpus.*
+- **The cutting changes gear with the song: the quietest sections run ~0.74×
+  the song's mean cut rate, the loudest sustained music ~1.15×, and the peak
+  ~1.3×.** First measurement of a *whole* song rather than a window — the
+  director's own deliverable of an 8.3-minute tune, 77 cuts over 78 shots,
+  9.28 cuts/min overall, crossed against the song's own energy legs and solo
+  handovers:
+
+  | section | d (s) | LUFS | cuts/min | gear | median shot | <2 s |
+  | --- | --- | --- | --- | --- | --- | --- |
+  | head | 0–36 | −14.5 | 9.98 | 1.08× | 4.84 s | 1 |
+  | floor | 36–96 | −25.2 | 8.01 | 0.86× | 5.71 s | 0 |
+  | breath | 96–154 | −22.5 | 7.30 | 0.79× | 5.05 s | 1 |
+  | trade | 154–233 | −18.0 | 9.07 | 0.98× | 3.44 s | 0 |
+  | plateau | 233–295 | −11.2 | 7.79 | 0.84× | 6.38 s | 0 |
+  | build | 295–328 | −11.5 | 8.96 | 0.97× | 4.21 s | 2 |
+  | fast | 328–381 | −11.5 | 14.72 | 1.59× | 4.17 s | 0 |
+  | summit | 381–475 | −11.8 | 10.90 | 1.17× | 3.80 s | 3 |
+  | ending | 475–498 | −22.6 | 2.61 | 0.28× | 21.27 s | 0 |
+
+  Banded by measured loudness rather than by name: the three sections at or
+  below −22 LUFS run **6.83 cuts/min (0.74×)**, the four at or above −12 LUFS
+  run **10.67 (1.15×)** — a **1.56× swing** — and across the sustained peak
+  d330–480 he pushes **12.0 cuts/min (1.29×)**. The extremes are wider still —
+  the ending is a single 21.3 s shot at 0.28×, the fast zone 1.59× — so the
+  full gearbox spans **5.7× top to bottom**. Our cut of the same song ran
+  0.85× quiet / 1.10× loud (a 1.29× swing) and 10.8 cuts/min across d330–480,
+  and lost 1–2 to *"it never surprises… under-drives the sustained peak at
+  330–480 s where the song is asking to be pushed"*, all three judges. The
+  bullets above this one set the **shape** a passage takes; this one sets the
+  **rate that passage is allowed to run at**, and the failure it names is only
+  visible at song scale — every passage defensible on its own, the song flat.
+  A full song needs the full gearbox.
+  `[measured — 1 project, full song, n=78 shots + review feedback 2026-08]`
+- **Sub-2 s accent shots belong in the loudest music.** The seven sub-2 s shots
+  in that cut sit at d32.5 / 103.5 / 320.9 / 322.5 / 435.7 / 440.4 / 461.4 —
+  **five of seven above −12 LUFS**, six of seven above −18 LUFS, and exactly
+  one in the quiet band. They arrive in pairs and at the two places the song
+  peaks: 320.9 + 322.5 tightening into the summit at d328, then 435.7 + 440.4
+  inside the sustained finale. A sub-2 s shot is not general-purpose spice to
+  be sprinkled for variety; it is **what the loudest sustained music is cut
+  with**, and it is the register our cut never entered — one sub-2 s shot in
+  8.3 minutes, at d354, against his seven. This does not contradict the
+  "never return to a framing for under ~3 s" rule, which governs returns: all
+  seven are cuts to a picture the run had not just been on.
+  `[measured — 1 project, full song, n=78 shots + review feedback 2026-08]`
+- **One-speed is a *within-section* failure at least as often as a
+  between-section one — check both axes.** The obvious diagnosis of a flat cut
+  is that the section rates never move, and on this pair that diagnosis was
+  wrong. Our section rates varied about as much as his (CV across the nine
+  section rates 0.305 against his 0.345) and our section mean shot lengths
+  spanned slightly *more* (3.76–8.68 s against his 4.16–8.50 s). What separated
+  our overall shot-length CV of **0.59** from his **0.77** was the spread
+  *inside* each section: his lengths vary at a mean within-section CV of
+  **0.692**, ours at **0.478**. We had built the gearbox and then driven every
+  section at its own constant speed. The two axes fail independently — a plan
+  whose section gears are right still reads one-speed if each section's shots
+  cluster on that section's mean, and a cut full of local variety still reads
+  one-speed if the section means never move — so a distribution that is bimodal
+  inside a window proves nothing about the song, and neither does a table of
+  section rates. Before shipping a song, measure **both**: the per-section rate
+  against the song mean, and the shot-length CV within each section.
+  `[measured — 1 project, full song, n=78 shots + review feedback 2026-08]`
+- Duration distributions conditioned on section type and energy band. *Partly
+  closed by the three bullets above — but that is one song, one director, one
+  cut. What stays open is whether those gear ratios hold across the corpus, and
+  whether the gear is set by loudness, by section type, or by both: inside this
+  song the loudest sections are also the late ones, so energy and position are
+  confounded and nothing here separates them.*
 - **The drum cam's frequent-and-short shape needs internal variety too.** The
   #46 recut kept the drum shots short (median 3.3 s against the agent cut's
   4.5 s) but deliberately broke their sameness: one held to 8 s "since the drum
@@ -291,7 +356,10 @@ that the grid is a live band's grid, so it moves.
   concert changes nothing about them — they carry their tags in `base.md` and
   are named here only so this section is not read as silent on them.
 - Whether shots shorten through a solo's build and lengthen through a head.
-  *Open.*
+  *One song says neither, at least not by rate: in the gear table above the
+  head runs 1.08× and the song's longest build 0.97×. The build is instead
+  where two of the seven sub-2 s shots sit — it tightens its **extremes**
+  without lifting its average. Still open across the corpus.*
 
 ## 4. Angle roles
 
