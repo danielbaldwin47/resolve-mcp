@@ -62,6 +62,81 @@ def sane_floor(minimum_confidence: float, default: float, writes: str = "candida
         )
 
 
+def collected(directory: Path) -> dict[str, Path]:
+    """The stems under a separation's directory — the four-stem pass, or the parent of it.
+
+    A separation writes a directory per pass — ``<directory>/mix``, ``<directory>/drums``, and
+    ``<directory>/other`` when the wind split was asked for — and the job reports the parent of
+    all of them. The melodic stems are in the first pass, so that is looked in first; the
+    parent itself is checked too, because a director who copied the stems into a folder of
+    their own should not have to name a subdirectory that is not there.
+
+    Here beside ``readable`` because more than one detector reads a stem now — phrases off the
+    line, bars off the pulse (#180) — and two answers to "where are the stems" would be two
+    conventions. What each of them says when the stem it wants is *missing* stays with the
+    detector: the advice differs, since a phrase job cannot run without one and a bar job can.
+
+    The imports are function-local: ``audio.stems`` reaches the Resolve seam, and every
+    analysis half imports this module.
+    """
+    from ..audio import separator
+    from ..audio.stems import MIX_PASS
+
+    if not directory.is_dir():
+        raise InvalidRequestError(
+            cause=f"There is no directory at {directory}.",
+            fix="Pass the directory a separate_stems job reported, or the mix pass inside it.",
+            detail={"requested": str(directory)},
+        )
+    for candidate in (directory / MIX_PASS, directory):
+        found = separator.collect(candidate)
+        if found:
+            return found
+    return {}
+
+
+def stem_named(
+    stems: Mapping[str, str | Path] | str | Path,
+    wanted: str,
+    purpose: str,
+    absent: str,
+) -> Path:
+    """One stem out of a separation's directory or a mapping of named paths, or the refusal.
+
+    Both detectors that read a stem ask this the same way — a directory the job reported, or
+    the paths already lifted out of it — and both refuse the same two ways: the stem is not
+    among them, or it is named and gone. Those refusals were duplicated word for word before
+    #180 added the second caller, which is how a fix line gets corrected in one of them.
+
+    ``purpose`` and ``absent`` are what genuinely differ, and they differ because the advice
+    does: a phrase job cannot run without its stem and a bar job falls back to the master mix,
+    so a reader who got this error should not have to translate. The missing-file fix is the
+    same for both — the cache drops an entry whose files went missing, whoever asked.
+    """
+    if isinstance(stems, str | Path):
+        found = collected(Path(stems))
+    else:
+        found = {str(label): Path(path) for label, path in stems.items()}
+
+    chosen = found.get(wanted)
+    if chosen is None:
+        raise InvalidRequestError(
+            cause=f"There is no {wanted} stem {purpose}.",
+            fix=absent,
+            detail={"wanted": wanted, "found": sorted(found)},
+        )
+    if not chosen.is_file():
+        raise InvalidRequestError(
+            cause=f"The {wanted} stem is not on disk: {chosen}.",
+            fix=(
+                "Run separate_stems again — the cache drops an entry whose files went missing, "
+                "so asking for them redoes the separation."
+            ),
+            detail={"stem": str(chosen)},
+        )
+    return chosen
+
+
 def identity(source: Path, config: Config) -> dict[str, Any]:
     """What this audio is: its bytes, whoever wrote the file and wherever it sits.
 

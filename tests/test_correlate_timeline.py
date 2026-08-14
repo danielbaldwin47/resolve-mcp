@@ -22,6 +22,7 @@ import pytest
 from resolve_mcp.analysis import beats as beats_module
 from resolve_mcp.analysis import correlate, energy, records
 from resolve_mcp.analysis.beats import BeatGrid
+from resolve_mcp.errors import InvalidRequestError
 from resolve_mcp.jobs.runner import wait_for
 from resolve_mcp.resolve.connection import get_connection
 from resolve_mcp.tools import analysis as analysis_tools
@@ -177,6 +178,26 @@ def solos_file(tmp_path: Path, first_from: str | None = None, first_t: float = 0
 
 
 
+def bars_file(tmp_path: Path, first: float = 0.0, name: str = "concert-bars.json") -> Path:
+    """A bar map in the shape detect_bars writes: a bar a second, four to the group."""
+    return records.write(
+        tmp_path / name,
+        {"kind": "bars", "audio": "concert.wav", "count": 6, "meter": 2, "source": "inferred"},
+        "bars",
+        [
+            {
+                "bar": index + 1,
+                "t": round(first + index, 3),
+                "seconds": 1.0,
+                "beats": 2,
+                "beat": index * 2 + 1,
+                "in_group": index % 4 + 1,
+            }
+            for index in range(6)
+        ],
+    )
+
+
 def _onsets(times: Sequence[float] = ONSETS) -> correlate.Onsets:
     def detect(path: Path) -> tuple[float, ...]:
         return tuple(times)
@@ -277,12 +298,93 @@ def test_every_shot_lands_on_disk_with_its_offsets_bar_and_section(
         "in_bar": 3,
         "in_grid": True,
         "stranded": False,
+        "map_bar": None,
+        "in_group": None,
+        "bar_offset": None,
         "transient_offset": -0.017,
         "tune": 1,
         "front": "drums",
     }
     assert cuts[2]["tune"] == 2
     assert cuts[2]["front"] == "other"
+
+
+def test_a_bar_map_puts_every_cut_on_the_form(attach: Attach, tmp_path: Path) -> None:
+    """The in_bar column comes from the beat model's own downbeats; where the model commits
+    to nothing, this is the only column that can say where in the form a cut landed (#180)."""
+    attach(studio(timeline=a_cut()))
+
+    result = _measured(tmp_path, bars=str(bars_file(tmp_path)))
+
+    cuts = _rows(result)
+    assert [one["map_bar"] for one in cuts[1:]] == [2, 3]
+    assert [one["in_group"] for one in cuts[1:]] == [2, 3]
+    assert cuts[1]["bar_offset"] == 0.033  # 1.033s against a bar line at 1.0
+    assert cuts[2]["bar_offset"] == 0.483  # 2.483s: nearer the line at 2.0 than the one at 3.0
+
+
+def test_a_cut_just_before_a_bar_line_belongs_to_that_bar(attach: Attach, tmp_path: Path) -> None:
+    """A cut just before a downbeat is a cut on the one; filing it under the bar it falls
+    inside would put the commonest placement in this material in the wrong bar every time."""
+    attach(studio(timeline=a_cut()))
+    # Bar lines at 1.05 and 2.05: the cut at 1.033 sits before the second one, not inside it.
+    late = bars_file(tmp_path, first=0.05, name="late-bars.json")
+
+    cuts = _rows(_measured(tmp_path, bars=str(late)))
+
+    assert cuts[1]["map_bar"] == 2
+    assert cuts[1]["bar_offset"] == -0.017
+
+
+def test_the_bar_columns_read_null_when_no_map_was_named(attach: Attach, tmp_path: Path) -> None:
+    attach(studio(timeline=a_cut()))
+
+    result = _measured(tmp_path)
+
+    assert all(one["map_bar"] is None for one in _rows(result))
+    assert result["bar_groups"] is None
+    assert result["bar_offsets"] is None
+
+
+def test_the_reading_counts_where_in_the_group_the_cuts_land(
+    attach: Attach, tmp_path: Path
+) -> None:
+    attach(studio(timeline=a_cut()))
+
+    result = _measured(tmp_path, bars=str(bars_file(tmp_path)))
+
+    assert result["bar_groups"] == {"2": 1, "3": 1}
+    assert result["bar_offsets"]["measured"] == 2
+    assert result["bar_offsets"]["late"] == 2
+
+
+def test_the_group_histogram_is_not_gated_on_the_grid(attach: Attach, tmp_path: Path) -> None:
+    """A bar map exists for the grids the #112 gate refuses wholesale; gating its histogram
+    on that verdict would empty the one reading that still had something to say."""
+    attach(studio(timeline=a_cut()))
+    beats = beats_file(tmp_path, BAD_BAR_SECONDS, BAD_BAR_DOWNBEATS, name="bad-bars.json")
+
+    result = _measured(tmp_path, beats=str(beats), bars=str(bars_file(tmp_path)))
+
+    assert result["gated"] > 0
+    assert sum(result["bar_groups"].values()) == result["cuts"] - result["openings"]
+
+
+def test_a_file_that_is_not_a_bar_map_is_refused_by_name(attach: Attach, tmp_path: Path) -> None:
+    attach(studio(timeline=a_cut()))
+
+    with pytest.raises(InvalidRequestError) as caught:
+        _started(tmp_path, bars=str(tunes_file(tmp_path)))
+    assert caught.value.payload()["detail"]["field"] == "bars"
+
+
+def test_naming_a_bar_map_is_a_different_measurement(attach: Attach, tmp_path: Path) -> None:
+    attach(studio(timeline=a_cut()))
+
+    without = _measured(tmp_path)
+    with_map = _measured(tmp_path, bars=str(bars_file(tmp_path)))
+
+    assert with_map["path"] != without["path"]
 
 
 def test_the_offset_is_signed_from_the_cut_to_the_nearest_beat(

@@ -230,7 +230,7 @@ FLOOR_HEURISTIC = (
 )
 """The floor heuristic in words, carried in the report beside the numbers it was drawn from."""
 
-READING = 7
+READING = 8
 """What this measurement *is*; bumped whenever a rerun over unchanged inputs would differ.
 
 The cache is keyed on what was measured, not on the code that measured it, so a call whose
@@ -240,9 +240,10 @@ back as though it were this measurement rather than the one before it. Both the 
 the reading count: 3 rather than 2 because the same shots now resolve to a different strip,
 4 rather than 3 because the header now carries ``shot_rhythm``, 5 rather than 4 because that
 block now carries ``gears``, 6 rather than 5 because ``reads_metronomic`` now reads the
-ramp as well and the gearing no longer counts shots the level curve does not reach, and 7
-rather than 6 because the gearing now carries ``quiet_floor`` — a cached hit from an earlier
-reading answers the self-review question with a file that never asked it.
+ramp as well and the gearing no longer counts shots the level curve does not reach, 7
+rather than 6 because the gearing now carries ``quiet_floor``, and 8 rather than 7 because
+every record now carries its place in the bar map — a cached hit from an earlier reading
+answers the self-review question with a file that never asked it.
 """
 
 GIVEN = "given"
@@ -311,6 +312,7 @@ class Music(NamedTuple):
     beats: tuple[dict[str, Any], ...]
     tunes: tuple[dict[str, Any], ...] | None
     solos: tuple[dict[str, Any], ...] | None
+    bars: tuple[dict[str, Any], ...] | None
     roles: dict[str, str] | None
     subjects: dict[str, subject.Subject] | None
     audio: Path | None
@@ -323,6 +325,7 @@ def correlate_timeline(
     audio: str | None = None,
     tunes: str | None = None,
     solos: str | None = None,
+    bars: str | None = None,
     angles: Mapping[str, Any] | None = None,
     track: int | None = None,
     audio_at: Any | None = None,
@@ -350,13 +353,20 @@ def correlate_timeline(
     ``audio_at`` is the timeline frame the analysed audio's own zero sits at, for when no
     clip on the timeline carries it and so none can be read.
 
+    ``bars`` is the bar map ``detect_bars`` writes, and it is the file that makes a cut
+    measurable against the *form* rather than only against the pulse (#180). The beat grid
+    already carries a bar number, but only the one the beat model committed to — on material
+    where it commits to nothing that column is a meter of one, and the bar-map file is the
+    second reading that recovers a real bar line. Optional, because a grid the model did
+    commit to needs no second opinion.
+
     ``onsets`` is the transient seam and ``loudness`` the level one; both defaults decode the
     audio for real.
     """
     config = config or get_config()
     roles = _roles(angles)
     subjects = _subjects(angles)
-    music = _music(beats, audio, tunes, solos, roles, subjects)
+    music = _music(beats, audio, tunes, solos, bars, roles, subjects)
     cut = _read_cut(connection, timeline, track, music.audio, audio_at)
 
     params: dict[str, Any] = {
@@ -367,13 +377,18 @@ def correlate_timeline(
         "audio": _named(audio),
         "tunes": _named(tunes),
         "solos": _named(solos),
+        "bars": _named(bars),
         "angles": dict(sorted(roles.items())) if roles is not None else None,
         # Carried apart from the roles so that relabelling a camera's subject — the one edit
         # that moves the on-soloist track and nothing else — is a different job rather than a
         # cache hit on the reading it replaces.
         "subjects": None if subjects is None else _labelling(subjects),
     }
-    watched = [{"reading": READING}, cut.fingerprint, *_fingerprints(beats, audio, tunes, solos)]
+    watched = [
+        {"reading": READING},
+        cut.fingerprint,
+        *_fingerprints(beats, audio, tunes, solos, bars),
+    ]
     key = cache.cache_key(KIND, watched, params)
 
     def work(progress: Progress) -> JobOutput:
@@ -768,6 +783,7 @@ def _music(
     audio: str | None,
     tunes: str | None,
     solos: str | None,
+    bars: str | None,
     roles: dict[str, str] | None,
     subjects: dict[str, subject.Subject] | None,
 ) -> Music:
@@ -776,16 +792,22 @@ def _music(
         beats=_rows(_path(beats, "beat grid", "analyze_music writes it"), "beats"),
         tunes=_optional_rows(tunes, "tune list", "tunes"),
         solos=_optional_rows(solos, "solo changes", "solos"),
+        bars=_optional_rows(bars, "bar map", "bars", "detect_bars writes it"),
         roles=roles,
         subjects=subjects,
         audio=_path(audio, "master mix", "it is the file the analysis ran on") if audio else None,
     )
 
 
-def _optional_rows(file: str | None, what: str, field: str) -> tuple[dict[str, Any], ...] | None:
+def _optional_rows(
+    file: str | None,
+    what: str,
+    field: str,
+    provenance: str = "the structure analysis writes it",
+) -> tuple[dict[str, Any], ...] | None:
     if file is None:
         return None
-    return _rows(_path(file, what, "the structure analysis writes it"), field)
+    return _rows(_path(file, what, provenance), field)
 
 
 def _path(file: str, what: str, provenance: str) -> Path:
@@ -970,6 +992,7 @@ def measure(
     times = [float(row["t"]) for row in music.beats]
     tune_times = [float(row["t"]) for row in (music.tunes or ())]
     solo_times = [float(row["t"]) for row in (music.solos or ())]
+    bar_times = [float(row["t"]) for row in (music.bars or ())]
     roles = music.roles or {}
     subjects = music.subjects or {}
     voices = subject.voices(music.solos)
@@ -991,6 +1014,12 @@ def measure(
             and trusted[found]
             and _out_of_reach(seconds, times[found], widths[found])
         )
+        # The bar line is read the way the beat is — nearest, with a signed offset — and for
+        # the same reason: a cut twenty milliseconds *before* a downbeat is a cut on the one,
+        # and a rule that assigned it to the bar it technically falls inside would file the
+        # commonest placement in this material under the wrong bar every time.
+        line = None if not bar_times else nearest(bar_times, seconds)
+        bar_line = None if line is None else (music.bars or ())[line]
         rows.append(
             {
                 "cut": index,
@@ -1028,6 +1057,13 @@ def measure(
                 # report.
                 "in_grid": found is not None and trusted[found] and not stranded,
                 "stranded": stranded,
+                # From the bar map, when one was named: which bar of the form this cut is on,
+                # where that bar sits in the four-bar group, and how far off the line it is.
+                "map_bar": None if bar_line is None else bar_line.get("bar"),
+                "in_group": None if bar_line is None else bar_line.get("in_group"),
+                "bar_offset": (
+                    None if bar_line is None else _rounded(seconds - float(bar_line["t"]))
+                ),
                 "transient_offset": _offset(transients, seconds),
                 "tune": _tune_at(music.tunes, tune_times, seconds),
                 "front": _front_at(music.solos, solo_times, seconds),
@@ -1165,6 +1201,20 @@ def _summary(
         "beat_offsets": _offsets([row["beat_offset"] for row in in_grid]),
         "transient_offsets": transient_offsets,
         "bars": _histogram(row["in_bar"] for row in in_grid),
+        # The bar map's own histogram, and deliberately not gated on ``in_grid``: the beat
+        # gate refuses beats the *grid* describes badly, and a bar map exists precisely for
+        # the grids that get refused wholesale. Gating this on the grid's verdict would empty
+        # the one reading that still had something to say (#180).
+        "bar_groups": (
+            _histogram(row["in_group"] for row in cut_to_music)
+            if _measured("in_group", rows)
+            else None
+        ),
+        "bar_offsets": (
+            _offsets([row["bar_offset"] for row in cut_to_music])
+            if _measured("bar_offset", rows)
+            else None
+        ),
         "tunes": _spread("tune", cut_to_music) if _measured("tune", rows) else None,
         "solos": _spread("front", cut_to_music) if _measured("front", rows) else None,
         "shot_seconds": _lengths([row["seconds"] for row in rows]),

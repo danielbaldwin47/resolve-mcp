@@ -41,7 +41,15 @@ and the cache makes a rerun free, so there is no per-session picking:
 2. `analyze_structure` on the mix path when the stems land, `solos=true` with the
    stems directory — tunes from applause, solo changes from the stems. Keep the file
    paths every job returns: the self-review consumes them verbatim.
-3. **`songs.json`** is shared prep, not titling-owned: applause analysis proposes the
+3. **`detect_bars`** on the mix path when `analyze_music` lands, *if* its `meter`
+   comes back under 2 — the beat model tracks the swung eighth on this material and
+   calls every one a downbeat, so the grid carries no bar line to cut on (#180). The
+   job folds the grid to the pulse and finds the bar from where the accents fall;
+   pass the stems directory with `stem="bass"` when the kit is brushes and the mix
+   will not carry it. Keep the path: the self-review takes it as `bars`. A result
+   whose `source` reads `refused` is the honest answer and not a failure — plan
+   without a bar map rather than against a guessed one.
+4. **`songs.json`** is shared prep, not titling-owned: applause analysis proposes the
    song starts, the director confirms the blue markers (one per song key, T7), you
    author the file. Whichever pillar runs first writes it; format and ownership live
    in `docs/agents/rough-cut.md` §songs.json.
@@ -98,9 +106,12 @@ separate timelines.
 ## The self-review
 
 **Mandatory, per song, before the director sees anything**: run `correlate_timeline`
-on the cut you just built — beats, tunes, solos files from prep, the master-mix path as
-`audio` (that is what makes the transient column real), and the sidecar's labels passed
-as `angles`. This is the concert counterpart to the rough-cut pillar's
+on the cut you just built — beats, tunes, solos files from prep, the bar map as `bars`
+when prep produced one, the master-mix path as `audio` (that is what makes the transient
+column real), and the sidecar's labels passed as `angles`. Naming the bar map is what
+gives the report a `bar_groups` histogram at all on this material: the `bars` histogram
+comes off the beat model's own downbeats and is empty exactly where the model committed
+to no meter. This is the concert counterpart to the rough-cut pillar's
 `virtual_transcript`, and the same tool the corpus was measured with, so your cut is
 measured on exactly the axes the profile's `[measured]` claims stand on.
 

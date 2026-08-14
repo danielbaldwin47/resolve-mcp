@@ -51,6 +51,18 @@ timelines. The server measures; Claude decides.
   measuring all three counts the residual twice (#157).
   _Avoid_: "piano stem" as a name for `comp` — it is accompaniment, and
   nothing may name it otherwise (#126).
+- **bar map** — `analysis/bars.py`'s reading: one record per bar, each with its
+  downbeat time, its length, the grid beat it starts on and its `in_group`
+  position in the four-bar group. Every map says its `source` — `model` when the
+  beat model committed to a meter and the map takes it at its word, `inferred`
+  when it was recovered from the accents, `refused` when neither reading was
+  worth having. The last is the point: the failure it ends is a grid quietly
+  reporting `meter: 1` and callers doing bar arithmetic on it (#180).
+  _Avoid_: reading `in_group` as a phrase — it is hypermeter, saying a bar line
+  is a plausible place for a phrase to turn over, never that one did.
+- **tactus** — the pulse the bars are counted in, and the thing a bar map folds
+  a subdivision-scale grid down to. Not the grid's own beat: on the corpus
+  anchor the grid is swung eighths and the tactus is every second one of them.
 - **phrase** — the cut-placement unit (#46, `styles/concert.md` §1): a
   stretch of the soloist's line between two endings. `analysis/phrases.py`
   reports the **boundaries**, each with two times — `measured_t`, where the
@@ -97,7 +109,13 @@ Top level:
 `applause` (bursts → tune boundaries, then a beat-density floor drops the calls
 with no pulse under them, #133; every boundary then walks forward off the applause
 to where the loudness curve says the band comes in, and a mix the threshold finds
-no clapping in at all is read at its own scale instead, #179), `beats` (grid + downbeats, model
+no clapping in at all is read at its own scale instead, #179),
+`bars` (the **bar map**: a rule layer over the grid for the material the beat
+model will not commit a meter to — folds a too-fast grid to the tactus, then
+scores every meter and phase against a per-beat accent reading and takes the
+widest lead over the runner-up, refusing rather than guessing when the accents
+say nothing. The accent reading is injected per ADR 0002 and defaults to RMS off
+the mix; a named stem reads that instead, #180), `beats` (grid + downbeats, model
 injected per ADR 0002; `trust` says which beats the grid describes well enough
 to count, #112; `spacing` says how wide a beat is at each beat), `correlate`
 (measure a cut against its music — by default the *visible* edit,
@@ -115,14 +133,20 @@ the analysed mix, counted apart rather than clamped into a tercile — plus
 `quiet_floor`, the passages the slow gear is held through, found by smoothing
 that curve rather than off the per-window tercile labels, each read for the
 spread its lone flashes are not holding up (#190) —
-warnings the report carries, never gates),
+warnings the report carries, never gates. Takes an optional **bar map**
+(`bars=`) and then reports `map_bar`, `in_group` and `bar_offset` per cut and
+a `bar_groups` histogram — ungated on the beat gate, since the map exists for
+the grids that gate refuses whole, #180),
 `cuda` (preloads
 the CUDA runtime the `analysis` extra ships, so CTranslate2 finds it on Windows;
 pure decisions, #128),
 `decode` (WAV → numpy, no third-party decoder), `drums` (hits per stem), `energy`
 (loudness curves; `rms_curve` is the cheap level-only pass, no K-weighting and
 no onsets), `fills` (drum-fill candidates), `halves` (shared
-identify/cache/write pattern), `melody` (notes off one melodic stem —
+identify/cache/write pattern, plus `collected`/`stem_named` — where a
+separation's stems are and which one was asked for, shared by every detector
+that reads one: `phrases` off the line, `bars` off the pulse),
+`melody` (notes off one melodic stem —
 monophonic pitch + gating, model injected per ADR 0002; the reading `phrases`
 is a rule layer over, as `drums` is to `fills`), `music` (beats + energy + gist
 job; `beats_of`/`energy_of` are the shared entries other jobs read a grid or a

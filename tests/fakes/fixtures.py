@@ -94,6 +94,7 @@ def write_hits(
     decay_seconds: float = 0.03,
     amplitude: float = 0.5,
     frequency: float = 2_000.0,
+    accents: Sequence[float] | None = None,
 ) -> Path:
     """A drum stem: decaying hits at exactly the times asked for, silence in between.
 
@@ -101,17 +102,21 @@ def write_hits(
     opposite of what a stem is — a kick stem is mostly nothing, and where its hits fall is
     the thing under test. Passing no times writes the silence a stem the band did not play
     would hold.
+
+    ``accents`` scales each hit in turn — the fixture a bar map needs (#180), where *which*
+    hits are loud is the whole reading and hits of one size would say nothing.
     """
     peak = 2 ** (bit_depth - 1) * amplitude
     total = int(seconds * sample_rate)
     decay = max(int(decay_seconds * sample_rate), 1)
+    scales = tuple(accents) if accents is not None else tuple(1.0 for _ in times)
     samples = [0] * total
-    for when in times:
+    for when, scale in zip(times, scales, strict=True):
         start = int(when * sample_rate)
         for offset in range(min(decay, max(total - start, 0))):
             envelope = 1.0 - offset / decay
             wobble = math.sin(2 * math.pi * frequency * offset / sample_rate)
-            samples[start + offset] = int(peak * envelope * envelope * wobble)
+            samples[start + offset] = int(peak * scale * envelope * envelope * wobble)
     return _write_samples(path, samples, sample_rate, bit_depth, channels)
 
 

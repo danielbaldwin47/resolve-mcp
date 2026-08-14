@@ -70,6 +70,46 @@ that the grid is a live band's grid, so it moves.
   grid from an independent source (a click track, a hand-tapped grid), which
   this corpus does not have.
 
+- **The bar and the four-bar group are sayable now, on the timelines whose grid
+  said nothing.** `detect_bars` (#180) is the second reading over the same grid:
+  where `beat_this` tracked the swung eighth and called every one of them a
+  downbeat, it folds the grid to the pulse a listener would tap and finds the
+  meter and the phase from where the accents fall. That gives two names a claim
+  in this profile may use that the beat grid alone could not supply on this
+  material — the **bar** the cut is on, and its **in_group** position in the
+  four-bar group, which is the unit an eight- or twelve-bar form turns over on.
+  `correlate_timeline` reports both per cut (`map_bar`, `in_group`,
+  `bar_offset`) when the bar-map file is named, and the group histogram is *not*
+  gated on beat confidence — the gate refuses grids, and this reading exists for
+  the grids it refuses.
+
+  A bar map carries its own `source` — `model` when the beat model committed and
+  the map takes it at its word, `inferred` when it was recovered, `refused` when
+  the accents said nothing — and a claim drawn from an `inferred` map has to say
+  so, because the phase is a reading and a bar map one beat out would make every
+  claim in this section confidently wrong.
+
+  **On the anchor it refuses, and that is the current state of this claim.**
+  Run over the Zinc mix and over its bass stem, on the Taurus span and on the
+  whole set, agreement across four-bar windows came back 0.10–0.17 — adjacent
+  windows of one tune at one tempo reach different meters and phases 83–90% of
+  the time — so no map is written and nothing here can be claimed in bars yet.
+  RMS at the beat is the wrong witness on this idiom: brushes do not mark the
+  one and a walking bass plays every quarter alike. What the pass *did* recover
+  is the tempo — all four readings fold to 107.14 bpm off a grid reporting
+  214.29, which is the tune's real tempo and the number the grid alone could not
+  give.
+  `[measured — 1 project, 4 readings (2 witnesses × 2 spans), concert]`
+  (`gauntlet/recon/g2_bar_map.json`, 2026-08-14)
+
+  One project and one mix: thin by the standards of every other number in this
+  section, and enough only because the two things it says are a refusal and a
+  tempo. Neither generalises to another room until it is run there.
+
+  The bar-position claim itself therefore stays `[believed, unverified]` until a
+  witness that is not loudness produces a map — downbeat tracking proper, or the
+  root the bass lands on rather than how hard it lands. (#180, gauntlet gap G2)
+
 - Beat-grid position patterns **conditioned on context** — by tune section, by
   energy, in beat-fraction rather than whole positions. *Open. The unconditioned
   histogram above is what the gated pass could support; conditioning it splits
