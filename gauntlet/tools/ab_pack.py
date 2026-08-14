@@ -430,11 +430,16 @@ def decode_grey(
     fps: float | None = None,
     start: float | None = None,
     dur: float | None = None,
+    dtype: Any = np.float64,
 ) -> np.ndarray:
-    """Decode a clip (or a window of it) to an (n, height, width) float array.
+    """Decode a clip (or a window of it) to an (n, height, width) array.
 
     `fps=None` keeps the native frame rate -- transition typing needs every
     frame; the motion track resamples to a coarse grid instead.
+
+    `dtype` is float64 for every pass that subtracts frames from each other, which
+    on uint8 would wrap a negative difference round to 255. Pass `np.uint8` to hold
+    a whole song at once: 8k frames is 80 MB of bytes and 640 MB of doubles.
     """
     cmd = ["ffmpeg", "-v", "error", "-nostdin"]
     if start is not None:
@@ -449,11 +454,11 @@ def decode_grey(
     stride = width * height
     n = len(proc.stdout) // stride
     if n == 0:
-        return np.zeros((0, height, width), dtype=np.float64)
+        return np.zeros((0, height, width), dtype=dtype)
     return (
         np.frombuffer(proc.stdout[: n * stride], dtype=np.uint8)
         .reshape(n, height, width)
-        .astype(np.float64)
+        .astype(dtype)
     )
 
 
@@ -720,17 +725,25 @@ def cut_delta(arr: np.ndarray, transition: dict[str, Any]) -> framing.Delta | No
     """How far the picture steps across one boundary, or None if it cannot be read.
 
     The typing pass has already found where the boundary really is; this reads
-    across it. `None` is the honest answer for a cut too close to the head or tail
-    of its window to have three clean frames either side -- a delta invented from
-    one frame of a dissolve would be a number a critic could quote.
+    across it. `None` is the honest answer in three cases, and all three are the
+    same refusal: a delta invented from frames nobody located would be a number a
+    critic could quote.
+
+    * Nothing decoded.
+    * The typing found no boundary -- `none` is a detected cut with no frame-pair
+      change above the noise floor, and `unknown` is a window too short to type. In
+      both, the indices such a doc carries point at the argmax of decode noise, so
+      reading there would produce a confident delta of about zero and flag a cut
+      that is not there.
+    * The boundary sits too close to the head or tail of its window to leave three
+      clean frames either side.
     """
-    if len(arr) == 0:
+    if len(arr) == 0 or transition.get("type") in {"none", "unknown", None}:
         return None
-    middle = len(arr) // 2
-    out_index = int(transition.get("out_index", middle))
-    in_index = int(transition.get("in_index", middle))
+    if "out_index" not in transition or "in_index" not in transition:
+        return None
     try:
-        return framing.read_across(arr, out_index, in_index)
+        return framing.read_across(arr, int(transition["out_index"]), int(transition["in_index"]))
     except ValueError:
         return None
 
@@ -1404,6 +1417,18 @@ def placeholder_tile(dest: Path, caption: str, font: Path | None, cwd: Path) -> 
     return proc.returncode == 0 and dest.exists()
 
 
+def delta_caption(reading: framing.Delta | None) -> str:
+    """The visual delta as it appears on a filmstrip row, or nothing.
+
+    ASCII only: the caption goes through ffmpeg's drawtext against whatever font the
+    box happens to have, and a glyph it cannot render is a blank where a number
+    should be.
+    """
+    if reading is None:
+        return "  d=?"
+    return f"  d={reading.delta:.2f}{' JUMP' if reading.jump_cut else ''}"
+
+
 def build_cut_strips(
     clip: Path,
     cuts: list[float],
@@ -1411,6 +1436,7 @@ def build_cut_strips(
     fps: float,
     label_dir: Path,
     work: Path,
+    deltas: Sequence[framing.Delta | None] = (),
 ) -> tuple[list[str], list[dict[str, Any]]]:
     """One filmstrip row per cut: the last frames out, the first frames in.
 
@@ -1418,6 +1444,12 @@ def build_cut_strips(
     -- does it land on the hit, and is the return to a framing a jump cut --
     because both live in the frames immediately either side of the boundary.
     Returns the sheet file names and, per cut, where its row landed.
+
+    The second of those questions now has a number, so it is captioned onto the
+    row's first tile: a critic reading the sheet sees `d=0.62`, or `d=0.08 JUMP`
+    on a boundary the 30-degree check flagged, beside the frames it was measured
+    from. Left in cuts.json alone it would be a number nobody looking at the
+    picture ever meets.
     """
     if not cuts:
         return [], []
@@ -1454,6 +1486,8 @@ def build_cut_strips(
                 t = min(max(pts - 0.25 / fps, 0.0), last_t)
                 tile_no += 1
                 caption = f"c{cut_no:02d} {side} {k:+d}f  {max(pts, 0.0):.3f}s"
+                if (k, side) == offsets[0]:
+                    caption += delta_caption(deltas[cut_no - 1] if cut_no <= len(deltas) else None)
                 colors = (
                     ("white", "black@0.6") if side == "OUT" else ("black", "0x00D7FF@0.9")
                 )
@@ -1507,16 +1541,21 @@ def build_label(
     shots = shots_from_cuts(cuts, duration)
     stats = shot_stats(shots, duration, len(cuts))
 
-    sheets = build_sheets(clip, shots, label_dir, work)
-    strips, placement = build_cut_strips(clip, cuts, duration, fps, label_dir, work)
-    row_of = {p["cut_index"]: p for p in placement}
-
-    track = motion_track(clip)
+    # The boundary reads come before the filmstrips: a row's caption carries its own
+    # visual delta, so the number has to exist before the tile it is drawn on.
     reads = [read_cut(clip, cut, fps, duration) for cut in cuts]
     transitions = [one for one, _ in reads]
     deltas = [one for _, one in reads]
-    delta_summary = framing.summarize([one for one in deltas if one is not None])
-    delta_summary["cuts_unread"] = sum(1 for one in deltas if one is None)
+    delta_summary = framing.summarize(
+        [one for one in deltas if one is not None],
+        unread=sum(1 for one in deltas if one is None),
+    )
+
+    sheets = build_sheets(clip, shots, label_dir, work)
+    strips, placement = build_cut_strips(clip, cuts, duration, fps, label_dir, work, deltas)
+    row_of = {p["cut_index"]: p for p in placement}
+
+    track = motion_track(clip)
 
     # v3: the same boundaries again at multi-second scale, where a dissolve
     # the +/-12-frame window cannot hold is the obvious shape.
@@ -1766,7 +1805,9 @@ def main(argv: list[str] | None = None) -> int:
             "incoming_frame_offsets": list(STRIP_IN_OFFSETS),
             "offsets_relative_to": "first frame of the incoming shot",
             "caption_legend": "OUT = last frames of the old shot (white caption); "
-            "IN = first frames of the new shot (cyan caption)",
+            "IN = first frames of the new shot (cyan caption); the row's first tile "
+            "also carries d=<visual delta>, and JUMP where the 30-degree check flagged "
+            "it (d=? means the boundary could not be read -- see visual_delta)",
         },
         "shot_motion": {
             "method": "1-D cross-correlation of row/column projections",

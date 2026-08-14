@@ -10,14 +10,20 @@ subject teleports a few pixels, and the edit announces itself. That is what the
 along the same sight line is legal if the shot size really changes, which is why a
 size term sits beside the layout term rather than under it.
 
-Three terms, each a fraction, each measuring a different way two frames can differ:
+Four terms, each a fraction, each measuring a different way two frames can differ:
 
-* **layout** — where the light is. The frame's row and column profiles are
-  cross-correlated over a small lag, so a picture that merely slid sideways still
-  matches itself. What survives a lag search is composition: a real angle change
-  moves the subject relative to the background and no shift undoes it. The lag
-  itself is reported, because *matched at a shift of three pixels* is the exact
-  signature of the cut this measurement exists to catch.
+* **layout** — where the light is, allowing for a slide. The frame's row and column
+  profiles are cross-correlated over a small lag, so a picture that merely moved
+  sideways still matches itself. What survives a lag search is composition: a real
+  angle change moves the subject relative to the background and no shift undoes it.
+  The lag itself is reported, because *matched at a shift of three pixels* is the
+  exact signature of the cut this measurement exists to catch.
+* **structure** — where the light is, in two dimensions. Row and column profiles are
+  *marginals*, and marginals are blind by construction: two pictures with their
+  bright patches at opposite corners have identical profiles on both axes. A club
+  stage is the worst case for that — every camera in the room shares one bright band
+  across the middle — so the frame is also compared as a coarse grid of block means,
+  which no rearrangement of the same marginals can fake.
 * **content** — what the light is. Total-variation distance between the two luma
   histograms, which is what separates a blackout, a lighting state change or a
   different part of the room from a reframe of the same one.
@@ -41,6 +47,7 @@ so the human's own deliverables sit clear of it (see ``JUMP_DELTA``).
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any, NamedTuple
 
 import numpy as np
@@ -61,20 +68,34 @@ MAX_SHIFT = 0.125
 """How far the lag search slides one profile against the other, as a fraction of the
 axis. An eighth of the frame covers a reframe, a small pan and the parallax between
 two cameras a few feet apart — past that the pictures are not the same picture that
-moved, and calling them matched would hide exactly the cuts worth seeing."""
+moved, and calling them matched would hide exactly the cuts worth seeing.
 
-SCALE_SPAN = 2.0
-"""Doublings of subject spread that count as a full size change. Two of them — a
-four-fold change in how much of the frame the subject occupies — is a wide against a
-close-up, which is as large a size step as a concert cut makes."""
+A best match found *at* the limit is treated as no match at all rather than as the
+match it appears to be: the search ran out of room, which means the alignment it
+wanted lies outside the reframe this term is about, and the two profiles are then
+compared where they actually sit."""
 
-WEIGHT_LAYOUT = 0.5
-WEIGHT_CONTENT = 0.3
-WEIGHT_SCALE = 0.2
-"""How the three terms make one number. Layout leads because composition is what the
-eye reads across a cut; content follows because a change of light or of room is a
-real step even when the framing rhymes; size is last because it is the rule's
-escape clause rather than its subject."""
+BLOCK_COLS = 8
+BLOCK_ROWS = 4
+"""The coarse grid the structure term compares — 32 cells across the frame. Fine
+enough that a subject moving from one side to the other lands in different cells,
+coarse enough that grain, a head bobbing and a few pixels of reframe do not."""
+
+SCALE_SPAN = 1.0
+"""Doublings of subject spread that count as a full size change. One of them — the
+subject taking up twice as much of the frame — is a wide against a medium, which is
+already the size step the 30-degree rule accepts in place of an angle change."""
+
+WEIGHT_LAYOUT = 0.30
+WEIGHT_STRUCTURE = 0.25
+WEIGHT_CONTENT = 0.30
+WEIGHT_SCALE = 0.15
+"""How the four terms make one number. The two composition terms carry the most
+between them, split so neither can speak alone: layout forgives a slide and would
+call a re-arranged frame matched, structure forgives nothing and would call a pan a
+new picture. Content is weighted with them because a change of light or of room is a
+real step even when the framing rhymes. Size is last because it is the rule's escape
+clause rather than its subject."""
 
 JUMP_DELTA = 0.20
 """Below this composite the cut is a jump-cut candidate.
@@ -104,24 +125,27 @@ class Delta(NamedTuple):
     delta: float
     content: float
     layout: float
+    structure: float
     scale: float
-    shift_x: int
-    shift_y: int
+    shift_x: int | None
+    shift_y: int | None
+    """Where the lag search found this axis' best match, in grid pixels — or ``None``
+    when it found none inside the search, which is the answer for two pictures that
+    are not each other slid over. On real footage the vertical axis reads ``None``
+    far more often than the horizontal one: cameras in a room differ in height by
+    less than they differ in angle, so the vertical profiles rarely align at all."""
+
     jump_cut: bool
     reason: str
 
     def as_record(self) -> dict[str, Any]:
-        """The reading as plain JSON types, for a manifest or a cut record."""
-        return {
-            "delta": self.delta,
-            "content": self.content,
-            "layout": self.layout,
-            "scale": self.scale,
-            "shift_x": self.shift_x,
-            "shift_y": self.shift_y,
-            "jump_cut": self.jump_cut,
-            "reason": self.reason,
-        }
+        """The reading as plain JSON types, for a manifest or a cut record.
+
+        The fields above *are* the record — every value is already a float, an int, a
+        bool or a string, rounded at construction — so the written shape and the type
+        cannot drift apart the way a hand-listed dict would.
+        """
+        return dict(self._asdict())
 
 
 def read_pair(before: NDArray[Any], after: NDArray[Any]) -> Delta:
@@ -131,19 +155,26 @@ def read_pair(before: NDArray[Any], after: NDArray[Any]) -> Delta:
 
     content = _content(out, into)
     layout, shift_x, shift_y = _layout(out, into)
+    structure = _structure(out, into)
     scale = _scale(out, into)
 
-    delta = WEIGHT_LAYOUT * layout + WEIGHT_CONTENT * content + WEIGHT_SCALE * scale
+    delta = (
+        WEIGHT_LAYOUT * layout
+        + WEIGHT_STRUCTURE * structure
+        + WEIGHT_CONTENT * content
+        + WEIGHT_SCALE * scale
+    )
     jumped = delta < JUMP_DELTA
     return Delta(
         delta=round(delta, 4),
         content=round(content, 4),
         layout=round(layout, 4),
+        structure=round(structure, 4),
         scale=round(scale, 4),
         shift_x=shift_x,
         shift_y=shift_y,
         jump_cut=jumped,
-        reason=_reason(layout, scale) if jumped else "",
+        reason=_reason(layout, structure, scale) if jumped else "",
     )
 
 
@@ -176,17 +207,18 @@ def read_across(window: NDArray[Any], out_index: int, in_index: int) -> Delta:
     return read_pair(out, into)
 
 
-def summarize(readings: list[Delta]) -> dict[str, Any]:
+def summarize(readings: Sequence[Delta], unread: int = 0) -> dict[str, Any]:
     """The run's own distribution: how big its steps are and how many are flagged.
 
-    The flag count alone reads as a verdict; the quantiles are what say whether an
-    edit lives near the threshold or clear of it.
+    The flag count alone reads as a verdict; the quantiles are what say whether an edit
+    lives near the threshold or clear of it. ``unread`` is the boundaries that could not
+    be read at all, and it belongs in the same block as the counts it qualifies — a
+    consumer that pastes it on afterwards writes half of this shape somewhere else.
     """
-    if not readings:
-        return {"cuts": 0, "jump_cuts": 0, "delta": {}}
     values = np.asarray([one.delta for one in readings], dtype=np.float64)
     return {
         "cuts": len(readings),
+        "cuts_unread": unread,
         "jump_cuts": sum(1 for one in readings if one.jump_cut),
         "delta": {
             "min": round(float(values.min()), 4),
@@ -194,7 +226,9 @@ def summarize(readings: list[Delta]) -> dict[str, Any]:
             "median": round(float(np.median(values)), 4),
             "mean": round(float(values.mean()), 4),
             "max": round(float(values.max()), 4),
-        },
+        }
+        if readings
+        else None,
         "threshold": JUMP_DELTA,
     }
 
@@ -214,7 +248,9 @@ def _content(out: NDArray[np.float64], into: NDArray[np.float64]) -> float:
     return float(np.abs(a - b).sum()) / 2.0
 
 
-def _layout(out: NDArray[np.float64], into: NDArray[np.float64]) -> tuple[float, int, int]:
+def _layout(
+    out: NDArray[np.float64], into: NDArray[np.float64]
+) -> tuple[float, int | None, int | None]:
     """``(distance, shift_x, shift_y)`` — how much composition survives a lag search."""
     across, shift_x = _profile_peak(out.mean(axis=0), into.mean(axis=0))
     down, shift_y = _profile_peak(out.mean(axis=1), into.mean(axis=1))
@@ -222,12 +258,20 @@ def _layout(out: NDArray[np.float64], into: NDArray[np.float64]) -> tuple[float,
     return 1.0 - matched, shift_x, shift_y
 
 
-def _profile_peak(out: NDArray[np.float64], into: NDArray[np.float64]) -> tuple[float, int]:
+def _profile_peak(
+    out: NDArray[np.float64], into: NDArray[np.float64]
+) -> tuple[float, int | None]:
     """Best normalised correlation of two profiles over the lag search, and its lag.
 
     A positive lag is the picture moving towards the start of the axis — left, or up.
     Two profiles with no variation at all match perfectly, which is the honest answer
     for two blank frames; one flat against one not is no match at all.
+
+    A peak found at the edge of the search is refused. The search is bounded because a
+    match only means something inside the distance a reframe covers; a best score at the
+    boundary says the alignment it was climbing towards is further out than that, and
+    crediting it would let two unrelated pictures that happen to correlate at maximum
+    slide read as the same picture, nudged. Those are scored where they actually sit.
     """
     a = out - out.mean()
     b = into - into.mean()
@@ -238,17 +282,55 @@ def _profile_peak(out: NDArray[np.float64], into: NDArray[np.float64]) -> tuple[
 
     size = a.size
     maxlag = max(1, int(round(size * MAX_SHIFT)))
-    best, best_lag = -1.0, 0
+    scores: dict[int, float] = {}
     for lag in range(-maxlag, maxlag + 1):
         left = a[lag:] if lag >= 0 else a[: size + lag]
         right = b[: size - lag] if lag >= 0 else b[-lag:]
         denominator = float(np.linalg.norm(left) * np.linalg.norm(right))
         if denominator == 0.0:
             continue
-        score = float(np.dot(left, right)) / denominator
-        if score > best:
-            best, best_lag = score, lag
-    return best, best_lag
+        scores[lag] = float(np.dot(left, right)) / denominator
+    if not scores:
+        return 0.0, None
+    best_lag = max(scores, key=lambda lag: scores[lag])
+    if abs(best_lag) == maxlag:
+        return scores.get(0, 0.0), None
+    return scores[best_lag], best_lag
+
+
+def _structure(out: NDArray[np.float64], into: NDArray[np.float64]) -> float:
+    """How differently the light is arranged, on a grid marginals cannot fake.
+
+    Each frame becomes ``BLOCK_ROWS x BLOCK_COLS`` block means, and the two grids are
+    correlated after their own mean and level are divided out — the arrangement is the
+    question here, and how bright or contrasty the shot is belongs to ``content``.
+    """
+    left = _blocks(out)
+    right = _blocks(into)
+    flat_left = bool(np.allclose(left, 0.0))
+    flat_right = bool(np.allclose(right, 0.0))
+    if flat_left or flat_right:
+        return 0.0 if flat_left and flat_right else 1.0
+    matched = float(np.dot(left, right) / (np.linalg.norm(left) * np.linalg.norm(right)))
+    return 1.0 - max(0.0, matched)
+
+
+def _blocks(frame: NDArray[np.float64]) -> NDArray[np.float64]:
+    """The frame as a flat vector of block means, with its own mean taken out."""
+    rows, cols = frame.shape
+    edges_y = np.linspace(0, rows, BLOCK_ROWS + 1).astype(int)
+    edges_x = np.linspace(0, cols, BLOCK_COLS + 1).astype(int)
+    means = np.asarray(
+        [
+            [
+                float(frame[edges_y[y] : edges_y[y + 1], edges_x[x] : edges_x[x + 1]].mean())
+                for x in range(BLOCK_COLS)
+            ]
+            for y in range(BLOCK_ROWS)
+        ],
+        dtype=np.float64,
+    ).ravel()
+    return np.asarray(means - means.mean())
 
 
 def _scale(out: NDArray[np.float64], into: NDArray[np.float64]) -> float:
@@ -287,12 +369,14 @@ def _profile_spread(profile: NDArray[np.float64]) -> float:
     return float(np.sqrt(max(0.0, variance)))
 
 
-def _reason(layout: float, scale: float) -> str:
+def _reason(layout: float, structure: float, scale: float) -> str:
     """What a flagged cut failed to change."""
-    if layout < LAYOUT_MATCH and scale < SCALE_MATCH:
+    same_angle = layout < LAYOUT_MATCH and structure < LAYOUT_MATCH
+    same_size = scale < SCALE_MATCH
+    if same_angle and same_size:
         return "same angle and size"
-    if layout < LAYOUT_MATCH:
+    if same_angle:
         return "same angle"
-    if scale < SCALE_MATCH:
+    if same_size:
         return "same size"
     return "step below threshold"

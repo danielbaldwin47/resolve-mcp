@@ -193,9 +193,9 @@ DELTA_MATCH_SEC = 0.25
 """How near a cut-delta catalog row has to sit to count as this cut's.
 
 Six frames at 24 fps. A scene detector puts a boundary within a frame or two of the edit that
-made it, so the tolerance only has to absorb rounding; wide enough to reach the next cut and a
-missed boundary would silently borrow its neighbour's number, which is the one failure that
-would not look like one."""
+made it, so the tolerance only has to absorb rounding — and it is kept too narrow to reach the
+next cut on purpose. Were it wide enough to, a boundary the detector missed would silently
+borrow its neighbour's number, which is the one failure here that would not look like one."""
 
 GIVEN = "given"
 """The alignment mode where the caller named the frame rather than the server reading it."""

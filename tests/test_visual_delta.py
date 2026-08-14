@@ -97,6 +97,64 @@ def test_a_big_size_change_rescues_the_same_axis() -> None:
     assert reading.jump_cut is False
 
 
+def test_two_pictures_with_the_same_marginals_are_still_a_step() -> None:
+    """The failure the structure term exists for.
+
+    Bright patches at opposite corners give identical row profiles and identical
+    column profiles, so a measurement made of marginals alone calls these two frames
+    the same picture. They share no arrangement at all, and a club stage is the worst
+    case for this — every camera in the room shares one bright band across the middle.
+    """
+    rows, cols = framing.GRID_HEIGHT, framing.GRID_WIDTH
+    out = np.zeros((rows, cols), dtype=np.uint8)
+    into = np.zeros((rows, cols), dtype=np.uint8)
+    half_r, half_c = rows // 2, cols // 2
+    out[:half_r, :half_c] = 200
+    out[half_r:, half_c:] = 200
+    into[:half_r, half_c:] = 200
+    into[half_r:, :half_c] = 200
+
+    reading = framing.read_pair(out, into)
+
+    assert reading.layout == pytest.approx(0.0, abs=0.05)
+    assert reading.structure > 0.9
+    assert reading.jump_cut is False
+
+
+def test_a_picture_slid_further_than_a_reframe_is_not_matched() -> None:
+    """Beyond the search, two pictures are scored where they sit, not where they'd fit."""
+    rows, cols = framing.GRID_HEIGHT, framing.GRID_WIDTH
+    out = np.zeros((rows, cols), dtype=np.uint8)
+    out[5:25, 10:26] = 220
+    into = np.asarray(np.roll(out, (rows // 2, cols // 2), axis=(0, 1)))
+
+    reading = framing.read_pair(out, into)
+
+    assert reading.layout > 0.9
+    assert reading.jump_cut is False
+
+
+def test_a_best_match_at_the_limit_of_the_search_is_refused_rather_than_reported() -> None:
+    """A lag pegged at the boundary means the search ran out of room, not that it won.
+
+    The bar moves exactly ``MAX_SHIFT`` of the width, so the horizontal peak sits on
+    the edge of the search and is refused; the vertical profiles are identical, so
+    that axis reports its real zero. Reporting the pegged lag would publish a shift
+    the module's own docstring calls the signature of a jump cut.
+    """
+    rows, cols = framing.GRID_HEIGHT, framing.GRID_WIDTH
+    step = int(round(cols * framing.MAX_SHIFT))
+    out = np.zeros((rows, cols), dtype=np.uint8)
+    out[5:60, 10 : 10 + step] = 220
+    into = np.zeros((rows, cols), dtype=np.uint8)
+    into[5:60, 10 + step : 10 + 2 * step] = 220
+
+    reading = framing.read_pair(out, into)
+
+    assert reading.shift_x is None
+    assert reading.shift_y == 0
+
+
 def test_every_term_stays_inside_its_range() -> None:
     """Each term is a fraction, and the composite is one too."""
     pairs = [
@@ -106,7 +164,13 @@ def test_every_term_stays_inside_its_range() -> None:
     ]
     for out, into in pairs:
         reading = framing.read_pair(out, into)
-        for term in (reading.content, reading.layout, reading.scale, reading.delta):
+        for term in (
+            reading.content,
+            reading.layout,
+            reading.structure,
+            reading.scale,
+            reading.delta,
+        ):
             assert 0.0 <= term <= 1.0
 
 
@@ -185,10 +249,11 @@ def test_a_reading_serialises_to_plain_json_types() -> None:
         "delta",
         "content",
         "layout",
+        "structure",
         "scale",
         "shift_x",
         "shift_y",
         "jump_cut",
         "reason",
     }
-    assert all(isinstance(one, float | int | bool | str) for one in record.values())
+    assert all(one is None or isinstance(one, float | int | bool | str) for one in record.values())
