@@ -2,15 +2,26 @@
 
 Two kinds of identity live here, and the difference is the whole design:
 
-* **Source media is fingerprinted, not hashed.** A concert master is tens of gigabytes and
-  sits on the director's disk unchanged for months; reading all of it to prove that takes
-  minutes, every run. Path, size and mtime answer "is this the same file" well enough to
-  key an acquisition, and the acquisition is cheap to redo if the guess is ever wrong.
+* **Audio is identified by its bytes** (``identity``). The same concert reaches this server
+  under several names — the director's master, the copy an acquisition staged into the cache
+  directory, an excerpt rendered for one song — and keying on the name made each of those pay
+  for its own beat model over identical audio (#193). ``sha256`` of the file is the identity,
+  wherever the file sits, which is also what #22 asked for ("workers key off content hash of
+  cached audio + params hash") and what keeps one concert's beats off another's cut.
 
-* **Acquired audio is hashed for real.** The WAV this server wrote is the substrate every
-  analysis job keys off (#22: "workers key off content hash of cached audio + params
-  hash"), it is a manageable size, and a false cache hit there would silently attribute
-  one concert's beats to another.
+* **Video sources are fingerprinted, not hashed** (``fingerprint``). A camera master is tens
+  of gigabytes that sit unchanged for months; reading all of it to prove that takes minutes,
+  and the jobs that key off it — scene cuts, grabbed frames, occlusion — never read it end to
+  end themselves. Path, size and mtime answer "is this the same file" well enough there, and
+  the cost of being wrong is one redundant rerun rather than a wrong answer.
+
+Reading the bytes is not free, so **a hash is remembered against a fingerprint**
+(``known_hash``): the first sight of a file state costs one read, and every later call for
+that same path, size and mtime costs a ``stat``. That memo is what lets a starter whose whole
+contract is to return a job id at once (#22, story 25) key on content — an audio master gets
+read end to end by the analysis it is about to start anyway. The note is only ever a shortcut:
+one that cannot be read, written, or that no longer describes the file costs a reread, never a
+wrong answer.
 
 A hit is only a hit if the artifacts are still on disk. The cache directory is a user's
 local app data — they are allowed to delete things in it, and the agent must get a rerun
@@ -54,16 +65,64 @@ def content_hash(path: Path | str) -> str:
     return digest.hexdigest()
 
 
-def identity(path: Path | str, written_under: Path) -> dict[str, Any]:
-    """Hash what this server wrote under ``written_under``; fingerprint anything else.
+def known_hash(path: Path | str, config: Config | None = None) -> str:
+    """The file's content hash, read once per file state and remembered against a stat.
+
+    The memo is what makes content identity affordable where it is asked for — in a starter,
+    before a job id goes back. It is a shortcut and nothing else: a note that cannot be read,
+    cannot be written, or no longer describes the file on disk costs a reread.
+    """
+    config = config or get_config()
+    seen = fingerprint(path)
+    note = _note_path(seen, config)
+    remembered = _remembered(note, seen)
+    if remembered is not None:
+        return remembered
+    log.info("Hashing %s (%d bytes): first sight of this file state", seen["path"], seen["size"])
+    digest = content_hash(path)
+    _note(note, {**seen, "sha256": digest})
+    return digest
+
+
+def identity(path: Path | str, config: Config | None = None) -> dict[str, Any]:
+    """What audio is, for cache purposes: its bytes, wherever the file happens to sit.
 
     The rule at the top of this module, as one call — so two jobs keying off the same
     master agree about what it is, rather than each deciding for itself.
     """
-    resolved = Path(path)
-    if resolved.resolve().is_relative_to(written_under.resolve()):
-        return {"sha256": content_hash(resolved)}
-    return fingerprint(resolved)
+    return {"sha256": known_hash(path, config)}
+
+
+def _note_path(seen: Mapping[str, Any], config: Config) -> Path:
+    token = hashlib.sha256(
+        json.dumps([seen["path"], seen["size"], seen["mtime_ns"]]).encode("utf-8")
+    ).hexdigest()
+    return config.identity_dir / f"{token}.json"
+
+
+def _remembered(note: Path, seen: Mapping[str, Any]) -> str | None:
+    """The hash this note carries, if it still describes the file that was just stat'd."""
+    try:
+        noted = json.loads(note.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError):
+        log.warning("Discarding an unreadable identity note: %s", note)
+        _discard(note)
+        return None
+    if not isinstance(noted, dict) or not isinstance(noted.get("sha256"), str):
+        return None
+    describes = all(noted.get(field) == seen[field] for field in ("path", "size", "mtime_ns"))
+    return str(noted["sha256"]) if describes else None
+
+
+def _note(note: Path, remembering: Mapping[str, Any]) -> None:
+    """Write down what this file state hashed to. A memo that cannot be kept is not an error."""
+    try:
+        note.parent.mkdir(parents=True, exist_ok=True)
+        note.write_text(json.dumps(remembering, indent=2), encoding="utf-8")
+    except OSError:
+        log.warning("Could not remember the identity of %s", remembering["path"], exc_info=True)
 
 
 def cache_key(

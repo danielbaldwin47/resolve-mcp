@@ -535,7 +535,9 @@ def _clip_params(clip: str, bin_path: str, sample_rate: int, bit_depth: int) -> 
 def _result(target: Path, params: dict[str, Any]) -> dict[str, Any]:
     """What the agent — and every analysis job after it — reads off a finished acquisition."""
     reading = wav.describe(target)
-    reading["content_sha256"] = cache.content_hash(target)
+    # Through the memo rather than straight to the hash: the WAV was just written, so this is
+    # where its identity gets remembered, and the analysis job the agent starts next stats it.
+    reading["content_sha256"] = cache.known_hash(target)
     reading["scope"] = params["scope"]
     log.info(
         "Acquired %.1fs of audio for %s scope at %s",

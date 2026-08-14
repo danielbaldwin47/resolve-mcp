@@ -37,9 +37,15 @@ everything upstream of it, and size and mtime catch a rewrite in place. Fingerpr
 these files is not a weaker identity than hashing them — it is the same identity, read off
 a name instead of off two gigabytes.
 
-`cache.identity(path, written_under)` holds the general rule, so two jobs keying off the
+`cache.identity(path, config)` holds the general rule, so two jobs keying off the
 same master agree about what it is; `analysis/fills.py:_key` is the one caller that departs
 from it, and says so.
+
+> **Amended by [ADR 0007](0007-audio-is-identified-by-content-with-the-hash-remembered.md)
+> (2026-08-14).** The rule's fingerprint half no longer covers audio: an audio master is
+> hashed too, with the hash remembered against a stat so the starter still returns at once.
+> This decision is unchanged — stems keep fingerprint identity, on the reasoning below, and
+> so do video sources.
 
 ## Consequences
 
