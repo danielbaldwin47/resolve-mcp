@@ -70,7 +70,9 @@ def analyze_structure(
     solos: bool = False,
     stems: str | None = None,
     threshold: float = applause.DEFAULT_THRESHOLD,
+    scale: float = applause.DEFAULT_SCALE,
     tune_seconds: float = applause.DEFAULT_TUNE_SECONDS,
+    settle_seconds: float = applause.DEFAULT_SETTLE_SECONDS,
     density_per_second: float = applause.DEFAULT_DENSITY_PER_SECOND,
     solo_seconds: float = solos.DEFAULT_MINIMUM_SECONDS,
     snap_seconds: float = solos.DEFAULT_SNAP_SECONDS,
@@ -93,6 +95,22 @@ def analyze_structure(
     on. density_per_second is the floor in beats per second; set it to 0 to keep every
     call the tagger made, which is also the way to run this tool with no beat model
     installed.
+
+    A board mix needs two more things, and gets them by default. The tagger is far less
+    sure of clapping it hears through a desk feed than of clapping in a room — a whole set
+    can peak under the 0.3 an audible crowd clears easily — so the threshold you pass is a
+    ceiling: if the file holds almost no clapping over it, the curve is read at `scale` of
+    its own peak instead. read_at_own_scale says whether that happened, and threshold_used
+    and burst_seconds_used what the file was actually read at, beside the threshold and
+    burst_seconds you asked for; a mix the threshold does find clapping in is read exactly
+    where it always was. scale=0 turns the fallback off. And the applause is
+    not where the next tune starts: after it come the announcement, the re-tune and the
+    count-in, up to a minute of them, all far below playing level. So each boundary walks
+    forward to where the mix comes up and stays up for settle_seconds, and a call the band
+    never comes in on is not a tune at all. Each tune record carries the talk_seconds that
+    were skipped, and inline you get how many boundaries moved and by how much in total.
+    This reads analyze_music's loudness curve, measuring one if there is none;
+    settle_seconds=0 turns it off and puts the boundary back on the end of the applause.
 
     solos=true adds the second half and needs stems: pass the directory a separate_stems
     job returned. It measures which stem is out front over its own quiet baseline, and
@@ -125,7 +143,9 @@ def analyze_structure(
             solos=solos,
             stems=stems,
             threshold=threshold,
+            scale=scale,
             tune_seconds=tune_seconds,
+            settle_seconds=settle_seconds,
             density_per_second=density_per_second,
             solo_seconds=solo_seconds,
             snap_seconds=snap_seconds,
@@ -212,6 +232,10 @@ def correlate_timeline(
     bar's place in the four-bar group, and how far off the bar line it landed.
     angles is the angle labels themselves, not a path: {"C0012.mp4": {"role": "drums"}}, or
     just {"C0012.mp4": "drums"} — you keep the sidecar, you read it, you pass what it says.
+    An entry's subject — what that camera is framed on — is read from "subject", or from a
+    role written the way the corpus writes them, "drums-tight" or "ensemble-wide"; a one-word
+    role names a character rather than a subject and labels nothing. Add "voice" where your
+    sidecar names people and the solo map names stems: {"subject": "mike", "voice": "wind"}.
     Each of these is optional, and each one absent means that column reads null rather than
     a guess.
 
@@ -235,6 +259,15 @@ def correlate_timeline(
     histogram of where in the bar the cuts land, shot-duration stats, and how much of the
     cut each angle and role holds (black counted on its own line, apart from the angles the
     sidecar has not named).
+
+    With both a solo map and subject labels it also carries the on-soloist track: per shot,
+    what it is framed on and whether that is the player out front, split in seconds where the
+    front changes mid-shot; and inline, what share of the solo-window screen time went to the
+    soloist, to the ensemble, to a player who was not soloing and to neither (an audience
+    camera, a room shot). Screen time no label reaches, and black, are counted apart rather
+    than folded into the shares. on_soloist_by says how a shot reached the soloist line —
+    joined against the solo map, or asserted by a camera the sidecar says follows the front —
+    and soloist_seconds_by_follow_camera is how much of the share is the second kind.
 
     Nothing here judges the edit. Two frames late is reported as two frames late; what
     counts as musical belongs in your style profile, not in this server.

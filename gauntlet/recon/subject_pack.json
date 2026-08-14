@@ -1,0 +1,246 @@
+{
+  "source_receipt": "C:\\Users\\Daniel\\repos\\resolve-mcp\\.claude\\worktrees\\issue-181\\gauntlet\\recon\\subject_track.json",
+  "checks": [
+    {
+      "timeline": "Taurus People Opening R3 v3",
+      "cuts_file": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\analysis\\Taurus-People-Opening-R3-v3-b27ee8a933e2.correlate.json",
+      "shots_in_track": 17,
+      "fields_beyond_the_four": [],
+      "whole_span": {
+        "summary": {
+          "solo_window_seconds": 90.007,
+          "labelled_seconds": 81.54,
+          "unlabelled_seconds": 8.467,
+          "black_seconds": 0.0,
+          "seconds": {
+            "ensemble": 42.459,
+            "other_player": 39.081
+          },
+          "fraction_on_soloist": 0.0,
+          "fraction_on_ensemble": 0.521,
+          "fraction_on_other_player": 0.479,
+          "fraction_elsewhere": 0.0,
+          "soloist_seconds_by_follow_camera": 0.0,
+          "shots": {
+            "ensemble": 8,
+            "other_player": 7,
+            "unlabelled": 2
+          }
+        },
+        "matches_correlate": true,
+        "correlate_said": {
+          "solo_window_seconds": 90.007,
+          "labelled_seconds": 81.54,
+          "unlabelled_seconds": 8.467,
+          "black_seconds": 0.0,
+          "seconds": {
+            "ensemble": 42.459,
+            "other_player": 39.081
+          },
+          "fraction_on_soloist": 0.0,
+          "fraction_on_ensemble": 0.521,
+          "fraction_on_other_player": 0.479,
+          "fraction_elsewhere": 0.0,
+          "soloist_seconds_by_follow_camera": 0.0,
+          "shots": {
+            "ensemble": 8,
+            "other_player": 7,
+            "unlabelled": 2
+          }
+        },
+        "detected_shots_labelled": 16,
+        "detected_shots": 16,
+        "first_three_detected": [
+          {
+            "index": 1,
+            "start": 0.4,
+            "end": 2.736,
+            "subject": {
+              "subject": null,
+              "subject_kind": null,
+              "on_soloist": null,
+              "on_soloist_by": null,
+              "overlap_sec": 1.936
+            }
+          },
+          {
+            "index": 2,
+            "start": 2.736,
+            "end": 20.879,
+            "subject": {
+              "subject": "drums",
+              "subject_kind": "player",
+              "on_soloist": false,
+              "on_soloist_by": null,
+              "overlap_sec": 9.843
+            }
+          },
+          {
+            "index": 3,
+            "start": 20.879,
+            "end": 21.046,
+            "subject": {
+              "subject": null,
+              "subject_kind": null,
+              "on_soloist": null,
+              "on_soloist_by": null,
+              "overlap_sec": 0.167
+            }
+          }
+        ]
+      },
+      "cut_span": {
+        "span_sec": [
+          3590.987,
+          3635.99
+        ],
+        "shots_outside_clip": 8,
+        "shots_cut_by_the_span": 2,
+        "shots_left_out_of_the_share": 0,
+        "summary": {
+          "solo_window_seconds": 45.003,
+          "labelled_seconds": 40.728,
+          "unlabelled_seconds": 4.275,
+          "black_seconds": 0.0,
+          "seconds": {
+            "ensemble": 18.414,
+            "other_player": 22.314
+          },
+          "fraction_on_soloist": 0.0,
+          "fraction_on_ensemble": 0.452,
+          "fraction_on_other_player": 0.548,
+          "fraction_elsewhere": 0.0,
+          "soloist_seconds_by_follow_camera": 0.0,
+          "shots": {
+            "ensemble": 4,
+            "other_player": 4,
+            "unlabelled": 1
+          }
+        }
+      }
+    },
+    {
+      "timeline": "Taurus People Full P4 R2 v3",
+      "cuts_file": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\analysis\\Taurus-People-Full-P4-R2-v3-d4bd89e16d84.correlate.json",
+      "shots_in_track": 85,
+      "fields_beyond_the_four": [],
+      "whole_span": {
+        "summary": {
+          "solo_window_seconds": 497.496,
+          "labelled_seconds": 489.029,
+          "unlabelled_seconds": 8.467,
+          "black_seconds": 0.0,
+          "seconds": {
+            "soloist": 24.312,
+            "ensemble": 259.089,
+            "other_player": 205.628
+          },
+          "fraction_on_soloist": 0.05,
+          "fraction_on_ensemble": 0.53,
+          "fraction_on_other_player": 0.42,
+          "fraction_elsewhere": 0.0,
+          "soloist_seconds_by_follow_camera": 0.0,
+          "shots": {
+            "soloist": 4,
+            "ensemble": 42,
+            "other_player": 37,
+            "unlabelled": 2
+          }
+        },
+        "matches_correlate": true,
+        "correlate_said": {
+          "solo_window_seconds": 497.496,
+          "labelled_seconds": 489.029,
+          "unlabelled_seconds": 8.467,
+          "black_seconds": 0.0,
+          "seconds": {
+            "soloist": 24.312,
+            "ensemble": 259.089,
+            "other_player": 205.628
+          },
+          "fraction_on_soloist": 0.05,
+          "fraction_on_ensemble": 0.53,
+          "fraction_on_other_player": 0.42,
+          "fraction_elsewhere": 0.0,
+          "soloist_seconds_by_follow_camera": 0.0,
+          "shots": {
+            "soloist": 4,
+            "ensemble": 42,
+            "other_player": 37,
+            "unlabelled": 2
+          }
+        },
+        "detected_shots_labelled": 84,
+        "detected_shots": 84,
+        "first_three_detected": [
+          {
+            "index": 1,
+            "start": 0.4,
+            "end": 2.736,
+            "subject": {
+              "subject": null,
+              "subject_kind": null,
+              "on_soloist": null,
+              "on_soloist_by": null,
+              "overlap_sec": 1.936
+            }
+          },
+          {
+            "index": 2,
+            "start": 2.736,
+            "end": 20.879,
+            "subject": {
+              "subject": "drums",
+              "subject_kind": "player",
+              "on_soloist": false,
+              "on_soloist_by": null,
+              "overlap_sec": 9.843
+            }
+          },
+          {
+            "index": 3,
+            "start": 20.879,
+            "end": 21.046,
+            "subject": {
+              "subject": null,
+              "subject_kind": null,
+              "on_soloist": null,
+              "on_soloist_by": null,
+              "overlap_sec": 0.167
+            }
+          }
+        ]
+      },
+      "cut_span": {
+        "span_sec": [
+          3692.86,
+          3941.609
+        ],
+        "shots_outside_clip": 43,
+        "shots_cut_by_the_span": 2,
+        "shots_left_out_of_the_share": 0,
+        "summary": {
+          "solo_window_seconds": 248.75,
+          "labelled_seconds": 248.75,
+          "unlabelled_seconds": 0.0,
+          "black_seconds": 0.0,
+          "seconds": {
+            "soloist": 24.312,
+            "ensemble": 143.559,
+            "other_player": 80.879
+          },
+          "fraction_on_soloist": 0.098,
+          "fraction_on_ensemble": 0.577,
+          "fraction_on_other_player": 0.325,
+          "fraction_elsewhere": 0.0,
+          "soloist_seconds_by_follow_camera": 0.0,
+          "shots": {
+            "soloist": 4,
+            "ensemble": 21,
+            "other_player": 17
+          }
+        }
+      }
+    }
+  ]
+}

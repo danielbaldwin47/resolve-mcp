@@ -55,6 +55,7 @@ DIRECTORIES = (
     "listing_dir",
     "job_dir",
     "result_dir",
+    "identity_dir",
     "audio_dir",
     "stems_dir",
     "frame_dir",

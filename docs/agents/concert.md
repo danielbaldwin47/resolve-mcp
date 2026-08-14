@@ -54,6 +54,24 @@ and the cache makes a rerun free, so there is no per-session picking:
    author the file. Whichever pillar runs first writes it; format and ownership live
    in `docs/agents/rough-cut.md` §songs.json.
 
+A board or DI mix works here without special handling since #179 — read the gist
+before trusting it, though. `read_at_own_scale: true` says the 0.3 threshold found
+no clapping in the whole file and the curve was read at a fraction of its own peak
+instead — the normal case on a desk feed, and not what a room mic does;
+`threshold_used` and `burst_seconds_used` are what the file was actually read at,
+beside the `threshold` and `burst_seconds` you asked for.
+
+**Every mix gets the second half, room mics included**: each start is where the
+*band* comes in rather than where the clapping stopped, with the announcement it
+skipped on the record as `talk_seconds`. On the measured board mix those ran from
+0.3 s to 65 s, so a boundary read off the applause alone is up to a minute early —
+but the room mic in the corpus moved too, and lost two calls it used to report (an
+announcement, and an opening whose 293 s held 27 s of music). That is the intended
+behaviour and not a bug to work around: a call the mix never comes up in is refused
+and listed under `quiet_calls` in the tunes file, the same way the pulse check lists
+its own under `dropped_calls`. Read both lists before concluding a tune is missing.
+`settle_seconds=0` puts every boundary back on the end of the applause.
+
 Rubato regions are excluded from cut-placement evidence by beat-confidence gating — a
 grid fitted to free time measures nothing (`styles/concert.md` §1).
 
@@ -100,17 +118,29 @@ measured on exactly the axes the profile's `[measured]` claims stand on.
 The tool reports and never judges — the bar is the profile. Compare the inline gist
 against `styles/concert.md`'s measured claims: the transient-offset distribution
 (fourth-wall risk, §1), shot-duration runs (§3), role shares and transitions (§4),
-event responses (§5). **Every outlier is either fixed — edit the cut JSON, rebuild —
+event responses (§5). With a solo map and a sidecar that names subjects, the
+`on_soloist` block answers the core concert question — what share of the
+solo-window screen time went to the player out front, to the ensemble, and to a
+player who was not soloing. Read three of its lines next to the share:
+`unlabelled_seconds` (a high share measured over a quarter of the cut is a claim
+about a quarter of the cut), `black_seconds`, and
+`soloist_seconds_by_follow_camera`, which is the part of the soloist line a
+camera's label asserted rather than the solo map measured. **Every outlier is either fixed — edit the cut JSON, rebuild —
 or justified by name in the cut report** ("spectacle earns the hold"). Nothing lands
 off-style silently. Check `alignment.mode` before trusting a run, per
 `docs/agents/style-layer.md`.
 
-Two readings in that report are **blockers, not deviations you may justify**:
+Three readings in that report are **blockers, not deviations you may justify**:
 `shot_rhythm.reads_metronomic` — the cutting has acquired a pulse of its own, a long
-strict A/B alternation or shot lengths piled into one bin — and `gears.one_speed`, the
-same cut rate carried through loud and quiet where the music has an arc. Either one
-firing means edit the cut JSON and rebuild before the director sees it; both are things
-blind critics named unprompted in the rounds that went against us. The server only
+strict A/B alternation or shot lengths piled into one bin — `gears.one_speed`, the
+same cut rate carried through loud and quiet where the music has an arc, and
+`gears.quiet_floor.reads_locked`, a passage held in the slow gear at the right rate
+whose lengths sit on top of each other once its lone flashes are dropped (§3, #190).
+Any one of them firing means edit the cut JSON and rebuild before the director sees it;
+all three are things blind critics named unprompted in rounds that went against us.
+The third fires on a passage, so read its `runs`: the fix is that passage's lengths
+and what develops inside its pictures, not the song's rate, which the gear table
+already set. The server only
 warns — this gate is yours. And when the cut has also been rendered and scanned, check
 scene-detect count against timeline item count before believing any of it
 (`styles/concert.md` §6): the two disagreeing is an alarm about the measurement, not a

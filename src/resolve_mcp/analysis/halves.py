@@ -138,16 +138,18 @@ def stem_named(
 
 
 def identity(source: Path, config: Config) -> dict[str, Any]:
-    """Hash what this server wrote; fingerprint what the director handed over.
+    """What this audio is: its bytes, whoever wrote the file and wherever it sits.
 
-    Audio this server wrote is hashed, because it is the substrate later analysis keys off
-    and a false hit there would attribute one concert's beats to another; a master the
-    director handed over is fingerprinted, because it is tens of gigabytes that sit
-    unchanged for months and reading all of it would stall the starter that is supposed to
-    return a job id at once. The rule itself lives in ``jobs.cache``, so jobs that key off
-    an audio path without going through a half agree with the ones that do.
+    Content rather than path, because the same concert arrives under several names — the
+    director's master, the copy an acquisition staged into the cache directory, an excerpt
+    rendered for one song — and a half keyed on the name is a beat model run again over
+    identical audio (#193). The hash is read once per file state and remembered against a
+    stat, so the starter this runs in still returns a job id at once. The rule itself lives
+    in ``jobs.cache``; this is the door every analysis module goes through to reach it, so a
+    job that keys off an audio path without writing a half of its own still agrees with the
+    ones that do.
     """
-    return cache.identity(source, config.audio_dir)
+    return cache.audio_identity(source, config)
 
 
 def inside(source: Path, directory: Path) -> bool:

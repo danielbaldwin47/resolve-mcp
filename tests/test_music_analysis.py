@@ -227,17 +227,33 @@ def test_audio_the_server_wrote_is_identified_by_its_content(fixture_audio: Path
     assert again["cached"] is True
 
 
-def test_a_master_the_director_handed_over_is_not_read_end_to_end(
+def test_a_staged_copy_of_the_master_hits_the_analysis_of_the_original(
+    fixture_audio: Path,
+) -> None:
+    """#193: an acquired copy of the director's master is the same audio, and pays nothing."""
+    staged = get_config().audio_dir / "mix-abc123.wav"
+    staged.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(fixture_audio, staged)
+
+    _result(music.analyze_music(fixture_audio, energy=False, detector=_detector()))
+    again = music.analyze_music(staged, energy=False, detector=_detector_that_must_not_run())
+
+    assert again["cached"] is True
+
+
+def test_a_master_is_read_once_rather_than_on_every_run(
     fixture_audio: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A concert master is tens of gigabytes; hashing it would stall the starter (jobs.cache)."""
+    """A concert master is gigabytes; re-reading it per run would stall the starter (jobs.cache)."""
+    _result(music.analyze_music(fixture_audio, energy=False, detector=_detector()))
 
     def refuse(path: Any) -> str:
-        raise AssertionError("source media the server did not write is fingerprinted, not hashed")
+        raise AssertionError("the master's hash was remembered against its file state")
 
     monkeypatch.setattr(cache, "content_hash", refuse)
+    again = music.analyze_music(fixture_audio, energy=False, detector=_detector_that_must_not_run())
 
-    assert _result(music.analyze_music(fixture_audio, energy=False, detector=_detector()))
+    assert again["cached"] is True
 
 
 def test_a_deleted_curve_file_is_not_a_cache_hit(fixture_audio: Path) -> None:
