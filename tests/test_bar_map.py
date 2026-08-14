@@ -140,6 +140,88 @@ def test_too_few_beats_to_bar_at_all_is_no_barring() -> None:
     assert bars_module.barring([1.0, 0.2]) is None
 
 
+# --- levelling the reading ---------------------------------------------------------------
+
+
+def test_a_beat_is_read_against_the_music_around_it() -> None:
+    found = bars_module.levelled([0.5] * 8 + [1.0] + [0.5] * 8, window=5)
+    assert found[8] == pytest.approx(2.0)
+    assert found[0] == pytest.approx(1.0)
+
+
+def test_silence_levels_to_nothing_rather_than_dividing_by_it() -> None:
+    assert bars_module.levelled([0.0] * 9, window=5) == (0.0,) * 9
+
+
+def test_the_same_accent_reads_the_same_in_a_loud_tune_and_a_quiet_one() -> None:
+    quiet = [0.1, 0.05, 0.05, 0.05] * 8
+    loud = [1.0, 0.5, 0.5, 0.5] * 8
+    together = bars_module.levelled(quiet + loud)
+    assert together[0] == pytest.approx(together[len(quiet)], abs=0.01)
+
+
+def test_a_set_wide_reading_no_longer_swamps_the_bar_level_accent() -> None:
+    """The first real run over the Zinc set scored 0.03 on grids the arithmetic reads
+    perfectly on a fixture: a quiet tune, an applause gap and a shout chorus put all the
+    variance between tunes and none of it inside a bar (#180)."""
+    grid = _onset_scale(bars=12)
+    quiet = [0.1 if index % 8 == 0 else 0.04 for index in range(32)]
+    gap = [0.005] * 32
+    shout = [2.0 if index % 8 == 0 else 0.8 for index in range(32)]
+    reading = quiet + gap + shout
+    mapped = bars_module.mapped(grid, reading)
+    assert mapped.meter == 4
+    # The same reading either way: levelling is what puts the variance inside the bar
+    # instead of between the tunes, and the contrast is how much of it lands there.
+    raw = bars_module.barring(reading)
+    levelled = bars_module.barring(bars_module.levelled(reading))
+    assert raw is not None and levelled is not None
+    assert levelled.contrast > raw.contrast
+
+
+# --- does the span agree with itself ------------------------------------------------------
+
+
+def test_a_barring_that_holds_throughout_agrees_with_itself() -> None:
+    salience = [1.0, 0.4, 0.4, 0.4] * 16
+    read = bars_module.barring(salience)
+    assert read is not None
+    assert bars_module.agreement(salience, read) == pytest.approx(1.0)
+
+
+def test_a_barring_that_only_holds_for_half_the_span_says_so() -> None:
+    """The failure this catches: a span-wide score that is the average of two readings,
+    describing neither. It scored respectably on the corpus anchor and meant nothing."""
+    steady = [1.0, 0.4, 0.4, 0.4] * 8
+    shifted = [0.4, 0.4, 1.0, 0.4] * 8
+    read = bars_module.barring(steady + shifted)
+    assert read is not None
+    held = bars_module.agreement(steady + shifted, read)
+    assert held is not None and held < 1.0
+
+
+def test_a_span_too_short_to_check_against_itself_says_nothing_rather_than_zero() -> None:
+    salience = [1.0, 0.4, 0.4, 0.4] * 4
+    read = bars_module.barring(salience)
+    assert read is not None
+    assert bars_module.agreement(salience, read) is None
+
+
+def test_a_span_that_disagrees_with_itself_loses_confidence() -> None:
+    grid = _onset_scale(bars=16)
+    steady = _accented(grid, every=8)
+    # The same reading with the bar line moved two beats halfway through: the tracker that
+    # keeps the form for a chorus and then loses it.
+    wandering = steady[: len(steady) // 2] + _accented(grid, every=8)[4:][: len(steady) // 2]
+
+    holds = bars_module.mapped(grid, steady)
+    wanders = bars_module.mapped(grid, wandering)
+
+    assert wanders.confidence < holds.confidence
+    assert holds.reasons["meter_agreement"] == pytest.approx(1.0)
+    assert wanders.reasons["meter_agreement"] < 1.0
+
+
 # --- the map ---------------------------------------------------------------------------
 
 
@@ -402,6 +484,64 @@ def test_the_beat_grid_is_the_one_analyze_music_already_wrote(tmp_path: Path) ->
         )
     )
     assert result["meter"] == 4
+
+
+def test_a_span_maps_one_tune_out_of_a_set(tmp_path: Path) -> None:
+    """One fold, one meter, one phase — so a set of tunes at different tempos with applause
+    between them has to be asked about a tune at a time or the answer is wrong before the
+    arithmetic starts (#180)."""
+    grid = _onset_scale(bars=16)
+    source = _master(tmp_path, seconds=float(grid[-1]["t"]) + 1.0)
+    half = float(grid[len(grid) // 2]["t"])
+    seen: list[int] = []
+
+    def accent(path: Path, times: Sequence[float]) -> tuple[float, ...]:
+        seen.append(len(times))
+        return _accented(grid, every=8)[: len(times)]
+
+    result = _result(
+        bars_module.detect_bars(
+            source,
+            start_seconds=half,
+            detector=_detector(grid),
+            accent=accent,
+        )
+    )
+    assert seen == [len(grid) // 2]
+    assert result["count"] == 8
+    written = json.loads(Path(result["path"]).read_text(encoding="utf-8"))
+    assert written["start_seconds"] == half
+    # Bars are numbered within the span; the grid beat each one starts on is not.
+    assert written["bars"][0]["bar"] == 1
+    assert written["bars"][0]["beat"] == len(grid) // 2 + 1
+
+
+def test_a_span_is_part_of_the_cache_identity(tmp_path: Path) -> None:
+    grid = _onset_scale()
+    source = _master(tmp_path, seconds=float(grid[-1]["t"]) + 1.0)
+    accent = _accent_of(_accented(grid, every=8))
+    whole = _result(bars_module.detect_bars(source, detector=_detector(grid), accent=accent))
+    part = _result(
+        bars_module.detect_bars(
+            source,
+            start_seconds=1.0,
+            detector=_detector(grid),
+            accent=accent,
+        )
+    )
+    assert part["path"] != whole["path"]
+
+
+def test_a_span_that_ends_before_it_starts_is_refused(tmp_path: Path) -> None:
+    source = _master(tmp_path, seconds=2.0)
+    with pytest.raises(InvalidRequestError):
+        bars_module.detect_bars(source, start_seconds=5.0, end_seconds=1.0)
+
+
+def test_a_span_starting_before_the_audio_is_refused(tmp_path: Path) -> None:
+    source = _master(tmp_path, seconds=2.0)
+    with pytest.raises(InvalidRequestError):
+        bars_module.detect_bars(source, start_seconds=-1.0)
 
 
 def test_a_floor_outside_zero_to_one_is_refused_before_a_job_exists(tmp_path: Path) -> None:

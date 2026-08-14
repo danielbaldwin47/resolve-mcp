@@ -339,6 +339,8 @@ def detect_bars(
     audio: str,
     stems: str | None = None,
     stem: str = bars.DEFAULT_STEM,
+    start_seconds: float | None = None,
+    end_seconds: float | None = None,
     minimum_confidence: float = bars.DEFAULT_MINIMUM_CONFIDENCE,
     refresh: bool = False,
 ) -> dict[str, Any]:
@@ -350,11 +352,20 @@ def detect_bars(
     pass that recovers the bar. audio is the master mix; if music analysis already ran over it
     the beat grid comes from cache rather than the model again.
 
+    **Ask about one tune, not one set.** The reading is a single fold, meter and phase, and a
+    set has a different tempo and a different form every tune with applause between them — run
+    over all of it at once the answer is wrong before the arithmetic starts, and the evidence
+    averages to nothing. Pass start_seconds and end_seconds from the tune boundaries
+    analyze_structure wrote.
+
     Two readings, in order. The pulse: a grid running faster than anything you would tap is a
     subdivision, so every k-th beat is tried and the one that lands in the tapping range and
     sits on the accents wins — a grid already in that range is kept exactly as it is. Then the
-    bar line: each meter and each phase scored by how far its beats sit above the rest, and
-    the winner carries its lead over the runner-up.
+    bar line: each meter and each phase scored by how far its beats sit above the rest, the
+    winner's lead over the runner-up, and — the check that matters most on this material —
+    whether four-bar windows of the span reach the same answer on their own. A meter that
+    holds for eight bars and not the next eight is not the meter, whatever its contrast, and
+    that share comes back as agreement beside the confidence.
 
     The result names one JSON file and summarises it. Every bar carries its start in seconds
     (the downbeat time), its length, how many beats it holds, the grid beat it starts on, and
@@ -377,6 +388,8 @@ def detect_bars(
             audio,
             stems=stems,
             stem=stem,
+            start_seconds=start_seconds,
+            end_seconds=end_seconds,
             minimum_confidence=minimum_confidence,
             refresh=refresh,
         )

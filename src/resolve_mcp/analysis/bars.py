@@ -111,8 +111,27 @@ whether *these* beats are the loud ones here — and a quiet tune and a loud one
 it on the same scale.
 """
 
-CONTRAST_WEIGHT = 0.5
-MARGIN_WEIGHT = 0.5
+CONTRAST_WEIGHT = 0.35
+MARGIN_WEIGHT = 0.25
+AGREEMENT_WEIGHT = 0.4
+"""How the three pieces of evidence are weighed, agreement heaviest.
+
+Contrast and margin are both taken over the whole span at once, and the first real run showed
+what that misses: over sixty-second windows of one tune, the mix scored a confident-looking
+0.3–0.6 and the windows *disagreed with each other* — fold 2 then 3 then 1, meter 4 then 2
+then 3, inside a single tune at one tempo. Every one of those readings cleared a floor set on
+contrast alone. Agreement is the check that catches it, so it carries the most weight: a
+meter that holds for eight bars and not the next eight is not the meter, whatever its
+contrast, and this material is where that distinction decides.
+"""
+
+AGREEMENT_WINDOW_BARS = 4
+"""Bars per window when the barring is checked against itself.
+
+Four is the group (``beats.GROUP_BARS``), and the smallest window that can hold a bar line in
+every position it might occupy. Longer windows would agree more often by averaging the
+disagreement away, which is the failure being checked for.
+"""
 
 DEFAULT_MINIMUM_CONFIDENCE = 0.3
 DEFAULT_STEM = "bass"
@@ -121,6 +140,22 @@ ACCENT_WINDOW_SECONDS = 0.12
 
 Long enough to hold the attack and the body of a note at any tempo in range, short enough
 that at 200 bpm it stays inside its own beat.
+"""
+
+ACCENT_WINDOW_BEATS = 33
+"""Beats used as the local reference an accent is read against.
+
+The reading is comparative — is *this* beat the loud one around here — and "around here" has
+to be local for the reason ``beats.STEADINESS_WINDOW`` is: a two-hour set has quiet tunes and
+loud ones, an applause gap between every pair of them, and a solo that builds over four
+minutes. Scored set-wide, all of that lands in the standard deviation and the bar-level
+accent it is supposed to measure disappears under it — the first real run over the Zinc set
+returned a contrast of 0.03 against grids the arithmetic reads perfectly on a fixture, which
+is that swamping and nothing else (#180).
+
+Thirty-three of the grid's own beats, which on a subdivision-scale grid is about two bars in
+four: long enough to have a median worth the name, short enough that the reference moves with
+the music. Odd so the window is centred on the beat it judges.
 """
 
 MODEL_SHARE = 0.8
@@ -246,6 +281,39 @@ def barring(salience: Sequence[float]) -> Barring | None:
     return best._replace(margin=max(best.contrast - runner_up, 0.0))
 
 
+def agreement(salience: Sequence[float], read: Barring) -> float | None:
+    """How much of the span reaches the same barring on its own — or ``None`` if too short.
+
+    The span-wide score says the bar line is where the accents are *on average*, and average
+    is exactly the wrong reading when a tracker loses the form halfway or the meter was never
+    there: a span whose first half says four-on-one and whose second says three-on-two scores
+    respectably and describes nothing. This asks each window the same question in isolation
+    and counts the ones that answer the way the whole span did — same meter, and a phase that
+    continues the same bar line rather than merely sharing a number.
+
+    A window that found no contrast at all is left out of the count rather than counted as
+    agreeing. It has nothing to agree *about*: every candidate ties, the first one wins by
+    the sort order, and a flat reading would otherwise come back as unanimous — the most
+    confident answer this module can give, on the evidence that says the least.
+
+    ``None`` where fewer than two windows are left, because one window agreeing with itself
+    is not evidence and scoring it as agreement would be inventing a verdict.
+    """
+    width = AGREEMENT_WINDOW_BARS * read.meter
+    starts = range(0, len(salience) - width + 1, width)
+    windows = [(start, barring(salience[start : start + width])) for start in starts]
+    checked = [
+        (start, found) for start, found in windows if found is not None and found.contrast > 0
+    ]
+    if len(checked) < 2:
+        return None
+    return sum(
+        1
+        for start, found in checked
+        if found.meter == read.meter and (start + found.phase) % read.meter == read.phase
+    ) / len(checked)
+
+
 def _contrast(salience: Sequence[float], chosen: Sequence[int]) -> float:
     """How far the chosen beats sit above the rest, in standard deviations of the whole.
 
@@ -261,6 +329,31 @@ def _contrast(salience: Sequence[float], chosen: Sequence[int]) -> float:
     if spread <= 0:
         return 0.0
     return (statistics.mean(inside) - statistics.mean(outside)) / spread
+
+
+def levelled(
+    salience: Sequence[float],
+    window: int = ACCENT_WINDOW_BEATS,
+) -> tuple[float, ...]:
+    """The accent reading against the music around it, so a whole set scores like one bar.
+
+    Each beat divided by the median of its window: a beat twice as loud as its neighbours
+    reads as 2 whether the band is playing a ballad or a shout chorus. Without this the two
+    decisions here are taken over a standard deviation dominated by the arc of the set, and
+    the bar-level accent they are looking for is a rounding error inside it.
+
+    A window with no level at all — a stretch of true silence — is left as zeros rather than
+    divided by, since a silent bar has no accent and inventing one for it would be a verdict.
+    """
+    if not salience:
+        return ()
+    half = window // 2
+    scaled: list[float] = []
+    for index in range(len(salience)):
+        start = max(0, index - half)
+        local = statistics.median(salience[start : start + window])
+        scaled.append(salience[index] / local if local > 0 else 0.0)
+    return tuple(scaled)
 
 
 def committed(grid: Sequence[Mapping[str, Any]]) -> int | None:
@@ -292,8 +385,14 @@ def mapped(
     salience: Sequence[float],
     minimum_confidence: float = DEFAULT_MINIMUM_CONFIDENCE,
 ) -> BarMap:
-    """The bar map for one grid: the model's barring, an inferred one, or a refusal."""
+    """The bar map for one grid: the model's barring, an inferred one, or a refusal.
+
+    The reading is levelled against the music around it before either decision is taken —
+    see ``levelled``. Once, here, rather than inside each decision, so the two are always
+    scoring the same numbers.
+    """
     _parallel(grid, salience)
+    salience = levelled(salience)
     reasons = _reading(grid)
     empty = Tactus(1, 0, tuple(range(len(grid))), 0.0, "given")
     if not grid:
@@ -306,7 +405,9 @@ def mapped(
         return BarMap(bars, found, MODEL, _held(grid, found), empty, reasons)
 
     pulse = tactus([float(row["t"]) for row in grid], salience)
-    read = barring([salience[one] for one in pulse.beats])
+    pulsed = [salience[one] for one in pulse.beats]
+    read = barring(pulsed)
+    held = agreement(pulsed, read) if read is not None else None
     reasons = {
         **reasons,
         "meter_source": INFERRED,
@@ -317,22 +418,31 @@ def mapped(
         "fold_contrast": round(pulse.contrast, PLACES),
         "meter_contrast": round(read.contrast, PLACES) if read else 0.0,
         "meter_margin": round(read.margin, PLACES) if read else 0.0,
+        "meter_agreement": round(held, PLACES) if held is not None else None,
     }
     if read is None:
         return BarMap((), None, REFUSED, 0.0, pulse, reasons)
 
-    sure = _confidence(read)
+    sure = _confidence(read, held)
     if sure < minimum_confidence:
         return BarMap((), None, REFUSED, sure, pulse, reasons)
     return BarMap(_inferred(grid, pulse, read), read.meter, INFERRED, sure, pulse, reasons)
 
 
-def _confidence(read: Barring) -> float:
-    """How sure the barring is: how far it sits above the rest, and how far above the next."""
-    return _clamp(
-        CONTRAST_WEIGHT * _clamp(read.contrast / FULL_CONTRAST)
-        + MARGIN_WEIGHT * _clamp(read.margin / FULL_MARGIN)
+def _confidence(read: Barring, held: float | None) -> float:
+    """How sure the barring is: above the rest, above the runner-up, and holding throughout.
+
+    A span too short to check against itself is scored on the first two alone and rescaled,
+    rather than treated as disagreeing: eight bars is a real reading and refusing it for
+    being eight bars would be answering a different question. The span *is* shorter evidence,
+    which is what the rescale says — the same two numbers can no longer be corroborated.
+    """
+    scored = CONTRAST_WEIGHT * _clamp(read.contrast / FULL_CONTRAST) + MARGIN_WEIGHT * _clamp(
+        read.margin / FULL_MARGIN
     )
+    if held is None:
+        return _clamp(scored / (CONTRAST_WEIGHT + MARGIN_WEIGHT))
+    return _clamp(scored + AGREEMENT_WEIGHT * _clamp(held))
 
 
 def _reading(grid: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
@@ -462,6 +572,10 @@ def gist(bar_map: BarMap, minimum_confidence: float, stem: str | None) -> dict[s
         "source": bar_map.source,
         "confidence": round(bar_map.confidence, PLACES),
         "minimum_confidence": round(minimum_confidence, PLACES),
+        # Reported inline rather than left in the reasons: it is the number that says whether
+        # the span agreed with itself, and a reader deciding whether to trust a map at all
+        # needs it beside the confidence rather than in the file.
+        "agreement": bar_map.reasons.get("meter_agreement"),
         "tempo_bpm": bar_map.reasons.get("tactus_bpm", bar_map.reasons.get("grid_bpm")),
         "grid_bpm": bar_map.reasons.get("grid_bpm"),
         "grid_meter": bar_map.reasons.get("grid_meter"),
@@ -513,6 +627,8 @@ def detect_bars(
     audio: str | Path,
     stems: Mapping[str, str | Path] | str | Path | None = None,
     stem: str = DEFAULT_STEM,
+    start_seconds: float | None = None,
+    end_seconds: float | None = None,
     minimum_confidence: float = DEFAULT_MINIMUM_CONFIDENCE,
     refresh: bool = False,
     detector: beats_module.Detector | None = None,
@@ -521,22 +637,33 @@ def detect_bars(
 ) -> dict[str, Any]:
     """Start the bar-map job. Returns the job record, not the map.
 
+    **Map one tune, not one set.** The whole reading is a single fold, a single meter and a
+    single phase, and a set has a different tempo and a different form every tune with a
+    gap of applause between them: run over all of it at once, the answer is wrong by
+    construction and the evidence averages to nothing. The first run over the Zinc set scored
+    0.04 across seventy-four minutes and 0.1–0.6 over sixty-second windows inside one tune of
+    it. ``start_seconds`` and ``end_seconds`` bound the span; the tune boundaries
+    ``analyze_structure`` writes are where they come from.
+
     The cache identity is the audio (hashed if this server wrote it, fingerprinted if the
     director handed it over — ``halves.identity``), plus the accent source when one is named:
     the stem's own fingerprint under its label, exactly as the phrase job keys its stem. The
-    settings in the key are the stem label and the confidence floor, because both change what
-    lands on disk — a floor is what turns a weak reading into a refusal, and two floors over
-    one master are two different documents. Nothing else is in the key: the beat grid this
-    reads is cached under its own half key, so re-asking with a different floor re-runs the
-    arithmetic and never the beat model.
+    settings in the key are the stem label, the span, and the confidence floor, because each
+    changes what lands on disk — a floor is what turns a weak reading into a refusal, and two
+    floors over one master are two different documents. Nothing else is in the key: the beat
+    grid this reads is cached under its own half key, so re-asking for another span re-runs
+    the arithmetic and never the beat model.
     """
     config = config or get_config()
     source = _readable(audio)
     chosen = _stem(stems, stem) if stems is not None else None
     halves.sane_floor(minimum_confidence, DEFAULT_MINIMUM_CONFIDENCE, writes="bar map")
+    _sane_span(start_seconds, end_seconds)
 
     settings = {
         "stem": stem if chosen is not None else None,
+        "start_seconds": None if start_seconds is None else float(start_seconds),
+        "end_seconds": None if end_seconds is None else float(end_seconds),
         "minimum_confidence": float(minimum_confidence),
     }
     identity = halves.identity(source, config)
@@ -564,6 +691,41 @@ def detect_bars(
         refresh=refresh,
         config=config,
     )
+
+
+def _sane_span(start_seconds: float | None, end_seconds: float | None) -> None:
+    """Refuse a span that is not one, before a job exists to carry it."""
+    if start_seconds is not None and start_seconds < 0:
+        raise InvalidRequestError(
+            cause=f"The span starts at {start_seconds} s, which is before the audio does.",
+            fix="Leave start_seconds off for the whole file, or pass a time at or after zero.",
+            detail={"start_seconds": start_seconds},
+        )
+    if start_seconds is not None and end_seconds is not None and end_seconds <= start_seconds:
+        raise InvalidRequestError(
+            cause=f"The span ends at {end_seconds} s and starts at {start_seconds} s.",
+            fix="Pass end_seconds after start_seconds — a tune's boundaries, in that order.",
+            detail={"start_seconds": start_seconds, "end_seconds": end_seconds},
+        )
+
+
+def _within(
+    grid: Sequence[Mapping[str, Any]],
+    start_seconds: float | None,
+    end_seconds: float | None,
+) -> list[dict[str, Any]]:
+    """The beats inside the span, with their grid numbering intact.
+
+    The ``beat`` on each record still counts from the first beat of the *file*, so a bar map
+    over one tune and a beat grid over the set say the same thing about the same beat. Only
+    the bar numbering is span-local, and it has to be: it is the form of this tune.
+    """
+    return [
+        dict(row)
+        for row in grid
+        if (start_seconds is None or float(row["t"]) >= start_seconds)
+        and (end_seconds is None or float(row["t"]) < end_seconds)
+    ]
 
 
 def _readable(audio: str | Path) -> Path:
@@ -643,7 +805,8 @@ def detect(
     key = key or _key(known, stem, settings)
 
     progress(0.05, "reading the beat grid")
-    grid = music.numbered_beats(source, described, known, detector, refresh, config)
+    whole = music.numbered_beats(source, described, known, detector, refresh, config)
+    grid = _within(whole, settings["start_seconds"], settings["end_seconds"])
 
     progress(0.5, "reading the accents")
     read = accent or accents
@@ -669,6 +832,8 @@ def detect(
         "kind": BARS,
         "audio": described["path"],
         "duration_seconds": described["duration_seconds"],
+        "start_seconds": settings["start_seconds"],
+        "end_seconds": settings["end_seconds"],
         "reasons": bar_map.reasons,
         **summary,
     }

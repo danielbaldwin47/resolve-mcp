@@ -51,6 +51,18 @@ timelines. The server measures; Claude decides.
   measuring all three counts the residual twice (#157).
   _Avoid_: "piano stem" as a name for `comp` — it is accompaniment, and
   nothing may name it otherwise (#126).
+- **bar map** — `analysis/bars.py`'s reading: one record per bar, each with its
+  downbeat time, its length, the grid beat it starts on and its `in_group`
+  position in the four-bar group. Every map says its `source` — `model` when the
+  beat model committed to a meter and the map takes it at its word, `inferred`
+  when it was recovered from the accents, `refused` when neither reading was
+  worth having. The last is the point: the failure it ends is a grid quietly
+  reporting `meter: 1` and callers doing bar arithmetic on it (#180).
+  _Avoid_: reading `in_group` as a phrase — it is hypermeter, saying a bar line
+  is a plausible place for a phrase to turn over, never that one did.
+- **tactus** — the pulse the bars are counted in, and the thing a bar map folds
+  a subdivision-scale grid down to. Not the grid's own beat: on the corpus
+  anchor the grid is swung eighths and the tactus is every second one of them.
 - **phrase** — the cut-placement unit (#46, `styles/concert.md` §1): a
   stretch of the soloist's line between two endings. `analysis/phrases.py`
   reports the **boundaries**, each with two times — `measured_t`, where the
@@ -93,7 +105,13 @@ Top level:
 
 `analysis/` — compute jobs that read audio and write findings to disk:
 `applause` (bursts → tune boundaries, then a beat-density floor drops the calls
-with no pulse under them, #133), `beats` (grid + downbeats, model
+with no pulse under them, #133),
+`bars` (the **bar map**: a rule layer over the grid for the material the beat
+model will not commit a meter to — folds a too-fast grid to the tactus, then
+scores every meter and phase against a per-beat accent reading and takes the
+widest lead over the runner-up, refusing rather than guessing when the accents
+say nothing. The accent reading is injected per ADR 0002 and defaults to RMS off
+the mix; a named stem reads that instead, #180), `beats` (grid + downbeats, model
 injected per ADR 0002; `trust` says which beats the grid describes well enough
 to count, #112; `spacing` says how wide a beat is at each beat), `correlate`
 (measure a cut against its music — by default the *visible* edit,
@@ -108,7 +126,10 @@ and its `gears` block splits the cut's span into loudness terciles off a 1 s
 RMS curve and reports cuts per minute in each, the loud/quiet `rate_ratio`,
 where the sub-2 s shots sit, `one_speed`, and `outside_shots` — shots past
 the analysed mix, counted apart rather than clamped into a tercile —
-warnings the report carries, never gates),
+warnings the report carries, never gates. Takes an optional **bar map**
+(`bars=`) and then reports `map_bar`, `in_group` and `bar_offset` per cut and
+a `bar_groups` histogram — ungated on the beat gate, since the map exists for
+the grids that gate refuses whole, #180),
 `cuda` (preloads
 the CUDA runtime the `analysis` extra ships, so CTranslate2 finds it on Windows;
 pure decisions, #128),
@@ -182,6 +203,9 @@ because the scripting API cannot cut a transition at all), `takes`
 
 `titles/` — `document` (read off disk), `schema` (verbatim, served by
 `get_titles_schema`), `validate` (9 errors + 2 warnings).
+
+`halves` also owns `collected` — where the stems of a separation are, shared by
+every detector that resolves one (`phrases` off the line, `bars` off the pulse).
 
 `tools/` — MCP tool layer, thin, grouped by workflow: `analysis`, `cut`,
 `envelope` (**shared envelope + `@tool` decorator + handle-death retry**),

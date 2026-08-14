@@ -201,11 +201,45 @@ Per #13, and in this order:
    acquires it on the way. **Rubato regions are excluded from cut-placement
    evidence** via beat-confidence gating — a grid fitted to free time measures
    nothing.
-4. **`correlate_timeline`** with the sidecar's labels. This is the one tested
-   measurement path: Claude interprets its records and never recomputes
-   statistics ad hoc.
+3b. **`detect_bars`** on the same mix whenever `analyze_music` comes back with a
+   `meter` under 2, which is what the beat model reports on the anchor-side
+   material. See "Bar and phrase vocabulary" below for what its output entitles
+   a claim to say.
+4. **`correlate_timeline`** with the sidecar's labels, and with `bars=` when
+   step 3b produced a map. This is the one tested measurement path: Claude
+   interprets its records and never recomputes statistics ad hoc.
 5. **Draft.** Update the profile sections from the records, tag every claim,
    record the row in `corpus.md`. The director reviews; then commit.
+
+## Bar and phrase vocabulary
+
+Four names a style profile may use for *where in the music* a cut sits, and the
+file each one comes from. They are not interchangeable, and a claim that mixes
+them is a claim about nothing:
+
+- **beat** — `analyze_music`. The pulse the model tracked. Always available,
+  and on some material it is a subdivision rather than the beat (#180).
+- **bar** — the beat grid's `bar`/`in_bar` columns when the *model* committed to
+  a meter; `detect_bars`'s `map_bar` when it did not. `correlate_timeline`
+  reports the first as `bar`/`in_bar` and the second as `map_bar`, and they are
+  separate columns on purpose: one is the model's reading and one is a reading
+  over it, and a profile that folded them together could not say which stood
+  behind a number. A bar map says how it was arrived at — `model`, `inferred`,
+  or `refused` — and a claim off an `inferred` map carries that word.
+- **group** — `detect_bars`'s `in_group`, the bar's place in the four-bar group.
+  This is *hypermeter*, not a phrase: it says a bar line is a plausible place
+  for a phrase to turn over, never that one did. Every eight- and twelve-bar
+  form turns over on a four-bar boundary, which is why four is the divisor.
+- **phrase** — `detect_phrases`. Where the soloist actually stopped, which is a
+  reading of the line and not of the grid. This is the cut-placement unit the
+  #46 round named; a group boundary is where one *could* end, a phrase boundary
+  is where one did.
+
+The provenance tag follows the weakest input. A claim about bars drawn from an
+`inferred` map over a `refused`-adjacent grid is `[believed, unverified]` until
+a corpus pass says otherwise, however many cuts stand behind it: the phase is a
+reading, and a bar map one beat out makes every claim resting on it confidently
+wrong rather than merely thin.
 
 Read **across** the corpus before claiming, not one project at a time: the
 number that matters is the distribution, and the tag a claim is entitled to is

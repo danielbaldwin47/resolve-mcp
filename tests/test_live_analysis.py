@@ -16,15 +16,18 @@ from pathlib import Path
 
 import pytest
 
-from resolve_mcp.analysis import applause, beats
+from resolve_mcp.analysis import applause, bars, beats
 
-from .fakes import write_clicks, write_sections
+from .fakes import write_clicks, write_hits, write_sections
 
 CLICK_SECONDS = 20.0
 CLICK_BPM = 120.0
 
 APPLAUSE_SECONDS = 8.0
 ROOM_SECONDS = 6.0
+
+BAR_METER = 4
+BAR_SECONDS = 60.0 / CLICK_BPM * BAR_METER
 
 
 @pytest.mark.live
@@ -41,6 +44,43 @@ def test_the_installed_beat_model_hears_a_click_track(tmp_path: Path) -> None:
     # Downbeats are the second of the two lists the model returns, and a subset of the first.
     assert grid.downbeats
     assert set(grid.downbeats) <= set(grid.beats)
+
+
+@pytest.mark.live
+def test_a_bar_map_over_the_real_model_and_the_real_accents_finds_the_downbeat(
+    tmp_path: Path,
+) -> None:
+    """The two seams the fake tier cannot join: the installed model, and RMS off real audio.
+
+    Every decision in ``bars`` is checked against grids and readings written by hand. What
+    that cannot show is whether the accent reading, run over a file the *model* also read,
+    ranks the same beats the arithmetic was tested on — a window off by a beat, or a decoder
+    handing back a different length than the grid was measured in, is right or wrong on the
+    first real run and nowhere before it.
+
+    A click track with a loud one, which is the meter no ear has to arbitrate.
+    """
+    pytest.importorskip("beat_this.inference", reason="beat_this is not installed")
+    step = 60.0 / CLICK_BPM
+    times = [round(index * step, 6) for index in range(int(CLICK_SECONDS / step))]
+    path = write_hits(
+        tmp_path / "accented.wav",
+        times,
+        seconds=CLICK_SECONDS,
+        accents=[1.0 if index % BAR_METER == 0 else 0.3 for index in range(len(times))],
+    )
+
+    grid = beats.numbered(beats.detect(path))
+    salience = bars.accents(path, [float(row["t"]) for row in grid])
+    found = bars.mapped(grid, salience)
+
+    assert found.source in (bars.MODEL, bars.INFERRED), found.reasons
+    assert found.meter == BAR_METER
+    # The loud clicks are two seconds apart; the map has to put its bar lines on them.
+    assert [one.t for one in found.bars][:3] == [
+        pytest.approx(index * BAR_SECONDS, abs=0.1) for index in range(3)
+    ]
+    assert [one.in_group for one in found.bars][:5] == [1, 2, 3, 4, 1]
 
 
 @pytest.mark.live

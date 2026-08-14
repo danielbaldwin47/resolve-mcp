@@ -13,11 +13,51 @@ gating, a spectral applause signature that survives a board mix, or a
 cross-correlation route against deliverables when they exist (that is how
 the gauntlet measured the real spans).
 
-## G2 — beat grid unusable as bar map on this corpus anchor (open)
+## G2 — beat grid unusable as bar map on this corpus anchor (in-work)
 
 Prep, iter 1. `meter: 1`, median gap 0.28 s (~214 "bpm"), 71.7% trust,
 27 gaps >2 s. Onset-scale placement only; beat-1/bar-position style rules
 cannot fire. Known confound from docs survey (same on the corpus anchor).
+
+Fix: `detect_bars` (#180) — a second reading over the same grid rather than a
+second model. Folds the onset-scale grid to the tactus (only when the grid's own
+rate is outside the tapping range, so a backbeat cannot fold a grid that is
+already a plausible pulse), then scores every meter and phase against a per-beat
+accent reading and takes the widest lead over the runner-up. Refuses rather than
+guessing when the accents say nothing, and carries the grid's own `meter: 1` and
+214 bpm in the result beside its own answer. `correlate_timeline` takes the map
+as `bars=` and reports `map_bar` / `in_group` / `bar_offset` per cut plus a
+`bar_groups` histogram, ungated on the #112 beat gate — the map exists for the
+grids that gate refuses whole. Style vocabulary in `docs/agents/style-layer.md`
+§"Bar and phrase vocabulary"; the claim in `styles/concert.md` §1 is
+`[believed, unverified]` until a corpus pass measures it.
+
+**Measured, 2026-08-14** (`gauntlet/recon/g2_bar_map.json`), over the cached
+Zinc grid, both witnesses, Taurus span and whole set:
+
+- **The tempo half is fixed.** Off the mix the fold recovers 107 bpm from a grid
+  reporting 214 — the tune's real tempo, and the number G2 said nothing could
+  reach. That reading now rides home in every result beside the grid's own.
+- **The bar-line half is refused, and the refusal is measured.** Agreement
+  across four-bar windows is 0.06–0.18: adjacent windows of one tune at one
+  tempo reach *different* meters and phases 85–95% of the time. Confidence
+  0.06–0.10 against a floor of 0.3. Before the agreement check went in, the same
+  spans scored 0.3–0.6 on contrast alone over sixty-second windows and every one
+  of those readings disagreed with its neighbour — the check is what turned a
+  coin flip into an honest refusal.
+- **What that means:** RMS at the beat carries no bar-level accent on this
+  idiom. Brushes do not mark the one and a walking bass plays every quarter
+  alike, so the loudness witness has nothing to find. This is a fact about the
+  witness, not about the arithmetic — the same code reads a click track with a
+  loud one correctly through the installed beat model (live tier,
+  `test_live_analysis.py`).
+
+Still open, and now scoped: **a witness that is not loudness.** The two the
+ticket named and this did not try are downbeat tracking proper (a DBN over the
+beat activation, which is where the published work on this lives) and harmonic
+change — the root the bass lands on, not how hard it lands. Either is its own
+ticket. Closing G2 needs one of them plus the director's ear check on whatever
+map it produces.
 
 ## G3 — the gauntlet's own measuring tool lied, and the pack sealed anyway (in-work)
 

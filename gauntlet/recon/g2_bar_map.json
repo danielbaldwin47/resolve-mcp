@@ -1,0 +1,172 @@
+{
+ "question": "Does analysis.bars recover a bar line the beat grid could not give (#180, G2)?",
+ "beats_file": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\analysis\\Zinc-Set-2-Reaper-v4-62537c590a14-beats.json",
+ "grid_beats": 11130,
+ "readings": [
+  {
+   "witness": "mix/taurus-people",
+   "audio": "P:\\Client Work\\Ryan Devlin\\2026-06-17_Zinc Bar\\Audio\\Reaper\\Zinc Set 2 Reaper v4.wav",
+   "span": [
+    3514.9,
+    4450.5
+   ],
+   "beats_in_span": 2273,
+   "gist": {
+    "count": 0,
+    "meter": null,
+    "source": "refused",
+    "confidence": 0.064,
+    "minimum_confidence": 0.3,
+    "agreement": 0.128,
+    "tempo_bpm": 107.14,
+    "grid_bpm": 214.29,
+    "grid_meter": 1,
+    "fold": 2,
+    "fold_reason": "tempo",
+    "group_bars": 4,
+    "stem": "mix/taurus-people",
+    "first_seconds": null,
+    "last_seconds": null
+   },
+   "reasons": {
+    "beats": 2273,
+    "grid_meter": 1,
+    "grid_bpm": 214.29,
+    "meter_source": "inferred",
+    "tactus_bpm": 107.14,
+    "fold": 2,
+    "fold_phase": 1,
+    "fold_reason": "tempo",
+    "fold_contrast": 0.053,
+    "meter_contrast": 0.035,
+    "meter_margin": 0.002,
+    "meter_agreement": 0.128
+   },
+   "ear_check_bar_lines": []
+  },
+  {
+   "witness": "bass/taurus-people",
+   "audio": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\stems\\Zinc-Set-2-Reaper-v4.wav-8833f33949fe-d73a1e4c156e\\mix\\Zinc-Set-2-Reaper-v4.wav-8833f33949fe_(Bass)_htdemucs_ft.wav",
+   "span": [
+    3514.9,
+    4450.5
+   ],
+   "beats_in_span": 2273,
+   "gist": {
+    "count": 0,
+    "meter": null,
+    "source": "refused",
+    "confidence": 0.096,
+    "minimum_confidence": 0.3,
+    "agreement": 0.064,
+    "tempo_bpm": 71.43,
+    "grid_bpm": 214.29,
+    "grid_meter": 1,
+    "fold": 3,
+    "fold_reason": "tempo",
+    "group_bars": 4,
+    "stem": "bass/taurus-people",
+    "first_seconds": null,
+    "last_seconds": null
+   },
+   "reasons": {
+    "beats": 2273,
+    "grid_meter": 1,
+    "grid_bpm": 214.29,
+    "meter_source": "inferred",
+    "tactus_bpm": 71.43,
+    "fold": 3,
+    "fold_phase": 2,
+    "fold_reason": "tempo",
+    "fold_contrast": 0.038,
+    "meter_contrast": 0.115,
+    "meter_margin": 0.061,
+    "meter_agreement": 0.064
+   },
+   "ear_check_bar_lines": []
+  },
+  {
+   "witness": "mix/whole-set",
+   "audio": "P:\\Client Work\\Ryan Devlin\\2026-06-17_Zinc Bar\\Audio\\Reaper\\Zinc Set 2 Reaper v4.wav",
+   "span": [
+    0.0,
+    4450.5
+   ],
+   "beats_in_span": 11130,
+   "gist": {
+    "count": 0,
+    "meter": null,
+    "source": "refused",
+    "confidence": 0.091,
+    "minimum_confidence": 0.3,
+    "agreement": 0.165,
+    "tempo_bpm": 71.43,
+    "grid_bpm": 214.29,
+    "grid_meter": 1,
+    "fold": 3,
+    "fold_reason": "tempo",
+    "group_bars": 4,
+    "stem": "mix/whole-set",
+    "first_seconds": null,
+    "last_seconds": null
+   },
+   "reasons": {
+    "beats": 11130,
+    "grid_meter": 1,
+    "grid_bpm": 214.29,
+    "meter_source": "inferred",
+    "tactus_bpm": 71.43,
+    "fold": 3,
+    "fold_phase": 1,
+    "fold_reason": "tempo",
+    "fold_contrast": 0.013,
+    "meter_contrast": 0.061,
+    "meter_margin": 0.007,
+    "meter_agreement": 0.165
+   },
+   "ear_check_bar_lines": []
+  },
+  {
+   "witness": "bass/whole-set",
+   "audio": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\stems\\Zinc-Set-2-Reaper-v4.wav-8833f33949fe-d73a1e4c156e\\mix\\Zinc-Set-2-Reaper-v4.wav-8833f33949fe_(Bass)_htdemucs_ft.wav",
+   "span": [
+    0.0,
+    4450.5
+   ],
+   "beats_in_span": 11130,
+   "gist": {
+    "count": 0,
+    "meter": null,
+    "source": "refused",
+    "confidence": 0.104,
+    "minimum_confidence": 0.3,
+    "agreement": 0.182,
+    "tempo_bpm": 71.43,
+    "grid_bpm": 214.29,
+    "grid_meter": 1,
+    "fold": 3,
+    "fold_reason": "tempo",
+    "group_bars": 4,
+    "stem": "bass/whole-set",
+    "first_seconds": null,
+    "last_seconds": null
+   },
+   "reasons": {
+    "beats": 11130,
+    "grid_meter": 1,
+    "grid_bpm": 214.29,
+    "meter_source": "inferred",
+    "tactus_bpm": 71.43,
+    "fold": 3,
+    "fold_phase": 0,
+    "fold_reason": "tempo",
+    "fold_contrast": 0.018,
+    "meter_contrast": 0.073,
+    "meter_margin": 0.011,
+    "meter_agreement": 0.182
+   },
+   "ear_check_bar_lines": []
+  }
+ ],
+ "note": "The two witnesses agreeing on meter and phase is the result to trust. Disagreeing means the mix accents and the bass line are not saying the same thing about where the bar starts, and the bass is the one to believe on this idiom \u2014 it walks quarters. A refusal is a real answer: it says RMS at the beat carries no bar-level accent on this material, which is what brushes and a walking line sound like. The ear check is the verdict where a map was written: play the mix from the first listed time and count whether the rest land on the one."
+}
