@@ -46,6 +46,17 @@ and the cache makes a rerun free, so there is no per-session picking:
    author the file. Whichever pillar runs first writes it; format and ownership live
    in `docs/agents/rough-cut.md` §songs.json.
 
+A board or DI mix works here without special handling since #179 — read the gist
+before trusting it, though. `read_at_own_scale: true` says the 0.3 threshold found
+no clapping in the whole file and the curve was read at a fraction of its own peak
+instead, which is the normal case on a desk feed and never on a room mic;
+`applause_threshold` is what was actually used. Each start is where the *band* comes
+in rather than where the clapping stopped, with the announcement it skipped on the
+record as `talk_seconds` — on the measured set those ran from 0.3 s to 65 s, so a
+boundary read off the applause alone is up to a minute early. Calls the mix never
+comes up in are refused and listed under `quiet_calls` in the tunes file, the same
+way the pulse check lists its own under `dropped_calls`.
+
 Rubato regions are excluded from cut-placement evidence by beat-confidence gating — a
 grid fitted to free time measures nothing (`styles/concert.md` §1).
 

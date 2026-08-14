@@ -3,7 +3,7 @@
 Every critic loss and prep finding lands here as server or workflow work.
 Never a hand-tuned fix to an edit. Status: open / in-work / fixed (PR).
 
-## G1 — applause/tune detection blind on board mixes (open)
+## G1 — applause/tune detection blind on board mixes (FIXED, #179)
 
 Prep, iter 1. Peak applause probability 0.297 over the whole 74-min Reaper
 board mix vs 0.3 threshold → 1 tune found where 5 exist. The concert
@@ -12,6 +12,33 @@ room mic; the detector needs either a lower-threshold mode with beat-density
 gating, a spectral applause signature that survives a board mix, or a
 cross-correlation route against deliverables when they exist (that is how
 the gauntlet measured the real spans).
+
+**Fixed by two rules in `analysis/applause.py`**, both arithmetic over
+measurements that already existed. First, the threshold is a ceiling: when a
+whole file holds under 10 s over it, the curve is read at 0.09 of its own
+peak and the burst minimum drops to 2.0 s with it (`reading`). It is a
+fallback and not a recalibration on purpose — scaling the room mic the same
+way turns the clapping after every solo into a boundary, 19 calls where 13
+belong. Second, the applause says a tune *ended*, not that the next one
+started: on this mix the announcement between them ran 0.3 s to 65 s at
+20-40 dB under the music, so each boundary walks forward to where the
+loudness curve `analyze_music` already wrote comes up to the file's median
+less 6 dB and holds for 10 s (`settled`), and a call the band never comes in
+on is refused.
+
+Measured, this mix, `gauntlet/recon/board_tunes_job.py` (job) and
+`board_boundary_check.py` (both mixes, before and after):
+
+| | tunes | boundaries within 5 s of the human spans |
+|---|---|---|
+| before | 1 | 0 of 5 |
+| after | 5 | 5 of 5, worst error 1.63 s |
+
+The Scullers room mic is the no-regression control: threshold, burst count
+and burst length identical to before. Its call count goes 13 → 11 before the
+pulse check and 10 → 9 after, and the difference is honest — one call the
+settle step agrees with the pulse check about (talking, 296-440 s) and one
+whose 293 s hold only 27 s of music.
 
 ## G2 — beat grid unusable as bar map on this corpus anchor (open)
 

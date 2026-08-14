@@ -1,0 +1,100 @@
+{
+  "mix": "P:\\Client Work\\Ryan Devlin\\2026-06-17_Zinc Bar\\Audio\\Reaper\\Zinc Set 2 Reaper v4.wav",
+  "job_id": "analyze_structure-b14759cbb721",
+  "state": "completed",
+  "elapsed_s": 206.9,
+  "error": null,
+  "human_cut_starts_s": [
+    107.4405,
+    1373.8725,
+    1920.1265,
+    2725.014,
+    3568.4815
+  ],
+  "gist": {
+    "count": 5,
+    "applause_count": 14,
+    "applause_seconds": 53.599,
+    "peak_probability": 0.2977,
+    "median_probability": 0.0,
+    "longest": {
+      "t": 107.0,
+      "seconds": 1168.357,
+      "beats_per_second": 3.076
+    },
+    "shortest": {
+      "t": 3568.5,
+      "seconds": 508.77,
+      "beats_per_second": 3.019
+    },
+    "dropped": 0,
+    "dropped_seconds": 0,
+    "densest_dropped": null,
+    "sparsest_kept": {
+      "t": 1918.5,
+      "seconds": 756.054,
+      "beats_per_second": 1.366
+    },
+    "settled": 5,
+    "settled_seconds": 164.478,
+    "no_music": 3,
+    "threshold": 0.3,
+    "scale": 0.09,
+    "burst_seconds": 3.0,
+    "gap_seconds": 1.5,
+    "tune_seconds": 60.0,
+    "settle_db": 6.0,
+    "settle_seconds": 10.0,
+    "density_per_second": 0.5,
+    "applause_threshold": 0.0268,
+    "applause_burst_seconds": 2.0,
+    "read_at_own_scale": true
+  },
+  "path": "C:\\Users\\Daniel\\AppData\\Local\\resolve-mcp\\analysis\\Zinc-Set-2-Reaper-v4-7bccc45e2869-tunes.json",
+  "boundaries_s": [
+    107.0,
+    1373.0,
+    1918.5,
+    2724.0,
+    3568.5
+  ],
+  "talk_seconds": [
+    0.288,
+    64.688,
+    10.828,
+    46.886,
+    41.788
+  ],
+  "errors_s": [
+    0.441,
+    0.872,
+    1.627,
+    1.014,
+    0.019
+  ],
+  "within_tolerance": 5,
+  "quiet_calls": [
+    {
+      "t": 0.0,
+      "end": 67.679,
+      "seconds": 67.679,
+      "talk_seconds": null,
+      "reason": "no music: never came up to within 6.0 dB of the file's median loudness"
+    },
+    {
+      "t": 4080.0,
+      "end": 4146.079,
+      "seconds": 66.079,
+      "talk_seconds": null,
+      "reason": "no music: never came up to within 6.0 dB of the file's median loudness"
+    },
+    {
+      "t": 4150.878,
+      "end": 4450.5,
+      "seconds": 299.622,
+      "talk_seconds": null,
+      "reason": "no music: never came up to within 6.0 dB of the file's median loudness"
+    }
+  ],
+  "dropped_calls": []
+}

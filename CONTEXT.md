@@ -93,7 +93,9 @@ Top level:
 
 `analysis/` — compute jobs that read audio and write findings to disk:
 `applause` (bursts → tune boundaries, then a beat-density floor drops the calls
-with no pulse under them, #133), `beats` (grid + downbeats, model
+with no pulse under them, #133; on a mix the threshold finds no clapping in, the
+curve is read at its own scale and each boundary walks forward off the applause
+to where the loudness curve says the band comes in, #179), `beats` (grid + downbeats, model
 injected per ADR 0002; `trust` says which beats the grid describes well enough
 to count, #112; `spacing` says how wide a beat is at each beat), `correlate`
 (measure a cut against its music — by default the *visible* edit,
@@ -118,14 +120,15 @@ no onsets), `fills` (drum-fill candidates), `halves` (shared
 identify/cache/write pattern), `melody` (notes off one melodic stem —
 monophonic pitch + gating, model injected per ADR 0002; the reading `phrases`
 is a rule layer over, as `drums` is to `fills`), `music` (beats + energy + gist
-job), `phrases` (phrase boundaries: where the soloist stops, which is the
+job; `beats_of`/`energy_of` are the shared entries other jobs read a grid or a
+loudness curve through, one measurement per piece of audio), `phrases` (phrase boundaries: where the soloist stops, which is the
 cut-placement unit #46 named, #143),
 `records` (sliceable record files), `silence` (RMS spans), `solos` (front
 of band changes: lead off the stem energy, timbre off one stem's brightness —
 with the third pass on disk the voices are `wind`/`comp` rather than `other`
 and timbre reads `wind`, #157), `structure` (tunes + solo changes job; both
-halves read the shared beats half; its stem loader is what reaches the third
-pass), `transcribe`
+halves read the shared beats half and the tune half the shared energy half; its
+stem loader is what reaches the third pass), `transcribe`
 (job), `transcript` (document + Word/Transcription/Transcriber vocabulary),
 `virtual` (a cut file read back as the words it will contain — the P4
 self-review, warnings only, touches no Resolve handle), `whisper`

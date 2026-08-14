@@ -27,6 +27,33 @@ fourth rule reads the beat grid the music analysis already wrote:
   Talking and long announcements come back near zero; the sparsest real tune on the
   measured concert was 1.36. That is the whole check — the grid is somebody else's
   measurement (#37) and this module only divides by it.
+
+Those four rules are enough on a room mic and blind on a board mix, which is the case #179
+was filed for. A desk feed carries no crowd bleed, so the same clapping the room mic reads
+at 0.99 reaches the tagger at 0.30 — under the threshold for a whole 74-minute set, one
+tune found where five were played. Two more rules close that, and neither invents a signal:
+
+* **A file the threshold finds nothing in is read at its own scale.** The model's
+  confidence is set by how much room is in the mix, but the *shape* of the curve is not:
+  applause is still a rare, tall excursion over a floor that is nearly zero (the board
+  mix's median is 0.00003, its 90th percentile 0.0003, and its applause peaks 0.03 to
+  0.30). So when the ceiling turns up less than ``QUIET_SECONDS`` of clapping in a whole
+  set, ``reading`` derives the threshold from the file's own peak instead, and shortens the
+  burst minimum with it. A fallback and not a recalibration, deliberately: dropping the
+  threshold on a mix that *does* clear it turns every burst of mid-tune applause after a
+  solo into a tune boundary, which is the regression this rule is shaped to avoid. Set
+  ``scale`` to zero and there is no fallback at all.
+
+* **A tune starts when the band does, not when the clapping stops.** Between the applause
+  and the downbeat is an announcement, a re-tune, a count-in — 2 s of it on the measured
+  set's first tune and 66 s on its second, all of it 20-40 dB under the music. Reading the
+  boundary off the applause alone therefore lands up to a minute early, which is a miss at
+  any tolerance an editor cares about. So each call's start walks forward to where the mix
+  comes up to playing level and stays there, and a call the music never comes up in at all
+  is not a tune. Playing level is the file's own median loudness less ``settle_db`` — the
+  loudness curve is ``analyze_music``'s measurement (#37), and this module only compares
+  against it. Set ``settle_seconds`` to zero and the boundary is the end of the applause,
+  which is what it was before #179.
 """
 
 from __future__ import annotations
@@ -58,10 +85,74 @@ CHUNK_SECONDS = 60.0
 """How much audio goes through the model at once. A concert does not fit in GPU memory."""
 
 DEFAULT_THRESHOLD = 0.3
+"""How sure the tagger has to be. A ceiling since #179 rather than the only threshold:
+``reading`` falls back to the file's own scale when this one finds nothing, and never
+raises it, so material with an audible crowd is read exactly as it was."""
+
+DEFAULT_SCALE = 0.09
+"""How much of the file's own applause peak counts as applause, when the fallback fires.
+
+Measured on the Zinc Set 2 board mix, whose five human-established tune starts are the only
+ground truth this rule has (`gauntlet/recon/board_boundary_sweep.py`). Every fraction from
+0.08 to 0.10 finds all five within 2 s; 0.12 loses two of them, because the two quietest
+bursts on that mix peak at 0.066 and 0.129 against a file peak of 0.298. 0.09 is the middle
+of that plateau.
+
+The Scullers room mic is why this is a fallback and not the rule: 0.09 of its peak is
+0.059, and reading it there turns the clapping after each solo into a boundary — 19 calls
+where the ceiling finds 13. Zero turns the fallback off."""
+
+QUIET_SECONDS = 10.0
+"""How little clapping over the ceiling means the ceiling is unusable on this file.
+
+Under one burst's worth in a whole set. The measured board mix has none at all — its peak
+is 0.298 against a ceiling of 0.3 — and the Scullers room mic has 146 seconds, so the two
+cases are three orders apart and this number is nowhere near either of them. A threshold
+that finds this little in an hour of a room that applauds between tunes is not a threshold
+that file can be read at."""
+
+QUIET_BURST_SECONDS = 2.0
+"""How long a burst has to last on a file read at its own scale.
+
+Shorter than ``DEFAULT_MINIMUM_SECONDS`` and for a reason that only applies there: a
+compressed curve clears its own threshold at the burst's peak and nowhere else, so what is
+measured is the peak of the burst rather than the burst. At 3.0 two of the five measured
+board-mix boundaries have no burst at any threshold; 1.5 through 2.5 call that set
+identically."""
+
+MINIMUM_THRESHOLD = 0.02
+"""Below this a scaled threshold is chasing the model's own noise, not a quiet room.
+
+A file with no applause anywhere still has a peak, and a fraction of it is meaningless —
+the board mix's 90th percentile is 0.0003, so anything at this level is three decimal
+orders above the curve's own baseline and still an order under its quietest real burst."""
+
 DEFAULT_MINIMUM_SECONDS = 3.0
 DEFAULT_GAP_SECONDS = 1.5
 DEFAULT_TUNE_SECONDS = 60.0
 """Under a minute between two bursts of applause is an announcement, not a tune."""
+
+DEFAULT_SETTLE_DB = 6.0
+"""How far under the file's median loudness still counts as the band playing.
+
+Measured on the same set: its music sits between -12 and -25 LUFS against a median of
+-17.5, and everything between the tunes — talking, tuning, the room — between -27 and -55.
+Margins of 4 to 8 dB put all five starts within 2 s of the human ones; at 10 dB and wider
+the floor reaches down into the talk and a sixth call appears."""
+
+DEFAULT_SETTLE_SECONDS = 10.0
+"""How long the mix has to stay at playing level before it is the tune starting.
+
+Long enough that a shouted introduction or one loud chord of tuning is not a downbeat,
+short enough to sit well inside the shortest tune anyone plays. 5 through 20 seconds call
+the measured set identically. Zero turns the whole step off, and then a boundary is the
+end of the applause — which is what it was before #179, and the way to run the tune half
+with no loudness curve at all."""
+
+SETTLE_SHARE = 0.75
+"""How much of the hold window has to be over the floor. Music dips inside a phrase and
+between them; it does not stop. Requiring an unbroken run instead makes the start depend
+on how deep the first dip is, which is not a boundary anyone hears."""
 
 DEFAULT_DENSITY_PER_SECOND = 0.5
 """Beats per second a call needs before it counts as music.
@@ -85,6 +176,32 @@ class Curve(NamedTuple):
     probability: tuple[float, ...]
 
 
+class Reading(NamedTuple):
+    """The two numbers a curve is read with, and whether they came off the file itself.
+
+    ``own_scale`` is the finding, not a setting: it says the ceiling found almost no
+    clapping in this file and the numbers beside it were derived from the curve instead. It
+    rides out in the gist, because "these boundaries were read at 0.027 rather than 0.3" is
+    the first thing to know about a set that came back with more tunes than expected.
+    """
+
+    threshold: float
+    burst_seconds: float
+    own_scale: bool
+
+
+class Loudness(NamedTuple):
+    """How loud the mix is, window by window — ``analyze_music``'s energy curve, as read.
+
+    ``seconds`` is each window's start and ``lufs`` its loudness. Only the two columns this
+    module compares against: the curve on disk carries onset density and RMS too, and
+    neither is a boundary.
+    """
+
+    seconds: tuple[float, ...]
+    lufs: tuple[float, ...]
+
+
 class Span(NamedTuple):
     """One burst of applause."""
 
@@ -103,6 +220,10 @@ class Tune(NamedTuple):
     ``beats`` and ``beats_per_second`` are ``None`` until ``counted`` reads a grid over the
     call. None is not zero: no grid was read, so nothing is known about the pulse, and a
     call in that state is never dropped for want of one.
+
+    ``talk_seconds`` is the same kind of None, for the same reason: how long the applause
+    had been over before the band came in, once ``settled`` has read a loudness curve over
+    the call, and nothing at all before that.
     """
 
     start: float
@@ -111,6 +232,7 @@ class Tune(NamedTuple):
     applause_after: float | None
     beats: int | None = None
     beats_per_second: float | None = None
+    talk_seconds: float | None = None
 
     @property
     def seconds(self) -> float:
@@ -122,6 +244,22 @@ class Calls(NamedTuple):
 
     kept: tuple[Tune, ...]
     dropped: tuple[Tune, ...]
+
+
+class Settled(NamedTuple):
+    """The tune set after the loudness curve has been read over it.
+
+    Two ways to lose a call here rather than one, because they are different findings and a
+    reader of the rejects has to be able to tell them apart: ``silent`` never came up to
+    playing level anywhere inside itself — a stretch of talking bounded by clapping, the
+    thing the density check catches after the fact and this one catches before. ``brief``
+    did come up, so late that what is left is under a tune's worth of music: the applause
+    was a minute and a half apart and eighty seconds of that was announcing the band.
+    """
+
+    kept: tuple[Tune, ...]
+    silent: tuple[Tune, ...]
+    brief: tuple[Tune, ...]
 
 
 Tagger = Callable[[Path], Curve]
@@ -225,6 +363,44 @@ def _chunks(path: Path) -> list[tuple[float, np.ndarray[Any, Any]]]:
     ]
 
 
+def reading(
+    curve: Curve,
+    ceiling: float = DEFAULT_THRESHOLD,
+    scale: float = DEFAULT_SCALE,
+    burst_seconds: float = DEFAULT_MINIMUM_SECONDS,
+) -> Reading:
+    """How to read this file's curve: the threshold to use, and the shortest burst that counts.
+
+    Both, together, because on a file the tagger was never sure about they come down for the
+    same reason. The fallback fires when the whole file holds less than ``QUIET_SECONDS``
+    over the ceiling — less clapping than one burst, in a recording of a room that applauded
+    between every tune — and that is the evidence that the ceiling is not a threshold here
+    but a wall. It is deliberately not "the peak is under the ceiling": a board mix with one
+    lucky burst over the line is still a board mix, and a set read at the ceiling should not
+    change its mind over a single frame.
+
+    A file that does clear the ceiling is read exactly as it was before #179, threshold and
+    burst both, which is what keeps material with an audible crowd where it was. So is any
+    file when ``scale`` is zero.
+    """
+    if scale <= 0 or not curve.probability:
+        return Reading(ceiling, burst_seconds, False)
+    if _seconds_over(curve, ceiling) >= QUIET_SECONDS:
+        return Reading(ceiling, burst_seconds, False)
+    threshold = min(ceiling, max(MINIMUM_THRESHOLD, max(curve.probability) * scale))
+    return Reading(threshold, min(burst_seconds, QUIET_BURST_SECONDS), True)
+
+
+def _seconds_over(curve: Curve, threshold: float) -> float:
+    """How much of the file the tagger put at or over a threshold, frames added up."""
+    steps = _steps(curve.seconds)
+    return sum(
+        step
+        for step, probability in zip(steps, curve.probability, strict=True)
+        if probability >= threshold
+    )
+
+
 def spans(
     curve: Curve,
     threshold: float = DEFAULT_THRESHOLD,
@@ -296,6 +472,85 @@ def tunes(
     return tuple(one for one in found if one.seconds >= minimum_seconds)
 
 
+def settled(
+    found: Sequence[Tune],
+    loudness: Loudness,
+    margin_db: float = DEFAULT_SETTLE_DB,
+    hold_seconds: float = DEFAULT_SETTLE_SECONDS,
+    minimum_seconds: float = DEFAULT_TUNE_SECONDS,
+) -> Settled:
+    """Each call's start moved forward to where the band comes in, and the ones with no band.
+
+    The applause says a tune ended; it does not say the next one started. What says that is
+    the mix coming up to playing level and staying there, so every call is walked forward
+    from the end of its applause to the first window that does — see ``_came_up`` for what
+    "staying there" means, and ``DEFAULT_SETTLE_DB`` for what playing level is.
+
+    A start that does not move is the ordinary case on a room mic and on any set where the
+    band counts straight in: the first window of the call is already at playing level, so
+    the boundary is where it always was and ``talk_seconds`` is zero.
+    """
+    if hold_seconds <= 0 or not loudness.lufs:
+        return Settled(tuple(found), (), ())
+    floor = statistics.median(loudness.lufs) - margin_db
+    kept: list[Tune] = []
+    silent: list[Tune] = []
+    brief: list[Tune] = []
+    for one in found:
+        came = _came_up(loudness, one.start, one.end, floor, hold_seconds)
+        if came is None:
+            silent.append(one)
+            continue
+        moved = one._replace(
+            start=round(came, 3),
+            talk_seconds=round(came - one.start, 3),
+        )
+        (kept if moved.seconds >= minimum_seconds else brief).append(moved)
+    return Settled(tuple(kept), tuple(silent), tuple(brief))
+
+
+def _came_up(
+    loudness: Loudness,
+    start: float,
+    end: float,
+    floor: float,
+    hold_seconds: float,
+) -> float | None:
+    """The first window inside the call that is over the floor and mostly stays over it.
+
+    "Mostly" is ``SETTLE_SHARE`` of the next ``hold_seconds``, counted off a running sum
+    rather than a window per frame — a set is tens of thousands of windows and this runs
+    once per call. The window that starts the hold has to be over the floor itself, so the
+    boundary lands on the music rather than on the last quiet second before it.
+    """
+    inside = [
+        (seconds, level)
+        for seconds, level in zip(loudness.seconds, loudness.lufs, strict=True)
+        if start <= seconds < end
+    ]
+    if len(inside) < 2:
+        return None
+    step = statistics.median(
+        later - earlier for (earlier, _), (later, _) in zip(inside, inside[1:], strict=False)
+    )
+    width = max(int(round(hold_seconds / step)), 1) if step > 0 else 1
+    if len(inside) < width:
+        return None
+    over = [1 if level >= floor else 0 for _, level in inside]
+    running = 0
+    counts: list[int] = []
+    for index, one in enumerate(over):
+        running += one
+        if index >= width:
+            running -= over[index - width]
+        if index >= width - 1:
+            counts.append(running)
+    for index, count in enumerate(counts):
+        if over[index] and count >= SETTLE_SHARE * width:
+            return inside[index][0]
+    return None
+
+
 def counted(found: Sequence[Tune], beats: Sequence[float]) -> tuple[Tune, ...]:
     """The same tunes with the grid's beats counted inside each one, and the density that is.
 
@@ -348,6 +603,7 @@ def numbered(found: Sequence[Tune]) -> tuple[dict[str, Any], ...]:
             "applause_after": one.applause_after,
             "beats": one.beats,
             "beats_per_second": one.beats_per_second,
+            "talk_seconds": one.talk_seconds,
         }
         for index, one in enumerate(found, start=1)
     )
@@ -378,7 +634,53 @@ def dropped_calls(dropped: Sequence[Tune], minimum_density: float) -> tuple[dict
     )
 
 
-def gist(curve: Curve, applause: Sequence[Span], calls: Calls) -> dict[str, Any]:
+def quiet_calls(
+    found: Settled,
+    margin_db: float,
+    minimum_seconds: float,
+) -> tuple[dict[str, Any], ...]:
+    """What the settle step took out, each with the reason it went — same shape as a drop.
+
+    Beside ``dropped_calls`` on disk and for the same reason (#38): these are the calls the
+    applause proposed and the loudness curve refused, and a boundary set nobody can audit
+    is one nobody can trust. Bounded the same way too — at most one per burst.
+    """
+    return tuple(
+        [
+            {
+                "t": one.start,
+                "end": one.end,
+                "seconds": one.seconds,
+                "talk_seconds": one.talk_seconds,
+                "reason": (
+                    "no music: never came up to within "
+                    f"{margin_db} dB of the file's median loudness"
+                ),
+            }
+            for one in found.silent
+        ]
+        + [
+            {
+                "t": one.start,
+                "end": one.end,
+                "seconds": one.seconds,
+                "talk_seconds": one.talk_seconds,
+                "reason": (
+                    f"too little music: {one.seconds}s of playing after "
+                    f"{one.talk_seconds}s of talk, under the {minimum_seconds}s a tune takes"
+                ),
+            }
+            for one in found.brief
+        ]
+    )
+
+
+def gist(
+    curve: Curve,
+    applause: Sequence[Span],
+    calls: Calls,
+    found: Settled | None = None,
+) -> dict[str, Any]:
     """How many tunes, how much clapping, and which tune is the long one — no lists.
 
     The boundaries themselves are on disk. A set is a dozen records; what belongs in a tool
@@ -389,9 +691,15 @@ def gist(curve: Curve, applause: Sequence[Span], calls: Calls) -> dict[str, Any]
     is whether the floor was anywhere near a decision, so it gets the two shoulders: the
     densest call that was dropped and the sparsest that was kept. A wide gap between them
     says the filter did not have to choose; a narrow one says the threshold wants looking at.
+
+    The settle step reports the same three numbers for the same reason — how many starts it
+    moved, how much announcement it moved them past, and how many calls it refused
+    outright. A set where nothing moved was read off the applause alone; one where every
+    start moved a minute is a board mix, and that is worth knowing without opening the file.
     """
     longest = max(calls.kept, key=lambda one: one.seconds, default=None)
     shortest = min(calls.kept, key=lambda one: one.seconds, default=None)
+    moved = [one for one in calls.kept if one.talk_seconds]
     return {
         "count": len(calls.kept),
         "applause_count": len(applause),
@@ -406,6 +714,9 @@ def gist(curve: Curve, applause: Sequence[Span], calls: Calls) -> dict[str, Any]
         "dropped_seconds": round(sum(one.seconds for one in calls.dropped), 3),
         "densest_dropped": _summary(max(calls.dropped, key=_pulse, default=None)),
         "sparsest_kept": _summary(min(calls.kept, key=_pulse, default=None)),
+        "settled": len(moved),
+        "settled_seconds": round(sum(one.talk_seconds or 0.0 for one in moved), 3),
+        "no_music": (len(found.silent) + len(found.brief)) if found is not None else 0,
     }
 
 
