@@ -115,7 +115,7 @@ def environment(
     config = config or get_config()
     lines: list[str] = []
     try:
-        returncode = (runner or _run)(environment_command(config.audio_separator), lines.append)
+        returncode = (runner or run)(environment_command(config.audio_separator), lines.append)
     except FileNotFoundError as exc:
         raise SeparatorUnavailableError(
             cause=f"No audio-separator at {config.audio_separator!r}.",
@@ -177,7 +177,7 @@ def separate(
 
     log.info("Separating %s with %s", Path(source).name, model)
     try:
-        returncode = (runner or _run)(argv, on_line)
+        returncode = (runner or run)(argv, on_line)
     except FileNotFoundError as exc:
         raise SeparatorUnavailableError(
             cause=f"No audio-separator at {config.audio_separator!r}.",
@@ -231,8 +231,12 @@ def _percent(line: str) -> float | None:
     return min(int(found.group(1)) / FULL, 1.0)
 
 
-def _run(argv: Sequence[str], on_line: Lines) -> int:
+def run(argv: Sequence[str], on_line: Lines) -> int:
     """The real call: stderr folded into stdout, read as it arrives.
+
+    Named rather than private because a ``Runner`` that wants the real thing under it — a live
+    test counting the passes a run actually paid for — has nowhere else to reach for it, and a
+    second copy of this function is a second chance to get the encoding wrong.
 
     Universal newlines makes the progress bar's carriage returns line breaks, which is the
     only reason a tqdm bar can be followed line by line at all.

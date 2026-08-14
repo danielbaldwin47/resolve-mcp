@@ -12,12 +12,16 @@ is to be run on the machine that has it, and to say so on the ticket when it has
 
 from __future__ import annotations
 
+import os
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
 
 from resolve_mcp.analysis import applause, bars, beats
-from resolve_mcp.audio import wav
+from resolve_mcp.audio import separator, stems, wav
+from resolve_mcp.config import Config
+from resolve_mcp.jobs import cache
 
 from .fakes import write_clicks, write_hits, write_sections
 
@@ -147,6 +151,79 @@ def test_the_five_tunes_of_a_board_mix_are_found_where_the_human_cut_them() -> N
     assert len(starts) == len(BOARD_TUNE_STARTS)
     for want in BOARD_TUNE_STARTS:
         assert min(abs(one - want) for one in starts) <= BOARD_TOLERANCE_SECONDS
+
+
+ACQUIRED_SET = "Zinc-Set-2-Reaper-v4.wav-8833f33949fe.wav"
+"""The board mix as the acquisition left it in the cache — what the stems on disk were cut from.
+
+Named rather than re-acquired: the export needs Resolve and the project open, and what this
+test is about is the directory the separation already filled, which is keyed on this file's
+bytes. Reaching it any other way would separate a second copy under a second key.
+"""
+
+
+@pytest.mark.live
+def test_a_wind_split_on_the_zinc_stems_runs_that_pass_and_no_other() -> None:
+    """#192's live acceptance: the third pass over a two-pass directory is one pass.
+
+    The fake tier proves the decision — which passes a directory owes — with the separator
+    substituted. What it cannot say is that the real ``17_HP-Wind_Inst-UVR`` reads the
+    ``other`` stem the first pass wrote and labels its halves the way ``WIND_STEMS`` spells
+    them, which is the half of this that only a real model on a real set can answer. Skips
+    where the Zinc stems are not on this machine — record the run on the ticket when they are.
+    """
+    config = _machine_cache()
+    acquired = config.audio_dir / ACQUIRED_SET
+    if not acquired.exists():
+        pytest.skip(f"the acquired Zinc set is not in this cache at {acquired}")
+    audio = {"path": str(acquired), "content_sha256": cache.content_hash(acquired)}
+    params = {**stems.separation_params(config), "split_wind": True}
+    counting = _CountingSeparator()
+
+    output = stems.multi_pass(
+        audio, params, _no_progress, split_wind=True, runner=counting, config=config
+    )
+
+    assert len(counting.calls) <= 1  # nothing to run at all once this test has run once
+    for argv in counting.calls:
+        assert argv[3] == config.wind_model
+        assert argv[1] == output.result["stems"][stems.OTHER_SOURCE]
+    assert set(output.result[stems.OTHER_PASS]) == set(stems.WIND_KEYS.values())
+    assert all(Path(one).exists() for one in output.result[stems.OTHER_PASS].values())
+    assert len(output.result["stems"]) == len(stems.FOUR_STEMS)
+    assert len(output.result["drums"]) >= len(stems.DRUM_STEMS)
+
+
+def _machine_cache() -> Config:
+    """The machine's own cache, not the per-test one redirected into ``tmp_path``.
+
+    That redirect is right everywhere else — nothing a test writes should be readable by the
+    next one — and wrong here. What this verifies is a directory the director's separations
+    filled, reached by a 1.2 GB file's bytes; a temporary copy of it would be a differently
+    keyed directory answering a question the fake tier already answers. The pass this runs is
+    the one that directory is missing, so the run leaves the cache more complete, not dirtier.
+    """
+    return Config.from_env(dict(os.environ))
+
+
+class _CountingSeparator:
+    """The real separator call with a note of every pass it was asked for.
+
+    ``environment`` goes through the same seam, so its probe is kept off the count — what is
+    being measured is separations, and a run that reused everything still asks what it runs on.
+    """
+
+    def __init__(self) -> None:
+        self.calls: list[list[str]] = []
+
+    def __call__(self, argv: Sequence[str], on_line: separator.Lines) -> int:
+        if "--env_info" not in argv:
+            self.calls.append(list(argv))
+        return separator.run(argv, on_line)
+
+
+def _no_progress(fraction: float, step: str) -> None:
+    """A live pass reports for minutes and there is nobody here to read it."""
 
 
 def _loudness_of(path: Path) -> applause.Loudness:

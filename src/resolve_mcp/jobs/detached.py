@@ -112,8 +112,13 @@ def spawn_options(platform: str = sys.platform) -> list[dict[str, Any]]:
 
 
 def worker_log(job_id: str, config: Config) -> Path:
-    """Where the detached worker's own output lands: beside the record, never inside it."""
-    return config.job_dir / f"{job_id}.worker.log"
+    """Where the detached worker's own output lands: beside the record, never inside it.
+
+    ``store`` owns the name, because ``store`` is what reads the file back onto the record of a
+    worker that died without writing its own failure (#192). This is the launcher's word for
+    the same file, kept so callers here do not have to know which module named it.
+    """
+    return store.worker_log(job_id, config)
 
 
 def child_env(config: Config, env: dict[str, str] | None = None) -> dict[str, str]:

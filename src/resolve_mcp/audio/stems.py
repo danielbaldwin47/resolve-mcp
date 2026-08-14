@@ -152,9 +152,9 @@ def separate_stems(
     """Start a separation job. Returns the job record, not the stems.
 
     ``split_wind`` adds the third pass over ``other``. It is a job param but not a stems-key
-    param, so it stays in one stems directory rather than separating the same audio twice —
-    but a directory missing the pass this run wants is partial, and partial is redone whole,
-    so turning it on for audio already separated re-runs the earlier passes too.
+    param, so it stays in one stems directory rather than separating the same audio twice, and
+    turning it on for audio already separated runs that pass alone against the stems on disk
+    (#192).
 
     ``detach`` moves the separation into a process of its own once the audio exists, so a
     half-hour pass survives this process exiting (G4). The acquisition stays here: it drives
@@ -883,6 +883,7 @@ def multi_pass(
                     refresh=refresh,
                     runner=runner,
                     config=config,
+                    reuse=reuse,
                 )
 
     progress(COLLECTING, "collecting the stems")
@@ -939,40 +940,59 @@ def _passes(
     refresh: Callable[[], None],
     runner: separator.Runner | None,
     config: Config,
+    reuse: bool = True,
 ) -> _Sets:
     """The two passes, and the third when it is asked for — run with the claim already held.
 
-    Every reading of the bar refreshes that claim, so the ceiling that reads a claim as
+    Only the passes this directory is actually missing are run (#192). The wind flag is not
+    part of the stems key, so turning it on lands in the directory the first two passes already
+    filled, and treating that as partial-so-redo-it-whole spent the better part of an hour of
+    GPU rewriting two byte-identical answers to add a third. What a pass costs is the reason
+    the flag is opt-in at all; paying for the other two as well was the same mistake twice.
+
+    Every reading of the bar refreshes the claim, so the ceiling that reads a claim as
     abandoned measures how long it has been since anybody was working — not how long this
     separation has run. A full set can take the better part of an hour.
     """
     beat = _keeping_the_claim(progress, refresh)
-    stems = separator.separate(
-        audio["path"],
-        mix_dir,
-        config.stem_model,
-        FOUR_STEMS,
-        progress=_pass(beat, ACQUIRE_CEILING, PASS_ONE_CEILING, "separating four stems"),
-        runner=runner,
-        config=config,
-    )
-    beat(PASS_ONE_CEILING, "decomposing the drum stem")
-    drums = separator.separate(
-        stems[DRUM_SOURCE],
-        drums_dir,
-        config.drum_model,
-        DRUM_STEMS,
-        progress=_pass(
-            beat,
-            PASS_ONE_CEILING,
-            WIND_FLOOR if split_wind else SEPARATED,
-            "decomposing the drums",
-        ),
-        runner=runner,
-        config=config,
-    )
+    done = _complete(mix_dir, drums_dir, other_dir if split_wind else None) if reuse else _Done()
+    if done.mix:
+        log.info("Reusing the four stems already at %s", mix_dir)
+        stems = separator.collect(mix_dir)
+    else:
+        stems = separator.separate(
+            audio["path"],
+            mix_dir,
+            config.stem_model,
+            FOUR_STEMS,
+            progress=_pass(beat, ACQUIRE_CEILING, PASS_ONE_CEILING, "separating four stems"),
+            runner=runner,
+            config=config,
+        )
+    if done.drums:
+        log.info("Reusing the drum stems already at %s", drums_dir)
+        drums = separator.collect(drums_dir)
+    else:
+        beat(PASS_ONE_CEILING, "decomposing the drum stem")
+        drums = separator.separate(
+            stems[DRUM_SOURCE],
+            drums_dir,
+            config.drum_model,
+            DRUM_STEMS,
+            progress=_pass(
+                beat,
+                PASS_ONE_CEILING,
+                WIND_FLOOR if split_wind else SEPARATED,
+                "decomposing the drums",
+            ),
+            runner=runner,
+            config=config,
+        )
     other: dict[str, Path] = {}
-    if split_wind:
+    if split_wind and done.other:
+        log.info("Reusing the wind split already at %s", other_dir)
+        other = separator.collect(other_dir)
+    elif split_wind:
         beat(WIND_FLOOR, "splitting the winds out of the other stem")
         other = separator.separate(
             stems[OTHER_SOURCE],
@@ -1003,17 +1023,44 @@ def _waiting_for(progress: Progress) -> Waiting:
     return report
 
 
-def _already_separated(mix_dir: Path, drums_dir: Path, other_dir: Path | None = None) -> bool:
-    """Every pass this run was asked for is on disk in full — a partial run is worth redoing.
+class _Done(NamedTuple):
+    """Which passes are already on disk in full. Nothing is, until it has been looked for."""
 
-    ``other_dir`` is ``None`` when the third pass is off, and then a two-pass directory is
-    complete rather than partial. The flag is not part of the stems key, so both shapes share
-    a directory: what completeness means has to come from what was asked for, or a job with
-    the pass off would rerun everything to fill a directory it does not want.
+    mix: bool = False
+    drums: bool = False
+    other: bool = False
+
+
+def _complete(mix_dir: Path, drums_dir: Path, other_dir: Path | None) -> _Done:
+    """Read each pass's directory for the stems that pass is supposed to have left there.
+
+    A missing first pass makes the other two unreusable whatever is in their directories: both
+    are cut from files the first pass wrote, so a mix that has to run again would leave one
+    separation's drums sitting beside another's under a name that promises they came from the
+    same run. The dependency only runs that way — the drum pass and the wind pass never read
+    each other — so either can be the one thing a directory owes.
+
+    ``other_dir`` is ``None`` when the third pass is off, and then nothing is asked about it:
+    the flag is not part of the stems key, so a two-pass and a three-pass run share a
+    directory, and what completeness means has to come from what this run asked for.
     """
-    if separator.missing_from(mix_dir, FOUR_STEMS) or separator.missing_from(drums_dir, DRUM_STEMS):
-        return False
-    return other_dir is None or not separator.missing_from(other_dir, WIND_STEMS)
+    if separator.missing_from(mix_dir, FOUR_STEMS):
+        return _Done()
+    return _Done(
+        mix=True,
+        drums=not separator.missing_from(drums_dir, DRUM_STEMS),
+        other=other_dir is not None and not separator.missing_from(other_dir, WIND_STEMS),
+    )
+
+
+def _already_separated(mix_dir: Path, drums_dir: Path, other_dir: Path | None = None) -> bool:
+    """Nothing is owed at all: every pass this run was asked for is on disk in full.
+
+    The question the claim is taken on. A directory that owes one pass is not this, and is not
+    redone whole either — ``_passes`` runs the passes it is missing (#192).
+    """
+    done = _complete(mix_dir, drums_dir, other_dir)
+    return done.mix and done.drums and (other_dir is None or done.other)
 
 
 def _keeping_the_claim(progress: Progress, refresh: Callable[[], None]) -> Progress:

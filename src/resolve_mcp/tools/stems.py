@@ -36,7 +36,7 @@ def separate_stems(
     back near-silent; it is not a piano stem). Ask for it when a horn or reed is what you
     need to hear apart from the piano, and leave it off otherwise: on a band with no piano
     "other" is already the winds, and the pass costs time to recover nothing. Turning it on
-    for audio already separated re-runs the earlier passes too.
+    for audio already separated costs that one pass and reuses the stems on disk.
 
     The separation runs in a process of its own and keeps running if this server exits, so a
     half-hour pass on a full set is not lost with the session that started it; get_job reads
