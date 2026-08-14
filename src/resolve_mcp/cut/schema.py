@@ -193,7 +193,9 @@ project, named, and the error says so."""
 _RULES: Final = """\
 ## 7. Validation
 
-12 hard errors (E1-E12) block a build; 3 warnings (W1, W2, W8) never do. W3-W7 are
+12 hard errors (E1-E12) block a build; 4 warnings (W1, W2, W8, W9) never do. W9 is the
+one that says a rule *could not run*: Resolve reported no media bounds for that clip, so
+the range was never checked against them. W3-W7 are
 `virtual_transcript`'s and describe the same cut file — one document, one numbering.
 The list is identical in the `validate_cut` dry run and `build_timeline`'s pre-flight,
 and a failing file aborts before Resolve is touched. Every finding is

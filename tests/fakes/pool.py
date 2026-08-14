@@ -74,6 +74,19 @@ class FakeMediaPool:
         self.take_quirks: dict[str, Any] = {}
         self.append_calls: list[list[dict[str, Any]]] = []
         self.append_result: list[FakeTimelineItem] | None = None
+        # ``startFrame`` read as an offset from the clip's own ``Start`` rather than as an
+        # absolute media frame. Which reading Resolve takes is unmeasured: every clip the
+        # pillar has built from reports ``Start = 0``, where the two coincide, so the
+        # difference has never shown. The build sends absolute frames — the space ``Start``
+        # and ``End`` report and E5 checks against — and this is the other reading, which
+        # places every shot as far past its in point as the media's start stamp is from
+        # zero while reporting a perfectly ordinary success.
+        self.rebases_source_frames = False
+        # ``GetLeftOffset`` answering with how far into the media the shot begins rather
+        # than the absolute frame it plays. The two are the same number on a clip that
+        # starts at 0, which is all ADR 0005 could measure, so both readings are modelled
+        # and the source read-back has to survive either.
+        self.reports_relative_left_offset = False
         self.appends_share_one_comp = False
         self.appends_land_nowhere = False
         self.created_timelines: list[str] = []
@@ -401,6 +414,16 @@ class FakeMediaPool:
         clip: FakeMediaPoolItem = info["mediaPoolItem"]
         source_start = int(info.get("startFrame", 0))
         duration = _appended_duration(clip, source_start, info.get("endFrame"))
+        if self.rebases_source_frames:
+            # The span is still the one that was asked for; only where it begins moves,
+            # which is what makes the drift invisible to a check that reads durations.
+            source_start += _clip_start(clip)
+        # Which frame ``GetLeftOffset`` answers with is the other half of the same unknown:
+        # how far into the media the shot begins, or the absolute frame it plays. ADR 0005
+        # measured it on media starting at 0, where the two readings are the same number.
+        left_offset = None
+        if self.reports_relative_left_offset:
+            left_offset = source_start - _clip_start(clip)
         media_type = info.get("mediaType")
         track_type = "audio" if media_type == AUDIO_TYPE else "video"
         index = int(info.get("trackIndex", 1))
@@ -417,6 +440,7 @@ class FakeMediaPool:
             record,
             duration,
             source_start=source_start,
+            left_offset=left_offset,
             media_item=clip,
             comps=comps,
             owner=self._owner,
@@ -458,6 +482,18 @@ class FakeMediaPool:
         for sub in folder.subfolders:
             found.extend(self._walk(sub))
         return found
+
+
+def _clip_start(clip: FakeMediaPoolItem) -> int:
+    """The first frame of the clip's own media — zero on everything without a start stamp.
+
+    Resolve answers with a string, and with an empty one on media that carries no stamp at
+    all (audio, #46), so anything that is not a number reads as no stamp.
+    """
+    reported = clip.GetClipProperty("Start")
+    if not isinstance(reported, str) or not reported.isdigit():
+        return 0
+    return int(reported)
 
 
 def media_pool(bins: dict[str, list[FakeMediaPoolItem]] | None = None) -> FakeMediaPool:

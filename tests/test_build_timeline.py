@@ -1088,3 +1088,196 @@ def test_a_missing_video_track_is_created_before_the_append(
     assert result["ok"] is True
     assert len(placements(built(resolve, "sunset-set v1"))) == 3
     assert placements(built(resolve, "sunset-set v1"), "audio")
+
+
+# --- the dormant risks: assumptions the build now checks instead of holding (#186) ---------
+
+
+def a_stamped_pool() -> Any:
+    """A pool whose picture clip counts its own frames from an hour of timecode.
+
+    Every clip the pillar has built from reports ``Start = 0``, which is exactly why the
+    two readings of ``startFrame`` — absolute media frame, or offset from the clip's own
+    start — have never been told apart. A differently conformed project is where they part.
+    """
+    return a_pool(
+        gtr_close=FakeMediaPoolItem(
+            "C0012.mp4",
+            file_path="D:/media/C0012.mp4",
+            properties={"Frames": "20000", "Start": "86400", "End": "106399"},
+        )
+    )
+
+
+def a_stamped_doc() -> dict[str, Any]:
+    """One shot, cut from frames the start-stamped clip really holds."""
+    doc = valid_doc()
+    doc["segments"] = [{"id": "s001", "source": "gtr_close", "in": 87400, "out": 87500}]
+    doc["audio"]["out"] = 100
+    return doc
+
+
+def test_a_start_stamped_clip_builds_when_resolve_reads_its_frames_as_the_cut_does(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The check must not convict the ordinary case: same frames in, same frames back."""
+    resolve = empty_project(a_stamped_pool())
+    attach(resolve)
+
+    result = build_timeline(a_cut(tmp_path, a_stamped_doc()))
+
+    assert result["ok"] is True
+    items = built(resolve, "sunset-set v1").GetItemListInTrack("video", 1) or []
+    assert [item.GetLeftOffset() for item in items] == [87400]
+
+
+def test_a_pool_that_rebases_source_frames_off_the_clip_start_fails_the_build(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Risk 1: the cut file's frames are absolute, and the append is not assumed to agree.
+
+    Nothing about the placement gives it away — the shot lands on the record frame the cut
+    puts it on, for exactly the duration it asked for, an hour of source footage away.
+    """
+    pool = a_stamped_pool()
+    pool.rebases_source_frames = True
+    resolve = empty_project(pool)
+    attach(resolve)
+
+    result = build_timeline(a_cut(tmp_path, a_stamped_doc()))
+
+    assert result["ok"] is False
+    assert result["error"]["code"] == "build_failed"
+    assert placements(built(resolve, "sunset-set v1")) == [("C0012.mp4", 0, 100)]
+    drifted = result["error"]["detail"]["wrong_source"]
+    assert [finding["id"] for finding in drifted] == ["s001"]
+    assert drifted[0]["source_frame"] == 87400
+    assert drifted[0]["landed_on"] == 87400 + 86400
+
+
+def test_a_relative_left_offset_on_a_start_stamped_clip_is_not_a_false_alarm(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The read-back must survive the other reading of ``GetLeftOffset`` too.
+
+    ADR 0005 measured the offset against ``GetSourceStartFrame`` on media starting at 0,
+    where "how far into the media" and "which frame it plays" are the same number. A start
+    stamp separates them, and ``source_bounds`` is what keeps the comparison honest: the
+    two getters then disagree by the whole stamp, well past the measured slip, so it falls
+    back to the absolute one — the space the cut file's ranges are written in.
+    """
+    pool = a_stamped_pool()
+    pool.reports_relative_left_offset = True
+    resolve = empty_project(pool)
+    attach(resolve)
+
+    result = build_timeline(a_cut(tmp_path, a_stamped_doc()))
+
+    assert result["ok"] is True
+    items = built(resolve, "sunset-set v1").GetItemListInTrack("video", 1) or []
+    assert [item.GetLeftOffset() for item in items] == [1000]
+
+
+def test_a_rebase_is_caught_whichever_frame_the_left_offset_reports(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Both unknowns at once: a rebasing append read through a relative offset still fails."""
+    pool = a_stamped_pool()
+    pool.rebases_source_frames = True
+    pool.reports_relative_left_offset = True
+    attach(empty_project(pool))
+
+    result = build_timeline(a_cut(tmp_path, a_stamped_doc()))
+
+    assert result["ok"] is False
+    drifted = result["error"]["detail"]["wrong_source"]
+    assert [finding["id"] for finding in drifted] == ["s001"]
+    assert drifted[0]["landed_on"] == 87400 + 86400
+
+
+def test_an_append_that_hands_back_fewer_items_than_it_was_given_fails_the_build(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Risk 3: one call places the whole cut, so a short answer is shots that never landed.
+
+    Before the count, the read-back caught it a step later and blamed placement — a failure
+    telling the agent to check its ranges for a cut whose ranges were never the problem.
+    """
+    pool = a_pool()
+    pool.append_result = [FakeTimelineItem("C0012.mp4", 0, 100)]
+    attach(empty_project(pool))
+
+    result = build_timeline(a_cut(tmp_path, valid_doc()))
+
+    assert result["ok"] is False
+    assert result["error"]["code"] == "build_failed"
+    assert result["error"]["detail"]["clips"] == 4
+    assert result["error"]["detail"]["appended"] == 1
+
+
+def test_an_append_that_spreads_a_clip_over_more_items_than_it_was_given_builds(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """More items back is not evidence of a drop: Resolve spreads a multi-channel mix."""
+    pool = a_pool()
+    pool.append_result = [
+        FakeTimelineItem("C0012.mp4", 0, 100, source_start=1000),
+        FakeTimelineItem("C0012.mp4", 0, 100, source_start=1000),
+    ]
+    resolve = empty_project(pool)
+    attach(resolve)
+
+    doc = valid_doc()
+    del doc["audio"]
+    doc["segments"] = [{"id": "s001", "source": "gtr_close", "in": 1000, "out": 1100}]
+    result = build_timeline(a_cut(tmp_path, doc))
+
+    assert result["ok"] is True
+    assert len(placements(built(resolve, "sunset-set v1"))) == 2
+
+
+def test_a_shot_that_landed_on_the_wrong_source_frames_fails_the_build(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Risk 4: the frames a shot plays are read off the track, not off the build's own books.
+
+    The item Resolve hands back is placed exactly where the cut file puts it and plays
+    something else entirely — a return value that agrees with the plan on every axis a
+    build was checking.
+    """
+    pool = a_pool()
+    pool.append_result = [FakeTimelineItem("C0012.mp4", 0, 100, source_start=0)]
+    attach(empty_project(pool))
+
+    doc = valid_doc()
+    del doc["audio"]
+    doc["segments"] = [{"id": "s001", "source": "gtr_close", "in": 1000, "out": 1100}]
+    result = build_timeline(a_cut(tmp_path, doc))
+
+    assert result["ok"] is False
+    assert result["error"]["code"] == "build_failed"
+    drifted = result["error"]["detail"]["wrong_source"]
+    assert [finding["id"] for finding in drifted] == ["s001"]
+    assert drifted[0]["source_frame"] == 1000
+    assert drifted[0]["landed_on"] == 0
+
+
+def test_a_still_is_exempt_from_the_source_frame_read_back(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """A still's left offset is the timeline's clock, not a source frame (ADR 0005)."""
+    still = FakeMediaPoolItem(
+        "backdrop.png",
+        file_path="D:/media/backdrop.png",
+        properties={"Type": "Still", "FPS": "", "Frames": "1", "Start": "27", "End": "27"},
+    )
+    doc = valid_doc()
+    doc["sources"]["keys_wide"] = {"clip": "backdrop.png", "bin": "Angles"}
+    pool = a_pool(keys_wide=still)
+    # Only the still carries a start stamp, so it is the only shot the rebase moves.
+    pool.rebases_source_frames = True
+    attach(empty_project(pool))
+
+    result = build_timeline(a_cut(tmp_path, doc))
+
+    assert result["ok"] is True
