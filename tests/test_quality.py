@@ -291,6 +291,25 @@ def test_a_sampling_rate_this_scan_does_not_run_at_is_refused(
     assert raised.value.detail["requested"] == 90.0
 
 
+def test_a_floor_switched_off_is_a_rule_nobody_is_enforcing(
+    attach: Attach, fixture_video: Path
+) -> None:
+    """A style rule that cares only about clipping sets the other floors to zero.
+
+    The severity a window is ranked by is a distance from each floor, and a floor of zero has
+    no distance from it — the arithmetic would divide by it and end the scan on its first
+    sample rather than answering the question that was asked.
+    """
+    attach(_studio_holding(fixture_video))
+
+    record = wait_for(_scan([], _sequence(2, 2, 2), min_sharpness=0.0, min_stability=0.0)["job_id"])
+
+    assert record.state == "completed", record.error
+    assert record.result is not None
+    assert record.result["windows"] == 0
+    assert record.result["unusable_samples"] == 0
+
+
 def test_a_decode_that_wrote_nothing_is_a_failure_not_a_clean_scan(
     attach: Attach, fixture_video: Path
 ) -> None:

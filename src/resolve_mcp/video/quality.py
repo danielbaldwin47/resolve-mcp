@@ -37,8 +37,9 @@ from ..jobs.runner import JobOutput, Progress, start_job
 from ..logging_config import get_logger
 from ..naming import slug
 from ..resolve.connection import ResolveConnection
-from ..timing import IN_POINT, SECONDS_PRECISION, dual_time, frames_from_seconds, to_frames
+from ..timing import SECONDS_PRECISION, dual_time
 from . import ffmpeg
+from .sampled import readable_range, runs, sample_frame, sample_step
 from .source import Source, locate
 
 if TYPE_CHECKING:  # pragma: no cover - the worker imports this when it runs
@@ -68,11 +69,10 @@ corpus (0.05 for the two 0-to-1 readings, 0.005 for clipping, which lives near z
 
 Percentiles rather than extremes on both sides: the tails of a 3600-sample scan are whip pans
 and strobe frames, and a floor set on those is a floor set on the estimator's worst moment.
-What the rule buys, measured: no sample of the corpus is vetoed on sharpness or clipping and
-1.1% on stability, while a one-sigma defocus is caught in full, a stop-and-a-half of
-overexposure 94% of the time and a 1%-of-frame wobble 99.9%. The whole sweep either side —
-including what each candidate floor would have let past — is in
-`gauntlet/recon/image_quality_calib.json`, read in
+What the rule buys, measured: not one sample of the 3600 is vetoed by any of the three, while
+a one-sigma defocus is caught in full, a stop-and-a-half of overexposure 94% of the time and a
+1%-of-frame wobble 99.9%. The whole sweep either side — including what each candidate floor
+would have let past — is in `gauntlet/recon/image_quality_calib.json`, read in
 `docs/reference/image-quality-calibration.md`."""
 
 MAX_RANGE_SECONDS = 900.0
@@ -119,7 +119,8 @@ def analyze_quality(
     source = locate(connection, clip, bin, QualityScanError)
     rate = _readable_rate(sample_fps)
     floors = _readable_floors(min_sharpness, max_clipped, min_stability)
-    first, last = _readable_range(start, end, source, rate)
+    first, last = readable_range(start, end, source, MAX_RANGE_SECONDS, "a quality scan")
+    _readable_length(first, last, source, rate)
 
     params = {
         "clip": clip,
@@ -190,7 +191,12 @@ def scan_quality(
         raw.unlink(missing_ok=True)
 
     progress(0.9, "assembling the unusable windows")
-    samples = _samples(scan.readings, floors, first, rate, source)
+    # The verdicts are taken here, where ``picture`` is already imported, rather than inside
+    # each helper: numpy and scipy load with that module, and the worker is the one place in
+    # this file that has paid for them.
+    verdicts = [picture.failures(one, floors) for one in scan.readings]
+    whole = picture.summarize(list(scan.readings), floors)
+    samples = _samples(scan.readings, verdicts, floors, first, rate, source)
     windows = _windows(samples, first, last, rate, source)
     target = config.analysis_dir / f"{stem}.quality.json"
     catalog = {
@@ -225,20 +231,17 @@ def scan_quality(
         len(windows),
         target,
     )
-    return JobOutput(_gist(catalog, target, scan.readings, floors, samples, windows), (target,))
+    return JobOutput(_gist(catalog, target, whole, samples, windows), (target,))
 
 
 def _gist(
     catalog: dict[str, Any],
     target: Path,
-    readings: tuple[Reading, ...],
-    floors: Floors,
+    whole: dict[str, Any],
     samples: list[dict[str, Any]],
     windows: list[dict[str, Any]],
 ) -> dict[str, Any]:
     """What comes back inline: the windows to avoid, and how the range reads overall."""
-    from . import picture  # noqa: PLC0415 - the same lazy import the worker takes
-
     unusable = [one for one in samples if one["reasons"]]
     ranked = sorted(windows, key=lambda one: float(one["severity"]), reverse=True)
     worst = min(samples, key=_severity) if samples else None
@@ -253,7 +256,7 @@ def _gist(
         "unusable_samples": len(unusable),
         "unusable_fraction": _rounded(len(unusable) / len(samples)) if samples else 0.0,
         # The whole range as one block — what a builder ranking two angles reads first.
-        "quality": picture.summarize(list(readings), floors),
+        "quality": whole,
         "windows": len(windows),
         "worst_windows": ranked[:INLINE_WINDOWS],
         "worst_sample": worst,
@@ -262,6 +265,7 @@ def _gist(
 
 def _samples(
     readings: tuple[Reading, ...],
+    verdicts: list[tuple[str, ...]],
     floors: Floors,
     first: int,
     rate: float,
@@ -276,12 +280,10 @@ def _samples(
     other clocks — a scan of a render of a cut is joined onto that cut's own shots — and a
     joiner should not have to reach into a dual-time block to find the number it matches on.
     """
-    from . import picture  # noqa: PLC0415 - the same lazy import the worker takes
-
     rows: list[dict[str, Any]] = []
     for index, reading in enumerate(readings):
-        frame = _sample_frame(index, first, rate, source)
-        missed = picture.failures(reading, floors)
+        frame = sample_frame(index, first, rate, source)
+        missed = verdicts[index]
         rows.append(
             {
                 "time": dual_time(frame, source.fps),
@@ -303,18 +305,21 @@ def _samples(
     return rows
 
 
-def _sample_frame(index: int, first: int, rate: float, source: Source) -> int:
-    return first + frames_from_seconds(index / rate, source.fps or 1.0, IN_POINT)
-
-
 def _missed_by(reading: Reading, floors: Floors) -> float:
     """How badly the worst-missed floor was missed, 0 to 1 — what ranks one window over another.
 
     Normalised per floor so the three are comparable: a sharpness of zero against a floor of
     0.3 and a frame entirely blown out both read as 1.0, because both are as unusable as that
     reading gets.
+
+    Every floor is skipped at the value that switches it off, and a floor of zero switches a
+    veto off — which is exactly how a style rule that cares only about clipping is written.
+    Dividing by it would end the scan on its first sample, and a normalised distance from a
+    rule nobody is enforcing is not a number anyway.
     """
-    misses = [max(0.0, (floors.sharpness - reading.sharpness) / floors.sharpness)]
+    misses = [0.0]
+    if floors.sharpness > 0.0:
+        misses.append(max(0.0, (floors.sharpness - reading.sharpness) / floors.sharpness))
     if floors.clipped < 1.0:
         misses.append(max(0.0, (reading.clipped - floors.clipped) / (1.0 - floors.clipped)))
     if reading.stability is not None and floors.stability > 0.0:
@@ -344,13 +349,13 @@ def _windows(
     whether the shot is soft, blown or shaky, because those are three different fixes and only
     one of them is 'use another angle'.
     """
-    runs = _runs([bool(one["reasons"]) for one in samples])
-    step = max(1, frames_from_seconds(1.0 / rate, source.fps or 1.0, IN_POINT))
+    found = runs([bool(one["reasons"]) for one in samples], GAP_SAMPLES)
+    step = sample_step(rate, source)
     windows: list[dict[str, Any]] = []
-    for begin, stop in runs:
+    for begin, stop in found:
         inside = samples[begin:stop]
-        start_frame = max(first, min(last, _sample_frame(begin, first, rate, source)))
-        end_frame = min(last, _sample_frame(stop - 1, first, rate, source) + step)
+        start_frame = max(first, min(last, sample_frame(begin, first, rate, source)))
+        end_frame = min(last, sample_frame(stop - 1, first, rate, source) + step)
         if end_frame <= start_frame:
             continue
         reasons = sorted({name for one in inside for name in one["reasons"]})
@@ -363,8 +368,10 @@ def _windows(
                 "samples": stop - begin,
                 "reasons": reasons,
                 "severity": _rounded(max(float(one["severity"]) for one in inside)),
-                "worst_sharpness": _rounded(min(float(one["sharpness"]) for one in inside)),
-                "worst_clipped": _rounded(max(float(one["clipped"]) for one in inside)),
+                # Carried as the readings themselves, not re-rounded: a window's worst
+                # sharpness and the sample it came from have to be the same number.
+                "worst_sharpness": min(float(one["sharpness"]) for one in inside),
+                "worst_clipped": max(float(one["clipped"]) for one in inside),
                 "worst_stability": _worst_stability(inside),
             }
         )
@@ -373,26 +380,15 @@ def _windows(
 
 def _worst_stability(samples: list[dict[str, Any]]) -> float | None:
     measured = [float(one["stability"]) for one in samples if one["stability"] is not None]
-    return _rounded(min(measured)) if measured else None
-
-
-def _runs(unusable: list[bool]) -> list[tuple[int, int]]:
-    """Index runs of ``True``, merging any two separated by at most ``GAP_SAMPLES`` good ones.
-
-    Half-open, so a run is ``[begin, stop)`` and a lone unusable sample is one sample long.
-    """
-    runs: list[tuple[int, int]] = []
-    for index, flag in enumerate(unusable):
-        if not flag:
-            continue
-        if runs and index - runs[-1][1] <= GAP_SAMPLES:
-            runs[-1] = (runs[-1][0], index + 1)
-        else:
-            runs.append((index, index + 1))
-    return runs
+    return min(measured) if measured else None
 
 
 def _rounded(value: float) -> float:
+    """Seconds and fractions of a range, at the precision every time in this repo carries.
+
+    Never the readings themselves — those arrive from ``picture`` already rounded, and a
+    second rounding here would leave the gist and the curve disagreeing in the last digit.
+    """
     return round(value, SECONDS_PRECISION)
 
 
@@ -436,63 +432,32 @@ def _readable_floors(sharpness: float, clipped: float, stability: float) -> Floo
     return Floors(sharpness=float(sharpness), clipped=float(clipped), stability=float(stability))
 
 
-def _readable_range(start: Any, end: Any, source: Source, rate: float) -> tuple[int, int]:
-    """The range to scan as this clip's own frame numbers, half-open and inside its media."""
-    if not source.fps:
-        raise InvalidRequestError(
-            cause=(
-                f"Resolve reports no frame rate for {source.name!r}, so a range cannot be "
-                "sampled."
-            ),
-            fix="inspect_clip shows what Resolve knows about the clip; a still has no timeline.",
-            detail={"clip": source.name, "file_path": source.path},
-        )
+def _readable_length(first: int, last: int, source: Source, rate: float) -> None:
+    """Refuse a range this scan cannot hold in memory at once.
 
-    first = to_frames(start, source.fps, field="start")
-    first = source.start if first is None else first
-    last = to_frames(end, source.fps, field="end")
-    if last is None:
-        last = source.out
-    if last is None:
-        raise InvalidRequestError(
-            cause=f"Resolve reports no end for {source.name!r}, so the range has no out point.",
-            fix="Pass end explicitly — inspect_clip reports what Resolve does know about it.",
-            detail={"clip": source.name, "bounds": source.bounds},
-        )
-
-    if not source.holds(first) or first >= last:
-        raise source.outside(first)
-    if source.out is not None and last > source.out:
-        raise source.outside(last)
-
-    seconds = (last - first) / source.fps
-    if seconds > MAX_RANGE_SECONDS:
-        raise InvalidRequestError(
-            cause=f"The range asked for is {seconds:.0f}s of footage.",
-            fix=(
-                f"Scan at most {MAX_RANGE_SECONDS:.0f}s at a time — a quality scan answers 'is "
-                "this angle usable through this song', so pass the song's range."
-            ),
-            detail={"clip": source.name, "seconds": round(seconds, 1)},
-        )
-    if seconds * rate > MAX_SAMPLES:
-        raise InvalidRequestError(
-            cause=(
-                f"{seconds:.0f}s at {rate:g} samples a second is "
-                f"{round(seconds * rate)} frames to hold at once."
-            ),
-            fix=(
-                f"Scan at most {MAX_SAMPLES} samples in one job — shorten the range, or lower "
-                f"sample_fps (the default is {DEFAULT_SAMPLE_FPS}). The whole sampled range is "
-                "measured in memory at once, so this is a ceiling on the decode rather than on "
-                "the answer."
-            ),
-            detail={
-                "clip": source.name,
-                "seconds": round(seconds, 1),
-                "sample_fps": rate,
-                "samples": round(seconds * rate),
-                "maximum": MAX_SAMPLES,
-            },
-        )
-    return int(first), int(last)
+    The occlusion scan needs no such check: it samples once a second onto a grid a sixth the
+    area, so an hour of it is megabytes. This one samples several times a second onto a grid
+    wide enough to see focus, and the whole sampled range is read and measured at once — so
+    the ceiling is on the *decode*, not on the answer, and it is a separate refusal from the
+    range length because it is a different thing going wrong.
+    """
+    seconds = (last - first) / (source.fps or 1.0)
+    if seconds * rate <= MAX_SAMPLES:
+        return
+    raise InvalidRequestError(
+        cause=(
+            f"{seconds:.0f}s at {rate:g} samples a second is "
+            f"{round(seconds * rate)} frames to hold at once."
+        ),
+        fix=(
+            f"Scan at most {MAX_SAMPLES} samples in one job — shorten the range, or lower "
+            f"sample_fps (the default is {DEFAULT_SAMPLE_FPS})."
+        ),
+        detail={
+            "clip": source.name,
+            "seconds": round(seconds, 1),
+            "sample_fps": rate,
+            "samples": round(seconds * rate),
+            "maximum": MAX_SAMPLES,
+        },
+    )

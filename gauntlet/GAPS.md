@@ -228,11 +228,21 @@ Round 1 critic, verbatim needs; each is server measurement work:
    as movement and dragged six samples of a locked-off shot to zero — a delivered shot
    the report called shaky. The guard is measured now too
    (`recon/quality_cut_guard.json`): in-shot pairs correlate at 0.29 or better at the
-   1st percentile, crossing pairs cluster below 0.03, and the floor sits in the gap at
-   0.05. That took the corpus's below-floor stability samples from 40 to 0 and the
-   Taurus People cut from one shot called shaky to none of 78 — and it retired two
-   workarounds (a median-instead-of-worst aggregate, a minimum window length) that had
-   been papering over it.
+   1st percentile, while the pairs a cut falls inside run down to nothing — and the
+   sweep is flat from 0.03 to 0.12, so a floor anywhere in that gap catches every one
+   the sweep can catch and no more. It sits at 0.05. (The receipt labels a pair as
+   "across a cut" with a sample of slack either side, so about two in three of that
+   set are really in-shot neighbours — which is why its median peak is high and why
+   34% caught is the ceiling, not a miss.)
+
+   What the fix was worth, both halves reproducible: re-running the calibration with
+   the old guard (`--peak-floor 0.01 --cut-shift 0.10`, receipt
+   `recon/image_quality_calib_loose_guard.json`) puts 40 of 3561 corpus samples under
+   the stability floor with a lowest sample of 0.000; with the guard as shipped it is
+   0 of 3553 with a lowest of 0.844, and the Taurus People cut goes from one shot
+   called shaky to none of 78. It also retired two workarounds — a
+   median-instead-of-worst aggregate and a minimum window length — that had been
+   papering over it.
 
    Still open from this item: nothing has measured the *raw angles* at scale — one
    2-minute span, clean — so how often a source fails these floors is unknown, and

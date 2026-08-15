@@ -30,6 +30,7 @@ playing rather than the count-in.
 | --- | --- | --- |
 | defocus | gaussian blur on the grid | σ=1, about six pixels at the 4K master |
 | blown | luma gain before clipping | ×1.6, a stop and a half |
+| dark | luma gain down | ×0.35, a stop and a half the other way |
 | shake | every other frame translated | 3 px, ~1% of frame width |
 
 Degrading the corpus rather than composing a fixture is the point. The question is
@@ -43,10 +44,22 @@ synthetic pair could be separated by a measurement that says nothing about a con
 | sharpness | min 0.582, p05 0.647, median 0.705, max 0.810 | defocus σ=1: 0.157–0.197 |
 | clipped | max 0.0002 (two pixels in ten thousand) | blown ×1.6: median 0.029 |
 | stability | min 0.844, p05 0.938, median 1.000 | shake 3 px: median 0.605 |
+| exposure | min 0.066, median 0.093, max 0.162 | dark ×0.35: 0.023–0.057 |
 
-Every reading separates completely. Nothing in the corpus overlaps any of the three
-degraded distributions, and the gaps are wide: the softest delivered frame is three
-times sharper than the sharpest defocused one.
+All four readings separate completely. Nothing in the corpus overlaps any degraded
+distribution, and the gaps are wide: the softest delivered frame is three times
+sharper than the sharpest defocused one, and the darkest delivered frame is brighter
+than the brightest underexposed one.
+
+**Exposure has no floor, and that is the finding, not an omission.** This corpus sits
+at a mean luma of 0.093 with 30% of the average frame already crushed to black — a
+dark club, lit from the front, shot as intended. There is no level a shot has to
+reach to be usable here, because what "correctly exposed" means is a property of the
+room. The reading discriminates (a stop and a half down is unmistakable, and nothing
+delivered comes close to it), so it is worth reporting and worth ranking takes on;
+what it is not is a veto anyone can set from outside the room. Clipping is the
+objective half of the same question — a burned-out highlight is gone whatever the
+lighting intended — and that is the half that gets a floor.
 
 ## The rule, and the floors it gives
 
@@ -90,20 +103,34 @@ them by whether a detected cut falls inside the pair:
 | inside a shot | 14397 | 0.287 | 0.397 | 0.583 |
 | across a cut | (601 labelled, ~1 in 3 truly crossing) | 0.000 | 0.017 | — |
 
-The two are cleanly separated and the sweep between them is flat: a peak floor of
-0.03 catches every crossing pair, 0.12 catches no more, and nothing at all lies in
-between. `PEAK_FLOOR` sits in the middle of that gap at **0.05**, refusing 0.6% of
-in-shot pairs — which are flat frames the contrast guard would refuse anyway.
-Separately, no in-shot pair anywhere in the corpus moves more than 3.1% of frame
-width between samples, so `CUT_SHIFT` came down from 0.10 to **0.04**.
+Read the second row carefully: a pair is labelled "across a cut" when a detected cut
+falls within a sample of it, so roughly two of every three in that set are really
+in-shot neighbours of a cut rather than pairs that straddle one (601 labelled against
+~200 detected cuts). That is why its median peak is high, and why 34% is the *most*
+any floor catches rather than a shortfall.
 
-What that fix was worth, measured the same way on the same footage:
+What matters is that the two populations are separated and the sweep between them is
+flat: a peak floor of 0.03 catches every crossing pair it is ever going to catch,
+0.12 catches no more, and nothing at all lies in between. `PEAK_FLOOR` sits in the
+middle of that gap at **0.05**, refusing 0.6% of in-shot pairs — which are flat
+frames the contrast guard would refuse anyway. Separately, no in-shot pair anywhere
+in the corpus moves more than 3.1% of frame width between samples, so `CUT_SHIFT`
+came down from 0.10 to **0.04**.
 
-| | before | after |
+What that fix was worth. The "before" column is not a memory: re-run the calibration
+with `--peak-floor 0.01 --cut-shift 0.10` and it reproduces, which is what
+`image_quality_calib_loose_guard.json` beside the main receipt is.
+
+| | loose guard | as shipped |
 | --- | --- | --- |
 | corpus samples under the stability floor | 40 of 3561 (1.1%) | 0 of 3553 |
 | lowest single corpus stability sample | 0.000 | 0.844 |
 | shots of the human's Taurus People cut called shaky | 1 of 78 | 0 of 78 |
+
+(The last row is the one exception — it was measured in the session that found the
+bug, and `quality_shots.json` holds only the fixed run. Regenerating the loose
+version of it would mean shipping a receipt of a state the code is no longer in; the
+first two rows carry the claim.)
 
 The 1.1% was not estimator noise to be smoothed over in the aggregation — it was
 this bug, and two decisions taken to work around it (judging a stretch on its median
@@ -134,9 +161,12 @@ fixed. A stretch is judged on its worst moment, which is what a veto means.
 - **Fine jitter.** Stability is read between samples, so 4 samples a second sees
   sway up to about 2 Hz. A true micro-jitter needs `sample_fps` raised.
 - **Footage that actually failed.** The bad side is degraded good footage, not a
-  take the director rejected for being soft. Nobody keeps those, which is why it was
-  done this way — but it means the readings are calibrated against a *model* of each
-  failure rather than against the real thing.
+  take the director rejected for being soft — the ticket asked for "known-bad
+  reference frames from the corpus" and no such frames exist to point at, because
+  nobody delivers the takes they threw away. So the readings are calibrated against a
+  *model* of each failure. The corpus's own worst samples are named in the receipt
+  (`softest_samples`, with times) as the nearest thing to a real bad reference, and
+  they are all comfortably usable.
 - **Raw angles at scale.** One angle span was scanned, not the card. How often a
   source fails these floors is still unknown, and that is the number that would say
   how much a builder's angle choice is really being constrained (#182 leaves it

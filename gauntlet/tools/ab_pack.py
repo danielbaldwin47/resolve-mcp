@@ -1791,7 +1791,13 @@ def build_label(
         "picture_quality": {
             "sample_hz": QUALITY_RATE,
             "grid": f"{picture.GRID_WIDTH}x{picture.GRID_HEIGHT}",
-            "floors": QUALITY_FLOORS._asdict(),
+            # Spelled the way the server's own catalog spells them, so a critic comparing a
+            # pack against an analyze_quality scan is reading one vocabulary.
+            "floors": {
+                "min_sharpness": QUALITY_FLOORS.sharpness,
+                "max_clipped": QUALITY_FLOORS.clipped,
+                "min_stability": QUALITY_FLOORS.stability,
+            },
             "whole_clip": picture.summarize(picture_track["readings"], QUALITY_FLOORS),
             "unusable_shots": unusable_shots,
         },

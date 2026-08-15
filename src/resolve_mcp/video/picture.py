@@ -199,7 +199,7 @@ def measure(frames: NDArray[np.uint8]) -> Scan:
         if previous is not None:
             moves.append(travel(previous, luma))
         previous = luma
-    scores = stability(moves, frames.shape[2] if frames.ndim == 3 else GRID_WIDTH)
+    scores = stability(moves, int(frames.shape[2]))
     readings = [
         Reading(
             sharpness=frame.sharpness,

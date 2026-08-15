@@ -49,39 +49,39 @@
     "min_stability": [
       {
         "floor": 0.6,
-        "corpus_vetoed": 0.0,
-        "shake_3px": 0.0974,
-        "shake_6px": 1.0
+        "corpus_vetoed": 0.0101,
+        "shake_3px": 0.1025,
+        "shake_6px": 0.9986
       },
       {
         "floor": 0.65,
-        "corpus_vetoed": 0.0,
-        "shake_3px": 0.9327,
-        "shake_6px": 1.0
+        "corpus_vetoed": 0.0112,
+        "shake_3px": 0.936,
+        "shake_6px": 0.9994
       },
       {
         "floor": 0.7,
-        "corpus_vetoed": 0.0,
-        "shake_3px": 0.9947,
-        "shake_6px": 1.0
+        "corpus_vetoed": 0.0112,
+        "shake_3px": 0.9935,
+        "shake_6px": 0.9994
       },
       {
         "floor": 0.75,
-        "corpus_vetoed": 0.0,
-        "shake_3px": 0.9994,
-        "shake_6px": 1.0
+        "corpus_vetoed": 0.0112,
+        "shake_3px": 0.9992,
+        "shake_6px": 0.9994
       },
       {
         "floor": 0.8,
-        "corpus_vetoed": 0.0,
+        "corpus_vetoed": 0.0112,
         "shake_3px": 1.0,
-        "shake_6px": 1.0
+        "shake_6px": 0.9994
       },
       {
         "floor": 0.85,
-        "corpus_vetoed": 0.0006,
+        "corpus_vetoed": 0.0118,
         "shake_3px": 1.0,
-        "shake_6px": 1.0
+        "shake_6px": 0.9994
       }
     ],
     "max_clipped": [
@@ -127,8 +127,8 @@
   "grid": "320x180",
   "sample_fps": 4.0,
   "guards": {
-    "peak_floor": 0.05,
-    "cut_shift": 0.04
+    "peak_floor": 0.01,
+    "cut_shift": 0.1
   },
   "window": "180s from 25% into each song",
   "floors_under_test": {
@@ -147,14 +147,6 @@
       "p95": 0.7685,
       "max": 0.81
     },
-    "exposure": {
-      "n": 3600,
-      "min": 0.0659,
-      "p05": 0.0833,
-      "median": 0.0926,
-      "p95": 0.1504,
-      "max": 0.1617
-    },
     "clipped": {
       "n": 3600,
       "min": 0.0,
@@ -163,17 +155,9 @@
       "p95": 0.0001,
       "max": 0.0002
     },
-    "crushed": {
-      "n": 3600,
-      "min": 0.0677,
-      "p05": 0.1576,
-      "median": 0.3022,
-      "p95": 0.4091,
-      "max": 0.4982
-    },
     "stability": {
-      "n": 3553,
-      "min": 0.8438,
+      "n": 3561,
+      "min": 0.0,
       "p05": 0.9375,
       "median": 1.0,
       "p95": 1.0,
@@ -181,7 +165,7 @@
     },
     "below_sharpness_floor": 0,
     "above_clipped_floor": 0,
-    "below_stability_floor": 0
+    "below_stability_floor": 40
   },
   "known_bad": {
     "blown_gain_1.6": {
@@ -193,14 +177,6 @@
         "p95": 0.755,
         "max": 0.7945
       },
-      "exposure": {
-        "n": 3600,
-        "min": 0.1029,
-        "p05": 0.1295,
-        "median": 0.1446,
-        "p95": 0.2371,
-        "max": 0.2549
-      },
       "clipped": {
         "n": 3600,
         "min": 0.0003,
@@ -209,17 +185,9 @@
         "p95": 0.0375,
         "max": 0.0486
       },
-      "crushed": {
-        "n": 3600,
-        "min": 0.0027,
-        "p05": 0.0082,
-        "median": 0.0153,
-        "p95": 0.0184,
-        "max": 0.0207
-      },
       "stability": {
-        "n": 3553,
-        "min": 0.8438,
+        "n": 3564,
+        "min": 0.0,
         "p05": 0.9375,
         "median": 1.0,
         "p95": 1.0,
@@ -235,14 +203,6 @@
         "p95": 0.7543,
         "max": 0.7938
       },
-      "exposure": {
-        "n": 3600,
-        "min": 0.1318,
-        "p05": 0.1635,
-        "median": 0.1841,
-        "p95": 0.3056,
-        "max": 0.3278
-      },
       "clipped": {
         "n": 3600,
         "min": 0.01,
@@ -251,59 +211,9 @@
         "p95": 0.0959,
         "max": 0.1181
       },
-      "crushed": {
-        "n": 3600,
-        "min": 0.0001,
-        "p05": 0.0013,
-        "median": 0.0027,
-        "p95": 0.0034,
-        "max": 0.0039
-      },
       "stability": {
-        "n": 3553,
-        "min": 0.8438,
-        "p05": 0.9375,
-        "median": 1.0,
-        "p95": 1.0,
-        "max": 1.0
-      }
-    },
-    "dark_gain_0.35": {
-      "sharpness": {
-        "n": 3600,
-        "min": 0.583,
-        "p05": 0.6479,
-        "median": 0.7074,
-        "p95": 0.7702,
-        "max": 0.8109
-      },
-      "exposure": {
-        "n": 3600,
-        "min": 0.0233,
-        "p05": 0.0293,
-        "median": 0.0326,
-        "p95": 0.0526,
-        "max": 0.0566
-      },
-      "clipped": {
-        "n": 3600,
+        "n": 3555,
         "min": 0.0,
-        "p05": 0.0,
-        "median": 0.0,
-        "p95": 0.0,
-        "max": 0.0
-      },
-      "crushed": {
-        "n": 3600,
-        "min": 0.467,
-        "p05": 0.5152,
-        "median": 0.7471,
-        "p95": 0.7918,
-        "max": 0.8521
-      },
-      "stability": {
-        "n": 3553,
-        "min": 0.8438,
         "p05": 0.9375,
         "median": 1.0,
         "p95": 1.0,
@@ -319,14 +229,6 @@
         "p95": 0.1888,
         "max": 0.197
       },
-      "exposure": {
-        "n": 3600,
-        "min": 0.0659,
-        "p05": 0.0832,
-        "median": 0.0926,
-        "p95": 0.1504,
-        "max": 0.1616
-      },
       "clipped": {
         "n": 3600,
         "min": 0.0,
@@ -335,17 +237,9 @@
         "p95": 0.0,
         "max": 0.0
       },
-      "crushed": {
-        "n": 3600,
-        "min": 0.0345,
-        "p05": 0.1077,
-        "median": 0.2294,
-        "p95": 0.3429,
-        "max": 0.4436
-      },
       "stability": {
-        "n": 3561,
-        "min": 0.75,
+        "n": 3573,
+        "min": 0.0,
         "p05": 0.9375,
         "median": 1.0,
         "p95": 1.0,
@@ -361,14 +255,6 @@
         "p95": 0.0613,
         "max": 0.0654
       },
-      "exposure": {
-        "n": 3600,
-        "min": 0.0659,
-        "p05": 0.0832,
-        "median": 0.0926,
-        "p95": 0.1504,
-        "max": 0.1616
-      },
       "clipped": {
         "n": 3600,
         "min": 0.0,
@@ -377,18 +263,10 @@
         "p95": 0.0,
         "max": 0.0
       },
-      "crushed": {
-        "n": 3600,
-        "min": 0.0168,
-        "p05": 0.0713,
-        "median": 0.1864,
-        "p95": 0.2939,
-        "max": 0.4082
-      },
       "stability": {
-        "n": 3562,
-        "min": 0.6875,
-        "p05": 1.0,
+        "n": 3567,
+        "min": 0.0,
+        "p05": 0.9688,
         "median": 1.0,
         "p95": 1.0,
         "max": 1.0
@@ -403,14 +281,6 @@
         "p95": 0.0306,
         "max": 0.0327
       },
-      "exposure": {
-        "n": 3600,
-        "min": 0.0659,
-        "p05": 0.0832,
-        "median": 0.0926,
-        "p95": 0.1504,
-        "max": 0.1616
-      },
       "clipped": {
         "n": 3600,
         "min": 0.0,
@@ -419,17 +289,9 @@
         "p95": 0.0,
         "max": 0.0
       },
-      "crushed": {
-        "n": 3600,
-        "min": 0.007,
-        "p05": 0.0474,
-        "median": 0.1568,
-        "p95": 0.256,
-        "max": 0.3795
-      },
       "stability": {
-        "n": 3562,
-        "min": 0.6875,
+        "n": 3566,
+        "min": 0.0,
         "p05": 0.9688,
         "median": 1.0,
         "p95": 1.0,
@@ -445,14 +307,6 @@
         "p95": 0.7672,
         "max": 0.8087
       },
-      "exposure": {
-        "n": 3600,
-        "min": 0.0659,
-        "p05": 0.0833,
-        "median": 0.0926,
-        "p95": 0.1504,
-        "max": 0.1617
-      },
       "clipped": {
         "n": 3600,
         "min": 0.0,
@@ -461,21 +315,13 @@
         "p95": 0.0001,
         "max": 0.0002
       },
-      "crushed": {
-        "n": 3600,
-        "min": 0.0677,
-        "p05": 0.1576,
-        "median": 0.3022,
-        "p95": 0.4091,
-        "max": 0.4982
-      },
       "stability": {
-        "n": 3553,
-        "min": 0.3412,
+        "n": 3561,
+        "min": 0.0,
         "p05": 0.545,
         "median": 0.6047,
         "p95": 0.6634,
-        "max": 0.7671
+        "max": 0.7747
       }
     },
     "shake_6px": {
@@ -487,14 +333,6 @@
         "p95": 0.7678,
         "max": 0.8086
       },
-      "exposure": {
-        "n": 3600,
-        "min": 0.0659,
-        "p05": 0.0833,
-        "median": 0.0926,
-        "p95": 0.1504,
-        "max": 0.1617
-      },
       "clipped": {
         "n": 3600,
         "min": 0.0,
@@ -503,21 +341,13 @@
         "p95": 0.0001,
         "max": 0.0002
       },
-      "crushed": {
-        "n": 3600,
-        "min": 0.0677,
-        "p05": 0.1576,
-        "median": 0.3022,
-        "p95": 0.4091,
-        "max": 0.4982
-      },
       "stability": {
-        "n": 3553,
+        "n": 3561,
         "min": 0.0,
         "p05": 0.1051,
         "median": 0.1615,
         "p95": 0.2169,
-        "max": 0.3926
+        "max": 0.9116
       }
     }
   },
@@ -525,42 +355,37 @@
     "blown_gain_1.6": {
       "sharpness": 0.0,
       "clipped": 0.9428,
-      "stability": 0.0
+      "stability": 0.0154
     },
     "blown_gain_2.2": {
       "sharpness": 0.0,
       "clipped": 0.9978,
-      "stability": 0.0
-    },
-    "dark_gain_0.35": {
-      "sharpness": 0.0,
-      "clipped": 0.0,
-      "stability": 0.0
+      "stability": 0.0028
     },
     "defocus_sigma_1": {
       "sharpness": 1.0,
       "clipped": 0.0,
-      "stability": 0.0
+      "stability": 0.0134
     },
     "defocus_sigma_2": {
       "sharpness": 1.0,
       "clipped": 0.0,
-      "stability": 0.0003
+      "stability": 0.0053
     },
     "defocus_sigma_3": {
       "sharpness": 1.0,
       "clipped": 0.0,
-      "stability": 0.0006
+      "stability": 0.0048
     },
     "shake_3px": {
       "sharpness": 0.0,
       "clipped": 0.0,
-      "stability": 0.9994
+      "stability": 0.9992
     },
     "shake_6px": {
       "sharpness": 0.0,
       "clipped": 0.0,
-      "stability": 1.0
+      "stability": 0.9994
     }
   },
   "per_song": [
@@ -703,14 +528,14 @@
         "max": 0.3331
       },
       "stability": {
-        "n": 705,
-        "min": 0.8438,
-        "p05": 0.9375,
+        "n": 709,
+        "min": 0.0,
+        "p05": 0.9062,
         "median": 1.0,
         "p95": 1.0,
         "max": 1.0
       },
-      "unmeasurable_stability": 15,
+      "unmeasurable_stability": 11,
       "softest_samples": [
         {
           "t_sec": 352.05,
@@ -973,14 +798,14 @@
         "max": 0.4103
       },
       "stability": {
-        "n": 695,
-        "min": 0.875,
-        "p05": 0.9375,
+        "n": 699,
+        "min": 0.0,
+        "p05": 0.9062,
         "median": 1.0,
         "p95": 1.0,
         "max": 1.0
       },
-      "unmeasurable_stability": 25,
+      "unmeasurable_stability": 21,
       "softest_samples": [
         {
           "t_sec": 215.17,

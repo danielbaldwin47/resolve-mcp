@@ -107,12 +107,12 @@ proves it on the cuts a camera and an editor made.
 """
 
 SCAN_BIN = "resolve-mcp-scratch"
+"""Where the generated scan clip is imported. Deleted with its clip when the test ends."""
 
 QUALITY_SCAN_SECONDS = 20.0
 """How much of a real angle the image-quality smoke decodes. Long enough to hold several
 seconds of camera movement — the stability reading needs neighbours — and short enough that
 a 4K master does not turn the live tier into a render queue."""
-"""Where the generated scan clip is imported. Deleted with its clip when the test ends."""
 
 SMOKE_CUT = "resolve-mcp-smoke"
 """Every build here materialises a new version of this name; delete them when you are done."""

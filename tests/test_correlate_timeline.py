@@ -474,7 +474,7 @@ def test_an_image_quality_scan_joins_over_each_shot(attach: Attach, tmp_path: Pa
     assert [one["quality_samples"] for one in cuts] == [5, 5, 4]
     assert result["picture_quality"]["joined"] == 3
     assert result["picture_quality"]["unjoined"] == 0
-    assert result["picture_quality"]["soft_shots"] == [2]
+    assert result["picture_quality"]["soft_shots"] == {"count": 1, "floor": 0.3, "cuts": [2]}
 
 
 def test_a_shot_is_judged_on_its_worst_moment_not_its_first_frame(
@@ -491,7 +491,7 @@ def test_a_shot_is_judged_on_its_worst_moment_not_its_first_frame(
     result = _measured(tmp_path, quality=str(catalog))
 
     assert [one["clipped"] for one in _rows(result)] == [0.0, 0.3, 0.0]
-    assert result["picture_quality"]["blown_shots"] == [2]
+    assert result["picture_quality"]["blown_shots"]["cuts"] == [2]
 
 
 def test_an_unmeasurable_stability_does_not_make_a_shot_shaky(
@@ -509,7 +509,7 @@ def test_an_unmeasurable_stability_does_not_make_a_shot_shaky(
     result = _measured(tmp_path, quality=str(catalog))
 
     assert [one["stability"] for one in _rows(result)] == [1.0, 1.0, 1.0]
-    assert result["picture_quality"]["shaky_shots"] == []
+    assert result["picture_quality"]["shaky_shots"] == {"count": 0, "floor": 0.6, "cuts": []}
 
 
 def test_a_scan_of_a_different_span_joins_nothing_and_says_so(

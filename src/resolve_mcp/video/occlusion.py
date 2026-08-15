@@ -35,8 +35,9 @@ from ..jobs.runner import JobOutput, Progress, start_job
 from ..logging_config import get_logger
 from ..naming import slug
 from ..resolve.connection import ResolveConnection
-from ..timing import IN_POINT, SECONDS_PRECISION, dual_time, frames_from_seconds, to_frames
+from ..timing import SECONDS_PRECISION, dual_time
 from . import ffmpeg
+from .sampled import readable_range, runs, sample_frame, sample_step
 from .source import Source, locate
 
 if TYPE_CHECKING:  # pragma: no cover - the worker imports this when it runs
@@ -90,7 +91,7 @@ def analyze_occlusion(
     source = locate(connection, clip, bin, OcclusionScanError)
     rate = _readable_rate(sample_fps)
     level = _readable_threshold(threshold)
-    first, last = _readable_range(start, end, source)
+    first, last = readable_range(start, end, source, MAX_RANGE_SECONDS, "an occlusion scan")
 
     params = {
         "clip": clip,
@@ -230,7 +231,7 @@ def _samples(scan: Scan, first: int, rate: float, source: Source) -> list[dict[s
     """
     return [
         {
-            "time": dual_time(_sample_frame(index, first, rate, source), source.fps),
+            "time": dual_time(sample_frame(index, first, rate, source), source.fps),
             "score": reading.score,
             "coverage": reading.coverage,
             "largest": reading.largest,
@@ -238,10 +239,6 @@ def _samples(scan: Scan, first: int, rate: float, source: Source) -> list[dict[s
         }
         for index, reading in enumerate(scan.readings)
     ]
-
-
-def _sample_frame(index: int, first: int, rate: float, source: Source) -> int:
-    return first + frames_from_seconds(index / rate, source.fps or 1.0, IN_POINT)
 
 
 def _windows(
@@ -262,13 +259,13 @@ def _windows(
     stays in the curve, but the window it would make starts where the range stops. A
     zero-length or backwards window in the catalog is a stretch no cut can be kept out of.
     """
-    runs = _runs([float(one["score"]) >= threshold for one in samples])
-    step = max(1, frames_from_seconds(1.0 / rate, source.fps or 1.0, IN_POINT))
+    found = runs([float(one["score"]) >= threshold for one in samples], GAP_SAMPLES)
+    step = sample_step(rate, source)
     windows: list[dict[str, Any]] = []
-    for begin, stop in runs:
+    for begin, stop in found:
         scores = [float(samples[one]["score"]) for one in range(begin, stop)]
-        start_frame = max(first, min(last, _sample_frame(begin, first, rate, source)))
-        end_frame = min(last, _sample_frame(stop - 1, first, rate, source) + step)
+        start_frame = max(first, min(last, sample_frame(begin, first, rate, source)))
+        end_frame = min(last, sample_frame(stop - 1, first, rate, source) + step)
         if end_frame <= start_frame:
             continue
         windows.append(
@@ -283,22 +280,6 @@ def _windows(
             }
         )
     return windows
-
-
-def _runs(blocked: list[bool]) -> list[tuple[int, int]]:
-    """Index runs of ``True``, merging any two separated by at most ``GAP_SAMPLES`` clean ones.
-
-    Half-open, so a run is ``[begin, stop)`` and a lone blocked sample is one sample long.
-    """
-    runs: list[tuple[int, int]] = []
-    for index, flag in enumerate(blocked):
-        if not flag:
-            continue
-        if runs and index - runs[-1][1] <= GAP_SAMPLES:
-            runs[-1] = (runs[-1][0], index + 1)
-        else:
-            runs.append((index, index + 1))
-    return runs
 
 
 def _rounded(seconds: float) -> float:
@@ -336,45 +317,3 @@ def _readable_threshold(threshold: float) -> float:
             detail={"requested": threshold, "maximum": 1.0},
         )
     return float(threshold)
-
-
-def _readable_range(start: Any, end: Any, source: Source) -> tuple[int, int]:
-    """The range to scan as this clip's own frame numbers, half-open and inside its media."""
-    if not source.fps:
-        raise InvalidRequestError(
-            cause=(
-                f"Resolve reports no frame rate for {source.name!r}, so a range cannot be "
-                "sampled."
-            ),
-            fix="inspect_clip shows what Resolve knows about the clip; a still has no timeline.",
-            detail={"clip": source.name, "file_path": source.path},
-        )
-
-    first = to_frames(start, source.fps, field="start")
-    first = source.start if first is None else first
-    last = to_frames(end, source.fps, field="end")
-    if last is None:
-        last = source.out
-    if last is None:
-        raise InvalidRequestError(
-            cause=f"Resolve reports no end for {source.name!r}, so the range has no out point.",
-            fix="Pass end explicitly — inspect_clip reports what Resolve does know about it.",
-            detail={"clip": source.name, "bounds": source.bounds},
-        )
-
-    if not source.holds(first) or first >= last:
-        raise source.outside(first)
-    if source.out is not None and last > source.out:
-        raise source.outside(last)
-
-    seconds = (last - first) / source.fps
-    if seconds > MAX_RANGE_SECONDS:
-        raise InvalidRequestError(
-            cause=f"The range asked for is {seconds:.0f}s of footage.",
-            fix=(
-                f"Scan at most {MAX_RANGE_SECONDS:.0f}s at a time — an occlusion scan answers "
-                "'is this angle usable through this song', so pass the song's range."
-            ),
-            detail={"clip": source.name, "seconds": round(seconds, 1)},
-        )
-    return int(first), int(last)

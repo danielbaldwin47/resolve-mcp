@@ -7,8 +7,9 @@ judge accepted — and above footage that has actually failed. This script produ
 evidence for both sides.
 
 **Known-good** is the five human deliverables as shipped, sampled through the same decode
-`analyze_quality` runs. **Known-bad** is those same frames with the three failures applied to
-them: a gaussian defocus, a gain that burns the highlights, and a synthetic handheld wobble.
+`analyze_quality` runs. **Known-bad** is those same frames with each failure applied to them:
+a gaussian defocus, a gain that burns the highlights, a gain that closes them down, and a
+synthetic handheld wobble.
 Deriving the bad side from the corpus rather than from a synthetic fixture is the point — the
 question is whether the reading separates *this footage* from *this footage gone wrong*, and
 a fixture pair could be separated by a measurement that says nothing about a concert.
@@ -58,7 +59,12 @@ here is a defocus of about six pixels at the master — a miss a director would 
 operator might not see on a small monitor."""
 
 BLOWN_GAINS = (1.6, 2.2)
-"""Multiplied on luma before clipping at 1.0: an angle exposed for the wrong light."""
+DARK_GAINS = (0.35,)
+"""Multiplied on luma before clipping at 1.0: an angle exposed for the wrong light, too open
+and too closed. The dark case is what shows the exposure reading discriminating at all — it
+is the only failure of the four that clipping does not also catch, and it has no floor of its
+own, because what counts as correctly exposed is a property of the room rather than of the
+shot (this corpus sits at a mean luma of 0.09 and is not underexposed)."""
 
 SHAKE_PIXELS = (3, 6)
 """Alternating translations, in grid pixels — a wobble with no trend for the residual to
@@ -157,7 +163,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--rate", type=float, default=DEFAULT_SAMPLE_FPS)
     parser.add_argument("--seconds", type=float, default=WINDOW_SEC)
     parser.add_argument("--out", type=Path, default=OUT)
+    # The guard that refuses to score a frame pair across a cut is what decides whether a
+    # delivered edit reads as stable, so its effect has to be reproducible rather than
+    # remembered: run this with the pre-#182 values (--peak-floor 0.01 --cut-shift 0.10) and
+    # the receipt shows what the loose guard cost.
+    parser.add_argument("--peak-floor", type=float, default=None)
+    parser.add_argument("--cut-shift", type=float, default=None)
     args = parser.parse_args(argv)
+
+    if args.peak_floor is not None:
+        picture.PEAK_FLOOR = args.peak_floor
+    if args.cut_shift is not None:
+        picture.CUT_SHIFT = args.cut_shift
 
     songs = sorted(HUMAN_DIR.glob("*.mp4"))
     if args.songs:
@@ -209,6 +226,8 @@ def main(argv: list[str] | None = None) -> int:
             )
         for gain in BLOWN_GAINS:
             bad.setdefault(f"blown_gain_{gain:g}", []).extend(readings(blown(frames, gain)))
+        for gain in DARK_GAINS:
+            bad.setdefault(f"dark_gain_{gain:g}", []).extend(readings(blown(frames, gain)))
         for pixels in SHAKE_PIXELS:
             bad.setdefault(f"shake_{pixels}px", []).extend(readings(shaken(frames, pixels)))
 
@@ -219,7 +238,9 @@ def main(argv: list[str] | None = None) -> int:
     degraded = {
         name: {
             "sharpness": spread(sharpness_of(rows)),
+            "exposure": spread([one.exposure for one in rows]),
             "clipped": spread(clipped_of(rows)),
+            "crushed": spread([one.crushed for one in rows]),
             "stability": spread(stability_of(rows)),
         }
         for name, rows in sorted(bad.items())
@@ -272,6 +293,7 @@ def main(argv: list[str] | None = None) -> int:
         "generated_by": "gauntlet/recon/image_quality_calib.py",
         "grid": f"{picture.GRID_WIDTH}x{picture.GRID_HEIGHT}",
         "sample_fps": args.rate,
+        "guards": {"peak_floor": picture.PEAK_FLOOR, "cut_shift": picture.CUT_SHIFT},
         "window": f"{args.seconds:g}s from {WINDOW_AT:.0%} into each song",
         "floors_under_test": {
             "min_sharpness": DEFAULT_MIN_SHARPNESS,
@@ -282,7 +304,9 @@ def main(argv: list[str] | None = None) -> int:
             "songs": len(songs),
             "samples": len(good),
             "sharpness": spread(good_sharp),
+            "exposure": spread([one.exposure for one in good]),
             "clipped": spread(good_clip),
+            "crushed": spread([one.crushed for one in good]),
             "stability": spread(good_steady),
             "below_sharpness_floor": sum(1 for one in good_sharp if one < DEFAULT_MIN_SHARPNESS),
             "above_clipped_floor": sum(1 for one in good_clip if one > DEFAULT_MAX_CLIPPED),

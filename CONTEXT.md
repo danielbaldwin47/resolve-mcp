@@ -242,7 +242,10 @@ grabs — the one compute route that is not a job), `jpeg` (read back
 dimensions), `scenes` (scene-cut detection as cached job), `blocking` (how
 blocked one frame is: the near-field obstruction arithmetic, numpy + scipy,
 no I/O), `occlusion` (that arithmetic as a cached job over a sampled range —
-per-sample scores and the unusable windows to keep a cut out of), `picture`
+per-sample scores and the unusable windows to keep a cut out of), `sampled`
+(what both sampled-decode scans share: the range check, the sample grid and
+the runs that become windows — one copy, because a range check that clamps
+instead of refusing answers for footage nobody decoded), `picture`
 (how good one frame looks: sharpness as acutance, exposure, clipped
 highlights, and stability as the residual after global motion compensation,
 so a pan is not a wobble and a pair across a cut is unmeasurable rather than

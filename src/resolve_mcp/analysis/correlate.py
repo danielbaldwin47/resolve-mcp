@@ -38,7 +38,7 @@ from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from ..config import Config, get_config
 from ..errors import InvalidRequestError
@@ -66,6 +66,9 @@ from ..resolve.timeline import (
 from ..timing import SECONDS_PRECISION, dual_time, to_frames
 from . import decode, energy, records, subject
 from .beats import GridTrust, nearest, spacing, trust
+
+if TYPE_CHECKING:  # pragma: no cover - numpy and scipy load with this module, in the worker
+    from ..video import picture
 
 log = get_logger("analysis")
 
@@ -1154,31 +1157,55 @@ def _quality_over(
     shorter than a sample interval — and inventing a number for them would be inventing it
     for exactly the cuts a fast passage is made of.
     """
+    empty = {
+        "sharpness": None,
+        "exposure": None,
+        "clipped": None,
+        "stability": None,
+        "quality_samples": 0,
+    }
     if not takes:
-        return {
-            "sharpness": None,
-            "exposure": None,
-            "clipped": None,
-            "stability": None,
-            "quality_samples": 0,
-        }
-    inside = [
-        takes[index]
-        for index in range(bisect_left(times, seconds), bisect_left(times, until))
-    ]
-    steady = [float(one["stability"]) for one in inside if one.get("stability") is not None]
+        return empty
+    first, last = bisect_left(times, seconds), bisect_left(times, until)
+    inside = [takes[index] for index in range(first, last)]
+    if not inside:
+        return empty
+
+    # The aggregation rule itself belongs to ``video.picture`` and is taken from there rather
+    # than repeated: a shot in a correlate report and a shot in a blind pack have to be the
+    # same number, and two copies of a rule are two rules waiting to disagree. The import is
+    # here rather than at module scope because numpy and scipy load with that module, and this
+    # is the one path in this file that needs them (and only when a catalog was named).
+    from ..video.picture import summarize  # noqa: PLC0415 - see above
+
+    summary = summarize([_scanned(one) for one in inside])
     return {
-        "sharpness": _median_of(inside, "sharpness"),
-        "exposure": _median_of(inside, "exposure"),
-        "clipped": _rounded(max(float(one["clipped"]) for one in inside)) if inside else None,
-        "stability": _rounded(min(steady)) if steady else None,
+        "sharpness": summary["sharpness"],
+        "exposure": summary["exposure"],
+        "clipped": summary["clipped"],
+        "stability": summary["stability"],
         "quality_samples": len(inside),
     }
 
 
-def _median_of(rows: Sequence[Mapping[str, Any]], field: str) -> float | None:
-    found = [float(row[field]) for row in rows if row.get(field) is not None]
-    return _rounded(statistics.median(found)) if found else None
+def _scanned(row: Mapping[str, Any]) -> picture.Reading:
+    """One catalog row read back as the reading that wrote it.
+
+    The catalog is JSON on disk, and the aggregation lives in a module that knows nothing
+    about files, so something has to carry a row across that line. This is the only place
+    that knows both shapes.
+    """
+    from ..video.picture import Reading  # noqa: PLC0415 - numpy loads with that module
+
+    return Reading(
+        sharpness=float(row["sharpness"]),
+        exposure=float(row["exposure"]),
+        contrast=float(row.get("contrast") or 0.0),
+        clipped=float(row["clipped"]),
+        crushed=float(row.get("crushed") or 0.0),
+        stability=None if row.get("stability") is None else float(row["stability"]),
+        discontinuity=bool(row.get("discontinuity")),
+    )
 
 
 def _delta_at(
@@ -1429,8 +1456,13 @@ def _missing(
     field: str,
     floor: str,
     below: bool,
-) -> list[int] | None:
-    """The cuts that missed one floor, by number — ``None`` when the catalog named no floor."""
+) -> dict[str, Any] | None:
+    """The cuts that missed one floor — ``None`` when the catalog named no floor to miss.
+
+    The count travels with the list because the list is capped. Twelve cut numbers and no
+    total reads as twelve bad shots whether there were twelve or forty, and the difference
+    between those two is the difference between fixing a few shots and rebuilding the cut.
+    """
     if floors is None or floor not in floors:
         return None
     limit = float(floors[floor])
@@ -1440,7 +1472,7 @@ def _missing(
         if row[field] is not None
         and (float(row[field]) < limit if below else float(row[field]) > limit)
     ]
-    return missed[:INLINE_CUTS]
+    return {"count": len(missed), "floor": limit, "cuts": missed[:INLINE_CUTS]}
 
 
 def _floors(file: str | None) -> dict[str, float] | None:
