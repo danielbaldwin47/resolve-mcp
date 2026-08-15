@@ -13,11 +13,11 @@ from collections.abc import Sequence
 import pytest
 
 from scripts.prune_merged import (
+    CommandError,
     Plan,
     apply_plan,
     build_plan,
     main,
-    parse_pr_heads,
     parse_worktrees,
 )
 
@@ -30,15 +30,21 @@ AFTER_MERGE = "c" * 40  # commits pushed after the PR merged
 UNMERGED = "d" * 40
 OPEN_TIP = "e" * 40
 FRESH = "f" * 40  # a branch that is on main by ancestry (merge-commit PR, or no commits yet)
+STACKED = "1" * 40  # head of a PR squash-merged into another branch, never into main
 
 MERGED_PRS = json.dumps(
     [
-        {"headRefName": "issue-1", "headRefOid": SQUASHED_TIP},  # squash; branch still at tip
-        {"headRefName": "issue-2", "headRefOid": FRESH},  # merge-commit; ancestor of main
-        {"headRefName": "issue-3", "headRefOid": "9" * 40},  # merged, then more commits pushed
+        # squash into main; branch still at the squashed tip
+        {"headRefName": "issue-1", "headRefOid": SQUASHED_TIP, "baseRefName": "main"},
+        # merge-commit into main; tip is an ancestor of main
+        {"headRefName": "issue-2", "headRefOid": FRESH, "baseRefName": "main"},
+        # merged into main, then more commits pushed to the branch
+        {"headRefName": "issue-3", "headRefOid": "9" * 40, "baseRefName": "main"},
+        # stacked: squash-merged into issue-2, never into main; reads MERGED on the forge
+        {"headRefName": "issue-8", "headRefOid": STACKED, "baseRefName": "issue-2"},
     ]
 )
-OPEN_PRS = json.dumps([{"headRefName": "issue-4", "headRefOid": OPEN_TIP}])
+OPEN_PRS = json.dumps([{"headRefName": "issue-4", "headRefOid": OPEN_TIP, "baseRefName": "main"}])
 
 PORCELAIN = f"""worktree {ROOT}
 HEAD {MAIN}
@@ -73,14 +79,13 @@ worktree {WT}/issue-7
 HEAD {FRESH}
 branch refs/heads/issue-7
 
+worktree {WT}/issue-8
+HEAD {STACKED}
+branch refs/heads/issue-8
+
 worktree {WT}/detached
 HEAD {FRESH}
 detached
-
-worktree {WT}/gone
-HEAD {FRESH}
-branch refs/heads/gone
-prunable gitdir file points to non-existent location
 
 worktree C:/Users/x/elsewhere
 HEAD {FRESH}
@@ -97,6 +102,7 @@ LOCAL_REFS = "\n".join(
         f"issue-5 {FRESH}",
         f"issue-6 {UNMERGED}",
         f"issue-7 {FRESH}",
+        f"issue-8 {STACKED}",
         f"elsewhere {FRESH}",
         f"orphan-on-main {FRESH}",  # no worktree, no PR, but nothing main lacks
         f"orphan-ahead {UNMERGED}",
@@ -110,24 +116,33 @@ REMOTE_REFS = "\n".join(
         f"origin/issue-2 {FRESH}",
         f"origin/issue-3 {AFTER_MERGE}",
         f"origin/issue-4 {OPEN_TIP}",
+        f"origin/issue-5 {FRESH}",
         f"origin/issue-6 {UNMERGED}",
+        f"origin/issue-8 {STACKED}",
     ]
 )
 # ``git branch --merged origin/main``: names whose tip is an ancestor of origin/main.
 LOCAL_ON_MAIN = "\n".join(
     ["main", "issue-2", "issue-5", "issue-7", "elsewhere", "orphan-on-main"]
 )
-REMOTE_ON_MAIN = "\n".join(["origin/HEAD", "origin/main", "origin/issue-2"])
+REMOTE_ON_MAIN = "\n".join(["origin/HEAD", "origin/main", "origin/issue-2", "origin/issue-5"])
 
 
 class FakeRunner:
-    def __init__(self, dirty: frozenset[str] | set[str] = frozenset()) -> None:
+    def __init__(
+        self,
+        dirty: frozenset[str] | set[str] = frozenset(),
+        failing: frozenset[str] | set[str] = frozenset(),
+    ) -> None:
         self.dirty = set(dirty)
+        self.failing = set(failing)  # last argv token of a command that should fail
         self.calls: list[list[str]] = []
 
     def __call__(self, argv: Sequence[str]) -> str:
         argv = list(argv)
         self.calls.append(argv)
+        if argv[-1] in self.failing:
+            raise CommandError(f"{' '.join(argv)} failed (1): refused")
         match argv:
             case ["gh", "pr", "list", "--state", "merged", *_]:
                 return MERGED_PRS
@@ -145,7 +160,9 @@ class FakeRunner:
                 return REMOTE_ON_MAIN
             case ["git", "-C", path, "status", "--porcelain"]:
                 return "?? scratch.txt\n" if path in self.dirty else ""
-            case ["git", "fetch", *_] | ["git", "worktree", "remove", *_]:
+            case ["git", "fetch", *_] | ["git", "worktree", "prune"]:
+                return ""
+            case ["git", "worktree", "remove", *_]:
                 return ""
             case ["git", "branch", "-D", *_] | ["git", "push", "origin", "--delete", *_]:
                 return ""
@@ -164,26 +181,17 @@ def test_parse_worktrees_reads_locked_detached_and_prunable() -> None:
     wts = {w.path.rsplit("/", 1)[-1]: w for w in parse_worktrees(PORCELAIN)}
     assert wts["issue-5"].locked and wts["issue-5"].branch == "issue-5"
     assert wts["detached"].branch is None
-    assert wts["gone"].prunable
     assert wts["resolve-mcp"].branch == "main"
+    gone = parse_worktrees(
+        f"worktree {WT}/gone\nHEAD {FRESH}\nbranch refs/heads/gone\n"
+        "prunable gitdir file points to non-existent location\n"
+    )
+    assert gone[0].prunable
 
 
 def test_parse_worktrees_normalises_backslashes() -> None:
     wt = parse_worktrees("worktree C:\\repo\\.claude\\worktrees\\x\nHEAD 1\nbranch refs/heads/x\n")
     assert wt[0].path == "C:/repo/.claude/worktrees/x"
-
-
-def test_parse_pr_heads_groups_oids_by_head() -> None:
-    heads = parse_pr_heads(
-        json.dumps(
-            [
-                {"headRefName": "b", "headRefOid": "1"},
-                {"headRefName": "b", "headRefOid": "2"},
-            ]
-        )
-    )
-    assert heads == {"b": {"1", "2"}}
-    assert parse_pr_heads("") == {}
 
 
 def test_plan_removes_only_merged_and_unheld() -> None:
@@ -199,9 +207,12 @@ def test_plan_refuses_locked_worktree_and_keeps_its_branch() -> None:
     plan = build_plan(FakeRunner())
     kept = dict(plan.skipped)
     assert kept[f"worktree {WT}/issue-5"].startswith("locked")
-    # issue-5's tip is on main, but the locked worktree still checks the branch out.
+    # issue-5's tip is on main, but the locked worktree still checks the branch out — and the
+    # lock holds the remote branch too, since the session may push again.
     assert kept["local issue-5"] == f"checked out in {WT}/issue-5"
+    assert kept["remote origin/issue-5"] == "held by a locked worktree"
     assert "issue-5" not in plan.local_branches
+    assert "issue-5" not in plan.remote_branches
 
 
 def test_plan_refuses_worktree_with_commits_not_on_main() -> None:
@@ -212,10 +223,19 @@ def test_plan_refuses_worktree_with_commits_not_on_main() -> None:
     assert kept["local orphan-ahead"] == "commits not on origin/main"
     assert kept["remote origin/issue-3"] == "PR merged but branch has commits after it"
     assert kept["remote origin/issue-6"] == "commits not on origin/main"
-    for name in ("issue-3", "issue-6"):
+    for name in ("issue-3", "issue-6", "issue-8"):
         assert f"{WT}/{name}" not in plan.worktrees
         assert name not in plan.local_branches
         assert name not in plan.remote_branches
+
+
+def test_plan_ignores_prs_merged_into_a_branch_other_than_main() -> None:
+    """A stacked PR reads MERGED on the forge while its commits never reached main."""
+    plan = build_plan(FakeRunner())
+    kept = dict(plan.skipped)
+    assert kept[f"worktree {WT}/issue-8"] == "PR merged into a branch, not main"
+    assert kept["local issue-8"] == f"checked out in {WT}/issue-8"
+    assert kept["remote origin/issue-8"] == "PR merged into a branch, not main"
 
 
 def test_plan_never_touches_open_pr_branches() -> None:
@@ -231,8 +251,8 @@ def test_plan_skips_detached_prunable_and_foreign_worktrees() -> None:
     plan = build_plan(FakeRunner())
     kept = dict(plan.skipped)
     assert kept[f"worktree {WT}/detached"] == "detached HEAD"
-    assert kept[f"worktree {WT}/gone"] == "prunable - `git worktree prune` handles it"
     # A worktree outside .claude/worktrees/ is never removed, and it pins its branch.
+    assert kept["worktree C:/Users/x/elsewhere"] == "outside .claude/worktrees/"
     assert "C:/Users/x/elsewhere" not in plan.worktrees
     assert kept["local elsewhere"] == "checked out in C:/Users/x/elsewhere"
     assert kept["local main"] == f"checked out in {ROOT}"
@@ -263,14 +283,32 @@ def test_dry_run_issues_no_mutations(capsys: pytest.CaptureFixture[str]) -> None
 def test_apply_removes_worktrees_then_locals_then_remotes() -> None:
     run = FakeRunner()
     assert main(["--apply"], run=run) == 0
-    assert run.calls[0] == ["git", "fetch", "--prune", "origin"]
+    assert run.calls[:2] == [["git", "fetch", "--prune", "origin"], ["git", "worktree", "prune"]]
     assert run.mutations() == [
         ["git", "worktree", "remove", f"{WT}/issue-1"],
         ["git", "worktree", "remove", f"{WT}/issue-2"],
         ["git", "worktree", "remove", f"{WT}/issue-7"],
-        ["git", "branch", "-D", "issue-1", "issue-2", "issue-7", "orphan-on-main"],
+        ["git", "branch", "-D", "issue-1"],
+        ["git", "branch", "-D", "issue-2"],
+        ["git", "branch", "-D", "issue-7"],
+        ["git", "branch", "-D", "orphan-on-main"],
         ["git", "push", "origin", "--delete", "issue-1", "issue-2"],
     ]
+
+
+def test_apply_reports_a_refusal_and_keeps_going(capsys: pytest.CaptureFixture[str]) -> None:
+    run = FakeRunner(failing={f"{WT}/issue-2", "issue-7"})
+    assert main(["--apply", "--no-fetch"], run=run) == 1
+    assert len(run.mutations()) == 8  # every removal was still attempted
+    err = capsys.readouterr().err
+    assert f"FAILED  git worktree remove {WT}/issue-2 failed (1): refused" in err
+    assert "FAILED  git branch -D issue-7 failed (1): refused" in err
+
+
+def test_a_failing_read_stops_before_anything_is_removed() -> None:
+    run = FakeRunner(failing={"--porcelain"})
+    assert main(["--apply", "--no-fetch"], run=run) == 1
+    assert run.mutations() == []
 
 
 def test_apply_batches_remote_deletes() -> None:

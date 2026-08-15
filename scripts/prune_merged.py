@@ -8,13 +8,16 @@ Dry-run by default — prints what it would remove and why. ``--apply`` removes 
 What counts as merged, for a branch ``N`` whose tip is ``T``:
 
 * ``T`` is already on ``origin/main`` (``git branch --merged origin/main``), or
-* a merged PR's head was ``N`` at exactly ``T`` — the squash case, where the content landed
-  but the commits themselves never became ancestors of main.
+* a PR from ``N`` **into main** merged with ``T`` as its head — the squash case, where the
+  content landed but the commits themselves never became ancestors of main. A PR merged into
+  any other base does not count: a stacked PR reads MERGED while its commits may never reach
+  main (CLAUDE.md step 6).
 
 Never touched: ``main`` / ``HEAD``; any branch that has an open PR; a branch whose tip
 carries commits ``origin/main`` does not (a merged PR followed by new commits included); a
-worktree that is locked (a running session holds it), dirty, or on a detached HEAD; and a
-local branch still checked out in a worktree that survives.
+worktree that is locked (a running session holds it), dirty, or on a detached HEAD; the
+branch a locked worktree holds, local and remote; and a local branch still checked out in
+any worktree that survives.
 
 Everything the script learns comes through one ``Runner`` (a callable from argv to stdout),
 so the fake tier drives it on fixtures of the ``gh`` and ``git`` output
@@ -33,7 +36,12 @@ from dataclasses import dataclass, field
 Runner = Callable[[Sequence[str]], str]
 
 WORKTREE_DIR = ".claude/worktrees/"
-PROTECTED = frozenset({"main", "master", "HEAD"})
+PROTECTED = frozenset({"main", "HEAD"})
+BASE = "main"
+
+
+class CommandError(RuntimeError):
+    """A command the Runner issued failed; the message carries argv and stderr."""
 
 
 @dataclass(frozen=True)
@@ -43,6 +51,16 @@ class Worktree:
     branch: str | None  # short name; None when detached
     locked: bool
     prunable: bool
+
+
+@dataclass(frozen=True)
+class MergeFacts:
+    """What the repo and the forge say about branches, gathered once."""
+
+    merged_into_main: dict[str, set[str]]  # head name -> head SHAs of PRs merged into main
+    merged_elsewhere: set[str]  # head names of PRs merged into some other base
+    open_prs: set[str]  # head names with an open PR
+    held: set[str]  # branch names a locked worktree checks out
 
 
 @dataclass(frozen=True)
@@ -87,12 +105,10 @@ def parse_worktrees(porcelain: str) -> list[Worktree]:
     return out
 
 
-def parse_pr_heads(gh_json: str) -> dict[str, set[str]]:
-    """``gh pr list --json headRefName,headRefOid`` -> head name -> set of head SHAs."""
-    heads: dict[str, set[str]] = {}
-    for pr in json.loads(gh_json or "[]"):
-        heads.setdefault(pr["headRefName"], set()).add(pr.get("headRefOid", ""))
-    return heads
+def parse_prs(gh_json: str) -> list[dict[str, str]]:
+    """``gh pr list --json headRefName,headRefOid,baseRefName`` -> list of those dicts."""
+    prs: list[dict[str, str]] = json.loads(gh_json or "[]")
+    return prs
 
 
 def parse_refs(for_each_ref: str) -> dict[str, str]:
@@ -112,139 +128,141 @@ def parse_names(listing: str) -> set[str]:
 # --- the decision ---------------------------------------------------------------------------
 
 
-def _merged_reason(
-    name: str,
-    tip: str,
-    *,
-    merged_prs: dict[str, set[str]],
-    open_prs: dict[str, set[str]],
-    on_main: set[str],
-) -> tuple[bool, str]:
+def _prune_decision(name: str, tip: str, on_main: set[str], facts: MergeFacts) -> tuple[bool, str]:
     """(prune?, reason) for a branch called ``name`` whose tip is ``tip``."""
     if name in PROTECTED:
         return False, "protected"
-    if name in open_prs:
+    if name in facts.held:
+        return False, "held by a locked worktree"
+    if name in facts.open_prs:
         return False, "open PR"
     if name in on_main:
         return True, "tip is on origin/main"
-    if name in merged_prs:
-        if tip in merged_prs[name]:
+    if name in facts.merged_into_main:
+        if tip in facts.merged_into_main[name]:
             return True, "PR merged (squash) at this tip"
         return False, "PR merged but branch has commits after it"
+    if name in facts.merged_elsewhere:
+        return False, "PR merged into a branch, not main"
     return False, "commits not on origin/main"
 
 
+def _record(plan: Plan, bucket: list[str], item: str, label: str, ok: bool, why: str) -> None:
+    if ok:
+        bucket.append(item)
+        plan.reasons[label] = why
+    elif why != "protected":
+        plan.skipped.append((label, why))
+
+
+def _gh_heads(run: Runner, state: str) -> list[dict[str, str]]:
+    return parse_prs(
+        run(
+            ["gh", "pr", "list", "--state", state, "--limit", "1000",
+             "--json", "headRefName,headRefOid,baseRefName"]
+        )
+    )
+
+
+def _refs(run: Runner, namespace: str) -> dict[str, str]:
+    return parse_refs(
+        run(["git", "for-each-ref", namespace, "--format=%(refname:short) %(objectname)"])
+    )
+
+
+def _on_main(run: Runner, *flags: str) -> set[str]:
+    return parse_names(
+        run(["git", "branch", *flags, "--merged", f"origin/{BASE}", "--format=%(refname:short)"])
+    )
+
+
 def build_plan(run: Runner) -> Plan:
-    merged_prs = parse_pr_heads(
-        run(
-            ["gh", "pr", "list", "--state", "merged", "--limit", "1000",
-             "--json", "headRefName,headRefOid"]
-        )
-    )
-    open_prs = parse_pr_heads(
-        run(
-            ["gh", "pr", "list", "--state", "open", "--limit", "1000",
-             "--json", "headRefName,headRefOid"]
-        )
-    )
     worktrees = parse_worktrees(run(["git", "worktree", "list", "--porcelain"]))
-    local_refs = parse_refs(
-        run(["git", "for-each-ref", "refs/heads", "--format=%(refname:short) %(objectname)"])
+    if not worktrees:
+        raise CommandError("git worktree list returned nothing - not inside a repo?")
+    root = worktrees[0].path.rstrip("/")
+
+    merged_into_main: dict[str, set[str]] = {}
+    merged_elsewhere: set[str] = set()
+    for pr in _gh_heads(run, "merged"):
+        if pr.get("baseRefName") == BASE:
+            merged_into_main.setdefault(pr["headRefName"], set()).add(pr.get("headRefOid", ""))
+        else:
+            merged_elsewhere.add(pr["headRefName"])
+    facts = MergeFacts(
+        merged_into_main=merged_into_main,
+        merged_elsewhere=merged_elsewhere,
+        open_prs={pr["headRefName"] for pr in _gh_heads(run, "open")},
+        held={wt.branch for wt in worktrees if wt.locked and wt.branch},
     )
+    local_refs = _refs(run, "refs/heads")
     remote_refs = {
         name.removeprefix("origin/"): sha
-        for name, sha in parse_refs(
-            run(
-                ["git", "for-each-ref", "refs/remotes/origin",
-                 "--format=%(refname:short) %(objectname)"]
-            )
-        ).items()
+        for name, sha in _refs(run, "refs/remotes/origin").items()
         if name != "origin/HEAD"
     }
-    local_on_main = parse_names(
-        run(["git", "branch", "--merged", "origin/main", "--format=%(refname:short)"])
-    )
-    remote_on_main = {
-        n.removeprefix("origin/")
-        for n in parse_names(
-            run(["git", "branch", "-r", "--merged", "origin/main", "--format=%(refname:short)"])
-        )
-    }
+    local_on_main = _on_main(run)
+    remote_on_main = {n.removeprefix("origin/") for n in _on_main(run, "-r")}
 
     plan = Plan()
-    if not worktrees:
-        raise SystemExit("git worktree list returned nothing - not inside a repo?")
-    root = worktrees[0].path.rstrip("/")
     surviving_checkouts: dict[str, str] = {}  # branch -> worktree path that keeps it
-
-    for wt in worktrees[1:]:
-        if not wt.path.startswith(root + "/" + WORKTREE_DIR):
-            if wt.branch:
-                surviving_checkouts[wt.branch] = wt.path
-            continue
-        label = f"worktree {wt.path}"
-        if wt.prunable:
-            plan.skipped.append((label, "prunable - `git worktree prune` handles it"))
-            continue
-        if wt.locked:
-            plan.skipped.append((label, "locked (a session holds it)"))
-        elif wt.branch is None:
-            plan.skipped.append((label, "detached HEAD"))
-        else:
-            ok, why = _merged_reason(
-                wt.branch, wt.head, merged_prs=merged_prs, open_prs=open_prs,
-                on_main=local_on_main,
-            )
-            if ok and run(["git", "-C", wt.path, "status", "--porcelain"]).strip():
-                ok, why = False, "dirty (uncommitted or untracked files)"
-            if ok:
-                plan.worktrees.append(wt.path)
-                plan.reasons[label] = why
-                continue
-            plan.skipped.append((label, why))
-        if wt.branch:
-            surviving_checkouts[wt.branch] = wt.path
     if worktrees[0].branch:
         surviving_checkouts[worktrees[0].branch] = worktrees[0].path
+
+    for wt in worktrees[1:]:
+        label = f"worktree {wt.path}"
+        if not wt.path.startswith(root + "/" + WORKTREE_DIR):
+            ok, why = False, "outside " + WORKTREE_DIR
+        elif wt.locked:
+            ok, why = False, "locked (a session holds it)"
+        elif wt.branch is None:
+            ok, why = False, "detached HEAD"
+        else:
+            ok, why = _prune_decision(wt.branch, wt.head, local_on_main, facts)
+            if ok and run(["git", "-C", wt.path, "status", "--porcelain"]).strip():
+                ok, why = False, "dirty (uncommitted or untracked files)"
+        _record(plan, plan.worktrees, wt.path, label, ok, why)
+        if not ok and wt.branch:
+            surviving_checkouts[wt.branch] = wt.path
 
     for name, sha in sorted(local_refs.items()):
         label = f"local {name}"
         if name in surviving_checkouts:
-            plan.skipped.append((label, f"checked out in {surviving_checkouts[name]}"))
-            continue
-        ok, why = _merged_reason(
-            name, sha, merged_prs=merged_prs, open_prs=open_prs, on_main=local_on_main
-        )
-        if ok:
-            plan.local_branches.append(name)
-            plan.reasons[label] = why
-        elif why != "protected":
-            plan.skipped.append((label, why))
+            ok, why = False, f"checked out in {surviving_checkouts[name]}"
+        else:
+            ok, why = _prune_decision(name, sha, local_on_main, facts)
+        _record(plan, plan.local_branches, name, label, ok, why)
 
     for name, sha in sorted(remote_refs.items()):
-        label = f"remote origin/{name}"
-        ok, why = _merged_reason(
-            name, sha, merged_prs=merged_prs, open_prs=open_prs, on_main=remote_on_main
-        )
-        if ok:
-            plan.remote_branches.append(name)
-            plan.reasons[label] = why
-        elif why != "protected":
-            plan.skipped.append((label, why))
+        ok, why = _prune_decision(name, sha, remote_on_main, facts)
+        _record(plan, plan.remote_branches, name, f"remote origin/{name}", ok, why)
     return plan
 
 
 # --- doing it -------------------------------------------------------------------------------
 
 
-def apply_plan(run: Runner, plan: Plan) -> None:
-    """Worktrees first (they pin branches), then local branches, then remote branches."""
+def apply_plan(run: Runner, plan: Plan) -> list[str]:
+    """Worktrees first (they pin branches), then local branches, then remote branches.
+
+    Each removal is its own command so one refusal cannot abort the rest; returns the
+    failure messages.
+    """
+    failures: list[str] = []
+
+    def attempt(argv: list[str]) -> None:
+        try:
+            run(argv)
+        except CommandError as e:
+            failures.append(str(e))
+
     for path in plan.worktrees:
-        run(["git", "worktree", "remove", path])
-    if plan.local_branches:
-        run(["git", "branch", "-D", *plan.local_branches])
+        attempt(["git", "worktree", "remove", path])
+    for name in plan.local_branches:
+        attempt(["git", "branch", "-D", name])
     for i in range(0, len(plan.remote_branches), 50):
-        run(["git", "push", "origin", "--delete", *plan.remote_branches[i : i + 50]])
+        attempt(["git", "push", "origin", "--delete", *plan.remote_branches[i : i + 50]])
+    return failures
 
 
 def render(plan: Plan, *, verbose: bool) -> str:
@@ -261,7 +279,7 @@ def render(plan: Plan, *, verbose: bool) -> str:
 def subprocess_runner(argv: Sequence[str]) -> str:
     proc = subprocess.run(list(argv), capture_output=True, text=True, encoding="utf-8")
     if proc.returncode != 0:
-        raise SystemExit(f"{' '.join(argv)} failed ({proc.returncode}):\n{proc.stderr.strip()}")
+        raise CommandError(f"{' '.join(argv)} failed ({proc.returncode}): {proc.stderr.strip()}")
     return proc.stdout
 
 
@@ -271,18 +289,25 @@ def main(argv: Sequence[str] | None = None, run: Runner = subprocess_runner) -> 
     ap.add_argument("--no-fetch", action="store_true", help="skip `git fetch --prune origin`")
     ap.add_argument("-v", "--verbose", action="store_true", help="also list what is kept and why")
     args = ap.parse_args(argv)
-    if not args.no_fetch:
-        run(["git", "fetch", "--prune", "origin"])
-    plan = build_plan(run)
+    try:
+        if not args.no_fetch:
+            run(["git", "fetch", "--prune", "origin"])
+        run(["git", "worktree", "prune"])  # drop admin files of worktrees whose dir is gone
+        plan = build_plan(run)
+    except CommandError as e:
+        print(e, file=sys.stderr)
+        return 1
     print(render(plan, verbose=args.verbose))
     if plan.empty:
         return 0
-    if args.apply:
-        apply_plan(run, plan)
-        print("applied.")
-    else:
+    if not args.apply:
         print("dry run - re-run with --apply to remove.")
-    return 0
+        return 0
+    failures = apply_plan(run, plan)
+    for msg in failures:
+        print(f"FAILED  {msg}", file=sys.stderr)
+    print(f"applied; {len(failures)} failure(s).")
+    return 1 if failures else 0
 
 
 if __name__ == "__main__":
