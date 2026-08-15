@@ -1,0 +1,303 @@
+{
+  "what": "burned-in supers in the human deliverables, and the cuts that land on them",
+  "measured_at": "2026-08-14",
+  "reading": {
+    "grid": "720x405",
+    "scan_fps": 2.0,
+    "lag_sec": [
+      1.0,
+      2.0
+    ],
+    "changed_at_or_below": 0.65,
+    "held_at_or_above": 0.98,
+    "contrast": 25.0,
+    "min_region_share": 0.0004,
+    "max_box_share": 0.35,
+    "min_super_share": 0.0025,
+    "max_super_height": 0.2
+  },
+  "decode": "NVDEC where the box has it; the frames are bit-identical to a software decode, checked frame for frame (see ab_pack.grey_chain)",
+  "caveat": "the cut list comes from the same per-frame scene detector the pack uses, which is blind to the dissolve-cut songs (#203). A song reporting few cuts has few cuts to check a straddle against, not few straddles.",
+  "songs": [
+    {
+      "clip": "S:\\Deliverables\\Ryan Devlin\\6-17-26 Zinc Bar\\Full Videos\\6-17 - Zinc Set 2 - Hardest Part.mp4",
+      "fps": 23.976,
+      "duration_sec": 534.165,
+      "cuts_detected": 30,
+      "seconds_to_measure": 130.1,
+      "supers": [
+        {
+          "kind": "overlay",
+          "first": 417,
+          "last": 565,
+          "top": 0.8568,
+          "left": 0.2236,
+          "bottom": 0.9259,
+          "right": 0.775,
+          "pixels": 1071,
+          "pairs": 17,
+          "ramp_in": 13,
+          "ramp_out": 26,
+          "visible_first": 404,
+          "visible_last": 591,
+          "frames": 188,
+          "clears_before": 6251,
+          "t": 16.85,
+          "end": 24.691
+        }
+      ],
+      "cards": 0,
+      "overlays": 1,
+      "cuts": 30,
+      "straddled": 0,
+      "straddled_cards": 0,
+      "straddled_overlays": 0,
+      "straddles": [],
+      "held_frames": {
+        "min": 188,
+        "median": 188,
+        "max": 188
+      },
+      "scan": {
+        "rate_fps": 2.0,
+        "lag_frames": [
+          2,
+          4
+        ],
+        "grid": "720x405",
+        "frames_scanned": 1068
+      }
+    },
+    {
+      "clip": "S:\\Deliverables\\Ryan Devlin\\6-17-26 Zinc Bar\\Full Videos\\6-17 - Zinc Set 2 - Maitland Boulevard.mp4",
+      "fps": 23.976,
+      "duration_sec": 1173.184,
+      "cuts_detected": 63,
+      "seconds_to_measure": 274.1,
+      "supers": [
+        {
+          "kind": "overlay",
+          "first": 444,
+          "last": 545,
+          "top": 0.8568,
+          "left": 0.2236,
+          "bottom": 0.9309,
+          "right": 0.775,
+          "pixels": 1517,
+          "pairs": 2,
+          "ramp_in": 0,
+          "ramp_out": 26,
+          "visible_first": 444,
+          "visible_last": 571,
+          "frames": 128,
+          "clears_before": 8360,
+          "t": 18.518,
+          "end": 23.857
+        }
+      ],
+      "cards": 0,
+      "overlays": 1,
+      "cuts": 63,
+      "straddled": 0,
+      "straddled_cards": 0,
+      "straddled_overlays": 0,
+      "straddles": [],
+      "held_frames": {
+        "min": 128,
+        "median": 128,
+        "max": 128
+      },
+      "scan": {
+        "rate_fps": 2.0,
+        "lag_frames": [
+          2,
+          4
+        ],
+        "grid": "720x405",
+        "frames_scanned": 2346
+      }
+    },
+    {
+      "clip": "S:\\Deliverables\\Ryan Devlin\\6-17-26 Zinc Bar\\Full Videos\\6-17 - Zinc Set 2 - Sambra.mp4",
+      "fps": 23.976,
+      "duration_sec": 784.299,
+      "cuts_detected": 31,
+      "seconds_to_measure": 175.2,
+      "supers": [
+        {
+          "kind": "overlay",
+          "first": 124,
+          "last": 177,
+          "top": 0.8049,
+          "left": 0.0611,
+          "bottom": 0.9012,
+          "right": 0.1958,
+          "pixels": 819,
+          "pairs": 3,
+          "ramp_in": 15,
+          "ramp_out": 17,
+          "visible_first": 109,
+          "visible_last": 194,
+          "frames": 86,
+          "clears_before": 437,
+          "t": 4.546,
+          "end": 8.133
+        }
+      ],
+      "cards": 0,
+      "overlays": 1,
+      "cuts": 31,
+      "straddled": 0,
+      "straddled_cards": 0,
+      "straddled_overlays": 0,
+      "straddles": [],
+      "held_frames": {
+        "min": 86,
+        "median": 86,
+        "max": 86
+      },
+      "scan": {
+        "rate_fps": 2.0,
+        "lag_frames": [
+          2,
+          4
+        ],
+        "grid": "720x405",
+        "frames_scanned": 1569
+      }
+    },
+    {
+      "clip": "S:\\Deliverables\\Ryan Devlin\\6-17-26 Zinc Bar\\Full Videos\\6-17 - Zinc Set 2 - Soultrane.mp4",
+      "fps": 23.976,
+      "duration_sec": 761.28,
+      "cuts_detected": 0,
+      "seconds_to_measure": 172.3,
+      "supers": [
+        {
+          "kind": "overlay",
+          "first": 1680,
+          "last": 1846,
+          "top": 0.8568,
+          "left": 0.225,
+          "bottom": 0.9259,
+          "right": 0.775,
+          "pixels": 1114,
+          "pairs": 14,
+          "ramp_in": 13,
+          "ramp_out": 0,
+          "visible_first": 1667,
+          "visible_last": 1846,
+          "frames": 180,
+          "clears_before": null,
+          "t": 69.528,
+          "end": 77.035
+        }
+      ],
+      "cards": 0,
+      "overlays": 1,
+      "cuts": 0,
+      "straddled": 0,
+      "straddled_cards": 0,
+      "straddled_overlays": 0,
+      "straddles": [],
+      "held_frames": {
+        "min": 180,
+        "median": 180,
+        "max": 180
+      },
+      "scan": {
+        "rate_fps": 2.0,
+        "lag_frames": [
+          2,
+          4
+        ],
+        "grid": "720x405",
+        "frames_scanned": 1523
+      }
+    },
+    {
+      "clip": "S:\\Deliverables\\Ryan Devlin\\6-17-26 Zinc Bar\\Full Videos\\6-17 - Zinc Set 2 - Taurus People.mp4",
+      "fps": 23.976,
+      "duration_sec": 497.664,
+      "cuts_detected": 77,
+      "seconds_to_measure": 119.8,
+      "supers": [
+        {
+          "kind": "card",
+          "first": 1,
+          "last": 55,
+          "top": 0.4667,
+          "left": 0.3028,
+          "bottom": 0.6074,
+          "right": 0.6958,
+          "pixels": 3395,
+          "pairs": 4,
+          "ramp_in": 0,
+          "ramp_out": 0,
+          "visible_first": 1,
+          "visible_last": 55,
+          "frames": 55,
+          "clears_before": 1,
+          "t": 0.042,
+          "end": 2.336
+        },
+        {
+          "kind": "overlay",
+          "first": 504,
+          "last": 623,
+          "top": 0.8568,
+          "left": 0.2236,
+          "bottom": 0.9259,
+          "right": 0.7764,
+          "pixels": 1032,
+          "pairs": 6,
+          "ramp_in": 13,
+          "ramp_out": 0,
+          "visible_first": 491,
+          "visible_last": 623,
+          "frames": 133,
+          "clears_before": 157,
+          "t": 20.479,
+          "end": 26.026
+        }
+      ],
+      "cards": 1,
+      "overlays": 1,
+      "cuts": 77,
+      "straddled": 1,
+      "straddled_cards": 0,
+      "straddled_overlays": 1,
+      "straddles": [
+        {
+          "cut": 541,
+          "kind": "overlay",
+          "in": 491,
+          "out": 623,
+          "into_super": 50,
+          "left_of_super": 83
+        }
+      ],
+      "held_frames": {
+        "min": 55,
+        "median": 94,
+        "max": 133
+      },
+      "scan": {
+        "rate_fps": 2.0,
+        "lag_frames": [
+          2,
+          4
+        ],
+        "grid": "720x405",
+        "frames_scanned": 995
+      }
+    }
+  ],
+  "totals": {
+    "supers": 6,
+    "cards": 1,
+    "overlays": 5,
+    "straddled": 1,
+    "cuts": 201
+  }
+}

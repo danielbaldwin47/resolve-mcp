@@ -103,10 +103,13 @@ def main(argv: list[str] | None = None) -> int:
             "changed_at_or_below": supers.CHANGED,
             "held_at_or_above": supers.HELD,
             "contrast": supers.CONTRAST,
-            "min_area_share": supers.MIN_AREA,
+            "min_region_share": supers.MIN_AREA,
             "max_box_share": supers.MAX_BOX,
-            "step_across_span_at_or_above": supers.STEP,
+            "min_super_share": supers.MIN_SUPER,
+            "max_super_height": supers.MAX_HEIGHT,
         },
+        "decode": "NVDEC where the box has it; the frames are bit-identical to a software "
+        "decode, checked frame for frame (see ab_pack.grey_chain)",
         "caveat": (
             "the cut list comes from the same per-frame scene detector the pack uses, which "
             "is blind to the dissolve-cut songs (#203). A song reporting few cuts has few "
