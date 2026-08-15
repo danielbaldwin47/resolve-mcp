@@ -397,7 +397,7 @@ def test_an_unmeasured_call_is_never_dropped() -> None:
 
 def test_every_tune_is_one_record_with_its_own_number() -> None:
     curve = _concert((0.0, 30.0), (0.9, 4.0), (0.0, 30.0))
-    rows = applause.numbered(applause.tunes(_spans(curve), 64.0, minimum_seconds=10.0))
+    rows = applause.rows(applause.tunes(_spans(curve), 64.0, minimum_seconds=10.0))
 
     assert [row["tune"] for row in rows] == [1, 2]
     assert set(rows[0]) == {
@@ -417,14 +417,14 @@ def test_every_tune_is_one_record_with_its_own_number() -> None:
 
 def test_a_record_carries_the_density_it_was_kept_on() -> None:
     """What the filter measured, on the row, so a songs.json author can see the evidence."""
-    rows = applause.numbered(applause.counted(_called((0.0, 10.0)), _beats(0.0, 10.0, 2.0)))
+    rows = applause.rows(applause.counted(_called((0.0, 10.0)), _beats(0.0, 10.0, 2.0)))
 
     assert rows[0]["beats"] == 20
     assert rows[0]["beats_per_second"] == 2.0
 
 
 def test_a_record_written_without_a_grid_says_so_rather_than_claiming_zero() -> None:
-    rows = applause.numbered(_called((0.0, 10.0)))
+    rows = applause.rows(_called((0.0, 10.0)))
 
     assert rows[0]["beats"] is None
     assert rows[0]["beats_per_second"] is None

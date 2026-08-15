@@ -58,7 +58,7 @@ from ..jobs.runner import JobOutput, Progress, start_job
 from ..logging_config import get_logger
 from ..naming import slug
 from . import beats as beats_module
-from . import halves, melody, music, records, solos
+from . import halves, melody, music, solos
 
 log = get_logger("analysis")
 
@@ -165,7 +165,7 @@ def boundaries(
 ) -> Detection:
     """Phrase boundaries over ``notes``, placed against the numbered beat ``grid``.
 
-    ``grid`` is what ``beats.numbered`` produces and the beats half writes: one record per
+    ``grid`` is what ``beats.rows`` produces and the beats half writes: one record per
     beat carrying its time, bar and whether it starts one.
     """
     played = sorted(notes, key=lambda one: (one.seconds, one.end))
@@ -334,7 +334,7 @@ def _clamp(value: float) -> float:
 def rows(detection: Detection) -> tuple[dict[str, Any], ...]:
     """One flat record per boundary — both placements, so a cut can use either.
 
-    The record keys are ``solos.numbered``'s and not this module's field names: ``t`` for the
+    The record keys are ``solos.rows``'s and not this module's field names: ``t`` for the
     time an event is called on and ``measured_t`` for where it was seen is what every record
     file in this stack already says, and a boundary is the same kind of thing as a solo change.
     A reader who greps one analysis document should not have to learn a second vocabulary.
@@ -525,17 +525,11 @@ def detect(
     progress(0.8, "looking for phrase boundaries")
     floor = float(settings["minimum_confidence"])
     detection = boundaries(notes, grid, floor)
-    summary = gist(detection, floor, label, len(notes))
+    stats = gist(detection, floor, label, len(notes))
 
     progress(0.9, "writing the boundaries")
     target = config.analysis_dir / f"{slug(source.stem, 'analysis')}-{key[:12]}-{PHRASES}.json"
-    header = {
-        "kind": PHRASES,
-        "audio": described["path"],
-        "duration_seconds": described["duration_seconds"],
-        **summary,
-    }
-    records.write(target, header, PHRASES, rows(detection))
+    result = halves.written(target, PHRASES, described, stats, rows(detection))
 
     progress(0.95, "written")
-    return JobOutput({"path": str(target), **summary}, (target,))
+    return JobOutput(result, (target,))

@@ -157,7 +157,12 @@ no silent CPU fallback, #202; the inventory and the stays-on-CPU corpus policy:
 `docs/reference/compute-device-inventory.md`), `drums` (hits per stem), `energy`
 (loudness curves; `rms_curve` is the cheap level-only pass, no K-weighting and
 no onsets), `fills` (drum-fill candidates), `halves` (shared
-identify/cache/write pattern, plus `collected`/`stem_named` — where a
+identify/cache/write pattern — `written` is the one door every analysis file
+goes through, so every one of them opens `kind`/`audio`/`duration_seconds`
+(#223, guarded across detectors by `tests/test_analysis_reports.py`;
+`correlate`'s join over cut rows is the documented exception), and where the
+naming rule lives: a header-stats builder is `gist`, a record builder is
+`rows` — plus `collected`/`stem_named` — where a
 separation's melodic stems are, third pass included, and which one was asked
 for; one convention for every detector that reads one: `phrases` off the line,
 `bars` off the pulse, `structure` off all of them (#220). `fills` still finds
@@ -357,6 +362,14 @@ process, a recycled pid and a refused read are arrangements rather than
 monkeypatches. `test_detached_jobs.py` keeps what is stems-shaped over it (the
 refusals' wording, the claim held across the passes and dropped after them) and
 `test_sharing.py` pins the retry both files depend on (#217).
+
+`test_analysis_reports.py` is the one test that spans detectors rather than
+following a module: it runs every half that writes an analysis file — beats,
+energy, tunes, solos, bars, phrases, fills — and asserts they all open
+`kind`/`audio`/`duration_seconds`, the header `analysis/halves.written`
+exists to keep (#223). It imports each detector's fakes from that detector's
+own test file, so the inputs have one home; what each file *says* stays with
+the per-detector tests.
 
 `tests/fakes/` is the fake Resolve API, one module per subsystem — open the
 module, not the package, and never the whole package at once:

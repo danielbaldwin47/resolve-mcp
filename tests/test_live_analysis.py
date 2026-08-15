@@ -40,7 +40,7 @@ def test_the_installed_beat_model_hears_a_click_track(tmp_path: Path) -> None:
     path = write_clicks(tmp_path / "clicks.wav", beats_per_minute=CLICK_BPM, seconds=CLICK_SECONDS)
 
     grid = beats.detect(path)
-    found = beats.gist(grid, beats.numbered(grid))
+    found = beats.gist(grid, beats.rows(grid))
 
     # Times in seconds, not frames or samples: the unit is what a wrong call gets wrong.
     assert all(0.0 <= one <= CLICK_SECONDS for one in grid.beats)
@@ -74,7 +74,7 @@ def test_a_bar_map_over_the_real_model_and_the_real_accents_finds_the_downbeat(
         accents=[1.0 if index % BAR_METER == 0 else 0.3 for index in range(len(times))],
     )
 
-    grid = beats.numbered(beats.detect(path))
+    grid = beats.rows(beats.detect(path))
     salience = bars.accents(path, [float(row["t"]) for row in grid])
     found = bars.mapped(grid, salience)
 

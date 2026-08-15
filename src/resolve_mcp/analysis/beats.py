@@ -126,7 +126,7 @@ def _loaded() -> Any:
         ) from exc
 
 
-def numbered(grid: BeatGrid) -> tuple[dict[str, Any], ...]:
+def rows(grid: BeatGrid) -> tuple[dict[str, Any], ...]:
     """One record per beat: its time, its number, its bar, and where it sits in the bar.
 
     Bars are counted from the downbeats the model gave, so a tune in five and a tune in four

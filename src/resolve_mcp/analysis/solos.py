@@ -459,7 +459,7 @@ def snapped(
     return tuple(called)
 
 
-def numbered(found: Sequence[Change]) -> tuple[dict[str, Any], ...]:
+def rows(found: Sequence[Change]) -> tuple[dict[str, Any], ...]:
     """One record per change: when it is called, when it was seen, and what changed."""
     return tuple(
         {
