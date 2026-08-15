@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -33,6 +34,28 @@ class LoadedDocument(NamedTuple):
     content_hash: str
     doc: Any  # the parsed document, or None when parse_error says why there is none
     parse_error: Finding | None
+
+
+@dataclass(frozen=True)
+class Preflight:
+    """A file as read, and what the rules said about it — the shape every dry run has.
+
+    The cut and the titles rule sets share nothing but this: the document they were run
+    over travels with their findings, so the operation that follows is judged on and
+    built from the same reading. Each rule set subclasses this to carry whatever else its
+    apply needs; the pair and the severity split are defined once, here.
+    """
+
+    loaded: LoadedDocument
+    findings: list[Finding]
+
+    @property
+    def errors(self) -> list[Finding]:
+        return [finding for finding in self.findings if finding.severity == "error"]
+
+    @property
+    def warnings(self) -> list[Finding]:
+        return [finding for finding in self.findings if finding.severity == "warning"]
 
 
 def content_hash(data: bytes) -> str:
@@ -66,4 +89,10 @@ def read_document(
     return LoadedDocument(path, digest, doc, None)
 
 
-__all__ = ["HASH_DIGEST_BYTES", "LoadedDocument", "content_hash", "read_document"]
+__all__ = [
+    "HASH_DIGEST_BYTES",
+    "LoadedDocument",
+    "Preflight",
+    "content_hash",
+    "read_document",
+]

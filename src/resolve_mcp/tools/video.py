@@ -53,7 +53,7 @@ def detect_scene_cuts(
 ) -> dict[str, Any]:
     """Start a job cataloguing every scene cut in a clip — the b-roll question, answered once.
 
-    Returns a job_id to poll with get_job. The finished result is a gist: how many cuts, how
+    Returns a job to poll with get_job. The finished result is a gist: how many cuts, how
     many shots, the shot lengths, the first few cut times — and path, the JSON catalog with
     every cut and every shot in dual time. Read or grep that file for the span you care
     about rather than asking for it all inline.
@@ -86,7 +86,7 @@ def analyze_occlusion(
     """Start a job scoring how much of an angle is blocked by something in the near field.
 
     The question before you cut to a camera: is anyone's head, hat, phone or back in the way?
-    Returns a job_id to poll with get_job. Run it over the range of a song on every angle you
+    Returns a job to poll with get_job. Run it over the range of a song on every angle you
     are considering, then keep your cuts out of the windows it reports.
 
     start and end are the clip's own frame numbers, dual time as everywhere — start=85653 or
@@ -141,7 +141,7 @@ def analyze_quality(
     """Start a job scoring how good the picture is across a range of an angle.
 
     The other question before you cut to a camera: is this take soft, blown out or shaky?
-    Returns a job_id to poll with get_job. Run it over a song's range on the angles you are
+    Returns a job to poll with get_job. Run it over a song's range on the angles you are
     choosing between, rank them on what comes back, and keep your cuts out of its windows.
 
     start and end are the clip's own frame numbers, dual time as everywhere — start=85653 or

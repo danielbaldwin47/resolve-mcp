@@ -75,18 +75,16 @@ def render_timeline(
     hand would; the timeline the director had open is the one thing put back.
     """
     connection = get_connection()
-    return {
-        "job": deliver.render_timeline(
-            connection,
-            preset=preset,
-            timeline=timeline,
-            name=name,
-            target_dir=target_dir,
-            start=start,
-            end=end,
-            refresh=refresh,
-        )
-    }
+    return deliver.render_timeline(
+        connection,
+        preset=preset,
+        timeline=timeline,
+        name=name,
+        target_dir=target_dir,
+        start=start,
+        end=end,
+        refresh=refresh,
+    )
 
 
 TOOLS: tuple[Any, ...] = (list_render_presets, render_timeline)

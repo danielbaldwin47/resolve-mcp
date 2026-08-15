@@ -17,8 +17,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..document import LoadedDocument
-from ..findings import Finding, severity_of
+from ..document import Preflight as LoadedPreflight
+from ..findings import report, severity_of
 from ..logging_config import get_logger
 from ..titles.assets import Asset
 from ..titles.document import read_titles_file
@@ -63,7 +63,7 @@ def get_titles_schema() -> dict[str, Any]:
 
 
 @dataclass(frozen=True)
-class Preflight:
+class Preflight(LoadedPreflight):
     """One pass of the rules, and everything the apply would need if they pass.
 
     The timeline, the templates and the events travel with the findings so the apply
@@ -71,22 +71,12 @@ class Preflight:
     another is the failure this pairing makes impossible.
     """
 
-    loaded: LoadedDocument
-    findings: list[Finding]
     project: Project | None = None
     timeline: Timeline | None = None
     fps: float | None = None
     templates: dict[str, mediapool.LocatedClip] = field(default_factory=dict)
     assets: dict[str, Asset] = field(default_factory=dict)
     events: list[Event] = field(default_factory=list)
-
-    @property
-    def errors(self) -> list[Finding]:
-        return [finding for finding in self.findings if finding.severity == "error"]
-
-    @property
-    def warnings(self) -> list[Finding]:
-        return [finding for finding in self.findings if finding.severity == "warning"]
 
 
 def preflight(connection: ResolveConnection, titles_file: str) -> Preflight:
@@ -210,8 +200,7 @@ def _report(checked: Preflight) -> dict[str, Any]:
         "titles_file": str(checked.loaded.path),
         "content_hash": checked.loaded.content_hash,
         "valid": not checked.errors,
-        "errors": [finding.as_dict() for finding in checked.errors],
-        "warnings": [finding.as_dict() for finding in checked.warnings],
+        **report(checked.findings),
         "timeline": (
             None if checked.timeline is None else timeline_read.name_of(checked.timeline)
         ),

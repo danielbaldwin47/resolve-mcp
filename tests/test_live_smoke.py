@@ -1317,7 +1317,9 @@ def test_a_real_quality_scan_reads_an_angle_on_its_own_clock() -> None:
     last = min(bounds["out"]["frames"], first + int(fps * QUALITY_SCAN_SECONDS))
 
     started = analyze_quality(footage["name"], bin=footage["bin"], start=first, end=last)
-    record = wait_for(started["job_id"], timeout=1800.0)
+    # The one envelope shape for a started job, on a real box (#219): the video tools used
+    # to splice the record into the top level and the analysis tools to wrap it.
+    record = wait_for(started["job"]["job_id"], timeout=1800.0)
 
     assert started["ok"] is True, started.get("error")
     assert record.state == "completed", record.error
@@ -1429,7 +1431,7 @@ def test_a_real_scene_scan_reports_cuts_on_the_clips_own_clock(
     bounds = inspect_clip(chosen["name"], bin=chosen["bin"])["bounds"]["media"]
 
     started = detect_scene_cuts(chosen["name"], bin=chosen["bin"])
-    record = wait_for(started["job_id"], timeout=1800.0)
+    record = wait_for(started["job"]["job_id"], timeout=1800.0)
 
     assert started["ok"] is True, started.get("error")
     assert record.state == "completed", record.error
