@@ -1,8 +1,8 @@
 # resolve-mcp
 
 An MCP server that lets an agent edit concert footage in DaVinci Resolve
-Studio — the server measures; Claude decides. Map and vocabulary:
-`CONTEXT.md`.
+Studio — the server measures; Claude decides. Map: `CONTEXT.md`;
+vocabulary: `docs/context/vocabulary.md`.
 
 ## Test seams
 
@@ -147,19 +147,25 @@ runs repeat. Delegate exploration to
 a read-only subagent; Read only what you will edit, ranged (grep first) on
 big files; do not re-read a file after editing it. The hooks in
 `.claude/hooks/` enforce the cat/tail rules, whole-file re-reads, and
-whole-file reads of code/config files over 400 lines (markdown exempt) — a
-block from them is the rule firing, not an obstacle to route around; the
-block message names the fix.
+whole-file reads of code, config and markdown files over 400 lines
+(CLAUDE.md exempt) — a block from them is the rule firing, not an obstacle
+to route around; the block message names the fix.
 
 The same scratch-file rule covers `gh` — issue bodies, comment threads,
 and PR diffs were the biggest single results in past sessions:
 `gh issue view <n> --json body -q .body > issue.scratch.log`, then Grep
 back the section you need.
 
-**Orient from `CONTEXT.md` first** — the repo map answers "which module
-owns X, where is the seam, which test file covers Y"; explores are for
-what a map can't hold (exact signatures, current behaviour). A PR that
-adds, moves, or deletes a module updates the map in the same PR.
+**Orient from `CONTEXT.md` first** — the map is one table, ~150 lines:
+which module owns X, which test covers it, at which seam. The narrative
+behind each area (vocabulary, `analysis/`, `resolve/`, the test map, …)
+lives in `docs/context/<area>.md`: Grep it, or Read it ranged, only when
+you are about to work in that area — never whole (the read guard now
+blocks whole-file Reads of any markdown over 400 lines except this file).
+Explores are for what a map can't hold (exact signatures, current
+behaviour). A PR that adds, moves, or deletes a module or test file
+updates the map in the same PR — `tests/test_context_map.py` fails
+otherwise — and area narrative goes to the area doc, not the map.
 
 Long multi-PR sweeps (merge trains, cross-PR audits) shard per-PR into
 subagents; the orchestrating session keeps receipts, not diffs — past
