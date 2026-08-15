@@ -36,7 +36,8 @@ from ..titles.validate import (
     validate_project,
     validate_structure,
 )
-from . import markers, media
+from . import markers
+from . import pool as mediapool
 from . import timeline as timeline_read
 from .connection import ResolveConnection
 from .session import frame_rate
@@ -75,7 +76,7 @@ class Preflight:
     project: Project | None = None
     timeline: Timeline | None = None
     fps: float | None = None
-    templates: dict[str, media.LocatedClip] = field(default_factory=dict)
+    templates: dict[str, mediapool.LocatedClip] = field(default_factory=dict)
     assets: dict[str, Asset] = field(default_factory=dict)
     events: list[Event] = field(default_factory=list)
 
@@ -109,7 +110,7 @@ def preflight(connection: ResolveConnection, titles_file: str) -> Preflight:
     project = timeline_read.open_project(connection)
     timeline = timeline_read.find_timeline(project, doc.get("timeline"))
     fps = frame_rate(project, timeline)
-    pool = media.media_pool(connection)
+    pool = mediapool.media_pool(connection)
 
     facts, located = _templates(pool, doc)
     anchors = markers.markers_by_name(connection, timeline, fps, ANCHOR_COLOR)
@@ -150,7 +151,7 @@ def _span(timeline: Timeline) -> tuple[int, int]:
 def _templates(
     pool: Pool,
     doc: dict[str, Any],
-) -> tuple[list[TemplateFacts], dict[str, media.LocatedClip]]:
+) -> tuple[list[TemplateFacts], dict[str, mediapool.LocatedClip]]:
     """Every declared template the file actually uses, resolved against the pool.
 
     Reported as facts rather than raised on, because T5 has to name every unusable
@@ -164,10 +165,10 @@ def _templates(
         if route_of(event) != PNG
     }
     declared = {name: one for name, one in doc.get("templates", {}).items() if name in used}
-    found = media.clips_named(pool, {str(one["clip"]) for one in declared.values()})
+    found = mediapool.clips_named(pool, {str(one["clip"]) for one in declared.values()})
 
     facts: list[TemplateFacts] = []
-    located: dict[str, media.LocatedClip] = {}
+    located: dict[str, mediapool.LocatedClip] = {}
     for name, template in declared.items():
         clip = str(template["clip"])
         bin_path = template.get("bin")
@@ -192,11 +193,11 @@ def _under(bin_path: str | None, declared: str) -> bool:
     """Whether a clip's bin is the declared one or nested inside it, as find_clip searches.
 
     ``declared`` is compared as written, so the one spelling this does not share with
-    :func:`media.find_clip` is the root's own name: ``Master`` reads as a bin called
+    :func:`mediapool.find_clip` is the root's own name: ``Master`` reads as a bin called
     Master here, where find_clip reads it as the root.
     """
     where = bin_path or ""
-    return where == declared or where.startswith(f"{declared}{media.BIN_SEPARATOR}")
+    return where == declared or where.startswith(f"{declared}{mediapool.BIN_SEPARATOR}")
 
 
 def validate_titles(connection: ResolveConnection, titles_file: str) -> dict[str, Any]:

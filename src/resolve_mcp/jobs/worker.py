@@ -31,7 +31,7 @@ from collections.abc import Callable, Sequence
 from ..config import Config, get_config
 from ..errors import InternalError, ResolveMcpError
 from ..logging_config import configure_logging, get_logger
-from . import runner, store
+from . import lifecycle, runner, store
 from .runner import JobOutput, Progress
 from .store import JobRecord
 
@@ -66,7 +66,7 @@ def run(job_id: str, config: Config | None = None) -> JobRecord:
     config = config or get_config()
     record = store.adopt(job_id, config)
     log.info("Detached worker running job %s (%s)", job_id, record.kind)
-    if record.state != store.RUNNING:
+    if record.state != lifecycle.RUNNING:
         log.warning("Job %s was already %s; the worker has nothing to do", job_id, record.state)
         return record
 
@@ -91,7 +91,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     except ResolveMcpError as exc:
         log.error("The detached worker could not start job %s: %s", args[0], exc.cause)
         return 2
-    return 0 if record.state == store.COMPLETED else 1
+    return 0 if record.state == lifecycle.COMPLETED else 1
 
 
 if __name__ == "__main__":

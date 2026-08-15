@@ -19,12 +19,8 @@ from typing import Any
 
 import pytest
 
-from resolve_mcp.cut.validate import (
-    overlay_positions,
-    positions,
-    total_frames,
-    validate_structure,
-)
+from resolve_mcp.cut.layout import overlay_positions, positions, total_frames
+from resolve_mcp.cut.validate import validate_structure
 from resolve_mcp.findings import Finding
 from resolve_mcp.tools.cut import (
     build_timeline,

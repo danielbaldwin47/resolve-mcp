@@ -17,15 +17,13 @@ from __future__ import annotations
 from typing import Any, NamedTuple
 
 from ..cut.document import read_cut_file
+from ..cut.layout import gaps, shots, total_frames
 from ..cut.schema import ANNOTATED_EXAMPLE, SCHEMA_DOC, SCHEMA_VERSION
 from ..cut.validate import (
     DEFAULT_MIN_SEGMENT_FRAMES,
     RULE_DESCRIPTIONS,
     ClipFacts,
-    gaps,
     resolve_aliases,
-    shots,
-    total_frames,
     validate_project,
     validate_structure,
 )
@@ -33,7 +31,7 @@ from ..document import LoadedDocument
 from ..findings import Finding, severity_of
 from ..logging_config import get_logger
 from ..timing import dual_time
-from . import media
+from . import pool as mediapool
 from .connection import ResolveConnection
 
 log = get_logger("cut")
@@ -71,7 +69,7 @@ class Source(NamedTuple):
     """
 
     facts: ClipFacts
-    located: media.LocatedClip
+    located: mediapool.LocatedClip
 
 
 class Preflight(NamedTuple):
@@ -127,7 +125,7 @@ def validate_cut(
     return _report(preflight(connection, cut_file, min_segment_frames))
 
 
-def clips_by_alias(checked: Preflight) -> dict[str, media.LocatedClip]:
+def clips_by_alias(checked: Preflight) -> dict[str, mediapool.LocatedClip]:
     """Alias -> the pool clip the rules resolved it to, ready to append.
 
     The alias is resolved by the same E4 rule the dry run uses, and the clip that comes
@@ -139,37 +137,37 @@ def clips_by_alias(checked: Preflight) -> dict[str, media.LocatedClip]:
     return {alias: handles[id(facts)] for alias, facts in resolved.items()}
 
 
-def _located(connection: ResolveConnection, doc: dict[str, Any]) -> list[media.LocatedClip]:
+def _located(connection: ResolveConnection, doc: dict[str, Any]) -> list[mediapool.LocatedClip]:
     """The pool clips this cut names, and nothing else.
 
     Only the aliased names are looked up: a concert pool holds thousands of clips, and a
     cut references a handful, so properties are read for the handful.
     """
-    pool = media.media_pool(connection)
+    pool = mediapool.media_pool(connection)
     wanted = {str(source["clip"]) for source in doc["sources"].values()}
-    located = media.clips_named(pool, wanted)
+    located = mediapool.clips_named(pool, wanted)
     log.info("Cut validation resolved %d of %d aliased clip names", len(located), len(wanted))
     return located
 
 
 def _facts(bin_path: str, clip: Clip, timeline_fps: float) -> ClipFacts:
     name = str(clip.GetName() or "")
-    reported = media.properties(clip)
+    reported = mediapool.properties(clip)
     # The timeline's rate is what the Duration fallback counts at: an audio-only clip
     # reports no Start/End/Frames and no rate of its own (#46), only a Duration timecode.
-    start, out = media.frame_bounds(reported, fps=timeline_fps)
+    start, out = mediapool.frame_bounds(reported, fps=timeline_fps)
     if start is None or out is None:
         # The condition W9 reports to the agent, said once here as well: the warning rides
         # in a result the agent may or may not read back, and a build that went wrong over a
         # range nothing checked is diagnosed from the log or not at all (#186).
         log.info("No usable media bounds on %s (%s-%s); E5 and E7 cannot check a range "
                  "against them", name, start, out)
-    channels = media.audio_channels(reported)
+    channels = mediapool.audio_channels(reported)
     if channels is None:
         # E7's has-audio leg reads an undocumented property key. If Resolve renames it
         # the rule silently passes everything, and no fake can catch that — so say so
         # here, where a live session's log is the only place it can be noticed.
-        log.info("No usable %r on %s; E7 cannot check for audio", media.AUDIO_CHANNELS, name)
+        log.info("No usable %r on %s; E7 cannot check for audio", mediapool.AUDIO_CHANNELS, name)
     return ClipFacts(
         name=name,
         bin_path=bin_path,
@@ -178,11 +176,11 @@ def _facts(bin_path: str, clip: Clip, timeline_fps: float) -> ClipFacts:
         # (the same fail-open stance has_audio takes below).
         start=start,
         end_exclusive=out,
-        fps=media.frame_rate(reported),
+        fps=mediapool.frame_rate(reported),
         # An unreported channel count must not fail a cut that is fine: E7 blocks the
         # build, and "Resolve did not say" is not evidence of silence.
         has_audio=channels is None or channels > 0,
-        is_still=media.is_still(reported),
+        is_still=mediapool.is_still(reported),
     )
 
 

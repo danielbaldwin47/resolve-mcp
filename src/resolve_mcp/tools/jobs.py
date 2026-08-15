@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..errors import InvalidRequestError
-from ..jobs import store
+from ..jobs import lifecycle, store
 from .envelope import tool
 
 DEFAULT_JOB_LIMIT = 50
@@ -38,11 +38,11 @@ def list_jobs(state: str | None = None, limit: int = DEFAULT_JOB_LIMIT) -> dict[
     went down comes back failed with code job_interrupted, which means start it again —
     finished work is already in the result cache and is not paid for twice.
     """
-    if state is not None and state not in store.STATES:
+    if state is not None and state not in lifecycle.STATES:
         raise InvalidRequestError(
             cause=f"{state!r} is not a job state.",
-            fix=f"Use one of {', '.join(store.STATES)}, or leave state out for all of them.",
-            detail={"requested": state, "states": list(store.STATES)},
+            fix=f"Use one of {', '.join(lifecycle.STATES)}, or leave state out for all of them.",
+            detail={"requested": state, "states": list(lifecycle.STATES)},
         )
     found = store.load_all(state=state)
     shown = found[:limit]

@@ -48,19 +48,21 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Final
 
+from ..cut import resolution as cut_resolution
 from ..cut import tail as cut_tail
-from ..cut.validate import gaps as cut_gaps
-from ..cut.validate import (
+from ..cut.layout import gaps as cut_gaps
+from ..cut.layout import (
     is_gap,
-    locked_track_finding,
     overlay_positions,
     overlay_track,
     placements,
 )
 from ..errors import BuildFailedError, CutInvalidError, TimelineNotFoundError
+from ..findings import Finding
 from ..logging_config import get_logger
 from ..naming import latest_version, next_version_name, version_name
-from . import cut, markers, media, mix, takes
+from . import cut, markers, mix, settings, takes
+from . import pool as mediapool
 from . import tail as tail_route
 from . import timeline as timeline_read
 from .connection import ResolveConnection
@@ -186,7 +188,7 @@ def build_timeline(
     doc: dict[str, Any] = checked.loaded.doc
 
     project = timeline_read.open_project(connection)
-    pool = media.media_pool(connection)
+    pool = mediapool.media_pool(connection)
     base = str(doc["timeline"]["name"])
     existing = timeline_read.timeline_names(project)
     # Read before the build, because creating the new version is what makes it the latest:
@@ -207,6 +209,14 @@ def build_timeline(
     writing = tail_route.staging_name(name, existing) if round_tripped else name
 
     built = _create(pool, project, writing)
+    # Before anything is appended, because the cut states the size it is *for* and a
+    # timeline is created at the project's own default — 4K on the corpus project, against
+    # 1080p deliverables (G13). A cut that says nothing keeps the v1 behaviour: whatever the
+    # project makes. A round-tripped build sets it again on the timeline the import made,
+    # below: the staging timeline's settings are not the ones that ship.
+    stated = cut_resolution.read(doc)
+    if stated is not None:
+        settings.apply_resolution(built, stated, writing)
     # The frame the shots are positioned against. Kept, rather than re-read per check: a
     # round-tripped build reads its placements back on a *second* timeline, whose own start
     # is Resolve's to choose, and the comparison there is offset against offset.
@@ -233,6 +243,11 @@ def build_timeline(
             tail,
             verify=lambda landed: _verify(reader, landed, shots, name, origin),
         )
+        if stated is not None:
+            # The import is a different timeline and Resolve creates it at the project's
+            # default like any other, so the staging timeline's setting does not travel with
+            # the OTIO document. This is the one that ships.
+            settings.apply_resolution(built, stated, name)
     elif tail is not None:
         # Nothing was injected and nothing was round-tripped, but the cut file did ask for a
         # tail — so the report says what it asked for and that it took no route.
@@ -434,7 +449,7 @@ def _write_entry(marker: dict[str, Any], shift: int) -> dict[str, Any]:
 
 def _shots(
     doc: dict[str, Any],
-    clips: dict[str, media.LocatedClip],
+    clips: dict[str, mediapool.LocatedClip],
     start: int,
     stills: Stills,
 ) -> list[Shot]:
@@ -498,7 +513,7 @@ def _shots(
 def _shot(
     id: str,
     track: Track,
-    located: media.LocatedClip,
+    located: mediapool.LocatedClip,
     source_in: int,
     record: int,
     duration: int,
@@ -516,14 +531,14 @@ def _shot(
     )
 
 
-def _clip_name(located: media.LocatedClip) -> str:
+def _clip_name(located: mediapool.LocatedClip) -> str:
     """What to call the clip in a failure — read once, since a dead handle answers nothing."""
     return str(located.clip.GetName() or "")
 
 
 def _selectors(
     doc: dict[str, Any],
-    clips: dict[str, media.LocatedClip],
+    clips: dict[str, mediapool.LocatedClip],
     shots: list[Shot],
     shift: int = 0,
 ) -> list[takes.Selector]:
@@ -550,7 +565,7 @@ def _selectors(
     return found
 
 
-def _take(alternate: dict[str, Any], clips: dict[str, media.LocatedClip]) -> takes.Take:
+def _take(alternate: dict[str, Any], clips: dict[str, mediapool.LocatedClip]) -> takes.Take:
     source = str(alternate["source"])
     located = clips[source]
     return takes.Take(
@@ -634,6 +649,24 @@ def _tracks(shots: list[Shot]) -> list[Track]:
     )
 
 
+def locked_track_finding(track: str) -> Finding:
+    """E11: Resolve accepts an append onto a locked track and silently drops it.
+
+    E11 is the one rule :mod:`resolve_mcp.cut.validate` cannot answer — the condition is a
+    live Resolve track, not anything in the document — so the finding is shaped here, beside
+    the check that can observe it, in the same ``{rule, id, message, fix_hint}`` shape every
+    other rule reports (#218). The catalogue entry stays with the rest in
+    :data:`resolve_mcp.cut.validate.RULE_DESCRIPTIONS`.
+    """
+    return Finding(
+        rule="E11",
+        id=track,
+        message=f"Track {track} is locked; Resolve would report the append as successful "
+        f"and place nothing.",
+        fix_hint="Unlock the track in Resolve's timeline header and build again.",
+    )
+
+
 def _refuse_locked_tracks(timeline: Timeline, shots: list[Shot], name: str) -> None:
     """E11: a locked track accepts the append, reports items, and places nothing.
 
@@ -661,7 +694,7 @@ def _handle(clip: Clip) -> int:
     return id(clip)
 
 
-def _prepare_sources(clips: dict[str, media.LocatedClip]) -> Stills:
+def _prepare_sources(clips: dict[str, mediapool.LocatedClip]) -> Stills:
     """Get every source clip ready to be appended, and answer with the stills among them.
 
     One pass, because each clip's properties are a round trip to Resolve and there is
@@ -684,18 +717,18 @@ def _prepare_sources(clips: dict[str, media.LocatedClip]) -> Stills:
         if _handle(located.clip) in seen:
             continue
         seen.add(_handle(located.clip))
-        reported = media.properties(located.clip)
-        start, _ = media.frame_bounds(reported)
+        reported = mediapool.properties(located.clip)
+        start, _ = mediapool.frame_bounds(reported)
         if start:
             log.info(
                 "%s counts its own frames from %d, not 0; source frames are read back per shot",
                 located.clip.GetName(),
                 start,
             )
-        if not media.is_still(reported):
+        if not mediapool.is_still(reported):
             continue
         stills.add(_handle(located.clip))
-        if media.apply_still_workaround(located.clip, reported):
+        if mediapool.apply_still_workaround(located.clip, reported):
             log.info("Unlocked exact durations on the still %s", located.clip.GetName())
     return frozenset(stills)
 
@@ -867,4 +900,4 @@ def _expected(shot: Shot) -> dict[str, Any]:
     }
 
 
-__all__ = ["Shot", "Track", "build_timeline"]
+__all__ = ["Shot", "Track", "build_timeline", "locked_track_finding"]

@@ -43,6 +43,7 @@ from ..spill import spill
 from ..timing import dual_time, to_frames
 from .connection import ResolveConnection
 from .session import current_project, frame_rate
+from .settings import read_resolution
 
 log = get_logger("timeline")
 
@@ -364,6 +365,12 @@ def _track_counts(reader: Reader, timeline: Timeline) -> dict[str, int]:
     }
 
 
+def _resolution_of(timeline: Timeline) -> dict[str, int] | None:
+    """The timeline's frame size as the report carries it — the one place it is flattened."""
+    landed = read_resolution(timeline)
+    return landed.as_dict() if landed is not None else None
+
+
 def summarise(
     reader: Reader,
     timeline: Timeline,
@@ -380,6 +387,10 @@ def summarise(
         "version": version,
         "current": name == current,
         "fps": fps,
+        # What the frames are, beside how fast they run. ``None`` when the timeline will not
+        # say — never a guess off the project, because the two differ exactly when it
+        # matters (a 1080p cut in a 4K project, #187).
+        "resolution": _resolution_of(timeline),
         **_bounds(timeline, fps),
         "tracks": _track_counts(reader, timeline),
     }

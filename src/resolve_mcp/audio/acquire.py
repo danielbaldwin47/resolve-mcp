@@ -42,7 +42,8 @@ from ..jobs import cache
 from ..jobs.runner import JobOutput, Progress, band, start_job
 from ..logging_config import get_logger
 from ..naming import keyed_name
-from ..resolve import media, render
+from ..resolve import pool as mediapool
+from ..resolve import render
 from ..resolve.connection import ResolveConnection
 from ..resolve.session import current_project
 from ..resolve.timeline import Reader, current_timeline, find_timeline, fingerprint, read_frames
@@ -490,20 +491,20 @@ def _locate_clip(
     connection: ResolveConnection,
     clip: str,
     bin: str | None,  # noqa: A002 - "bin" is the Resolve term the agent uses
-) -> tuple[media.LocatedClip, str]:
+) -> tuple[mediapool.LocatedClip, str]:
     """Find the clip and prove its audio is readable off its own file, or refuse."""
-    pool = media.media_pool(connection)
-    located = media.find_clip(pool, clip, bin)
-    reported = media.properties(located.clip)
-    source = reported.get(media.FILE_PATH, "")
-    if not source or media.is_offline(source):
+    pool = mediapool.media_pool(connection)
+    located = mediapool.find_clip(pool, clip, bin)
+    reported = mediapool.properties(located.clip)
+    source = reported.get(mediapool.FILE_PATH, "")
+    if not source or mediapool.is_offline(source):
         raise AudioExtractionError(
             cause=f"{clip!r} has no readable file on disk.",
             fix="relink_media points a clip back at its media; list_media shows what is offline.",
             detail={"clip": clip, "file_path": source},
         )
 
-    conflict = mapping_conflict(media.audio_mapping(located.clip), source)
+    conflict = mapping_conflict(mediapool.audio_mapping(located.clip), source)
     if conflict is not None:
         raise AudioMappingError(
             cause=f"{clip!r} does not carry its own audio: {conflict}",

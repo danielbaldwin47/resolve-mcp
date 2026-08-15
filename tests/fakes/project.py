@@ -30,11 +30,16 @@ class FakeProject:
         fps: str = "24",
         media_pool: FakeMediaPool | None = None,
         timelines: list[FakeTimeline | None] | None = None,
+        # The size every timeline this project creates is born at. 4K by default because
+        # that is the corpus project's own default and the reason G13 exists: the
+        # deliverables are 1080p, so a build that inherits silently ships the wrong frame.
+        resolution: tuple[str, str] = ("3840", "2160"),
     ) -> None:
         """``timelines`` may hold a ``None``: Resolve sometimes answers an index with one."""
         self._name = name
         self._timeline = timeline
         self._fps = fps
+        self._resolution = resolution
         self._media_pool = media_pool
         if timelines is not None:
             self._timelines = list(timelines)
@@ -202,7 +207,15 @@ class FakeProject:
         return None
 
     def GetSetting(self, key: str) -> str | None:  # noqa: N802
-        return self._fps if key == "timelineFrameRate" else None
+        return {
+            "timelineFrameRate": self._fps,
+            "timelineResolutionWidth": self._resolution[0],
+            "timelineResolutionHeight": self._resolution[1],
+        }.get(key)
+
+    def timeline_resolution(self) -> tuple[str, str]:
+        """What a timeline created here starts at — read by the pool, as Resolve does."""
+        return self._resolution
 
     def GetMediaPool(self) -> FakeMediaPool | None:  # noqa: N802
         return self._media_pool

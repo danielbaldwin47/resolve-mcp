@@ -56,6 +56,8 @@ from resolve_mcp.tools import stems as stems_tool
 
 from .conftest import Attach
 from .fakes import (
+    CPU_BANNER,
+    CUDA_BANNER,
     FakeMediaPoolItem,
     FakeSeparator,
     FakeTimeline,
@@ -938,3 +940,111 @@ def test_a_reused_separation_reports_no_environment_because_nothing_ran(
 
     assert output.result["reused"] is True
     assert "separator" not in output.result
+
+
+# --- the device the separation actually ran on (#188) ------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("line", "expected"),
+    [
+        ("CUDA is available in Torch, setting Torch device to CUDA", "cuda"),
+        ("Apple Silicon MPS/CoreML is available in Torch, setting Torch device to MPS", "mps"),
+        ("No hardware acceleration could be configured, running in CPU mode", "cpu"),
+        ("Torch device: cuda:0", "cuda:0"),
+        ("Setting Torch device to cuda:1.", "cuda:1"),
+    ],
+)
+def test_the_device_is_read_off_the_lines_the_separator_prints(line: str, expected: str) -> None:
+    assert separator.device_of(f"2026-01-01 00:00:00,000 - INFO - separator - {line}") == expected
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "PyTorch Version: 2.13.0+cu126",
+        "Separator version 1.2.3 instantiating with output_dir: /stems",
+        "  32%|###       | 8/25 [00:04<00:09,  1.77it/s]",
+        "",
+    ],
+)
+def test_a_line_that_names_no_device_reads_as_no_device(line: str) -> None:
+    assert separator.device_of(line) is None
+
+
+def test_a_fresh_separation_carries_the_device_its_passes_ran_on(tmp_path: Path) -> None:
+    fake = FakeSeparator(FOUR_STEMS, SIX_DRUM_STEMS, banners=(CUDA_BANNER,))
+
+    output = multi_pass(_acquired(tmp_path), {"scope": "timeline"}, _ignored, runner=fake)
+
+    assert output.result["separator"]["device"] == "cuda"
+
+
+def test_a_cpu_fallback_on_a_cuda_build_is_on_the_record_and_warned_about(
+    tmp_path: Path,
+) -> None:
+    """G10 itself: the models are CUDA-capable, the run fell back to the CPU, and the only
+    symptom was that it took a day. The build says nothing is wrong here, so the device is
+    the only thing that can."""
+    fake = FakeSeparator(
+        FOUR_STEMS, SIX_DRUM_STEMS, torch_build="2.13.0+cu126", banners=(CPU_BANNER,)
+    )
+
+    output = multi_pass(_acquired(tmp_path), {"scope": "timeline"}, _ignored, runner=fake)
+
+    report = output.result["separator"]
+    assert report["device"] == "cpu"
+    assert "CPU" in report["warning"]
+
+
+def test_a_cpu_build_keeps_its_own_warning_because_that_one_names_the_fix(
+    tmp_path: Path,
+) -> None:
+    """A ``+cpu`` build already explains the CPU device and says how to replace it. The
+    device warning would only overwrite that with less."""
+    fake = FakeSeparator(
+        FOUR_STEMS, SIX_DRUM_STEMS, torch_build="2.13.0+cpu", banners=(CPU_BANNER,)
+    )
+
+    output = multi_pass(_acquired(tmp_path), {"scope": "timeline"}, _ignored, runner=fake)
+
+    report = output.result["separator"]
+    assert report["device"] == "cpu"
+    assert "RESOLVE_MCP_AUDIO_SEPARATOR" in report["warning"]
+
+
+def test_an_unreadable_build_plus_a_cpu_device_is_still_warned_about(tmp_path: Path) -> None:
+    """The probe's own warning says whether this runs on the GPU is *unknown*. The passes have
+    since answered that, so the CPU warning replaces it rather than being suppressed by it."""
+    fake = FakeSeparator(FOUR_STEMS, SIX_DRUM_STEMS, torch_build="", banners=(CPU_BANNER,))
+
+    output = multi_pass(_acquired(tmp_path), {"scope": "timeline"}, _ignored, runner=fake)
+
+    report = output.result["separator"]
+    assert report["torch"] is None
+    assert report["device"] == "cpu"
+    assert "ran on the CPU" in report["warning"]
+
+
+def test_a_separator_that_names_no_device_records_unknown_rather_than_failing(
+    tmp_path: Path,
+) -> None:
+    """A banner that changed wording, or a version too old to print one, is not a reason to
+    fail half an hour of GPU: the record says the device is unknown and the stems still land."""
+    fake = FakeSeparator(FOUR_STEMS, SIX_DRUM_STEMS, banners=())
+
+    output = multi_pass(_acquired(tmp_path), {"scope": "timeline"}, _ignored, runner=fake)
+
+    assert output.result["separator"]["device"] == separator.UNKNOWN_DEVICE
+    assert output.result["stems"]
+
+
+def test_the_device_the_last_pass_ran_on_is_the_one_recorded(tmp_path: Path) -> None:
+    """Each pass is its own process and says so for itself. A run whose second process could
+    not reach the GPU is a CPU run — reporting the first pass's ``cuda`` would hide exactly
+    the fallback this record exists to show."""
+    fake = FakeSeparator(FOUR_STEMS, SIX_DRUM_STEMS, banners=(CUDA_BANNER, CPU_BANNER))
+
+    output = multi_pass(_acquired(tmp_path), {"scope": "timeline"}, _ignored, runner=fake)
+
+    assert output.result["separator"]["device"] == "cpu"

@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from resolve_mcp.config import get_config
-from resolve_mcp.jobs import store
+from resolve_mcp.jobs import lifecycle
 from resolve_mcp.jobs.runner import JobOutput, Progress, start_job, wait_for
 from resolve_mcp.tools.jobs import get_job, list_jobs
 
@@ -111,7 +111,7 @@ def _rewrite_as_a_previous_server_left_it(job_id: str) -> None:
     raw = json.loads(path.read_text(encoding="utf-8"))
     raw.update(
         {
-            "state": store.RUNNING,
+            "state": lifecycle.RUNNING,
             "session": "a-server-that-has-since-exited",
             "result": None,
             "finished_at": None,

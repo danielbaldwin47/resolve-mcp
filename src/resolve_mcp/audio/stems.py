@@ -57,13 +57,14 @@ from ..errors import InternalError, InvalidRequestError, SeparationInProgressErr
 from ..ffmpeg import Runner
 from ..jobs import cache
 from ..jobs import runner as job_runner
+from ..jobs.lifecycle import SESSION
 from ..jobs.runner import Detached, JobOutput, Progress, start_job
 
 # ``_sharing`` is the store's, and is reached for by its private name deliberately: a claim file
 # and a job record are the same Windows problem — another handle holding the file for the
 # microsecond of a poll — and a second copy of the retry here would be a second policy to keep in
 # step with that one.
-from ..jobs.store import SESSION, JobRecord, _sharing, pid_alive
+from ..jobs.store import JobRecord, _sharing, pid_alive
 from ..logging_config import get_logger
 from ..naming import slug
 from ..resolve.connection import ResolveConnection
@@ -866,6 +867,7 @@ def multi_pass(
     wanted_other = other_dir if split_wind else None
 
     separator_env: dict[str, Any] | None = None
+    devices: list[str] = []
     reused = reuse and _already_separated(mix_dir, drums_dir, other_dir, split_wind)
     if reused:
         log.info("Stems for %s are already on disk at %s", audio["path"], directory)
@@ -901,6 +903,7 @@ def multi_pass(
                     runner=runner,
                     config=config,
                     reuse=reuse,
+                    on_device=devices.append,
                 )
 
     progress(COLLECTING, "collecting the stems")
@@ -914,6 +917,9 @@ def multi_pass(
         "reused": reused,
     }
     if separator_env is not None:
+        # What the passes said they ran on, beside the build they ran under (#188). Only the
+        # fresh path has either: a reuse ran no process, and no process said anything.
+        separator.record_device(separator_env, devices)
         result["separator"] = separator_env
     if split_wind:
         # Keyed like ``drums`` is: the name of the stem this pass took apart. Absent rather
@@ -958,6 +964,7 @@ def _passes(
     runner: separator.Runner | None,
     config: Config,
     reuse: bool,
+    on_device: separator.Device | None = None,
 ) -> _Sets:
     """The two passes, and the third when it is asked for — run with the claim already held.
 
@@ -985,6 +992,7 @@ def _passes(
             progress=_pass(beat, ACQUIRE_CEILING, PASS_ONE_CEILING, "separating four stems"),
             runner=runner,
             config=config,
+            on_device=on_device,
         )
     if done.drums:
         log.info("Reusing the drum stems already at %s", drums_dir)
@@ -1004,6 +1012,7 @@ def _passes(
             ),
             runner=runner,
             config=config,
+            on_device=on_device,
         )
     other: dict[str, Path] = {}
     if not split_wind:
@@ -1021,6 +1030,7 @@ def _passes(
             progress=_pass(beat, WIND_FLOOR, SEPARATED, "splitting the winds"),
             runner=runner,
             config=config,
+            on_device=on_device,
         )
     return _Sets(stems, drums, other)
 

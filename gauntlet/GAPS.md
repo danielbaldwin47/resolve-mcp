@@ -378,6 +378,33 @@ is visible in one glance instead of being inferred from a rate. The same
 seam would have made this gap a five-second read rather than a process-tree
 excavation.
 
+## G13 — built timelines inherit the project's 4K default (in-work, #187)
+
+Recurring nit across every round: the Zinc project creates timelines at
+3840×2160, every deliverable is 1920×1080, and a built timeline is born at
+the project's size — so each round set the resolution by hand in Resolve
+before rendering, and a round that forgot rendered 4K and said nothing.
+
+Fixed on the server side by an optional `timeline.resolution`
+(`{width, height}`) on the cut file — `get_cut_schema` §9. One reading in
+`cut/resolution.py`, shape refused as E1 in `cut/validate.py` (both sides,
+integers, plausible), applied by `resolve/settings.py` and called from
+`resolve/build.py` **before the first append** and again after a tail round
+trip, since the import is a new timeline born at the project's default like
+any other.
+
+`SetSetting` is not evidence: the resolution keys are inert until
+`useCustomSettings` is `'1'`, and a write that changed nothing answers the
+same as one that landed (`gauntlet/recon/r3_reso.py`). So the wrapper writes
+the flag first and judges by the read-back, and a size that did not land
+**fails the build** rather than reporting a resolution the timeline does not
+have. `timeline.resolution` on the build report — and on `list_timelines` —
+is what it ended up at.
+
+Live proof owed: `test_a_real_build_delivers_the_resolution_the_cut_asked_for`
+builds 1080p in the 4K project, renders it, and reads the delivered frame's
+dimensions back off the file.
+
 ## G14 — cut-file schema cannot express a dissolve (CLOSED 2026-08-13)
 
 Piece 2 R1, unanimous 0–3 loss. The measured Taurus tail is a 5.923 s

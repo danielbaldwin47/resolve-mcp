@@ -77,7 +77,7 @@ def main() -> None:
     from resolve_mcp import interpreter as interp
 
     interp.ensure_supported()
-    from resolve_mcp.jobs import runner, store
+    from resolve_mcp.jobs import lifecycle, runner
     from resolve_mcp.tools import video as video_tools
 
     for span in SPANS:
@@ -116,7 +116,7 @@ def main() -> None:
             job_id = envelope["job_id"]
             entry["job_id"] = job_id
             got = runner.wait_for(job_id, timeout=60.0)
-            while got.state == store.RUNNING:
+            while got.state == lifecycle.RUNNING:
                 entry["step"] = got.step
                 write()
                 print(f"  [{key}] {got.step}", flush=True)

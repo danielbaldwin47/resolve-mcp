@@ -120,12 +120,18 @@ Top level:
 with no pulse under them, #133; every boundary then walks forward off the applause
 to where the loudness curve says the band comes in, and a mix the threshold finds
 no clapping in at all is read at its own scale instead, #179),
-`bars` (the **bar map**: a rule layer over the grid for the material the beat
+`barmap` (a cut read against the **bar map** `bars` writes: nearest bar line with a
+signed offset — a cut just before a downbeat is a cut on the one — giving `map_bar`,
+`in_group` and `bar_offset` per cut and the `bar_groups`/`bar_offsets` blocks over
+them, ungated on the beat gate since the map exists for the grids that gate refuses
+whole; pure, read by `correlate`, #180/#215),
+`bars` (the **bar map** itself: a rule layer over the grid for the material the beat
 model will not commit a meter to — folds a too-fast grid to the tactus, then
 scores every meter and phase against a per-beat accent reading and takes the
 widest lead over the runner-up, refusing rather than guessing when the accents
 say nothing. The accent reading is injected per ADR 0002 and defaults to RMS off
-the mix; a named stem reads that instead, #180), `beats` (grid + downbeats, model
+the mix; a named stem reads that instead, #180),
+`beats` (grid + downbeats, model
 injected per ADR 0002; `trust` says which beats the grid describes well enough
 to count, #112; `spacing` says how wide a beat is at each beat), `correlate`
 (measure a cut against its music — by default the *visible* edit,
@@ -133,20 +139,11 @@ every frame resolved to the topmost enabled video item with uncovered stretches
 as black shots, #142; `track=` measures one video track alone. Gates the beat
 statistics on `trust`, refuses as `stranded` a cut further from its beat than a
 beat is wide — the grid does not reach it, #160 — and leaves the transient ones
-ungated. Also reads the cutting itself: `shot_rhythm` bins the shot lengths,
-measures the longest strict A/B alternation run and the longest monotonic
-duration `ramp`, and says `reads_metronomic` with the heuristic that drew it,
-and its `gears` block splits the cut's span into loudness terciles off a 1 s
-RMS curve and reports cuts per minute in each, the loud/quiet `rate_ratio`,
-where the sub-2 s shots sit, `one_speed`, and `outside_shots` — shots past
-the analysed mix, counted apart rather than clamped into a tercile — plus
-`quiet_floor`, the passages the slow gear is held through, found by smoothing
-that curve rather than off the per-window tercile labels, each read for the
-spread its lone flashes are not holding up (#190) —
-warnings the report carries, never gates. Takes an optional **bar map**
-(`bars=`) and then reports `map_bar`, `in_group` and `bar_offset` per cut and
-a `bar_groups` histogram — ungated on the beat gate, since the map exists for
-the grids that gate refuses whole, #180),
+ungated. Composes the readings other modules own rather than computing them:
+`rhythm` for `shot_rhythm`, `barmap` for a cut's place in the form (`bars=`, the
+optional **bar map**), `subject` for `on_soloist`. What is left here is the join —
+reading the timeline, putting every shot on the music's clock, writing the file,
+#215),
 `cuda` (preloads
 the CUDA runtime the `analysis` extra ships, so CTranslate2 finds it on Windows;
 pure decisions, #128),
@@ -167,10 +164,24 @@ is a rule layer over, as `drums` is to `fills`), `music` (beats + energy + gist
 job; `beats_of`/`energy_of` are the shared entries other jobs read a grid or a
 loudness curve through, one measurement per piece of audio), `phrases` (phrase boundaries: where the soloist stops, which is the
 cut-placement unit #46 named, #143),
-`records` (sliceable record files), `silence` (RMS spans), `solos` (front
+`records` (sliceable record files), `rhythm` (how varied the cutting is, one entry
+`read(rows, levels)` over per-cut rows and a level curve: `shot_rhythm` bins the
+shot lengths, measures the longest strict A/B alternation run and the longest
+monotonic duration `ramp`, and says `reads_metronomic` with the heuristic that drew
+it; its `gears` block splits the cut's span into loudness terciles off a 1 s RMS
+curve and reports cuts per minute in each, the loud/quiet `rate_ratio`, where the
+sub-2 s shots sit, `one_speed`, and `outside_shots` — shots past the analysed mix,
+counted apart rather than clamped into a tercile — plus `quiet_floor`, the passages
+the slow gear is held through, found by smoothing that curve rather than off the
+per-window tercile labels, each read for the spread its lone flashes are not holding
+up (#190). Warnings the report carries, never gates; pure, read by `correlate`,
+#215), `silence` (RMS spans), `solos` (front
 of band changes: lead off the stem energy, timbre off one stem's brightness —
 with the third pass on disk the voices are `wind`/`comp` rather than `other`
-and timbre reads `wind`, #157), `structure` (tunes + solo changes job; both
+and timbre reads `wind`, #157), `stats` (the readings taken over a column of
+records — signed offsets with early and late counted apart, a histogram, and
+whether a column was measured at all — shared by `correlate` and the joins it
+composes so the rules have one copy, #215), `structure` (tunes + solo changes job; both
 halves read the shared beats half and the tune half the shared energy half;
 its stem loader is error shaping over `halves.collected`, #220), `subject`
 (what a shot is framed on crossed with who is out front: the angle sidecar's subject read as
@@ -185,7 +196,9 @@ self-review, warnings only, touches no Resolve handle), `whisper`
 `audio/` — concert audio out of Resolve onto disk: `acquire` (both routes),
 `ffmpeg` (per-source-clip route), `riff` (the WAV container itself: PCM,
 IEEE float and extensible headers, because stdlib `wave` opens PCM only),
-`separator` (python-audio-separator out of process), `stems` (two passes —
+`separator` (python-audio-separator out of process; its torch build probed
+before a fresh separation and the device each pass announces read off that
+pass's banner, both onto the job record — #202, #188), `stems` (two passes —
 mix into four, then the drum stem into the kit — plus an opt-in third,
 `split_wind`, splitting `other` into `wind` and `comp`; `comp` is
 accompaniment, never a piano stem. A directory is judged pass by pass and
@@ -194,46 +207,67 @@ alone — but a missing first pass redoes all three, since the later two are cut
 from what it wrote, #192), `wav` (header facts + the one
 unreadable-WAV error).
 
-`cut/` — cut-file schema v1: `document` (read off disk), `schema`
-(verbatim, served by `get_cut_schema`), `validate` (12 errors + W1, W2,
-W8, W9 — W3-W7 are `virtual_transcript`'s over the same document — shared by
+`cut/` — cut-file schema v1: `document` (read off disk), `resolution` (the
+optional **delivery resolution**: `timeline.resolution`, one reading of
+`{width, height}` for both the rules and the build — omitted means the timeline
+is created at the project's default, which on the corpus project is 4K against
+1080p deliverables, #187), `schema`
+(verbatim, served by `get_cut_schema`), `layout` (**where every entry lands** —
+pure, documents in and positions out: `positions`/`placements`/`total_frames`/
+`overlay_positions` are the one derivation the rules judge, the build places
+against and `virtual_transcript` reads back, #218), `validate` (12 errors + W1,
+W2, W8, W9 — W3-W7 are `virtual_transcript`'s over the same document — shared by
 dry run and build pre-flight; W9 is the one that reports a rule that *could
 not run*, where Resolve named no media bounds for E5 or E7 to check a range
-against, #186), `tail` (the optional **tail** device: one
-reading of `{type, duration_frames, audio_fade_frames}` for both the rules
-and the build). A `segments` entry is a shot or a **gap**
+against, #186; E11 is the exception it cannot answer, raised in
+`resolve/build` where a live locked track can be observed), `tail` (the optional
+**tail** device: one reading of `{type, duration_frames, audio_fade_frames}` for
+both the rules and the build). A `segments` entry is a shot or a **gap**
 (`{"id", "gap": <frames>}`, literal black); `is_gap`/`entry_duration`/
-`overlay_track` are the accessors every walker of that array shares.
+`overlay_track` are the `layout` accessors every walker of that array shares.
 
 `jobs/` — `cache` (hash-keyed results; `audio_identity` is the content hash
 wherever the file sits, read off a `known_hash` note remembered against a
 stat, except under `audio_dir` where it is always read for real;
 `fingerprint` is path+size+mtime and stays the identity for video sources
 and stems — ADR 0007, ADR 0003), `runner` (start heavy work without
-stalling stdio), `store` (one JSON record per job on disk), `detached` (hand
-a job to a process that outlives this one — flags, command, environment),
-`worker` (that process's entry point: `python -m resolve_mcp.jobs.worker
-<job-id>`). A worker returning `runner.Detached` instead of a result moves
-the rest of its job into that process; `separate_stems` does, once the audio
-is acquired, so a half-hour separation survives the server exiting. A
-detached record is judged by its pid rather than by its session, and only the
-worker writes it — the launcher's reading of the worker pid goes to a
-`<job-id>.launcher` note beside the record, folded in by readers only while
-the record has no pid of its own, so a launcher can never overwrite a result.
+stalling stdio), `lifecycle` (the job states, this server's `SESSION`, and
+`verdict(record, now, alive)` — whether anything is still running a job and
+the sentence for it if not, decided from the record alone with liveness
+injected, so the truth table is testable in memory), `store` (one JSON record
+per job on disk; `load` is read file → verdict → maybe write the failure
+back), `detached` (hand a job to a process that outlives this one — flags,
+command, environment), `worker` (that process's entry point: `python -m
+resolve_mcp.jobs.worker <job-id>`). A worker returning `runner.Detached`
+instead of a result moves the rest of its job into that process;
+`separate_stems` does, once the audio is acquired, so a half-hour separation
+survives the server exiting. A detached record is judged by its pid rather
+than by its session, and only the worker writes it — the launcher's reading
+of the worker pid goes to a `<job-id>.launcher` note beside the record,
+folded in by readers only while the record has no pid of its own, so a
+launcher can never overwrite a result.
 
 `resolve/` — connection management + thin scripting-API wrappers: `apply`
 (titles file → owned track), `build` (materialise cut file), `connection`
 (**the seam**: lazy singleton, probe, one auto reconnect), `cut` (cut-file
 contract), `fusion` (Text+ node, text, opacity fade spline), `interchange`
 (timeline export/import), `loader` (import DaVinciResolveScript +
-direct-attach), `markers` (read/write, review-loop transport), `media`
-(media pool: import, list, inspect, bins, relink), `mix` (where the master
+direct-attach), `markers` (read/write, review-loop transport), `media` (the
+six media operations: import, list, inspect, metadata, organize, relink —
+all of them callers of `pool`), `pool` (**the media pool adapter**: reaching
+the pool, bin addressing, clip lookup, clip reading, frame bounds, offline
+and still handling — what `cut`, `build`, `apply`, `titles`, `audio/acquire`
+and `video/source` consume; import it from here, never through `media`),
+`mix` (where the master
 mix sits under a timeline — the one axis a rebuild does not move; read by
 `build`'s marker carry and by `analysis/correlate`), `render` (render
 queue), `camera_sidecar` (camera model off the card's own XML, for media
 Resolve reports no camera metadata for — #94; not an **angle sidecar**),
 `scripting` (`run_python` with handles pre-bound), `session`
-(session/project wrappers), `tail` (materialising a cut's tail: the OTIO
+(session/project wrappers), `settings` (the timeline settings the server
+*writes*, through the string-typed `GetSetting`/`SetSetting` pair: resolution,
+which needs `useCustomSettings` first and is judged by the read-back, never by
+the return value — #187), `tail` (materialising a cut's tail: the OTIO
 document edit + the export/import round trip `build` takes when a tail has
 a transition to cut in — a hard out that fades nothing builds directly —
 because the scripting API cannot cut a transition at all), `takes`
@@ -285,6 +319,14 @@ out, and `analysis/correlate` joins the catalog on as `straddles_super`, #183),
 `source` (clip name → file path + the clip's own frame numbering).
 
 ## Test map — `tests/`
+
+Test files follow the module they cover, so the media pair splits the same way
+the source does: `test_media_pool.py` covers `resolve/pool` (bin addressing,
+clip lookup, clip reading, frame bounds, offline) and `test_media_tools.py`
+covers `resolve/media` (what the six operations do with what the adapter hands
+them). Both drive the fake seam through `tools/media`, and both build their
+pools from `tests/mediapool.py` (`a_file`, `a_clip`, `a_shallow_copy_pool`) so
+the pair cannot drift on what a clip or a shadowed copy looks like.
 
 `tests/fakes/` is the fake Resolve API, one module per subsystem — open the
 module, not the package, and never the whole package at once:
@@ -342,15 +384,19 @@ all three agreed about. `test_rough_cut_pillar.py` is one of two other
 exceptions: it covers no single module, walking the P4 pillar across `cut`,
 `build`, `takes` and `virtual` in one pass because the joins are what a
 per-module test cannot see. `test_cut_devices.py` (#141) is the second, for the
-same reason: gaps and overlay tracks are one device each across `cut/validate`,
-`resolve/build`, `resolve/takes` and `analysis/virtual`, and the interesting
-failures are the disagreements between them. `test_cut_tail.py` is the third: the
+same reason: gaps and overlay tracks are one device each across `cut/layout`,
+`cut/validate`, `resolve/build`, `resolve/takes` and `analysis/virtual`, and the
+interesting failures are the disagreements between them. `test_cut_tail.py` is the third: the
 tail is one device across `cut/tail`, `cut/validate`, `resolve/tail` and
 `resolve/build`, and a dissolve that did not land looks exactly like a cut that
 never asked for one. `test_hardware_decode.py` (#202) is the fourth: NVDEC is
 one decision across `ffmpeg` (the probe), `video/ffmpeg` (flags, fallback,
 report) and the three video routes that carry the report, and the failure worth
-testing is a decode that ran one way and reported another. Live tier: `test_live_smoke.py` (module-level
+testing is a decode that ran one way and reported another. `test_cut_resolution.py`
+(#187) is the fifth: the delivery resolution is one device across `cut/resolution`,
+`cut/validate`, `resolve/settings` and `resolve/build`, and a timeline that ignored
+the setting is indistinguishable from one that never asked for it until the render
+exists. Live tier: `test_live_smoke.py` (module-level
 `pytest.mark.live`) and five `@pytest.mark.live` tests in
 `test_live_analysis.py` — four over installed models, plus the #192 wind split
 over the director's own separated stems, the one test that opts out of the
