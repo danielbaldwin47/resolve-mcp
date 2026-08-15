@@ -25,21 +25,21 @@ def get_status() -> dict[str, Any]:
 def list_projects() -> dict[str, Any]:
     """List the project names in Resolve's current database folder.
 
-    Use it to find the exact name to hand to open_project — names must match exactly.
+    Use it to find the exact name to hand to load_project — names must match exactly.
     """
     connection = get_connection()
     return {"projects": session.list_projects(connection)}
 
 
 @tool
-def open_project(name: str) -> dict[str, Any]:
-    """Open the named project, making it the one every later tool call acts on.
+def load_project(name: str) -> dict[str, Any]:
+    """Load the named project, making it the one every later tool call acts on.
 
     The name must match exactly; list_projects shows what is available. The result echoes
     the new context, so you can confirm the switch landed.
     """
     connection = get_connection()
-    return {"opened": session.open_project(connection, name)}
+    return {"opened": session.load_project(connection, name)}
 
 
 @tool
@@ -55,6 +55,6 @@ def snapshot_project(path: str | None = None) -> dict[str, Any]:
     return {"snapshot": str(target), "project": project}
 
 
-TOOLS: tuple[Any, ...] = (get_status, list_projects, open_project, snapshot_project)
+TOOLS: tuple[Any, ...] = (get_status, list_projects, load_project, snapshot_project)
 
-__all__ = ["TOOLS", "get_status", "list_projects", "open_project", "snapshot_project"]
+__all__ = ["TOOLS", "get_status", "list_projects", "load_project", "snapshot_project"]

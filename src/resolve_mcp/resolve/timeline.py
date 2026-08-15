@@ -91,11 +91,6 @@ class Placement(NamedTuple):
 # --- reaching a timeline ------------------------------------------------------------------
 
 
-def open_project(connection: ResolveConnection) -> Project:
-    """The open project, or a structured refusal — never a ``None`` to trip over later."""
-    return current_project(connection, "No project is open, so there are no timelines to read.")
-
-
 def timelines_of(project: Project) -> list[Timeline]:
     """Every timeline the project holds, in Resolve's own order.
 
@@ -405,7 +400,7 @@ def list_timelines(
     config: Config | None = None,
 ) -> dict[str, Any]:
     """Every timeline in the project with its version, duration and track stack."""
-    project = open_project(connection)
+    project = current_project(connection)
     reader = Reader(connection)
     current = current_name(project)
 
@@ -463,7 +458,7 @@ def inspect_timeline(
             detail={"requested": detail, "available": list(DETAIL_LEVELS)},
         )
 
-    project = open_project(connection)
+    project = current_project(connection)
     timeline = find_timeline(project, name)
     current = current_name(project)
     is_current = name_of(timeline) == current

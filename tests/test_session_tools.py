@@ -10,7 +10,7 @@ from resolve_mcp.config import Config, set_config
 from resolve_mcp.tools.project import (
     get_status,
     list_projects,
-    open_project,
+    load_project,
     snapshot_project,
 )
 
@@ -76,10 +76,10 @@ def test_lists_projects_and_marks_the_open_one(attach: Attach) -> None:
     assert result["context"]["project"] == "sunset-set"
 
 
-def test_opening_a_project_echoes_the_new_context(attach: Attach) -> None:
+def test_loading_a_project_echoes_the_new_context(attach: Attach) -> None:
     attach(studio(project="sunset-set", extra_projects=("holiday-gig",)))
 
-    result = open_project("holiday-gig")
+    result = load_project("holiday-gig")
 
     assert result["ok"] is True
     assert result["opened"] == "holiday-gig"
@@ -88,10 +88,10 @@ def test_opening_a_project_echoes_the_new_context(attach: Attach) -> None:
     assert get_status()["context"]["project"] == "holiday-gig"
 
 
-def test_opening_an_unknown_project_lists_the_real_ones(attach: Attach) -> None:
+def test_loading_an_unknown_project_lists_the_real_ones(attach: Attach) -> None:
     attach(studio(project="sunset-set", extra_projects=("holiday-gig",)))
 
-    result = open_project("sunset set")
+    result = load_project("sunset set")
 
     assert result["ok"] is False
     assert result["error"]["code"] == "project_not_found"

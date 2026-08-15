@@ -93,7 +93,7 @@ class Placed:
 
 def list_titles(connection: ResolveConnection, timeline: str | None = None) -> dict[str, Any]:
     """Read the Titles track back: what each placed title says, and what it exposes."""
-    project = timeline_read.open_project(connection)
+    project = session.current_project(connection)
     target = timeline_read.find_timeline(project, timeline)
     name = timeline_read.name_of(target)
     fps = session.frame_rate(project, target)
@@ -136,7 +136,7 @@ def edit_title(
             detail={},
         )
 
-    project = timeline_read.open_project(connection)
+    project = session.current_project(connection)
     target = timeline_read.find_timeline(project, timeline)
     name = timeline_read.name_of(target)
     fps = session.frame_rate(project, target)

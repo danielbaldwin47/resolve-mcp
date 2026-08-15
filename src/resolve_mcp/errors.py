@@ -59,7 +59,7 @@ class UnsupportedInterpreterError(ResolveMcpError):
 class NoProjectOpenError(ResolveMcpError):
     code = "no_project_open"
     default_fix = (
-        "Open a project first — list_projects shows what is available, open_project loads one."
+        "Open a project first — list_projects shows what is available, load_project loads one."
     )
 
 
@@ -131,7 +131,7 @@ class MediaPoolUnavailableError(ResolveMcpError):
 
     code = "media_pool_unavailable"
     default_fix = (
-        "Reopen the project with open_project and retry; if it persists, check the project "
+        "Reopen the project with load_project and retry; if it persists, check the project "
         "is not mid-import in the GUI."
     )
 

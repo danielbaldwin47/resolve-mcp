@@ -54,13 +54,13 @@ from ..logging_config import get_logger
 from ..naming import write_target
 from .connection import ResolveConnection
 from .pool import pool_of
+from .session import current_project
 from .timeline import (
     Reader,
     current_name,
     find_timeline,
     name_of,
     next_free_name,
-    open_project,
     summarise,
     timeline_names,
 )
@@ -117,7 +117,7 @@ def export_timeline(
     """Write one timeline (the open one by default) out as an interchange file."""
     spec = _format(export_format)
     resolve = connection.handle()
-    project = open_project(connection)
+    project = current_project(connection)
     timeline = find_timeline(project, name)
     timeline_name = name_of(timeline)
 
@@ -369,7 +369,7 @@ def import_timeline(
             detail={"requested": str(source)},
         )
 
-    project = open_project(connection)
+    project = current_project(connection)
     pool = pool_of(project)
     existing = set(timeline_names(project))
     native = source.suffix.lower() == NATIVE_SUFFIX
