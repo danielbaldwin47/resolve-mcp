@@ -83,6 +83,8 @@ from .pool import FakeMediaPool as FakeMediaPool
 from .pool import media_pool as media_pool
 from .project import FakeProject as FakeProject
 from .project import FakeProjectManager as FakeProjectManager
+from .separator import CPU_BANNER as CPU_BANNER
+from .separator import CUDA_BANNER as CUDA_BANNER
 from .separator import FakeSeparator as FakeSeparator
 from .timeline import FakeTimeline as FakeTimeline
 from .timeline import FakeTrack as FakeTrack
