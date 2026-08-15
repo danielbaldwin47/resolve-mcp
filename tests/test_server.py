@@ -21,7 +21,7 @@ def test_registers_the_p1_session_media_timeline_cut_titling_render_and_job_tool
     assert tool_names() == {
         "get_status",
         "list_projects",
-        "open_project",
+        "load_project",
         "snapshot_project",
         "import_media",
         "list_media",

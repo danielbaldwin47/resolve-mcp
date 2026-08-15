@@ -25,8 +25,8 @@ from resolve_mcp.cut import tail as tail_device
 from resolve_mcp.cut.validate import validate_structure
 from resolve_mcp.errors import BuildFailedError
 from resolve_mcp.resolve import pool as mediapool
+from resolve_mcp.resolve import session
 from resolve_mcp.resolve import tail as tail_route
-from resolve_mcp.resolve import timeline as timeline_read
 from resolve_mcp.resolve.connection import get_connection
 from resolve_mcp.tools.cut import build_timeline, validate_cut
 
@@ -683,7 +683,7 @@ def a_staging_cut(resolve: Any, tmp_path: Path) -> tail_route.Staging:
     """
     assert build_timeline(a_cut(tmp_path, valid_doc()))["ok"] is True
     connection = get_connection()
-    project = timeline_read.open_project(connection)
+    project = session.current_project(connection)
     return tail_route.Staging(
         project, mediapool.media_pool(connection), built(resolve, "sunset-set v1"), "sunset-set v1"
     )

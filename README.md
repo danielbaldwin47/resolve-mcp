@@ -23,7 +23,7 @@ pillar); the taste the concert cut is measured against lives in `styles/`.
 | --- | --- |
 | `get_status` | Connection state, Resolve version, current project + timeline, fps |
 | `list_projects` | Project names in the current database folder |
-| `open_project` | Loads a project by name; the result echoes the new context |
+| `load_project` | Loads a project by name; the result echoes the new context |
 | `snapshot_project` | Writes an opaque `.drp` backup before a big operation |
 | `import_media` | Imports files and image sequences into a bin, still-duration workaround applied |
 | `list_media` | Summarises media pool clips, with offline state; spills big listings to disk |

@@ -36,13 +36,12 @@ from ..logging_config import get_logger
 from ..spill import capped
 from ..timing import dual_time, to_frames
 from .connection import ResolveConnection
-from .session import frame_rate
+from .session import current_project, frame_rate
 from .timeline import (
     Reader,
     Timeline,
     find_timeline,
     frame_window,
-    open_project,
     overlaps,
     read_frames,
 )
@@ -177,7 +176,7 @@ def list_markers(
     config: Config | None = None,
 ) -> dict[str, Any]:
     """Every marker on a timeline, in record time, narrowed by colour and range."""
-    project = open_project(connection)
+    project = current_project(connection)
     timeline = find_timeline(project, name)
     clock = MarkerClock(connection, timeline, frame_rate(project, timeline))
 
@@ -276,7 +275,7 @@ def set_markers(
     replace: bool = False,
 ) -> dict[str, Any]:
     """Write a batch of markers, each reported on its own. One bad entry sinks only itself."""
-    project = open_project(connection)
+    project = current_project(connection)
     timeline = find_timeline(project, name)
     clock = MarkerClock(connection, timeline, frame_rate(project, timeline))
     existing = _reported(clock)

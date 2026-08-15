@@ -40,7 +40,7 @@ from . import markers
 from . import pool as mediapool
 from . import timeline as timeline_read
 from .connection import ResolveConnection
-from .session import frame_rate
+from .session import current_project, frame_rate
 
 log = get_logger("titles")
 
@@ -97,7 +97,7 @@ def preflight(connection: ResolveConnection, titles_file: str) -> Preflight:
     asset_findings, assets = validate_assets(doc, base=loaded.path.parent)
     findings = [*findings, *asset_findings]
 
-    project = timeline_read.open_project(connection)
+    project = current_project(connection)
     timeline = timeline_read.find_timeline(project, doc.get("timeline"))
     fps = frame_rate(project, timeline)
     pool = mediapool.media_pool(connection)

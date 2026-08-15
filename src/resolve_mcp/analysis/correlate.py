@@ -54,7 +54,7 @@ from ..logging_config import get_logger
 from ..naming import keyed_name
 from ..resolve.connection import ResolveConnection
 from ..resolve.mix import MixShot, audio_shots
-from ..resolve.session import frame_rate
+from ..resolve.session import current_project, frame_rate
 from ..resolve.timeline import (
     Reader,
     angle_of,
@@ -64,7 +64,6 @@ from ..resolve.timeline import (
     item_enabled,
     items_in_track,
     name_of,
-    open_project,
     read_frames,
     start_frame,
     track_enabled,
@@ -447,7 +446,7 @@ def _read_cut(
     for everything off the current timeline (#84). Believing it there would read a whole
     concert as one black shot.
     """
-    project = open_project(connection)
+    project = current_project(connection)
     timeline = find_timeline(project, name)
     found = name_of(timeline)
     reader = Reader(connection, current=found == current_name(project))

@@ -47,7 +47,7 @@ def context(connection: ResolveConnection) -> Context:
     reading["connected"] = True
     reading["resolve_version"] = _read(resolve.GetVersionString)
     try:
-        project = _current_project(resolve)
+        project = _project_or_none(resolve)
         timeline = project.GetCurrentTimeline() if project is not None else None
     except Exception:  # noqa: BLE001
         log.debug("Could not read the current project or timeline", exc_info=True)
@@ -72,7 +72,12 @@ def current_project(
     connection: ResolveConnection,
     cause: str = "No project is open.",
 ) -> Any:
-    """The open project, or a failure saying so. ``cause`` names what wanted it."""
+    """The open project, or a failure saying so — never a ``None`` to trip over later.
+
+    The one accessor for "the project Resolve currently has open"; ``cause`` names what
+    wanted it, so a caller with a sharper sentence passes one instead of reaching past
+    this for the raw manager.
+    """
     manager = connection.handle().GetProjectManager()
     project = manager.GetCurrentProject() if manager is not None else None
     if project is None:
@@ -96,7 +101,7 @@ def list_projects(connection: ResolveConnection) -> list[str]:
     return [str(name) for name in (manager.GetProjectListInCurrentFolder() or [])]
 
 
-def open_project(connection: ResolveConnection, name: str) -> str:
+def load_project(connection: ResolveConnection, name: str) -> str:
     """Load a project by name. Returns the loaded project's own name."""
     manager = connection.handle().GetProjectManager()
     project = manager.LoadProject(name)
@@ -142,7 +147,7 @@ def snapshot_project(
     return target, name
 
 
-def _current_project(resolve: Any) -> Any | None:
+def _project_or_none(resolve: Any) -> Any | None:
     manager = resolve.GetProjectManager()
     return manager.GetCurrentProject() if manager is not None else None
 
