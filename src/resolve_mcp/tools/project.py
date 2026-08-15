@@ -36,7 +36,8 @@ def load_project(name: str) -> dict[str, Any]:
     """Load the named project, making it the one every later tool call acts on.
 
     The name must match exactly; list_projects shows what is available. The result echoes
-    the new context, so you can confirm the switch landed.
+    the new context, so you can confirm the switch landed — under ``opened``, which names
+    the state the load left behind rather than the call that got there.
     """
     connection = get_connection()
     return {"opened": session.load_project(connection, name)}
