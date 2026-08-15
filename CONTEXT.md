@@ -125,7 +125,12 @@ model will not commit a meter to — folds a too-fast grid to the tactus, then
 scores every meter and phase against a per-beat accent reading and takes the
 widest lead over the runner-up, refusing rather than guessing when the accents
 say nothing. The accent reading is injected per ADR 0002 and defaults to RMS off
-the mix; a named stem reads that instead, #180), `beats` (grid + downbeats, model
+the mix; a named stem reads that instead, #180), `barmap` (a cut read against that
+map: nearest bar line with a signed offset — a cut just before a downbeat is a cut
+on the one — giving `map_bar`, `in_group` and `bar_offset` per cut and the
+`bar_groups`/`bar_offsets` blocks over them, ungated on the beat gate since the map
+exists for the grids that gate refuses whole; pure, read by `correlate`, #180/#215),
+`beats` (grid + downbeats, model
 injected per ADR 0002; `trust` says which beats the grid describes well enough
 to count, #112; `spacing` says how wide a beat is at each beat), `correlate`
 (measure a cut against its music — by default the *visible* edit,
@@ -133,20 +138,11 @@ every frame resolved to the topmost enabled video item with uncovered stretches
 as black shots, #142; `track=` measures one video track alone. Gates the beat
 statistics on `trust`, refuses as `stranded` a cut further from its beat than a
 beat is wide — the grid does not reach it, #160 — and leaves the transient ones
-ungated. Also reads the cutting itself: `shot_rhythm` bins the shot lengths,
-measures the longest strict A/B alternation run and the longest monotonic
-duration `ramp`, and says `reads_metronomic` with the heuristic that drew it,
-and its `gears` block splits the cut's span into loudness terciles off a 1 s
-RMS curve and reports cuts per minute in each, the loud/quiet `rate_ratio`,
-where the sub-2 s shots sit, `one_speed`, and `outside_shots` — shots past
-the analysed mix, counted apart rather than clamped into a tercile — plus
-`quiet_floor`, the passages the slow gear is held through, found by smoothing
-that curve rather than off the per-window tercile labels, each read for the
-spread its lone flashes are not holding up (#190) —
-warnings the report carries, never gates. Takes an optional **bar map**
-(`bars=`) and then reports `map_bar`, `in_group` and `bar_offset` per cut and
-a `bar_groups` histogram — ungated on the beat gate, since the map exists for
-the grids that gate refuses whole, #180),
+ungated. Composes the readings other modules own rather than computing them:
+`rhythm` for `shot_rhythm`, `barmap` for a cut's place in the form (`bars=`, the
+optional **bar map**), `subject` for `on_soloist`. What is left here is the join —
+reading the timeline, putting every shot on the music's clock, writing the file,
+#215),
 `cuda` (preloads
 the CUDA runtime the `analysis` extra ships, so CTranslate2 finds it on Windows;
 pure decisions, #128),
@@ -165,10 +161,24 @@ is a rule layer over, as `drums` is to `fills`), `music` (beats + energy + gist
 job; `beats_of`/`energy_of` are the shared entries other jobs read a grid or a
 loudness curve through, one measurement per piece of audio), `phrases` (phrase boundaries: where the soloist stops, which is the
 cut-placement unit #46 named, #143),
-`records` (sliceable record files), `silence` (RMS spans), `solos` (front
+`records` (sliceable record files), `rhythm` (how varied the cutting is, one entry
+`read(rows, levels)` over per-cut rows and a level curve: `shot_rhythm` bins the
+shot lengths, measures the longest strict A/B alternation run and the longest
+monotonic duration `ramp`, and says `reads_metronomic` with the heuristic that drew
+it; its `gears` block splits the cut's span into loudness terciles off a 1 s RMS
+curve and reports cuts per minute in each, the loud/quiet `rate_ratio`, where the
+sub-2 s shots sit, `one_speed`, and `outside_shots` — shots past the analysed mix,
+counted apart rather than clamped into a tercile — plus `quiet_floor`, the passages
+the slow gear is held through, found by smoothing that curve rather than off the
+per-window tercile labels, each read for the spread its lone flashes are not holding
+up (#190). Warnings the report carries, never gates; pure, read by `correlate`,
+#215), `silence` (RMS spans), `solos` (front
 of band changes: lead off the stem energy, timbre off one stem's brightness —
 with the third pass on disk the voices are `wind`/`comp` rather than `other`
-and timbre reads `wind`, #157), `structure` (tunes + solo changes job; both
+and timbre reads `wind`, #157), `stats` (the readings taken over a column of
+records — signed offsets with early and late counted apart, a histogram, and
+whether a column was measured at all — shared by `correlate` and the joins it
+composes so the rules have one copy, #215), `structure` (tunes + solo changes job; both
 halves read the shared beats half and the tune half the shared energy half; its
 stem loader is what reaches the third pass), `subject` (what a shot is framed
 on crossed with who is out front: the angle sidecar's subject read as
