@@ -62,19 +62,25 @@ def sane_floor(minimum_confidence: float, default: float, writes: str = "candida
         )
 
 
-def collected(directory: Path) -> dict[str, Path]:
-    """The stems under a separation's directory — the four-stem pass, or the parent of it.
+def collected(directory: Path, absent: str | None = None) -> dict[str, Path]:
+    """The stems under a separation's directory — the four-stem pass, the third pass, or both.
 
     A separation writes a directory per pass — ``<directory>/mix``, ``<directory>/drums``, and
     ``<directory>/other`` when the wind split was asked for — and the job reports the parent of
     all of them. The melodic stems are in the first pass, so that is looked in first; the
     parent itself is checked too, because a director who copied the stems into a folder of
-    their own should not have to name a subdirectory that is not there.
+    their own should not have to name a subdirectory that is not there. The opt-in third pass
+    sits beside the first and comes along when it is there — see ``_third_pass``.
 
     Here beside ``readable`` because more than one detector reads a stem now — phrases off the
-    line, bars off the pulse (#180) — and two answers to "where are the stems" would be two
-    conventions. What each of them says when the stem it wants is *missing* stays with the
-    detector: the advice differs, since a phrase job cannot run without one and a bar job can.
+    line, bars off the pulse (#180), solo changes off all of them — and two answers to "where
+    are the stems" would be two conventions. That is not a hypothetical: ``structure`` carried
+    its own copy until #220, and the wind and comp stems it discovered reached the solo
+    detector and nothing else.
+
+    What a caller says when the stems are *missing* stays with the caller, because the advice
+    differs — ``absent`` shapes the fix for a directory that is not there, and an empty result
+    is left for the caller to refuse in its own words.
 
     The imports are function-local: ``audio.stems`` reaches the Resolve seam, and every
     analysis half imports this module.
@@ -85,14 +91,47 @@ def collected(directory: Path) -> dict[str, Path]:
     if not directory.is_dir():
         raise InvalidRequestError(
             cause=f"There is no directory at {directory}.",
-            fix="Pass the directory a separate_stems job reported, or the mix pass inside it.",
+            fix=absent
+            or "Pass the directory a separate_stems job reported, or the mix pass inside it.",
             detail={"requested": str(directory)},
         )
     for candidate in (directory / MIX_PASS, directory):
         found = separator.collect(candidate)
         if found:
+            found.update(_third_pass(directory))
             return found
     return {}
+
+
+def _third_pass(directory: Path) -> dict[str, Path]:
+    """The third pass's two halves under their envelope names — nothing, if it never ran.
+
+    That pass writes a sibling of the mix pass (#153), so it is reached from whichever of
+    the two accepted directories was given: the job's own directory holds it directly, and
+    the mix pass directory holds it one level up. Anywhere else there is no pass layout to
+    read, and a directory of loose stems gets nothing.
+
+    Both halves or neither, and only the two names the envelope knows. One half alone is a
+    partial pass, and it would join a voice set that still holds ``other`` — the residual
+    measured twice over, which is the one way this change reads worse than no change.
+    """
+    from ..audio import separator
+    from ..audio.stems import MIX_PASS, OTHER_PASS, WIND_KEYS
+
+    if (directory / MIX_PASS).is_dir():
+        outer = directory / OTHER_PASS
+    elif directory.name == MIX_PASS:
+        outer = directory.parent / OTHER_PASS
+    else:
+        return {}
+    if not outer.is_dir():
+        return {}
+    halved = {
+        WIND_KEYS[name]: path
+        for name, path in separator.collect(outer).items()
+        if name in WIND_KEYS
+    }
+    return halved if len(halved) == len(WIND_KEYS) else {}
 
 
 def stem_named(
