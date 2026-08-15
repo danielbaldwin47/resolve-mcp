@@ -148,7 +148,7 @@ def beats_file(
         target,
         {"kind": "beats", "audio": "concert.wav", "duration_seconds": 6.0},
         "beats",
-        beats_module.numbered(grid),
+        beats_module.rows(grid),
     )
 
 

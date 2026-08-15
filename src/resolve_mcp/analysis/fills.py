@@ -48,7 +48,7 @@ from ..jobs.runner import JobOutput, Progress, start_job
 from ..logging_config import get_logger
 from ..naming import slug
 from . import beats as beats_module
-from . import drums, halves, music, records
+from . import drums, halves, music
 
 log = get_logger("analysis")
 
@@ -167,7 +167,7 @@ def candidates(
 ) -> Detection:
     """Fill candidates over ``hits``, aligned to the numbered beat ``grid``.
 
-    ``grid`` is what ``beats.numbered`` produces and the beats half writes: one record per
+    ``grid`` is what ``beats.rows`` produces and the beats half writes: one record per
     beat carrying its time, bar and whether it starts one.
     """
     beats = list(grid)
@@ -605,19 +605,13 @@ def detect(
     progress(0.8, "looking for fills")
     floor = float(settings["minimum_confidence"])
     detection = candidates(hits, grid, floor)
-    summary = gist(detection, floor, sorted(stems), len(hits))
+    stats = gist(detection, floor, sorted(stems), len(hits))
 
     progress(0.9, "writing the candidates")
     target = config.analysis_dir / f"{slug(source.stem, 'analysis')}-{key[:12]}-{FILLS}.json"
-    header = {
-        "kind": FILLS,
-        "audio": described["path"],
-        "duration_seconds": described["duration_seconds"],
-        **summary,
-    }
-    records.write(target, header, FILLS, rows(detection))
+    result = halves.written(target, FILLS, described, stats, rows(detection))
 
     progress(0.95, "written")
-    return JobOutput({"path": str(target), **summary}, (target,))
+    return JobOutput(result, (target,))
 
 

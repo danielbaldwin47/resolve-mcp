@@ -667,7 +667,7 @@ def sifted(
     return Calls(tuple(kept), tuple(dropped))
 
 
-def numbered(found: Sequence[Tune]) -> tuple[dict[str, Any], ...]:
+def rows(found: Sequence[Tune]) -> tuple[dict[str, Any], ...]:
     """One record per tune, numbered from one — the rows a songs.json author reads."""
     return tuple(
         {

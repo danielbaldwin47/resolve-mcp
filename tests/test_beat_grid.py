@@ -24,14 +24,14 @@ def _steady(count: int, step: float = 0.5, every: int = 4, first: int = 0) -> Be
 
 
 def test_bars_are_counted_from_the_downbeats_the_model_gave() -> None:
-    records = beats.numbered(_steady(9))
+    records = beats.rows(_steady(9))
 
     assert [record["bar"] for record in records] == [1, 1, 1, 1, 2, 2, 2, 2, 3]
     assert [record["in_bar"] for record in records] == [1, 2, 3, 4, 1, 2, 3, 4, 1]
 
 
 def test_a_tune_in_five_numbers_in_five() -> None:
-    records = beats.numbered(_steady(11, every=5))
+    records = beats.rows(_steady(11, every=5))
 
     assert [record["in_bar"] for record in records] == [1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1]
     assert beats.gist(_steady(11, every=5), records)["meter"] == 5
@@ -39,7 +39,7 @@ def test_a_tune_in_five_numbers_in_five() -> None:
 
 def test_a_pickup_before_the_first_downbeat_counts_as_bar_one() -> None:
     """Counting a horn's two pickup notes as bar zero would offset every bar after them."""
-    records = beats.numbered(_steady(10, first=2))
+    records = beats.rows(_steady(10, first=2))
 
     assert [record["bar"] for record in records][:4] == [1, 1, 2, 2]
     assert records[0]["downbeat"] is False
@@ -51,7 +51,7 @@ def test_a_downbeat_a_hair_off_its_beat_still_marks_that_beat() -> None:
     """The model reports the two separately; float equality would silently drop the mark."""
     grid = BeatGrid(beats=(0.0, 0.5, 1.0, 1.5), downbeats=(0.0, 1.0009))
 
-    records = beats.numbered(grid)
+    records = beats.rows(grid)
 
     assert [record["downbeat"] for record in records] == [True, False, True, False]
 
@@ -59,13 +59,13 @@ def test_a_downbeat_a_hair_off_its_beat_still_marks_that_beat() -> None:
 def test_a_downbeat_nowhere_near_a_beat_marks_nothing() -> None:
     grid = BeatGrid(beats=(0.0, 0.5, 1.0, 1.5), downbeats=(0.0, 1.2))
 
-    assert [record["downbeat"] for record in beats.numbered(grid)] == [True, False, False, False]
+    assert [record["downbeat"] for record in beats.rows(grid)] == [True, False, False, False]
 
 
 def test_the_gist_reports_tempo_from_the_intervals() -> None:
     grid = _steady(9)
 
-    found = beats.gist(grid, beats.numbered(grid))
+    found = beats.gist(grid, beats.rows(grid))
 
     assert found["tempo_bpm"] == pytest.approx(120.0)
     assert found["tempo_min_bpm"] == pytest.approx(120.0)
@@ -78,7 +78,7 @@ def test_the_gist_reports_tempo_from_the_intervals() -> None:
 def test_the_gist_of_an_empty_grid_says_nothing_rather_than_dividing_by_zero() -> None:
     grid = BeatGrid((), ())
 
-    found = beats.gist(grid, beats.numbered(grid))
+    found = beats.gist(grid, beats.rows(grid))
 
     assert found["count"] == 0
     assert found["tempo_bpm"] is None
@@ -89,7 +89,7 @@ def test_the_gist_of_an_empty_grid_says_nothing_rather_than_dividing_by_zero() -
 def test_a_grid_that_arrives_out_of_order_is_sorted_before_it_is_numbered() -> None:
     grid = BeatGrid(beats=(1.0, 0.0, 0.5), downbeats=(0.5,))
 
-    records = beats.numbered(beats.detect(Path("unused.wav"), lambda path: grid))
+    records = beats.rows(beats.detect(Path("unused.wav"), lambda path: grid))
 
     assert [record["t"] for record in records] == [0.0, 0.5, 1.0]
     assert [record["downbeat"] for record in records] == [False, True, False]
@@ -124,7 +124,7 @@ def test_a_structured_failure_from_a_detector_is_passed_through_unchanged() -> N
 
 
 def test_the_top_of_a_four_bar_group_is_the_strongest_placement() -> None:
-    records = beats.numbered(_steady(20))
+    records = beats.rows(_steady(20))
     tops = [
         record for record in records if record["downbeat"] and record["bar"] in (1, 5)
     ]
@@ -133,7 +133,7 @@ def test_the_top_of_a_four_bar_group_is_the_strongest_placement() -> None:
 
 
 def test_an_ordinary_bar_line_reads_weaker_than_the_top_of_the_group() -> None:
-    records = beats.numbered(_steady(20))
+    records = beats.rows(_steady(20))
     (second_bar,) = [record for record in records if record["bar"] == 2 and record["downbeat"]]
 
     assert beats.bar_line_strength(second_bar) == beats.AT_BAR_LINE
@@ -141,7 +141,7 @@ def test_an_ordinary_bar_line_reads_weaker_than_the_top_of_the_group() -> None:
 
 
 def test_a_beat_inside_a_bar_is_the_weakest_placement() -> None:
-    records = beats.numbered(_steady(20))
+    records = beats.rows(_steady(20))
     inside = next(record for record in records if not record["downbeat"])
 
     assert beats.bar_line_strength(inside) == beats.MID_BAR
@@ -166,7 +166,7 @@ def _rubato(steady: int = 12, free: Sequence[float] = (0.9, 1.4, 0.7, 1.3)) -> B
 
 def test_a_grid_that_keeps_time_in_four_is_trusted_end_to_end() -> None:
     """The gate has to be inert on the timelines whose grids are already sound."""
-    found = beats.trust(beats.numbered(_steady(13)))
+    found = beats.trust(beats.rows(_steady(13)))
 
     assert found.meter == 4
     assert all(found.trusted)
@@ -180,7 +180,7 @@ def test_a_bar_position_the_meter_cannot_hold_is_not_trusted() -> None:
         downbeats=(0.0, 3.0, 5.0, 7.0),
     )
 
-    found = beats.trust(beats.numbered(grid))
+    found = beats.trust(beats.rows(grid))
 
     assert found.meter == 4
     # The opening bar runs to six beats, so its fifth and sixth are positions 4/4 cannot hold.
@@ -191,7 +191,7 @@ def test_a_bar_position_the_meter_cannot_hold_is_not_trusted() -> None:
 
 def test_beats_either_side_of_an_out_of_time_stretch_are_not_trusted() -> None:
     """Rubato carries perfectly legal bar positions, so only the timing gives it away."""
-    found = beats.trust(beats.numbered(_rubato()))
+    found = beats.trust(beats.rows(_rubato()))
 
     assert found.trusted[:10] == (True,) * 10
     assert not all(found.trusted[11:])
@@ -204,7 +204,7 @@ def test_a_steady_grid_that_changes_tempo_once_is_not_gated_wholesale() -> None:
     fast = [round(slow[-1] + (index + 1) * 0.35, 6) for index in range(12)]
     grid = BeatGrid(beats=tuple(slow + fast), downbeats=tuple((slow + fast)[::4]))
 
-    found = beats.trust(beats.numbered(grid))
+    found = beats.trust(beats.rows(grid))
 
     assert all(found.trusted[:9])
     assert all(found.trusted[-9:])
@@ -212,7 +212,7 @@ def test_a_steady_grid_that_changes_tempo_once_is_not_gated_wholesale() -> None:
 
 def test_a_grid_too_short_to_judge_is_left_alone_rather_than_gated_blind() -> None:
     """Two beats give one interval and no local reference; refusing them all would invent a gate."""
-    found = beats.trust(beats.numbered(BeatGrid(beats=(0.0, 0.5), downbeats=(0.0,))))
+    found = beats.trust(beats.rows(BeatGrid(beats=(0.0, 0.5), downbeats=(0.0,))))
 
     assert all(found.trusted)
 
@@ -225,7 +225,7 @@ def test_a_grid_that_calls_every_beat_a_downbeat_describes_no_bar_position_at_al
     is not a gate finding a skew, it is a gate manufacturing one, so the grid is refused whole.
     """
     times = tuple(round(index * 0.5, 6) for index in range(16))
-    found = beats.trust(beats.numbered(BeatGrid(beats=times, downbeats=times)))
+    found = beats.trust(beats.rows(BeatGrid(beats=times, downbeats=times)))
 
     assert found.meter == 1
     assert not any(found.trusted)
@@ -233,7 +233,7 @@ def test_a_grid_that_calls_every_beat_a_downbeat_describes_no_bar_position_at_al
 
 
 def test_an_empty_grid_has_nothing_to_trust_and_no_meter() -> None:
-    found = beats.trust(beats.numbered(BeatGrid((), ())))
+    found = beats.trust(beats.rows(BeatGrid((), ())))
 
     assert found.trusted == ()
     assert found.meter is None

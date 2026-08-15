@@ -477,7 +477,7 @@ def _tunes(
         TUNES,
         described,
         gist,
-        applause_module.numbered(calls.kept),
+        applause_module.rows(calls.kept),
         {
             "dropped_calls": list(applause_module.dropped_calls(calls.dropped, floor)),
             "quiet_calls": list(applause_module.quiet_calls(played, margin_db, tune_seconds)),
@@ -640,7 +640,7 @@ def _solos(
         brightness_stem or "nothing",
         source.name,
     )
-    return halves.written(target, SOLOS, described, gist, solos_module.numbered(changes))
+    return halves.written(target, SOLOS, described, gist, solos_module.rows(changes))
 
 
 def _timbre(

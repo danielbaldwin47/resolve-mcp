@@ -153,7 +153,12 @@ no silent CPU fallback, #202; the inventory and the stays-on-CPU corpus policy:
 `docs/reference/compute-device-inventory.md`), `drums` (hits per stem), `energy`
 (loudness curves; `rms_curve` is the cheap level-only pass, no K-weighting and
 no onsets), `fills` (drum-fill candidates), `halves` (shared
-identify/cache/write pattern, plus `collected`/`stem_named` — where a
+identify/cache/write pattern — `written` is the one door every analysis file
+goes through, so every one of them opens `kind`/`audio`/`duration_seconds`
+(#223, guarded across detectors by `tests/test_analysis_reports.py`;
+`correlate`'s join over cut rows is the documented exception), and where the
+naming rule lives: a header-stats builder is `gist`, a record builder is
+`rows` — plus `collected`/`stem_named` — where a
 separation's stems are and which one was asked for, shared by every detector
 that reads one: `phrases` off the line, `bars` off the pulse),
 `melody` (notes off one melodic stem —

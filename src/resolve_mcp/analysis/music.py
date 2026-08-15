@@ -247,7 +247,7 @@ def beats_half(
 ) -> dict[str, Any]:
     """The beat grid for this audio, written out. Shared with structure analysis."""
     grid = beats_module.detect(source, detector)
-    rows = beats_module.numbered(grid)
+    rows = beats_module.rows(grid)
     return halves.written(target, BEATS, described, beats_module.gist(grid, rows), list(rows))
 
 

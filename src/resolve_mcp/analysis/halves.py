@@ -201,12 +201,33 @@ def written(
 ) -> dict[str, Any]:
     """One file per half: a header of gist stats, then one record per line.
 
+    Every analysis file goes through here, so every one of them opens the same way — ``kind``,
+    the audio it read, how long that audio is — and an agent that greps the head of one knows
+    what the head of the next says. That is only true while this is the single writer: three
+    detectors hand-rolled the header instead and the promise was already false when #223
+    routed them back through it. The one report that stays out is ``correlate``'s, which is a
+    join over cut rows rather than a measurement of one audio file — it has no ``audio`` to
+    name and its own header shape, so it calls ``records.write`` directly and says so there.
+
     ``aside`` is written into the header but kept out of what comes back, which is the way
     a half records something too long for a tool result and too short for its own file —
     the calls the tune half rejected, say (#133). The gist rides home in the job record and
     stays stats; the aside stays on disk with the records it is about. It goes in under the
     gist rather than over it, so a name a half picks for an aside can never quietly replace
     a stat and leave the header saying something the returned dict does not.
+
+    The two names this takes are the two a detector builds, and they are the names to build
+    them under (#223, settling a drift where half the detectors used the other one):
+
+    * ``gist`` — the scalars a half returns inline and writes into its header. Every module
+      that builds one names the builder ``gist``. ``summary`` is the *cut* side's word —
+      ``barmap.summary``, ``subject.summary``, ``correlate._summary`` read a column of cut
+      rows, which is a different interface over different input, not a half's header.
+    * ``rows`` — the record builder: one flat dict per line under the file's record field.
+      ``numbered`` was the other half of the drift and is gone; it read as a distinction
+      (records that carry an index) that was never one, since bars and fills number theirs
+      too. ``music.numbered_beats`` and ``numbered_energy`` keep their names: they are half
+      *entries* — read me the numbered beats — rather than builders of anything.
     """
     header = {
         "kind": kind,

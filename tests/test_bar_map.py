@@ -17,7 +17,7 @@ import pytest
 
 from resolve_mcp.analysis import bars as bars_module
 from resolve_mcp.analysis import music
-from resolve_mcp.analysis.beats import BeatGrid, Detector, numbered
+from resolve_mcp.analysis.beats import BeatGrid, Detector, rows
 from resolve_mcp.errors import InvalidRequestError
 from resolve_mcp.jobs.runner import wait_for
 from resolve_mcp.tools import analysis as analysis_tools
@@ -29,7 +29,7 @@ TEMPO = 107.0
 
 
 def _rows(beats: Sequence[float], downbeats: Sequence[float]) -> tuple[dict[str, Any], ...]:
-    return numbered(BeatGrid(beats=tuple(beats), downbeats=tuple(downbeats)))
+    return rows(BeatGrid(beats=tuple(beats), downbeats=tuple(downbeats)))
 
 
 def _times(count: int, step: float, first: float = 0.0) -> tuple[float, ...]:
@@ -43,13 +43,13 @@ def _onset_scale(bars: int = 8, meter: int = 4, tempo: float = TEMPO) -> tuple[d
     the grid a bar map has to make something of.
     """
     times = _times(bars * meter * 2, 60.0 / tempo / 2)
-    return numbered(BeatGrid(beats=times, downbeats=times))
+    return rows(BeatGrid(beats=times, downbeats=times))
 
 
 def _committed(bars: int = 8, meter: int = 4, tempo: float = TEMPO) -> tuple[dict[str, Any], ...]:
     """A grid the model did commit to: the tactus, with a downbeat every ``meter`` beats."""
     times = _times(bars * meter, 60.0 / tempo)
-    return numbered(BeatGrid(beats=times, downbeats=times[::meter]))
+    return rows(BeatGrid(beats=times, downbeats=times[::meter]))
 
 
 def _accented(
@@ -367,7 +367,7 @@ def test_the_floor_gates_the_model_path_too() -> None:
     times = _times(40, 60.0 / TEMPO)
     # Nine bars of four and one of three: the model held its meter for most of the tune.
     downbeats = times[:36:4] + (times[36],) + (times[39],)
-    grid = numbered(BeatGrid(beats=times, downbeats=downbeats))
+    grid = rows(BeatGrid(beats=times, downbeats=downbeats))
 
     lenient = bars_module.mapped(grid, [0.5] * len(grid), minimum_confidence=0.5)
     strict = bars_module.mapped(grid, [0.5] * len(grid), minimum_confidence=0.95)
@@ -384,7 +384,7 @@ def test_a_model_grid_that_only_half_commits_falls_through_to_inference() -> Non
     # Downbeats every four for the first half, then every beat — the shape a tracker gives
     # when it loses the form partway through a set.
     downbeats = times[:32:4] + times[32:]
-    grid = numbered(BeatGrid(beats=times, downbeats=downbeats))
+    grid = rows(BeatGrid(beats=times, downbeats=downbeats))
     mapped = bars_module.mapped(grid, _accented(grid, every=4, fold=1))
     assert mapped.source == "inferred"
     assert mapped.meter == 4

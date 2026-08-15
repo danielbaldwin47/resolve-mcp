@@ -19,7 +19,7 @@ from typing import Any
 import pytest
 
 from resolve_mcp.analysis import drums, fills, music
-from resolve_mcp.analysis.beats import BeatGrid, Detector, numbered
+from resolve_mcp.analysis.beats import BeatGrid, Detector, rows
 from resolve_mcp.analysis.drums import Hit
 from resolve_mcp.audio.stems import DRUM_PASS, DRUM_STEMS, MIX_PASS
 from resolve_mcp.config import get_config
@@ -64,11 +64,11 @@ def stems(separation: Path) -> dict[str, Path]:
 
 
 def _grid(bars: int = 8, tempo: float = 120.0, meter: int = 4) -> tuple[dict[str, Any], ...]:
-    """``numbered`` rows for a steady grid — the same shape the beats half writes."""
+    """``beats.rows`` for a steady grid — the same shape the beats half writes."""
     step = 60.0 / tempo
     beats = tuple(round(index * step, 6) for index in range(bars * meter))
     downbeats = tuple(beats[index] for index in range(0, len(beats), meter))
-    return numbered(BeatGrid(beats=beats, downbeats=downbeats))
+    return rows(BeatGrid(beats=beats, downbeats=downbeats))
 
 
 def _comping(rows: Sequence[Mapping[str, Any]]) -> list[Hit]:
