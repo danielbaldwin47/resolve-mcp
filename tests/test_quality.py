@@ -34,6 +34,8 @@ from resolve_mcp.video.quality import (
     DEFAULT_MIN_SHARPNESS,
     DEFAULT_MIN_STABILITY,
     INLINE_WINDOWS,
+    MAX_SAMPLE_FPS,
+    MAX_SAMPLES,
     analyze_quality,
 )
 
@@ -289,6 +291,25 @@ def test_a_sampling_rate_this_scan_does_not_run_at_is_refused(
         _scan([], [SHARP], sample_fps=90.0)
 
     assert raised.value.detail["requested"] == 90.0
+
+
+def test_more_samples_than_one_scan_holds_is_refused_before_the_decode(
+    attach: Attach, fixture_video: Path
+) -> None:
+    """The ceiling this scan has and the occlusion scan does not: it measures the range whole.
+
+    A five-minute range is well inside the range limit and is still 3600 frames of the quality
+    grid at twelve samples a second. The refusal has to come from the sample count rather than
+    from the length, and it has to come before ffmpeg is asked for the decode.
+    """
+    long_clip = {"Frames": "7500", "End": "7499"}
+    attach(_studio_holding(fixture_video, long_clip))
+
+    with pytest.raises(InvalidRequestError) as raised:
+        _scan([], [SHARP], sample_fps=MAX_SAMPLE_FPS)
+
+    assert raised.value.detail["maximum"] == MAX_SAMPLES
+    assert raised.value.detail["samples"] > MAX_SAMPLES
 
 
 def test_a_floor_switched_off_is_a_rule_nobody_is_enforcing(
