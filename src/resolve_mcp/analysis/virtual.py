@@ -32,7 +32,7 @@ from typing import Any, Final
 
 from ..config import Config, get_config
 from ..cut.document import read_cut_file
-from ..cut.validate import is_gap, overlay_positions, positions, total_frames
+from ..cut.layout import is_gap, overlay_positions, positions, total_frames
 from ..document import LoadedDocument
 from ..errors import InvalidRequestError
 from ..findings import Finding, ordered

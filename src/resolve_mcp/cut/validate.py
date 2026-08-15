@@ -16,8 +16,12 @@ Two passes, because they need different things:
   check could not run). It is a pure function over those facts, so every rule in this
   file is unit-testable without Resolve.
 
-E11 is the build-time rule — a locked target track fails *silently* in the Resolve API,
-so the build checks it and reports it in the same shape as everything else.
+E11 is the build-time rule — a locked target track fails *silently* in the Resolve API —
+so it is described in :data:`RULE_DESCRIPTIONS` here with the rest of the catalogue, but
+raised in :mod:`resolve_mcp.resolve.build`, beside the check that can observe it.
+
+Where the entries *land* is not here: :mod:`resolve_mcp.cut.layout` computes that, and
+these rules judge the numbers it returns rather than summing their own (#218).
 
 Every finding is ``{rule, id, message, fix_hint}``: the rule so the agent can look it up,
 the id so it knows which segment to edit, and a fix hint so it does not have to guess.
@@ -34,6 +38,21 @@ from ..logging_config import get_logger
 from ..timing import duration_frames, ranges_overlap
 from . import resolution as cut_resolution
 from . import tail as tail_device
+from .layout import (
+    FIRST_OVERLAY_TRACK,
+    V1_TRACK,
+    anchored,
+    entries,
+    entry_duration,
+    gaps,
+    is_gap,
+    overlay_positions,
+    overlay_track,
+    overlays,
+    positions,
+    shots,
+    total_frames,
+)
 from .schema import SCHEMA_VERSION
 from .tail import Tail
 
@@ -44,12 +63,6 @@ DEFAULT_MIN_SEGMENT_FRAMES: Final = 12
 
 FPS_TOLERANCE: Final = 0.01
 """Reported rates carry float noise; real rate differences (23.976 vs 24) are far wider."""
-
-V1_TRACK: Final = 1
-"""The sequential cut's own track — the one ``segments`` lays out."""
-
-FIRST_OVERLAY_TRACK: Final = 2
-"""V1 is the sequential cut's own track, so the lowest an overlay can claim is V2."""
 
 MAX_OVERLAY_TRACK: Final = 8
 """A ceiling on ``track``, because the build adds every track below the one it is given.
@@ -91,7 +104,6 @@ _FIX_HINTS: Final[dict[str, str]] = {
     "E9": "Anchor the overlay to a segment that exists, at an offset inside it.",
     "E10": "Move one overlay, shorten it, or put it on its own 'track' — one track holds "
     "one clip per frame.",
-    "E11": "Unlock the track in Resolve's timeline header and build again.",
     "E12": "A dissolve reaches back into the last shot on V1 and the audio fade back into "
     "the mix, so each must be shorter than what it fades. Call get_cut_schema §8.",
     "W1": "Lengthen the segment or gap, or keep it if the flash is deliberate.",
@@ -130,16 +142,6 @@ def _finding(rule: str, id: str | None, message: str, fix_hint: str | None = Non
 def parse_failure_finding(detail: str) -> Finding:
     """E1: the file is on disk but is not JSON, so no other rule can be answered."""
     return _finding("E1", None, f"The cut file is not valid JSON: {detail}.")
-
-
-def locked_track_finding(track: str) -> Finding:
-    """E11: Resolve accepts an append onto a locked track and silently drops it."""
-    return _finding(
-        "E11",
-        track,
-        f"Track {track} is locked; Resolve would report the append as successful and "
-        f"place nothing.",
-    )
 
 
 # --- shape (E1) -------------------------------------------------------------------------
@@ -517,62 +519,11 @@ def validate_structure(
     return ordered(findings)
 
 
-def is_gap(entry: Any) -> bool:
-    """Whether a ``segments`` entry is black rather than a shot.
-
-    Public because the build, the swap and the read-back all walk the same array and each
-    has to answer this the same way: a second definition of what black looks like is how a
-    gap ends up placed on one side of the seam and ignored on the other.
-    """
-    return isinstance(entry, dict) and "gap" in entry
-
-
-def entry_duration(entry: dict[str, Any]) -> int:
-    """How much record time one ``segments`` entry takes — a gap's is the black itself."""
-    if is_gap(entry):
-        return int(entry["gap"])
-    return duration_frames(entry["in"], entry["out"])
-
-
-def overlay_track(overlay: dict[str, Any]) -> int:
-    """Which video track an overlay rides on. Absent means V2, the layer above the cut."""
-    track = overlay.get("track")
-    return int(track) if _is_int(track) else FIRST_OVERLAY_TRACK
-
-
-def _entries(doc: dict[str, Any]) -> list[dict[str, Any]]:
-    """``segments`` as authored: picture and black, in the order that lays out the V1."""
-    entries: list[dict[str, Any]] = doc["segments"]
-    return entries
-
-
-def shots(doc: dict[str, Any]) -> list[dict[str, Any]]:
-    """Only the entries that place a clip — *not* the same list as ``doc["segments"]``.
-
-    Every rule about *media* — aliases, bounds, rates, takes — reads this rather than the
-    raw array, so a gap is skipped by all of them at once instead of by a guard each of
-    them could be written without. Public alongside :func:`gaps` because the build and the
-    summaries need the same two counts, and counting them by hand at each call site is how
-    one of them ends up disagreeing about what black is.
-    """
-    return [entry for entry in _entries(doc) if not is_gap(entry)]
-
-
-def gaps(doc: dict[str, Any]) -> list[dict[str, Any]]:
-    """Only the entries that are black."""
-    return [entry for entry in _entries(doc) if is_gap(entry)]
-
-
-def _overlays(doc: dict[str, Any]) -> list[dict[str, Any]]:
-    overlays: list[dict[str, Any]] = doc.get("overlays") or []
-    return overlays
-
-
 def _id_errors(doc: dict[str, Any]) -> list[Finding]:
     """E2: segments, gaps and overlays share one id namespace."""
     seen: set[str] = set()
     findings: list[Finding] = []
-    for item in (*_entries(doc), *_overlays(doc)):
+    for item in (*entries(doc), *overlays(doc)):
         id = str(item["id"])
         if id in seen:
             findings.append(_finding("E2", id, f"The id {id!r} is used more than once."))
@@ -589,7 +540,7 @@ def _range_errors(doc: dict[str, Any]) -> list[Finding]:
             findings += _range_error(
                 alternate, str(segment["id"]), f"Alternate {index} of segment"
             )
-    for overlay in _overlays(doc):
+    for overlay in overlays(doc):
         findings += _range_error(overlay, str(overlay["id"]), "Overlay")
     for gap in gaps(doc):
         findings += _gap_length_error(gap)
@@ -661,7 +612,7 @@ def _alias_uses(doc: dict[str, Any]) -> Iterator[tuple[str, str]]:
         yield str(segment["source"]), str(segment["id"])
         for alternate in segment.get("alternates") or []:
             yield str(alternate["source"]), str(segment["id"])
-    for overlay in _overlays(doc):
+    for overlay in overlays(doc):
         yield str(overlay["source"]), str(overlay["id"])
 
 
@@ -688,74 +639,6 @@ def _alternate_duration_errors(doc: dict[str, Any]) -> list[Finding]:
     return findings
 
 
-def positions(doc: dict[str, Any]) -> dict[str, tuple[int, int]]:
-    """Each ``segments`` id to its computed ``(start, duration)`` — sequential V1, in order.
-
-    The overlay rules and the build both place against these numbers, and they have to be
-    the same numbers: an offset validated against one layout and built against another
-    would put the overlay somewhere nobody checked.
-
-    A gap is here with the rest. It places no clip, but it occupies record time and so it
-    moves everything after it — and an overlay may anchor over it, which is what makes a
-    V2 bridge across black expressible at all. Positions stay *computed* either way: black
-    is a duration in the array, never a frame number an author had to keep up to date.
-    """
-    placed: dict[str, tuple[int, int]] = {}
-    at = 0
-    for entry in _entries(doc):
-        duration = entry_duration(entry)
-        placed[str(entry["id"])] = (at, duration)
-        at += duration
-    return placed
-
-
-def placements(doc: dict[str, Any], start: int) -> dict[str, tuple[int, int]]:
-    """Each segment id to its ``(record frame, duration)`` on a timeline starting at ``start``.
-
-    The one place a cut's own offsets become absolute frames. A build sends these as
-    ``recordFrame`` and a swap finds a shot by them, so a second derivation of the same sum
-    somewhere else is a swap that quietly reads the wrong shot — there is only this one.
-    """
-    return {
-        id: (start + offset, duration) for id, (offset, duration) in positions(doc).items()
-    }
-
-
-def total_frames(doc: dict[str, Any]) -> int:
-    """The V1 span: sequential entries, so the sum of their durations, black included."""
-    return sum(entry_duration(entry) for entry in _entries(doc))
-
-
-def overlay_positions(doc: dict[str, Any]) -> dict[str, tuple[int, int]]:
-    """Each overlay id to its computed ``(start, duration)`` on V2 — start measured from
-    the cut's first frame, exactly as :func:`positions` measures a segment's.
-
-    An overlay names no absolute frame: its position is its anchor segment's computed
-    start plus the offset, which is what makes it ride the content it covers through a
-    tightening pass. E9 judges these numbers and the build places against them, from this
-    one function — a position validated one way and built another is exactly the drift
-    anchoring exists to prevent. An overlay whose anchor does not exist has no position
-    and is absent here; E9 has already refused that document.
-    """
-    return {str(overlay["id"]): at for overlay, at in _anchored(doc) if at is not None}
-
-
-def _anchored(doc: dict[str, Any]) -> Iterator[tuple[dict[str, Any], tuple[int, int] | None]]:
-    """Every overlay with its resolved span, or ``None`` when its anchor is not a segment."""
-    placed = positions(doc)
-    for overlay in _overlays(doc):
-        anchor = placed.get(str(overlay["over"]["segment"]))
-        yield (
-            overlay,
-            None
-            if anchor is None
-            else (
-                anchor[0] + int(overlay["over"]["offset"]),
-                duration_frames(overlay["in"], overlay["out"]),
-            ),
-        )
-
-
 def _overlay_errors(doc: dict[str, Any]) -> list[Finding]:
     """E9 and E10, both judged on the absolute positions resolved from the anchors."""
     placed = positions(doc)
@@ -763,7 +646,7 @@ def _overlay_errors(doc: dict[str, Any]) -> list[Finding]:
     findings: list[Finding] = []
     spans: dict[int, list[tuple[str, int, int]]] = {}
 
-    for overlay, resolved in _anchored(doc):
+    for overlay, resolved in anchored(doc):
         id = str(overlay["id"])
         anchor = str(overlay["over"]["segment"])
         offset = int(overlay["over"]["offset"])
@@ -883,8 +766,8 @@ def _dissolve_errors(doc: dict[str, Any], tail: Tail, declared: dict[str, Any]) 
             )
         ]
 
-    entries = _entries(doc)
-    last = entries[-1]
+    laid_out = entries(doc)
+    last = laid_out[-1]
     if is_gap(last):
         return [
             _finding(
@@ -980,13 +863,13 @@ def _video_ends(doc: dict[str, Any]) -> dict[int, tuple[int, str, int]]:
     """
     ends: dict[int, tuple[int, str, int]] = {}
     at = 0
-    for entry in _entries(doc):
+    for entry in entries(doc):
         duration = entry_duration(entry)
         if not is_gap(entry):
             ends[V1_TRACK] = (at + duration, str(entry["id"]), duration)
         at += duration
     total = total_frames(doc)
-    for overlay, resolved in _anchored(doc):
+    for overlay, resolved in anchored(doc):
         if resolved is None:
             continue
         start, duration = resolved
@@ -1042,7 +925,7 @@ def _segment_length_warnings(doc: dict[str, Any], minimum: int) -> list[Finding]
     duration far more often than as a device.
     """
     findings: list[Finding] = []
-    for entry in _entries(doc):
+    for entry in entries(doc):
         duration = entry_duration(entry)
         if duration < minimum:
             subject = "Gap" if is_gap(entry) else "Segment"
@@ -1126,7 +1009,7 @@ def _trailing_black(doc: dict[str, Any]) -> tuple[int, int] | None:
     placed = positions(doc)
     ends = [
         start + duration
-        for entry in _entries(doc)
+        for entry in entries(doc)
         if not is_gap(entry)
         for start, duration in [placed[str(entry["id"])]]
     ]
@@ -1213,7 +1096,7 @@ def _bounds_errors(doc: dict[str, Any], resolved: dict[str, ClipFacts]) -> list[
             findings += _bounds_error(
                 alternate, resolved, id, f"Alternate {index} of segment {id!r}"
             )
-    for overlay in _overlays(doc):
+    for overlay in overlays(doc):
         id = str(overlay["id"])
         findings += _bounds_error(overlay, resolved, id, f"Overlay {id!r}")
     return findings
@@ -1330,22 +1213,10 @@ def _audio_errors(doc: dict[str, Any], resolved: dict[str, ClipFacts]) -> list[F
 
 __all__ = [
     "DEFAULT_MIN_SEGMENT_FRAMES",
-    "FIRST_OVERLAY_TRACK",
-    "MAX_OVERLAY_TRACK",
     "RULE_DESCRIPTIONS",
     "ClipFacts",
-    "entry_duration",
-    "gaps",
-    "is_gap",
-    "locked_track_finding",
-    "overlay_positions",
-    "overlay_track",
     "parse_failure_finding",
-    "placements",
-    "positions",
     "resolve_aliases",
-    "shots",
-    "total_frames",
     "validate_project",
     "validate_structure",
 ]

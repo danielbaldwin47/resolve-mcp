@@ -17,15 +17,13 @@ from __future__ import annotations
 from typing import Any, NamedTuple
 
 from ..cut.document import read_cut_file
+from ..cut.layout import gaps, shots, total_frames
 from ..cut.schema import ANNOTATED_EXAMPLE, SCHEMA_DOC, SCHEMA_VERSION
 from ..cut.validate import (
     DEFAULT_MIN_SEGMENT_FRAMES,
     RULE_DESCRIPTIONS,
     ClipFacts,
-    gaps,
     resolve_aliases,
-    shots,
-    total_frames,
     validate_project,
     validate_structure,
 )
