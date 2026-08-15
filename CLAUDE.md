@@ -247,7 +247,7 @@ The five canonical triage roles, each label string equal to its role name. See `
 
 ### Domain docs
 
-Single-context — `CONTEXT.md` (repo map + vocabulary) and `docs/adr/` at
+Single-context — `CONTEXT.md` (the map), `docs/context/` (vocabulary + area narrative) and `docs/adr/` at
 the repo root. See `docs/agents/domain.md`.
 
 ### The concert pillar

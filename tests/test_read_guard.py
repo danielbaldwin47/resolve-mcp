@@ -133,8 +133,9 @@ def test_big_markdown_blocks_like_code(tmp_path: Path) -> None:
     assert "523 lines" in result.stderr
 
 
-def test_small_markdown_passes(tmp_path: Path) -> None:
-    doc = write_lines(tmp_path / "CONTEXT.md", 150)
+def test_markdown_at_the_limit_passes(tmp_path: Path) -> None:
+    """Same limit as code: 400 lines is in, 401 is out."""
+    doc = write_lines(tmp_path / "CONTEXT.md", 400)
 
     result = run_hook(read_event(doc), tmp_path)
 

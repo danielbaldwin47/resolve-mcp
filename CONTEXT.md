@@ -25,12 +25,12 @@ audio or synthetic frames; `live`: a running Resolve Studio (`pytest -m live`);
 | `__main__` | `python -m resolve_mcp` entry: start the server | `test_server` | fake |
 | `config` | zero-config defaults, `RESOLVE_MCP_*` env overrides | `test_config` | pure |
 | `deliver` | render preset + timeline span as a background job | `test_render_tools` | fake |
-| `document` | read agent JSON off disk, hash the bytes read; `Preflight` shape | `test_findings` | pure |
+| `document` | read agent JSON off disk, hash the bytes read; `Preflight`, the loaded-document + findings shape both contracts subclass | `test_findings` | pure |
 | `errors` | structured cause/fix errors; tracebacks never reach the agent | `test_connection` | pure |
 | `ffmpeg` | the one place the server shells out to ffmpeg; NVDEC probe | `test_hardware_decode` | pure |
-| `findings` | `{rule, id, message, fix_hint}`; `report`/`refuse` | `test_findings` | pure |
+| `findings` | `{rule, id, message, fix_hint}`; `report` the one `{errors, warnings}` reply, `refuse` the one raise-if-errors preamble | `test_findings` | pure |
 | `interpreter` | which interpreters may attach to fusionscript (ADR 0001) | `test_interpreter` | pure |
-| `lease` | is the owner of a claim still alive: `SESSION`, `liveness`, `claim` | `test_lease` | pure |
+| `lease` | is the owner of a claim still alive: `SESSION`, `liveness`, `claim`/`holder` | `test_lease` | pure |
 | `logging_config` | stderr-only logging (stdout is MCP transport) | `test_server` | fake |
 | `naming` | names for written files and `<base> v<N>` timelines | `test_naming` | pure |
 | `server` | FastMCP app + tool registration from each module's `TOOLS`; no logic | `test_server` | fake |
@@ -132,19 +132,19 @@ audio or synthetic frames; `live`: a running Resolve Studio (`pytest -m live`);
 | `video/source` | clip name → file path + the clip's own frame numbering | `test_frame_grabs` | fake |
 | `video/supers` | burned-in graphics: which are up when, which cuts land inside | `test_supers` | pure |
 
-**Tests not on a single row.** Spanning devices, one file each: `test_cut_devices`
-(gaps + overlays across layout/validate/build/takes/virtual), `test_analysis_reports`
-(every detector's file opens `kind`/`audio`/`duration_seconds`), `test_rough_cut_pillar`
-(the P4 pillar end to end), `test_style_layer` (server code never touches `styles/`),
-`test_text_plus_probe` (the Text+ template-append probe over fakes), `test_read_guard`
-(the Read hook, `sub`), `test_context_map` (this map covers the tree). Live tier: `test_live_smoke`, `test_live_analysis`, and the
-state it builds in `live_state` (decisions covered by `test_live_state`, fake).
+**Tests not on a single row** (seam in parentheses). Spanning devices, one file each:
+`test_cut_devices` (gaps + overlays across layout/validate/build/takes/virtual; fake),
+`test_analysis_reports` (every detector's file opens `kind`/`audio`/`duration_seconds`;
+fake), `test_rough_cut_pillar` (the P4 pillar end to end; fake), `test_style_layer`
+(server code never touches `styles/`; pure), `test_text_plus_probe` (the Text+
+template-append probe; fake), `test_read_guard` (the Read hook; sub), `test_context_map`
+(this map covers the tree; pure). Live tier: `test_live_smoke`, `test_live_analysis`, and
+the state it builds in `live_state` (decisions covered by `test_live_state`; fake).
 Fixtures and helpers: `conftest` (installs the fake seam, hermetic `Config`),
 `cutfile`, `roughcut`, `mediapool`, `otio`, `text_plus_probe`, `currency_probe`.
 The fake Resolve API, one module per subsystem — open the module, never the
 package: `fakes/core`, `fakes/connection`, `fakes/project`, `fakes/pool`,
 `fakes/media`, `fakes/timeline`, `fakes/timeline_item`, `fakes/fusion`,
-`fakes/interchange`, `fakes/separator`, `fakes/fixtures`, `fakes/builders`.
-`tests/data/` holds the one committed real footage (occlusion evidence grids).
+`fakes/interchange`, `fakes/separator`, `fakes/fixtures`, `fakes/builders`. `tests/data/`: the one committed real footage (occlusion evidence grids).
 
 **Not modules.** `styles/`, `gauntlet/`, `projects/` — agent-owned data, never read by server code (`docs/context/repo.md`). ADRs cited above: `docs/adr/`.

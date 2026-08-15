@@ -71,3 +71,34 @@ def test_every_tool_describes_itself() -> None:
 
 def test_the_escape_hatch_steers_back_to_the_real_tools() -> None:
     assert "prefer" in descriptions()["run_python"].lower()
+
+
+def test_python_m_entry_is_the_server_main() -> None:
+    """``python -m resolve_mcp`` runs ``server.main`` and nothing of its own."""
+    import importlib
+
+    from resolve_mcp import server
+
+    entry = importlib.import_module("resolve_mcp.__main__")
+
+    assert entry.main is server.main
+
+
+def test_logging_goes_to_stderr_only() -> None:
+    """stdout is the MCP transport; every handler the server installs writes to stderr."""
+    import logging
+    import sys
+
+    from resolve_mcp.logging_config import LOGGER_NAME, configure_logging, get_logger
+
+    logger = configure_logging()
+    child = get_logger("probe")
+
+    assert logger.name == LOGGER_NAME
+    assert child.name == f"{LOGGER_NAME}.probe"
+    assert logger.propagate is False
+    assert logger.handlers
+    assert all(
+        isinstance(h, logging.StreamHandler) and h.stream is sys.stderr for h in logger.handlers
+    )
+    assert configure_logging() is logger and len(logger.handlers) == 1

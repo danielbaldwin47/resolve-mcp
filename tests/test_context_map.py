@@ -51,21 +51,49 @@ def context_text() -> str:
     return CONTEXT.read_text(encoding="utf-8")
 
 
-def test_map_covers_every_module_and_test_file(context_text: str) -> None:
-    expected = {n for n in map(map_name, tracked("src", "tests")) if n}
-    assert expected, "git ls-files returned nothing — run from a checkout"
-    missing = sorted(n for n in expected if f"`{n}`" not in context_text)
-    assert not missing, f"CONTEXT.md is missing rows for: {missing}"
+@pytest.fixture(scope="module")
+def src_names() -> set[str]:
+    names = {n for n in map(map_name, tracked("src")) if n}
+    assert names, "git ls-files returned nothing — run from a checkout"
+    return names
 
 
-def test_map_names_no_file_that_does_not_exist(context_text: str) -> None:
-    """A row for a module that was moved or deleted is a wrong map, not a short one."""
-    live = {n for n in map(map_name, tracked("src", "tests")) if n}
-    packages = "analysis|audio|cut|jobs|resolve|titles|tools|video|fakes"
-    named = set(re.findall(rf"`((?:{packages})/\w+)`", context_text))
-    named |= set(re.findall(r"`(test_\w+)`", context_text))
-    stale = sorted(n for n in named if n not in live)
-    assert not stale, f"CONTEXT.md names files that are not tracked: {stale}"
+@pytest.fixture(scope="module")
+def test_names() -> set[str]:
+    return {n for n in map(map_name, tracked("tests")) if n}
+
+
+def table_rows(context_text: str) -> list[list[str]]:
+    rows = [line for line in context_text.splitlines() if line.startswith("| `")]
+    return [[c.strip() for c in row.strip("|").split("|")] for row in rows]
+
+
+def test_map_covers_every_module_and_test_file(
+    context_text: str, src_names: set[str], test_names: set[str]
+) -> None:
+    missing = sorted(n for n in src_names | test_names if f"`{n}`" not in context_text)
+    assert not missing, f"CONTEXT.md is missing: {missing}"
+
+
+def test_table_is_exactly_the_tracked_modules_once_each(
+    context_text: str, src_names: set[str]
+) -> None:
+    """A row for a moved or deleted module is a wrong map, not a short one; a
+    module with two rows is two answers to "who owns X"."""
+    first_cells = [row[0].strip("`") for row in table_rows(context_text)]
+    assert len(first_cells) == len(set(first_cells)), "a module has two rows"
+    assert set(first_cells) == src_names, (
+        f"rows without a module: {sorted(set(first_cells) - src_names)}; "
+        f"modules without a row: {sorted(src_names - set(first_cells))}"
+    )
+
+
+def test_map_names_no_test_file_that_does_not_exist(
+    context_text: str, test_names: set[str]
+) -> None:
+    named = set(re.findall(r"`((?:test_\w+|fakes/\w+))`", context_text))
+    stale = sorted(n for n in named if n not in test_names)
+    assert not stale, f"CONTEXT.md names test files that are not tracked: {stale}"
 
 
 def test_map_stays_short(context_text: str) -> None:
@@ -85,11 +113,11 @@ def test_map_links_every_area_doc(context_text: str) -> None:
     assert not unlinked, f"area docs CONTEXT.md does not link: {unlinked}"
 
 
-def test_every_map_row_names_a_test_and_a_seam(context_text: str) -> None:
-    rows = [line for line in context_text.splitlines() if line.startswith("| `")]
-    assert len(rows) > 100
-    for row in rows:
-        cells = [c.strip() for c in row.strip("|").split("|")]
-        assert len(cells) == 4, row
-        assert re.fullmatch(r"`test_\w+`", cells[2]), row
-        assert cells[3] in {"fake", "pure", "live", "sub"}, row
+def test_every_map_row_names_a_test_and_a_seam(
+    context_text: str, test_names: set[str]
+) -> None:
+    for cells in table_rows(context_text):
+        assert len(cells) == 4, cells
+        assert re.fullmatch(r"`test_\w+`", cells[2]), cells
+        assert cells[2].strip("`") in test_names, cells
+        assert cells[3] in {"fake", "pure", "live", "sub"}, cells
