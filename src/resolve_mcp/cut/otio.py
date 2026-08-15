@@ -322,4 +322,4 @@ def _exact(time: Any, rate: float) -> float:
     return value * rate / own if own > 0 and own != rate else value
 
 
-__all__ = ["DISSOLVE", "Document", "Item", "Track", "inject", "transitions"]
+__all__ = ["Document", "inject", "transitions"]

@@ -112,7 +112,12 @@ class Landed:
     name: str
 
     def release(self) -> None:
-        """Keep the import: drop the staging timeline. Best effort — see :func:`_delete_staging`."""
+        """Keep the import: drop the staging timeline. Best effort — see :func:`_delete_staging`.
+
+        The line it logs is the one that says a tail *landed*, because this is the moment the
+        cut stopped having a fallback. Everything before it is provisional.
+        """
+        log.info("Kept %s: its caller read the shots back on the cut the import made", self.name)
         _delete_staging(self.staging)
 
     def refuse(self, why: str) -> BuildFailedError:
@@ -228,8 +233,14 @@ def materialise(
     confirmed, refused = _confirm(connection, landed, placed, tail)
     if refused is not None:
         raise _failed_import(staging, name, landed, refused)
+    # "Written", not "landed": the caller has still to read its shots back on this timeline,
+    # and it may yet refuse it. A line claiming the tail here would leave a log where a
+    # failed build reads as a successful one right up to the refusal two lines later — and a
+    # live failure outside this session is diagnosed from the log or not at all. What the
+    # build committed to is recorded by ``_delete_staging`` when the caller releases.
     log.info(
-        "Tail on %s: %s dissolve over %s, audio fade over %s",
+        "Tail written into %s, pending its caller's check: %s dissolve over %s, audio fade "
+        "over %s",
         landed,
         tail.kind,
         ", ".join(placed["video_tracks"]) or "nothing",

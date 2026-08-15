@@ -225,7 +225,8 @@ no Resolve import: `inject` cuts the dissolve and the audio fade into an
 exported OTIO document and reports what did *not* get one, `transitions` reads
 them back, and the span/rate arithmetic under both counts every track in the
 *timeline's* rate rather than each clip's own; `resolve/tail` is the only
-caller, #221). A `segments` entry is a shot or a **gap**
+caller, #221 — not `tests/otio.py`, which hand-builds documents for the live
+tier). A `segments` entry is a shot or a **gap**
 (`{"id", "gap": <frames>}`, literal black); `is_gap`/`entry_duration`/
 `overlay_track` are the `layout` accessors every walker of that array shares.
 
@@ -273,9 +274,11 @@ which needs `useCustomSettings` first and is judged by the read-back, never by
 the return value — #187), `tail` (**the tail's round trip**: the export/import
 `build` takes when a tail has a transition to cut in — a hard out that fades
 nothing builds directly — because the scripting API cannot cut a transition at
-all; the document edit itself is `cut/otio`. Returns a `Landed` — the imported
-cut plus `release`/`refuse` — so the staging timeline outlives the import until
-the caller has read the shots back on it, #221), `takes`
+all; the document edit itself is `cut/otio`. Takes one `Staging` — the project,
+pool, timeline and name the shots are on until the import lands — and returns a
+`Landed`: the imported cut plus `release`/`refuse`, so the staging timeline
+outlives the import until the caller has read the shots back on it, #221),
+`takes`
 (take selectors + in-place swap), `timeline` (timeline read wrappers),
 `titles` (titles file against a project + dry run).
 
@@ -395,7 +398,8 @@ interesting failures are the disagreements between them. `test_cut_tail.py` is t
 tail is one device across `cut/tail`, `cut/validate`, `resolve/tail` and
 `resolve/build`, and a dissolve that did not land looks exactly like a cut that
 never asked for one. (`test_cut_otio.py` is its pure half, split out with the
-module in #221: documents in, documents out, plain dicts and no fakes.) `test_hardware_decode.py` (#202) is the fourth: NVDEC is
+module in #221: documents in, documents out, plain dicts and no fakes.)
+`test_hardware_decode.py` (#202) is the fourth: NVDEC is
 one decision across `ffmpeg` (the probe), `video/ffmpeg` (flags, fallback,
 report) and the three video routes that carry the report, and the failure worth
 testing is a decode that ran one way and reported another. `test_cut_resolution.py`
