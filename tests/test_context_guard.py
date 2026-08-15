@@ -225,7 +225,8 @@ def test_powershell_tool_silent_close_is_blocked() -> None:
 
 
 CLOSE_PASSES = [
-    'gh issue close 251 --comment "landed as PR #260; live ACs run"',
+    'gh issue close 251 --comment "landed as PR #260; live ACs run"',  # prose carries `;`
+    "gh issue close 251 --comment \"it's landed; see PR #260\"",  # ...and apostrophes
     "gh issue close 251 -c 'see PR #260'",
     "gh issue close 251 --comment='see PR #260'",
     'gh issue close 251 --reason completed --comment "see PR #260"',
