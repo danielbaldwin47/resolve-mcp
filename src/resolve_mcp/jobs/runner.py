@@ -41,7 +41,7 @@ from typing import Any, NamedTuple
 from ..config import Config, get_config
 from ..errors import ChainedJobError, InternalError, ResolveMcpError
 from ..logging_config import get_logger
-from . import cache, detached, store
+from . import cache, detached, lifecycle, store
 from .store import JobRecord
 
 log = get_logger("jobs")
@@ -53,7 +53,7 @@ WAITING = "waiting for Resolve"
 PROGRESS_INTERVAL = 1.0
 """How often a moving progress bar is written to the record, in seconds. See ``execute``.
 
-Comfortably below ``store.HEARTBEAT_CEILING``, which reads a record nothing has written to as
+Comfortably below ``lifecycle.HEARTBEAT_CEILING``, which reads a record nothing has written to as
 a worker that is gone: the bar is the heartbeat, and a throttle that outran the ceiling would
 have a running job declare itself dead.
 """
@@ -281,22 +281,22 @@ def follow(
     caller has to inspect. A cache hit is already finished and is never waited on at all.
     """
     record = store.load(job_id, config)
-    while record.state == store.RUNNING:
+    while record.state == lifecycle.RUNNING:
         if watch is not None:
             watch(record)
         sleep(poll)
         record = store.load(job_id, config)
-        if record.state == store.RUNNING and not record.detached and not alive(job_id):
+        if record.state == lifecycle.RUNNING and not record.detached and not alive(job_id):
             # The thread may have closed the record between that read and this check, so
             # the answer is the record read *after* the thread is known to be gone.
             record = store.load(job_id, config)
-            if record.state == store.RUNNING:
+            if record.state == lifecycle.RUNNING:
                 raise InternalError(
                     cause=f"The {record.kind} job {job_id} stopped without finishing.",
                     detail={"job_id": job_id, "step": record.step, "progress": record.progress},
                 )
 
-    if record.state == store.FAILED:
+    if record.state == lifecycle.FAILED:
         raise ChainedJobError(record.error or {}, job_id)
     return record
 

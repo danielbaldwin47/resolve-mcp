@@ -36,7 +36,7 @@ def main() -> None:
 
     from resolve_mcp.audio import stems as stems_module
     from resolve_mcp.config import get_config
-    from resolve_mcp.jobs import detached, store
+    from resolve_mcp.jobs import detached, lifecycle, store
     from resolve_mcp.resolve.connection import get_connection
 
     config = get_config()
@@ -51,7 +51,7 @@ def main() -> None:
 
     deadline = time.monotonic() + HANDOFF_BUDGET
     record = store.load(job_id, config)
-    while record.pid is None and record.state == store.RUNNING and time.monotonic() < deadline:
+    while record.pid is None and record.state == lifecycle.RUNNING and time.monotonic() < deadline:
         time.sleep(0.2)
         record = store.load(job_id, config)
 

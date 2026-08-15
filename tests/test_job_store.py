@@ -15,7 +15,7 @@ import pytest
 
 from resolve_mcp.config import get_config
 from resolve_mcp.errors import JobNotFoundError
-from resolve_mcp.jobs import store
+from resolve_mcp.jobs import lifecycle, store
 
 SAVES = 300
 
@@ -152,7 +152,7 @@ def test_the_interruption_is_written_back_so_the_verdict_is_reached_once() -> No
 
     on_disk = json.loads(_record_path(record.job_id).read_text(encoding="utf-8"))
     assert on_disk["state"] == "failed"
-    assert on_disk["session"] == store.SESSION
+    assert on_disk["session"] == lifecycle.SESSION
 
 
 def test_a_finished_job_from_a_previous_server_is_left_alone() -> None:

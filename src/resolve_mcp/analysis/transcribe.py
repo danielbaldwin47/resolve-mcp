@@ -32,7 +32,7 @@ from .. import ffmpeg
 from ..audio.acquire import acquire_clip_audio, acquire_timeline_audio
 from ..config import Config, get_config
 from ..errors import InvalidRequestError, TranscriptionError
-from ..jobs import cache, store
+from ..jobs import cache, lifecycle
 from ..jobs.runner import JobOutput, Progress, start_job, wait_for
 from ..logging_config import get_logger
 from ..naming import keyed_name
@@ -189,7 +189,7 @@ def _hash_of(acquisition: dict[str, Any]) -> str | None:
     job's cache exists for. Otherwise the audio is still being made and there is no hash to
     key on yet — and nothing to hit either, so waiting for one would buy nothing.
     """
-    if acquisition.get("state") != store.COMPLETED:
+    if acquisition.get("state") != lifecycle.COMPLETED:
         return None
     result = acquisition.get("result") or {}
     return str(result["content_sha256"]) if result.get("content_sha256") else None
@@ -198,7 +198,7 @@ def _hash_of(acquisition: dict[str, Any]) -> str | None:
 def _acquired(job_id: str, config: Config) -> dict[str, Any]:
     """Block until the audio is on disk, or fail carrying the acquisition's own advice."""
     record = wait_for(job_id, timeout=ACQUIRE_TIMEOUT, config=config)
-    if record.state == store.COMPLETED and record.result is not None:
+    if record.state == lifecycle.COMPLETED and record.result is not None:
         return dict(record.result)
 
     failure = record.error or {}
@@ -214,7 +214,7 @@ def _acquired(job_id: str, config: Config) -> dict[str, Any]:
 
 def _still_going(state: str) -> str | None:
     """A running acquisition is not a failure to fix — it is one to wait out and re-ask."""
-    if state != store.RUNNING:
+    if state != lifecycle.RUNNING:
         return None
     return (
         "The audio export is still running after an hour. Poll it with get_job, and start "
