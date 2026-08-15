@@ -244,6 +244,19 @@ for m in re.finditer(LOOP, scan_cat):
 # reader with no file arg fed by `xargs`, `find -exec`, or a lister's pipe
 # (`ls`, `find`, `Get-ChildItem`) reads what that stage named — `git diff
 # a.py | cat` is a no-pager idiom, not a dump, so only listers feed.
+# PowerShell accepts any unambiguous prefix of a parameter name (`-tot 5`,
+# `-Total 5`, `-Fi 3`), so every prefix of the bounding parameters clears a
+# read; `-t` alone is ambiguous (Tail/TotalCount) and the shell rejects it, so
+# the guard errs towards passing a read the shell will refuse anyway.
+BOUNDING_PARAM = (
+    r"-(?:"
+    + "|".join(
+        name[:n]
+        for name in ("TotalCount", "Tail", "Head", "First", "Last")
+        for n in range(len(name), 0, -1)
+    )
+    + r")\b"
+)
 READER_POS = r"(?:" + CMD_POS + r"|\bxargs\s+(?:-\S+\s+)*|-(?:exec|x|X)\s+)"
 LISTERS = r"(?:ls|find|fd|dir|Get-ChildItem|gci)"
 FED_BY = (
@@ -254,8 +267,7 @@ for stmt in re.split(STATEMENT_SEP, scan_cat):
     for m in re.finditer(READER_POS + READERS + r"\b(?P<rest>[^|;&\n]*)", stmt, re.I):
         rest = m.group("rest")
         seg = stmt[m.start("rest"):]
-        # PowerShell accepts any unambiguous prefix: `-tot 5`, `-Total 5`, `-Fi 3`.
-        if re.search(r"-(?:tot[a-z]*|tai?l?|hea?d?|fir?s?t?|las?t?)\b", rest, re.I):
+        if re.search(BOUNDING_PARAM, rest, re.I):
             continue
         if re.search(r"\)\s*(?:\.\w+|\[)", rest):
             continue
