@@ -508,6 +508,17 @@ route (`bake_taurus_cards.py` bakes a `%04d` RGBA frame run per card, fade
 ramps included, for a project whose media pool holds no GUI-authored Text+
 template; `titles/schema.py` Â§6).
 
+## Repo tooling — `scripts/`
+
+`prune_merged.py` — the post-merge sweep (#249): deletes remote and local
+branches whose PR GitHub reports merged and removes merged `.claude/worktrees/`
+entries; dry-run by default, `--apply` deletes. Merged is decided by `gh pr
+list --state merged` (head name + head oid), not ancestry — squash merges are
+never ancestors of `main`. Kept, with a reason printed: open PRs, tips past the
+merged PR head, locked (Claude-session) worktrees, dirty or detached ones, and
+the worktree holding the cwd. Planner is pure; `tests/test_prune_merged.py`
+drives it on fixture `gh`/`git worktree list --porcelain` output.
+
 ## Docs
 
 - `docs/adr/` â€” 0001 interpreter must be a registered install; 0002

@@ -111,6 +111,8 @@ torchcodec = [{ index = "pytorch-cu130", marker = "sys_platform == 'win32'" }]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# scripts/ holds repo tooling (prune_merged.py) whose planner the fake tier imports.
+pythonpath = ["scripts"]
 addopts = "-q --strict-markers -m 'not live'"
 markers = [
     "live: exercises a running DaVinci Resolve Studio; not part of the default suite",
@@ -118,7 +120,7 @@ markers = [
 
 [tool.ruff]
 line-length = 100
-src = ["src", "tests"]
+src = ["src", "tests", "scripts"]
 extend-exclude = [".claude"]
 
 [tool.ruff.lint]
@@ -131,7 +133,8 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.mypy]
 python_version = "3.12"
-files = ["src", "tests"]
+files = ["src", "tests", "scripts"]
+mypy_path = ["scripts"]
 strict = true
 warn_unused_ignores = true
 
