@@ -22,11 +22,11 @@ from ..analysis import (
     whisper,
 )
 from ..analysis import bars as bars_module  # `bars` is a tool argument on correlate_timeline
-from ..resolve.connection import get_connection
-from .envelope import tool
+from ..resolve.connection import ResolveConnection
+from .envelope import offline_tool, tool
 
 
-@tool
+@offline_tool
 def analyze_music(
     audio: str,
     beats: bool = True,
@@ -61,7 +61,7 @@ def analyze_music(
     )
 
 
-@tool
+@offline_tool
 def analyze_structure(
     audio: str,
     tunes: bool = True,
@@ -152,6 +152,7 @@ def analyze_structure(
 
 @tool
 def transcribe_audio(
+    connection: ResolveConnection,
     clip: str | None = None,
     bin: str | None = None,  # noqa: A002 - "bin" is the Resolve term the agent uses
     timeline: str | None = None,
@@ -180,7 +181,6 @@ def transcribe_audio(
     low_confidence moves the threshold a word counts as unsure below; refresh re-transcribes
     audio the cache would otherwise answer for.
     """
-    connection = get_connection()
     return transcribe.transcribe_audio(
         connection,
         clip=clip,
@@ -197,6 +197,7 @@ def transcribe_audio(
 
 @tool
 def correlate_timeline(
+    connection: ResolveConnection,
     beats: str,
     timeline: str | None = None,
     audio: str | None = None,
@@ -304,7 +305,6 @@ def correlate_timeline(
     Nothing here judges the edit. Two frames late is reported as two frames late; what
     counts as musical belongs in your style profile, not in this server.
     """
-    connection = get_connection()
     return correlate.correlate_timeline(
         connection,
         beats=beats,
@@ -323,7 +323,7 @@ def correlate_timeline(
     )
 
 
-@tool
+@offline_tool
 def detect_drum_fills(
     stems: str,
     audio: str,
@@ -357,7 +357,7 @@ def detect_drum_fills(
     )
 
 
-@tool
+@offline_tool
 def detect_phrases(
     stems: str,
     audio: str,
@@ -396,7 +396,7 @@ def detect_phrases(
     )
 
 
-@tool
+@offline_tool
 def detect_bars(
     audio: str,
     stems: str | None = None,

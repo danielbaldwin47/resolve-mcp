@@ -8,13 +8,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..resolve.connection import get_connection
+from ..resolve.connection import ResolveConnection
 from ..video import frames, occlusion, quality, scenes
 from .envelope import tool
 
 
 @tool
 def grab_frames(
+    connection: ResolveConnection,
     clip: str,
     times: list[Any],
     bin: str | None = None,  # noqa: A002 - the agent-facing word for a media pool folder
@@ -33,7 +34,6 @@ def grab_frames(
     Use this to check an angle at a moment the audio left ambiguous; to find where the shots
     change in b-roll, run detect_scene_cuts instead.
     """
-    connection = get_connection()
     return frames.grab_frames(
         connection,
         clip,
@@ -46,6 +46,7 @@ def grab_frames(
 
 @tool
 def detect_scene_cuts(
+    connection: ResolveConnection,
     clip: str,
     bin: str | None = None,  # noqa: A002 - the agent-facing word for a media pool folder
     threshold: float = scenes.DEFAULT_THRESHOLD,
@@ -63,7 +64,6 @@ def detect_scene_cuts(
     The scan decodes the whole clip, so it is cached against the media — an unchanged clip is
     never scanned twice.
     """
-    connection = get_connection()
     return scenes.detect_scene_cuts(
         connection,
         clip,
@@ -75,6 +75,7 @@ def detect_scene_cuts(
 
 @tool
 def analyze_occlusion(
+    connection: ResolveConnection,
     clip: str,
     bin: str | None = None,  # noqa: A002 - the agent-facing word for a media pool folder
     start: Any = None,
@@ -113,7 +114,6 @@ def analyze_occlusion(
     the threshold is a partial block, so grab_frames the peak and look before you write the
     angle off.
     """
-    connection = get_connection()
     return occlusion.analyze_occlusion(
         connection,
         clip,
@@ -128,6 +128,7 @@ def analyze_occlusion(
 
 @tool
 def analyze_quality(
+    connection: ResolveConnection,
     clip: str,
     bin: str | None = None,  # noqa: A002 - the agent-facing word for a media pool folder
     start: Any = None,
@@ -161,7 +162,6 @@ def analyze_quality(
     read it to justify or dispute a window, and grab_frames the worst sample before you write
     an angle off.
     """
-    connection = get_connection()
     return quality.analyze_quality(
         connection,
         clip,

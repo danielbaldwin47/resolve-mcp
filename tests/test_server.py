@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 
 from resolve_mcp.server import build_server
 
@@ -71,6 +72,29 @@ def test_every_tool_describes_itself() -> None:
 
 def test_the_escape_hatch_steers_back_to_the_real_tools() -> None:
     assert "prefer" in descriptions()["run_python"].lower()
+
+
+def schemas() -> dict[str, dict[str, Any]]:
+    tools = asyncio.run(build_server().list_tools())
+    return {tool.name: tool.parameters for tool in tools}
+
+
+def test_the_injected_connection_never_reaches_the_transport() -> None:
+    """The decorator hands the connection in (#229); the agent must never see the parameter."""
+    offenders = {
+        name: schema
+        for name, schema in schemas().items()
+        if "connection" in (schema.get("properties") or {})
+        or "connection" in (schema.get("required") or [])
+    }
+
+    assert offenders == {}
+
+
+def test_a_tool_s_own_parameters_survive_the_injection() -> None:
+    """Stripping one parameter must not strip the ones the agent is supposed to fill in."""
+    assert schemas()["open_project"]["required"] == ["name"]
+    assert set(schemas()["grab_frames"]["properties"]) >= {"clip", "times", "max_edge"}
 
 
 def test_python_m_entry_is_the_server_main() -> None:

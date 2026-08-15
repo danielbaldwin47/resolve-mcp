@@ -5,12 +5,12 @@ from __future__ import annotations
 from typing import Any
 
 from .. import deliver
-from ..resolve.connection import get_connection
+from ..resolve.connection import ResolveConnection
 from .envelope import tool
 
 
 @tool
-def list_render_presets() -> dict[str, Any]:
+def list_render_presets(connection: ResolveConnection) -> dict[str, Any]:
     """List the render presets this project offers, spelled the way render_timeline needs.
 
     Presets belong to the project and the machine, not to this server: what a preset renders
@@ -18,12 +18,12 @@ def list_render_presets() -> dict[str, Any]:
     so pick one by name rather than describing a shape. current is the format and codec the
     project would render with right now, which is the last preset anything loaded.
     """
-    connection = get_connection()
     return deliver.list_presets(connection)
 
 
 @tool
 def render_timeline(
+    connection: ResolveConnection,
     preset: str | None = None,
     timeline: str | None = None,
     name: str | None = None,
@@ -74,7 +74,6 @@ def render_timeline(
     A render leaves the Deliver page set to the preset it used, the same way rendering by
     hand would; the timeline the director had open is the one thing put back.
     """
-    connection = get_connection()
     return deliver.render_timeline(
         connection,
         preset=preset,

@@ -14,12 +14,14 @@ from typing import Any
 from ..resolve import interchange
 from ..resolve import markers as marker_wrapper
 from ..resolve import timeline as timelines
-from ..resolve.connection import get_connection
+from ..resolve.connection import ResolveConnection
 from .envelope import tool
 
 
 @tool
-def list_timelines(limit: int = timelines.DEFAULT_LIST_LIMIT) -> dict[str, Any]:
+def list_timelines(
+    connection: ResolveConnection, limit: int = timelines.DEFAULT_LIST_LIMIT
+) -> dict[str, Any]:
     """List the project's timelines with version, duration, fps, resolution and track stack.
 
     resolution is the frame size each timeline is actually on — which is not the project's
@@ -31,12 +33,12 @@ def list_timelines(limit: int = timelines.DEFAULT_LIST_LIMIT) -> dict[str, Any]:
     carrying an angle per video track, so the track counts are what identifies it. Past
     limit entries the full listing spills to disk and spilled_to holds the path.
     """
-    connection = get_connection()
     return timelines.list_timelines(connection, limit=limit)
 
 
 @tool
 def inspect_timeline(
+    connection: ResolveConnection,
     timeline: str | None = None,
     detail: str = "tracks",
     start: Any = None,
@@ -70,7 +72,6 @@ def inspect_timeline(
     Past limit shots the reply is capped and the full reading spills to disk (spilled_to);
     narrow the range or read that file rather than raising the cap.
     """
-    connection = get_connection()
     return timelines.inspect_timeline(
         connection,
         name=timeline,
@@ -84,6 +85,7 @@ def inspect_timeline(
 
 @tool
 def list_markers(
+    connection: ResolveConnection,
     timeline: str | None = None,
     color: str | None = None,
     start: Any = None,
@@ -101,7 +103,6 @@ def list_markers(
     or seconds with an explicit snap. colors counts what came back, which is the shape of a
     review round. Past limit markers the full set spills to disk (spilled_to).
     """
-    connection = get_connection()
     return marker_wrapper.list_markers(
         connection,
         name=timeline,
@@ -114,6 +115,7 @@ def list_markers(
 
 @tool
 def set_markers(
+    connection: ResolveConnection,
     markers: list[dict[str, Any]],
     timeline: str | None = None,
     replace: bool = False,
@@ -132,12 +134,12 @@ def set_markers(
     ok with unchanged: true. Every entry is reported separately; one bad entry never sinks
     the batch.
     """
-    connection = get_connection()
     return marker_wrapper.set_markers(connection, markers, name=timeline, replace=replace)
 
 
 @tool
 def export_timeline(
+    connection: ResolveConnection,
     timeline: str | None = None,
     format: str = interchange.DEFAULT_FORMAT,  # noqa: A002 - the agent-facing word
     path: str | None = None,
@@ -154,12 +156,12 @@ def export_timeline(
     suffix. export_type names the Resolve export constant used — fcpxml is versioned and
     the newest one this build offers is written.
     """
-    connection = get_connection()
     return interchange.export_timeline(connection, name=timeline, export_format=format, path=path)
 
 
 @tool
 def import_timeline(
+    connection: ResolveConnection,
     path: str,
     name: str | None = None,
     import_source_clips: bool | None = None,
@@ -183,7 +185,6 @@ def import_timeline(
     result is still checked against the timelines the project already had, so an import
     that came back as an existing cut is reported as a failure, never as a new timeline.
     """
-    connection = get_connection()
     return interchange.import_timeline(
         connection,
         path,
