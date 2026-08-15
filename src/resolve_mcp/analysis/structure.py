@@ -256,7 +256,7 @@ def _stems(stems: str | Path | None, solos: bool) -> dict[str, Path]:
             detail={SOLOS: solos, "stems": None},
         )
     directory = Path(stems)
-    found = halves.collected(directory, _NO_STEMS_FIX)
+    found = halves.collected(directory, fix=_NO_STEMS_FIX)
     if not found:
         raise InvalidRequestError(
             cause=f"There are no separated stems in {directory}.",

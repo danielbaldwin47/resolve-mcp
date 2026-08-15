@@ -62,8 +62,8 @@ def sane_floor(minimum_confidence: float, default: float, writes: str = "candida
         )
 
 
-def collected(directory: Path, absent: str | None = None) -> dict[str, Path]:
-    """The stems under a separation's directory — the four-stem pass, the third pass, or both.
+def collected(directory: Path, fix: str | None = None) -> dict[str, Path]:
+    """The melodic stems under a separation's directory — first pass, third pass, or both.
 
     A separation writes a directory per pass — ``<directory>/mix``, ``<directory>/drums``, and
     ``<directory>/other`` when the wind split was asked for — and the job reports the parent of
@@ -72,15 +72,17 @@ def collected(directory: Path, absent: str | None = None) -> dict[str, Path]:
     their own should not have to name a subdirectory that is not there. The opt-in third pass
     sits beside the first and comes along when it is there — see ``_third_pass``.
 
-    Here beside ``readable`` because more than one detector reads a stem now — phrases off the
-    line, bars off the pulse (#180), solo changes off all of them — and two answers to "where
-    are the stems" would be two conventions. That is not a hypothetical: ``structure`` carried
-    its own copy until #220, and the wind and comp stems it discovered reached the solo
-    detector and nothing else.
+    Here beside ``readable`` because more than one detector reads a melodic stem — phrases off
+    the line, bars off the pulse (#180), solo changes off all of them — and two answers to
+    "where are the stems" would be two conventions. That is not a hypothetical: ``structure``
+    carried its own copy until #220, and the wind and comp stems it alone knew how to find
+    reached the solo detector and nothing else. The drum pass is read by ``fills`` through a
+    lookup of its own, because it wants a different pass narrowed to a different set of names;
+    that one is still a second convention, and #220 did not close it.
 
     What a caller says when the stems are *missing* stays with the caller, because the advice
-    differs — ``absent`` shapes the fix for a directory that is not there, and an empty result
-    is left for the caller to refuse in its own words.
+    differs — ``fix``, as in ``readable``, shapes the refusal for a directory that is not
+    there, and an empty result is left for the caller to refuse in its own words.
 
     The imports are function-local: ``audio.stems`` reaches the Resolve seam, and every
     analysis half imports this module.
@@ -91,7 +93,7 @@ def collected(directory: Path, absent: str | None = None) -> dict[str, Path]:
     if not directory.is_dir():
         raise InvalidRequestError(
             cause=f"There is no directory at {directory}.",
-            fix=absent
+            fix=fix
             or "Pass the directory a separate_stems job reported, or the mix pass inside it.",
             detail={"requested": str(directory)},
         )
@@ -113,7 +115,8 @@ def _third_pass(directory: Path) -> dict[str, Path]:
 
     Both halves or neither, and only the two names the envelope knows. One half alone is a
     partial pass, and it would join a voice set that still holds ``other`` — the residual
-    measured twice over, which is the one way this change reads worse than no change.
+    measured twice over, which is the one way reaching for this pass reads worse than not
+    reaching for it at all.
     """
     from ..audio import separator
     from ..audio.stems import MIX_PASS, OTHER_PASS, WIND_KEYS
