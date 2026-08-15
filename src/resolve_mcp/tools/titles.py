@@ -11,10 +11,10 @@ from typing import Any
 
 from ..resolve import apply, title_edit, titles
 from ..resolve.connection import ResolveConnection
-from .envelope import offline_tool, tool
+from .envelope import tool, tool_without_connection
 
 
-@offline_tool
+@tool_without_connection
 def get_titles_schema() -> dict[str, Any]:
     """Return the titles-file schema v1, its annotated example, and the validation rules.
 

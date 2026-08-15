@@ -23,10 +23,10 @@ from ..analysis import (
 )
 from ..analysis import bars as bars_module  # `bars` is a tool argument on correlate_timeline
 from ..resolve.connection import ResolveConnection
-from .envelope import offline_tool, tool
+from .envelope import tool, tool_without_connection
 
 
-@offline_tool
+@tool_without_connection
 def analyze_music(
     audio: str,
     beats: bool = True,
@@ -61,7 +61,7 @@ def analyze_music(
     )
 
 
-@offline_tool
+@tool_without_connection
 def analyze_structure(
     audio: str,
     tunes: bool = True,
@@ -323,7 +323,7 @@ def correlate_timeline(
     )
 
 
-@offline_tool
+@tool_without_connection
 def detect_drum_fills(
     stems: str,
     audio: str,
@@ -357,7 +357,7 @@ def detect_drum_fills(
     )
 
 
-@offline_tool
+@tool_without_connection
 def detect_phrases(
     stems: str,
     audio: str,
@@ -396,7 +396,7 @@ def detect_phrases(
     )
 
 
-@offline_tool
+@tool_without_connection
 def detect_bars(
     audio: str,
     stems: str | None = None,

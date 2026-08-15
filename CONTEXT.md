@@ -109,7 +109,7 @@ audio or synthetic frames; `live`: a running Resolve Studio (`pytest -m live`);
 | `titles/validate` | 9 errors + 2 warnings | `test_titles_validate` | pure |
 | `tools/analysis` | analysis + correlate tools | `test_correlate_timeline` | fake |
 | `tools/cut` | cut tools: schema, dry run, build, swap, virtual transcript | `test_cut_tools` | fake |
-| `tools/envelope` | shared envelope + `@tool`/`@offline_tool` + connection injection + handle-death retry + job-record wrap | `test_envelope` | fake |
+| `tools/envelope` | shared envelope + `@tool`/`@tool_without_connection` + connection injection + handle-death retry + job-record wrap | `test_envelope` | fake |
 | `tools/escape_hatch` | `run_python` | `test_run_python` | fake |
 | `tools/jobs` | job status/list/cancel tools | `test_job_tools` | fake |
 | `tools/media` | the media tools over `resolve/media` | `test_media_tools` | fake |

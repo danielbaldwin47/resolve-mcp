@@ -13,10 +13,10 @@ from ..analysis import virtual
 from ..analysis.transcript import DEFAULT_LOW_CONFIDENCE
 from ..resolve import build, cut, takes
 from ..resolve.connection import ResolveConnection
-from .envelope import offline_tool, tool
+from .envelope import tool, tool_without_connection
 
 
-@offline_tool
+@tool_without_connection
 def get_cut_schema() -> dict[str, Any]:
     """Return the cut-file schema v1, its annotated example, and the validation rules.
 
@@ -43,7 +43,7 @@ def validate_cut(
     return cut.validate_cut(connection, cut_file, min_segment_frames)
 
 
-@offline_tool
+@tool_without_connection
 def virtual_transcript(
     cut_file: str,
     transcripts: dict[str, str] | None = None,

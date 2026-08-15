@@ -8,7 +8,7 @@ holds the module → test → seam map itself.
 `get_titles_schema`), `validate` (9 errors + 2 warnings).
 
 `tools/` — MCP tool layer, thin, grouped by workflow: `analysis`, `cut`,
-`envelope` (**shared envelope + the `@tool` / `@offline_tool` decorators +
+`envelope` (**shared envelope + the `@tool` / `@tool_without_connection` decorators +
 handle-death retry + the job-record wrap**),
 `escape_hatch` (`run_python`), `jobs`, `media`, `project`, `render`,
 `stems`, `timeline`, `titles`, `video`. Registration: each module exposes
@@ -21,7 +21,7 @@ declares `connection: ResolveConnection` first and is handed the live one —
 no body calls `get_connection()` — and the decorator strips that parameter
 from the signature registration reads, so the agent never sees it. A tool
 that answers from documents alone (a schema, a cut file, a job record) takes
-`@offline_tool` and keeps its own signature.
+`@tool_without_connection` and keeps its own signature.
 
 There is no `styles/` module and there never will be: the style layer is data
 the agent owns, not code the server runs.
