@@ -14,7 +14,13 @@ from pathlib import Path
 from typing import Any, NamedTuple
 
 from ..config import Config, get_config
-from ..errors import FrameGrabError, InvalidRequestError, OcclusionScanError, SceneDetectionError
+from ..errors import (
+    FrameGrabError,
+    InvalidRequestError,
+    OcclusionScanError,
+    ResolveMcpError,
+    SceneDetectionError,
+)
 from ..ffmpeg import Completed, Runner, hwaccels, invoke, refused
 from ..logging_config import get_logger
 
@@ -339,12 +345,17 @@ def sample(
     height: int,
     runner: Runner | None = None,
     config: Config | None = None,
+    failure: type[ResolveMcpError] = OcclusionScanError,
 ) -> Sampled:
     """Write the sampled frames of a range to ``target`` as raw grey, or say why not.
 
     An empty file is a failure rather than an empty scan: ffmpeg seeked past the end of a
     file exits zero and writes nothing, and a scan of no frames would otherwise come back
     saying the shot is clean.
+
+    ``failure`` is which refusal a caller wants back. Two scans sample the same way and fail
+    the same way, and an agent told its image-quality scan failed for occlusion reasons would
+    go looking at the wrong tool's documentation.
     """
     config = config or get_config()
     destination = Path(target)
@@ -367,9 +378,9 @@ def sample(
     )
 
     if finished.returncode != 0:
-        raise refused(source, finished, OcclusionScanError, start_seconds=start_seconds)
+        raise refused(source, finished, failure, start_seconds=start_seconds)
     if not destination.exists() or destination.stat().st_size < width * height:
-        raise OcclusionScanError(
+        raise failure(
             cause=f"ffmpeg reported success but wrote no frames to {destination}.",
             fix=(
                 "A range that starts past the end of the file exits zero and writes nothing. "

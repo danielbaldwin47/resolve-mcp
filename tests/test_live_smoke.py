@@ -77,7 +77,7 @@ from resolve_mcp.tools.timeline import (
     set_markers,
 )
 from resolve_mcp.tools.titles import apply_titles, edit_title, list_titles
-from resolve_mcp.tools.video import detect_scene_cuts, grab_frames
+from resolve_mcp.tools.video import analyze_quality, detect_scene_cuts, grab_frames
 from resolve_mcp.video import ffmpeg as video_ffmpeg
 
 from . import otio
@@ -108,6 +108,11 @@ proves it on the cuts a camera and an editor made.
 
 SCAN_BIN = "resolve-mcp-scratch"
 """Where the generated scan clip is imported. Deleted with its clip when the test ends."""
+
+QUALITY_SCAN_SECONDS = 20.0
+"""How much of a real angle the image-quality smoke decodes. Long enough to hold several
+seconds of camera movement — the stability reading needs neighbours — and short enough that
+a 4K master does not turn the live tier into a render queue."""
 
 SMOKE_CUT = "resolve-mcp-smoke"
 """Every build here materialises a new version of this name; delete them when you are done."""
@@ -1199,6 +1204,50 @@ def test_a_real_frame_grab_lands_on_the_moment_resolve_numbers_it_at() -> None:
 
     again = grab_frames(footage["name"], [middle], bin=footage["bin"])
     assert again["cached"] is True, "unchanged media must be a cache hit"
+
+
+def test_a_real_quality_scan_reads_an_angle_on_its_own_clock() -> None:
+    """#182's live AC: the four readings, off real 4K footage, over a span of a real angle.
+
+    What no fake can show is whether the readings *mean* anything on a concert master. The
+    fixture tier proves the arithmetic separates a composed sharp frame from a composed soft
+    one; here the frames are a camera in a dark club at 4K, decoded through the real scaler,
+    and what is checked is that the numbers land in their ranges rather than at the ends of
+    them — a sharpness of 0.0 or a stability of exactly 1.0 across a whole span would both be
+    a reading that had stopped reading. The floors themselves are calibrated separately
+    (docs/reference/image-quality-calibration.md); this is the route, not the threshold.
+    """
+    listing = list_media()
+    if not listing["ok"]:
+        pytest.skip("No project open in Resolve")
+    footage = next(iter(_decodable(listing["clips"])), None)
+    if footage is None:
+        pytest.skip("No online clip with a frame rate in the media pool")
+    bounds = inspect_clip(footage["name"], bin=footage["bin"])["bounds"]["media"]
+    fps = bounds["in"]["fps"] or 25.0
+    first = bounds["in"]["frames"] + bounds["duration"]["frames"] // 3
+    last = min(bounds["out"]["frames"], first + int(fps * QUALITY_SCAN_SECONDS))
+
+    started = analyze_quality(footage["name"], bin=footage["bin"], start=first, end=last)
+    record = wait_for(started["job_id"], timeout=1800.0)
+
+    assert started["ok"] is True, started.get("error")
+    assert record.state == "completed", record.error
+    assert record.result is not None
+    catalog = json.loads(Path(record.result["path"]).read_text(encoding="utf-8"))
+    samples = catalog["samples"]
+    assert len(samples) >= 4, "a scan of several seconds has to have several samples in it"
+    for sample in samples:
+        assert first <= sample["time"]["frames"] <= last
+        assert 0.0 <= sample["sharpness"] <= 1.0
+        assert 0.0 <= sample["exposure"] <= 1.0
+        assert 0.0 <= sample["clipped"] <= 1.0
+    # Not a threshold, a liveness check: a decode that handed back one repeated frame, or a
+    # scaler that flattened the picture, would leave every reading identical.
+    assert len({sample["sharpness"] for sample in samples}) > 1
+    steady = [one["stability"] for one in samples if one["stability"] is not None]
+    assert steady, "a continuous angle has neighbouring frames to compare"
+    assert all(0.0 <= one <= 1.0 for one in steady)
 
 
 def test_nvdec_decodes_a_real_clip_on_this_box(tmp_path: Path) -> None:

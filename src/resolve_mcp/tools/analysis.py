@@ -209,6 +209,7 @@ def correlate_timeline(
     tunes: str | None = None,
     solos: str | None = None,
     deltas: str | None = None,
+    quality: str | None = None,
     bars: str | None = None,
     angles: dict[str, Any] | None = None,
     track: int | None = None,
@@ -247,6 +248,14 @@ def correlate_timeline(
     gauntlet/tools/ab_pack.py writes such a catalog as cuts.json. Render the whole timeline,
     not a span, or the times will not line up — the visual_delta block in the result says how
     many cuts joined and how many did not.
+
+    quality is an image-quality catalog analyze_quality wrote, and it answers the other
+    question a still cannot: was this shot soft, blown out or shaky while it was on screen?
+    Scan the same full-length render the deltas came from — the catalog's times are that
+    render's clock — and every record gains sharpness, exposure, clipped and stability, each
+    taken over the whole shot rather than at its first frame. The picture_quality block names
+    the cuts that missed the floors the scan was run with, so a self-review can say "shot 7 is
+    the soft one" rather than "the median is fine".
 
     The audio is normally located by finding it on the timeline. When it is not there at all
     — a multicam carries its own audio angle, and the mix itself was never laid down —
@@ -291,6 +300,7 @@ def correlate_timeline(
             tunes=tunes,
             solos=solos,
             deltas=deltas,
+            quality=quality,
             bars=bars,
             angles=angles,
             track=track,
