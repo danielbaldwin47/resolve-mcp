@@ -88,6 +88,7 @@ def test_the_schema_lists_every_rule_with_its_severity(attach: Attach) -> None:
         "W1",
         "W2",
         "W8",
+        "W9",
     ]
 
 

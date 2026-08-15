@@ -75,7 +75,12 @@ import numpy as np
 from resolve_mcp.analysis import subject as subject_module
 from resolve_mcp.analysis.correlate import RHYTHM_BINS
 from resolve_mcp.ffmpeg import hwaccels
-from resolve_mcp.video import framing, supers
+from resolve_mcp.video import framing, picture, supers
+from resolve_mcp.video.quality import (
+    DEFAULT_MAX_CLIPPED,
+    DEFAULT_MIN_SHARPNESS,
+    DEFAULT_MIN_STABILITY,
+)
 
 # --------------------------------------------------------------------------
 # constants
@@ -122,6 +127,13 @@ MOTION_DIRECTIONAL = 0.5  # net / path travelled: high = one way, low = jitter
 MOTION_JITTER_SHARE = 0.5
 MOTION_JITTER_DIRECTIONAL = 0.35
 MOTION_MIN_SAMPLES = 3
+
+# per-shot image quality: the server's own reading (resolve_mcp.video.picture), decoded on
+# its grid. Separate from the motion pass because it asks a different question -- that one
+# says how much the camera moved, this one says whether the picture was worth cutting to --
+# and because it needs a wider grid: sharpness measured on a 192 px decode has had the
+# detail it is asking about thrown away before it looks.
+QUALITY_RATE = 4.0
 
 # transition typing: decode a native-fps window around each boundary
 TRANS_W, TRANS_H = 128, 72
@@ -583,6 +595,53 @@ def decode_grey(
         .reshape(n, height, width)
         .astype(dtype)
     )
+
+
+# --------------------------------------------------------------------------
+# per-shot image quality
+
+
+QUALITY_FLOORS = picture.Floors(
+    sharpness=DEFAULT_MIN_SHARPNESS,
+    clipped=DEFAULT_MAX_CLIPPED,
+    stability=DEFAULT_MIN_STABILITY,
+)
+
+
+def quality_track(clip: Path) -> dict[str, Any]:
+    """Every sampled frame of the clip, scored by the server's own image-quality reading.
+
+    The same arithmetic `analyze_quality` runs, so a number in a pack and a number in a
+    correlate report are the same measurement rather than two implementations that agree
+    until they do not. Sample times are the fps grid's own: the nth sample is the nth
+    interval from zero.
+    """
+    arr = decode_grey(
+        clip, picture.GRID_WIDTH, picture.GRID_HEIGHT, fps=QUALITY_RATE, dtype=np.uint8
+    )
+    if len(arr) == 0:
+        return {"t": [], "readings": []}
+    scan = picture.measure(arr)
+    return {
+        "t": [i / QUALITY_RATE for i in range(len(scan.readings))],
+        "readings": list(scan.readings),
+    }
+
+
+def shot_quality(track: dict[str, Any], start: float, end: float) -> dict[str, Any]:
+    """Image quality for one shot, over the samples that fall inside it.
+
+    No edge guard, unlike the motion pass. It needs one because a frame pair straddling a
+    cut reads as a huge bogus shift; the quality reading already knows what that pair is and
+    reports its stability as unmeasurable, so the samples either side of a boundary are
+    honest about themselves and belong to the shots they were taken from.
+    """
+    inside = [
+        reading
+        for t, reading in zip(track["t"], track["readings"], strict=True)
+        if start <= t < end
+    ]
+    return picture.summarize(inside, QUALITY_FLOORS)
 
 
 # --------------------------------------------------------------------------
@@ -1964,6 +2023,7 @@ def build_label(
     row_of = {p["cut_index"]: p for p in placement}
 
     track = motion_track(clip)
+    picture_track = quality_track(clip)
 
     # What the graphics layer put on the picture, and which cuts land inside it. Measured
     # off the render because nothing else can see it: a super is burned in by the time
@@ -1979,10 +2039,14 @@ def build_label(
     ghosts = ghost_scan(slow, shots, exclude=tail_ramp)
 
     motion_classes: dict[str, int] = {}
+    unusable_shots: list[int] = []
     shot_docs = []
     for i, (s, e) in enumerate(shots):
         motion = shot_motion(track, s, e)
+        quality = shot_quality(picture_track, s, e)
         motion_classes[motion["class"]] = motion_classes.get(motion["class"], 0) + 1
+        if quality.get("usable") is False:
+            unusable_shots.append(i + 1)
         shot_docs.append(
             {
                 "index": i + 1,
@@ -1990,6 +2054,7 @@ def build_label(
                 "end": round(e, 3),
                 "length": round(e - s, 3),
                 "motion": motion,
+                "quality": quality,
             }
         )
 
@@ -2015,6 +2080,19 @@ def build_label(
         "motion_classes": motion_classes,
         "visual_delta": delta_summary,
         "supers": supers_review,
+        "picture_quality": {
+            "sample_hz": QUALITY_RATE,
+            "grid": f"{picture.GRID_WIDTH}x{picture.GRID_HEIGHT}",
+            # Spelled the way the server's own catalog spells them, so a critic comparing a
+            # pack against an analyze_quality scan is reading one vocabulary.
+            "floors": {
+                "min_sharpness": QUALITY_FLOORS.sharpness,
+                "max_clipped": QUALITY_FLOORS.clipped,
+                "min_stability": QUALITY_FLOORS.stability,
+            },
+            "whole_clip": picture.summarize(picture_track["readings"], QUALITY_FLOORS),
+            "unusable_shots": unusable_shots,
+        },
         "cut_times_sec": cuts,
         "cuts": [
             {
@@ -2109,6 +2187,7 @@ def build_label(
                 "held_frames",
             )
         },
+        "picture_quality": cuts_doc["picture_quality"],
         "ending": {
             k: ending.get(k) for k in ("kind", "black_at_sec", "ramp_sec", "black_hold_sec")
         },
@@ -2407,6 +2486,37 @@ def main(argv: list[str] | None = None) -> int:
             "Recall is traded "
             "for precision on purpose: a graphic invented under a critic's cut misleads worse "
             "than one missed",
+        },
+        "picture_quality": {
+            "question": "was this shot worth cutting to at all -- soft, blown out, or shaky",
+            "method": f"resolve_mcp.video.picture over a {picture.GRID_WIDTH}x"
+            f"{picture.GRID_HEIGHT} grey decode at {QUALITY_RATE:g} samples a second; the same "
+            "reading the server's analyze_quality runs, so a pack number and a correlate "
+            "number are one measurement",
+            "terms": {
+                "sharpness": "acutance mapped to 0-1: the frame's own mean gradient divided "
+                f"by the gradient left after a {picture.BLUR_WINDOW}px box blur, so what is "
+                "measured is how much detail a blur can still take away rather than how busy "
+                "the frame is -- a lit soloist against black and a crowd wide are comparable",
+                "exposure": "mean luma 0-1, with contrast (standard deviation) beside it",
+                "clipped": f"fraction of the frame at or above {picture.CLIP_LEVEL:.3f} luma, "
+                f"and crushed the fraction at or below {picture.CRUSH_LEVEL:.3f}",
+                "stability": "1 - the residual after global motion compensation: the "
+                "frame-to-frame shift by phase correlation, less the trend of its "
+                f"{picture.SMOOTH_WINDOW} neighbours, over {picture.SHAKE_SPAN:.2f} of frame "
+                "width. A steady pan scores 1.0 -- movement is not instability",
+            },
+            "aggregation": "per shot, medians for sharpness and exposure and extremes for "
+            "clipped and stability: what a viewer sees is the worst moment of the shot, not "
+            "its average one",
+            "floors": f"soft below {DEFAULT_MIN_SHARPNESS}, blown above {DEFAULT_MAX_CLIPPED}, "
+            f"shaky below {DEFAULT_MIN_STABILITY}; unusable_shots lists the shots that missed "
+            "one (docs/reference/image-quality-calibration.md)",
+            "blind_spot": "stability is null across every cut and on any flat frame -- two "
+            "frames of different pictures cannot be aligned, so that pair is unmeasurable "
+            "rather than unstable. Sharpness is a no-reference reading: a shallow-focus shot "
+            "whose subject is sharp and whose frame is mostly bokeh scores low and is not "
+            "wrong, so treat a low score as a frame to look at",
         },
         "slow_transition": {
             "method": f"mean luma over a {SLOW_W}x{SLOW_H} grey track at {SLOW_FPS} fps; "

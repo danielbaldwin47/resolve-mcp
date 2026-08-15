@@ -158,6 +158,12 @@ def _facts(bin_path: str, clip: Clip, timeline_fps: float) -> ClipFacts:
     # The timeline's rate is what the Duration fallback counts at: an audio-only clip
     # reports no Start/End/Frames and no rate of its own (#46), only a Duration timecode.
     start, out = media.frame_bounds(reported, fps=timeline_fps)
+    if start is None or out is None:
+        # The condition W9 reports to the agent, said once here as well: the warning rides
+        # in a result the agent may or may not read back, and a build that went wrong over a
+        # range nothing checked is diagnosed from the log or not at all (#186).
+        log.info("No usable media bounds on %s (%s-%s); E5 and E7 cannot check a range "
+                 "against them", name, start, out)
     channels = media.audio_channels(reported)
     if channels is None:
         # E7's has-audio leg reads an undocumented property key. If Resolve renames it

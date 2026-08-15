@@ -305,6 +305,55 @@ def test_e5_covers_alternates_and_overlays() -> None:
     assert rules(findings).count("E5") == 2
 
 
+# --- W9: E5 fails open on unknown bounds, and says so (#186) ----------------------------
+
+
+def test_w9_warns_when_a_clips_media_bounds_were_never_reported() -> None:
+    """Fail-open is right — 'Resolve did not say' is not an overrun — but not silent."""
+    doc = valid_doc()
+    doc["segments"][0]["alternates"] = []
+    facts = [
+        c if c.name != "C0012.mp4" else replace(c, start=None, end_exclusive=None)
+        for c in clip_facts()
+    ]
+
+    finding = only(validate_project(doc, facts), "W9")
+
+    assert finding.id == "s001"
+    assert "C0012.mp4" in finding.message
+    assert "E5" not in rules(validate_project(doc, facts))
+
+
+def test_w9_covers_the_master_mix_whose_bounds_e7_checks_the_same_way() -> None:
+    doc = valid_doc()
+    facts = [
+        c if c.name != "sunset-master.wav" else replace(c, start=None, end_exclusive=None)
+        for c in clip_facts()
+    ]
+
+    finding = only(validate_project(doc, facts), "W9")
+
+    assert finding.id is None
+    assert "sunset-master.wav" in finding.message
+
+
+def test_w9_exempts_stills_which_have_no_bounds_to_check() -> None:
+    doc = valid_doc()
+    doc["segments"][0]["alternates"] = []
+    facts = [
+        c
+        if c.name != "C0012.mp4"
+        else replace(c, start=None, end_exclusive=None, fps=None, is_still=True)
+        for c in clip_facts()
+    ]
+
+    assert "W9" not in rules(validate_project(doc, facts))
+
+
+def test_w9_stays_quiet_when_the_bounds_are_known() -> None:
+    assert "W9" not in rules(validate_project(valid_doc(), clip_facts()))
+
+
 # --- E6: source fps matches timeline fps ------------------------------------------------
 
 

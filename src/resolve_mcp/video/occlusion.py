@@ -15,6 +15,13 @@ The answer the agent actually wants is the *windows* — the stretches to keep a
 so those come back inline. The per-sample curve goes to disk beside them, because a builder
 that has to justify skipping a favourite shot needs the number, and a reviewer that disagrees
 needs to see where the score sat rather than being told a verdict.
+
+Every window carries a **kind**: ``obstruction`` for the ones to keep a cut out of, ``scene``
+for the near-field mass the shot was framed to include. The score alone could not tell them
+apart — it flagged six windows on the round it was tuned against and two were real — so the
+classing is a second reading, ``blocking``'s ``novel`` and ``hidden``. Nothing is filtered out
+on the way: a scene window that vanished would be indistinguishable from a stretch that was
+never flagged, and the builder that disagrees with a class is the reason the curve is on disk.
 """
 
 from __future__ import annotations
@@ -35,8 +42,9 @@ from ..jobs.runner import JobOutput, Progress, start_job
 from ..logging_config import get_logger
 from ..naming import slug
 from ..resolve.connection import ResolveConnection
-from ..timing import IN_POINT, SECONDS_PRECISION, dual_time, frames_from_seconds, to_frames
+from ..timing import SECONDS_PRECISION, dual_time
 from . import ffmpeg
+from .sampled import readable_range, runs, sample_frame, sample_step
 from .source import Source, locate
 
 if TYPE_CHECKING:  # pragma: no cover - the worker imports this when it runs
@@ -68,6 +76,30 @@ that bobs out of frame for a beat has not made the shot usable."""
 INLINE_WINDOWS = 8
 """How many windows the gist carries, worst first. The file on disk has the rest."""
 
+DISCRIMINATOR = {
+    "classes": {
+        "obstruction": (
+            "something in the near field is covering a player the shot is framed on — the "
+            "stretch to keep a cut out of"
+        ),
+        "scene": (
+            "near-field mass the shot was framed to include: furniture, a parked audience "
+            "head, the shot's own foreground subject, or the same furniture moved by a "
+            "mid-take reframe. Flagged by the score, and not a reason to drop the shot"
+        ),
+    },
+    "bounds": (
+        "an obstruction window spans the samples that scored, not the body's own in and out: "
+        "the detector loses a body once it stops moving, so a crossing can outlast its window "
+        "by a second or more at either end"
+    ),
+}
+"""What the classes mean and what they cannot say, carried on every result.
+
+The limit is stated rather than implied because it is the one that costs an edit: a builder
+reading a 0.96 s window as 'the body is there for 0.96 s' cuts into the second after it. The
+gauntlet's one adjudicated crossing ran 3.7 s and scored across 0.96 of them (#189)."""
+
 
 def analyze_occlusion(
     connection: ResolveConnection,
@@ -90,7 +122,7 @@ def analyze_occlusion(
     source = locate(connection, clip, bin, OcclusionScanError)
     rate = _readable_rate(sample_fps)
     level = _readable_threshold(threshold)
-    first, last = _readable_range(start, end, source)
+    first, last = readable_range(start, end, source, MAX_RANGE_SECONDS, "an occlusion scan")
 
     params = {
         "clip": clip,
@@ -135,7 +167,7 @@ def scan_occlusion(
     raw = config.analysis_dir / f"{stem}-{os.getpid()}-{uuid4().hex[:8]}.gray"
     progress(0.1, f"decoding {duration:.0f}s of {source.name} at {rate:g} samples a second")
     try:
-        sampled = ffmpeg.sample(
+        decoded = ffmpeg.sample(
             source.path,
             raw,
             start_seconds=source.seek_seconds(first),
@@ -167,7 +199,7 @@ def scan_occlusion(
         "sample_fps": rate,
         "threshold": level,
         # Which device decoded the range, and why not the GPU when it was the CPU (#202).
-        "decode": sampled.decode,
+        "decode": decoded.decode,
         "grid": {"width": blocking.GRID_WIDTH, "height": blocking.GRID_HEIGHT},
         # What this shot covers even unobstructed: the scan's own floor, subtracted from
         # every score. A high baseline is worth seeing — it means the framing itself is tight.
@@ -180,10 +212,11 @@ def scan_occlusion(
     target.write_text(json.dumps(catalog, indent=2), encoding="utf-8")
 
     log.info(
-        "Scored %d occlusion sample(s) of %s, %d unusable window(s), to %s",
+        "Scored %d occlusion sample(s) of %s, %d window(s), %d an obstruction, to %s",
         len(samples),
         source.name,
         len(windows),
+        sum(1 for one in windows if one["kind"] == blocking.OBSTRUCTION),
         target,
     )
     return JobOutput(_gist(catalog, target, samples, windows), (target,))
@@ -196,10 +229,19 @@ def _gist(
     windows: list[dict[str, Any]],
 ) -> dict[str, Any]:
     """What comes back inline: the windows to avoid, and how bad the range is overall."""
+    from . import blocking  # noqa: PLC0415 - numpy and scipy load here, not at server startup
+
     scores = [float(one["score"]) for one in samples]
     blocked = [one for one in samples if float(one["score"]) >= float(catalog["threshold"])]
     worst = max(samples, key=lambda one: float(one["score"])) if samples else None
-    ranked = sorted(windows, key=lambda one: float(one["peak_score"]), reverse=True)
+    obstructions = [one for one in windows if one["kind"] == blocking.OBSTRUCTION]
+    # Obstructions before scene, worst first inside each: the inline budget is small and a
+    # veto the builder has to honour must never be crowded out by furniture it can ignore.
+    ranked = sorted(
+        windows,
+        key=lambda one: (one["kind"] == blocking.OBSTRUCTION, float(one["peak_score"])),
+        reverse=True,
+    )
     return {
         "path": str(target),
         "clip": catalog["clip"],
@@ -212,6 +254,9 @@ def _gist(
         "blocked_samples": len(blocked),
         "blocked_fraction": _rounded(len(blocked) / len(samples)) if samples else 0.0,
         "windows": len(windows),
+        "obstructions": len(obstructions),
+        "unusable_seconds": _rounded(sum(float(one["duration_seconds"]) for one in obstructions)),
+        "discriminator": DISCRIMINATOR,
         "worst_windows": ranked[:INLINE_WINDOWS],
         "worst_sample": worst,
         "score": {
@@ -230,18 +275,18 @@ def _samples(scan: Scan, first: int, rate: float, source: Source) -> list[dict[s
     """
     return [
         {
-            "time": dual_time(_sample_frame(index, first, rate, source), source.fps),
+            "time": dual_time(sample_frame(index, first, rate, source), source.fps),
             "score": reading.score,
             "coverage": reading.coverage,
             "largest": reading.largest,
             "blobs": reading.blobs,
+            # What separates a body from the shot's own furniture. The score does not: a real
+            # blocking has read below a drummer's arm in the same 90 seconds (#189).
+            "novel": reading.novel,
+            "hidden": reading.hidden,
         }
         for index, reading in enumerate(scan.readings)
     ]
-
-
-def _sample_frame(index: int, first: int, rate: float, source: Source) -> int:
-    return first + frames_from_seconds(index / rate, source.fps or 1.0, IN_POINT)
 
 
 def _windows(
@@ -261,14 +306,23 @@ def _windows(
     filter can emit a boundary frame dated at the range's own end: it is a real reading and it
     stays in the curve, but the window it would make starts where the range stops. A
     zero-length or backwards window in the catalog is a stretch no cut can be kept out of.
+
+    Every window is published, classed rather than filtered: a builder that disagrees with the
+    discriminator needs to see the stretch it decided was scene, and a window that vanished
+    would look exactly like a stretch that was never flagged.
     """
-    runs = _runs([float(one["score"]) >= threshold for one in samples])
-    step = max(1, frames_from_seconds(1.0 / rate, source.fps or 1.0, IN_POINT))
+    from . import blocking  # noqa: PLC0415 - numpy and scipy load here, not at server startup
+
+    found = runs([float(one["score"]) >= threshold for one in samples], GAP_SAMPLES)
+    step = sample_step(rate, source)
     windows: list[dict[str, Any]] = []
-    for begin, stop in runs:
-        scores = [float(samples[one]["score"]) for one in range(begin, stop)]
-        start_frame = max(first, min(last, _sample_frame(begin, first, rate, source)))
-        end_frame = min(last, _sample_frame(stop - 1, first, rate, source) + step)
+    for begin, stop in found:
+        run = samples[begin:stop]
+        scores = [float(one["score"]) for one in run]
+        novel = max(float(one["novel"]) for one in run)
+        hidden = max(float(one["hidden"]) for one in run)
+        start_frame = max(first, min(last, sample_frame(begin, first, rate, source)))
+        end_frame = min(last, sample_frame(stop - 1, first, rate, source) + step)
         if end_frame <= start_frame:
             continue
         windows.append(
@@ -280,25 +334,15 @@ def _windows(
                 "samples": stop - begin,
                 "peak_score": _rounded(max(scores)),
                 "mean_score": _rounded(statistics.fmean(scores)),
+                # The window is classed on its worst sample, the way it is scored on it: one
+                # second of a body crossing is what makes the stretch unusable, and the
+                # seconds either side of it are the ones a cut would land on.
+                "kind": blocking.verdict(novel, hidden),
+                "peak_novel": _rounded(novel),
+                "peak_hidden": _rounded(hidden),
             }
         )
     return windows
-
-
-def _runs(blocked: list[bool]) -> list[tuple[int, int]]:
-    """Index runs of ``True``, merging any two separated by at most ``GAP_SAMPLES`` clean ones.
-
-    Half-open, so a run is ``[begin, stop)`` and a lone blocked sample is one sample long.
-    """
-    runs: list[tuple[int, int]] = []
-    for index, flag in enumerate(blocked):
-        if not flag:
-            continue
-        if runs and index - runs[-1][1] <= GAP_SAMPLES:
-            runs[-1] = (runs[-1][0], index + 1)
-        else:
-            runs.append((index, index + 1))
-    return runs
 
 
 def _rounded(seconds: float) -> float:
@@ -336,45 +380,3 @@ def _readable_threshold(threshold: float) -> float:
             detail={"requested": threshold, "maximum": 1.0},
         )
     return float(threshold)
-
-
-def _readable_range(start: Any, end: Any, source: Source) -> tuple[int, int]:
-    """The range to scan as this clip's own frame numbers, half-open and inside its media."""
-    if not source.fps:
-        raise InvalidRequestError(
-            cause=(
-                f"Resolve reports no frame rate for {source.name!r}, so a range cannot be "
-                "sampled."
-            ),
-            fix="inspect_clip shows what Resolve knows about the clip; a still has no timeline.",
-            detail={"clip": source.name, "file_path": source.path},
-        )
-
-    first = to_frames(start, source.fps, field="start")
-    first = source.start if first is None else first
-    last = to_frames(end, source.fps, field="end")
-    if last is None:
-        last = source.out
-    if last is None:
-        raise InvalidRequestError(
-            cause=f"Resolve reports no end for {source.name!r}, so the range has no out point.",
-            fix="Pass end explicitly — inspect_clip reports what Resolve does know about it.",
-            detail={"clip": source.name, "bounds": source.bounds},
-        )
-
-    if not source.holds(first) or first >= last:
-        raise source.outside(first)
-    if source.out is not None and last > source.out:
-        raise source.outside(last)
-
-    seconds = (last - first) / source.fps
-    if seconds > MAX_RANGE_SECONDS:
-        raise InvalidRequestError(
-            cause=f"The range asked for is {seconds:.0f}s of footage.",
-            fix=(
-                f"Scan at most {MAX_RANGE_SECONDS:.0f}s at a time — an occlusion scan answers "
-                "'is this angle usable through this song', so pass the song's range."
-            ),
-            detail={"clip": source.name, "seconds": round(seconds, 1)},
-        )
-    return int(first), int(last)

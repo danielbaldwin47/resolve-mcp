@@ -33,12 +33,12 @@ from __future__ import annotations
 
 import json
 import statistics
-from bisect import bisect_right
+from bisect import bisect_left, bisect_right
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from ..config import Config, get_config
 from ..errors import InvalidRequestError
@@ -67,6 +67,9 @@ from ..timing import SECONDS_PRECISION, dual_time, to_frames
 from ..video import supers
 from . import decode, energy, records, subject
 from .beats import GridTrust, nearest, spacing, trust
+
+if TYPE_CHECKING:  # pragma: no cover - numpy and scipy load with this module, in the worker
+    from ..video import picture
 
 log = get_logger("analysis")
 
@@ -231,7 +234,7 @@ FLOOR_HEURISTIC = (
 )
 """The floor heuristic in words, carried in the report beside the numbers it was drawn from."""
 
-READING = 10
+READING = 11
 """What this measurement *is*; bumped whenever a rerun over unchanged inputs would differ.
 
 The cache is keyed on what was measured, not on the code that measured it, so a call whose
@@ -247,8 +250,10 @@ every record now carries its place in the bar map, and 9 rather than 8 because e
 now carries ``delta`` and ``jump_cut``, which are ``None`` on a call that named no cut-delta
 catalog — a cached hit from an earlier reading answers the self-review question with a file
 that never asked it, and a cached reading-8 file would hand back a report with no such
-columns at all. 10 rather than 9 because every record now carries ``straddles_super`` and
-``super_kind`` on the same terms.
+columns at all. 10 rather than 9 for the same reason one step further on: every record now
+carries the four image-quality columns and a ``quality_samples`` count (#182), and 11
+rather than 10 because every record now carries ``straddles_super`` and ``super_kind`` on
+the same terms (#183).
 """
 
 DELTA_MATCH_SEC = 0.25
@@ -351,6 +356,7 @@ def correlate_timeline(
     solos: str | None = None,
     deltas: str | None = None,
     supers: str | None = None,
+    quality: str | None = None,
     bars: str | None = None,
     angles: Mapping[str, Any] | None = None,
     track: int | None = None,
@@ -392,6 +398,14 @@ def correlate_timeline(
     cuts is how titling works, a cut inside a title card is not. Same clock rule as
     ``deltas``, and the same summary.
 
+    ``quality`` is an image-quality catalog — the per-sample reading ``analyze_quality``
+    writes (#182). Its ``t`` has to be in the same clock as this timeline, which a scan of a
+    full-length render of the cut gives; a scan of one angle's own range is in that clip's
+    numbering and joins nothing. Unlike the cut deltas it is joined *over* each shot rather
+    than at its boundary — the question is whether the shot held up while it was on screen,
+    not what happened at the instant it came in — so a shot gets a reading whenever the scan
+    covered any of it, and ``unjoined`` says how many got none.
+
     ``bars`` is the bar map ``detect_bars`` writes, and it is the file that makes a cut
     measurable against the *form* rather than only against the pulse (#180). The beat grid
     already carries a bar number, but only the one the beat model committed to — on material
@@ -413,6 +427,8 @@ def correlate_timeline(
         "supers",
         "gauntlet/tools/ab_pack.py writes one beside its cuts.json",
     )
+    takes = _optional_rows(quality, "image-quality catalog", "samples", "analyze_quality writes it")
+    floors = _floors(quality)
     cut = _read_cut(connection, timeline, track, music.audio, audio_at)
 
     params: dict[str, Any] = {
@@ -425,6 +441,7 @@ def correlate_timeline(
         "solos": _named(solos),
         "deltas": _named(deltas),
         "supers": _named(supers),
+        "quality": _named(quality),
         "bars": _named(bars),
         "angles": dict(sorted(roles.items())) if roles is not None else None,
         # Carried apart from the roles so that relabelling a camera's subject — the one edit
@@ -435,7 +452,7 @@ def correlate_timeline(
     watched = [
         {"reading": READING},
         cut.fingerprint,
-        *_fingerprints(beats, audio, tunes, solos, deltas, supers, bars),
+        *_fingerprints(beats, audio, tunes, solos, deltas, supers, quality, bars),
     ]
     key = cache.cache_key(KIND, watched, params)
 
@@ -454,6 +471,8 @@ def correlate_timeline(
             config,
             pictures,
             graphics,
+            takes,
+            floors,
         )
 
     return start_job(KIND, params, work, cache_key=key, refresh=refresh, config=config)
@@ -473,6 +492,8 @@ def correlate(
     config: Config | None = None,
     pictures: Sequence[Mapping[str, Any]] | None = None,
     graphics: Sequence[Mapping[str, Any]] | None = None,
+    takes: Sequence[Mapping[str, Any]] | None = None,
+    floors: Mapping[str, float] | None = None,
 ) -> JobOutput:
     """The worker: transients, then one record per shot on disk and the stats inline."""
     config = config or get_config()
@@ -485,7 +506,7 @@ def correlate(
 
     progress(0.7, "measuring the cut against the music")
     grid = trust(music.beats)
-    rows = measure(shots, clock, music, transients, grid, pictures, graphics)
+    rows = measure(shots, clock, music, transients, grid, pictures, graphics, takes)
     summary = _summary(
         rows,
         clock,
@@ -496,6 +517,8 @@ def correlate(
         levels,
         pictures,
         graphics,
+        takes,
+        floors,
     )
 
     target = config.analysis_dir / keyed_name(name, key, ".correlate.json", "correlate")
@@ -1043,6 +1066,7 @@ def measure(
     grid: GridTrust | None = None,
     pictures: Sequence[Mapping[str, Any]] | None = None,
     graphics: Sequence[Mapping[str, Any]] | None = None,
+    takes: Sequence[Mapping[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """One record per shot: where it starts in the music, and how far off everything it is.
 
@@ -1062,6 +1086,7 @@ def measure(
     trusted = (grid if grid is not None else trust(music.beats)).trusted
     widths = spacing(times)
     picture_times = [float(row["t"]) for row in (pictures or ())]
+    take_times = [float(row["t"]) for row in (takes or ())]
 
     rows: list[dict[str, Any]] = []
     for index, shot in enumerate(shots, start=1):
@@ -1141,6 +1166,13 @@ def measure(
                 # for it, is the convention rather than the fault, and the interval is read
                 # strictly at both ends so those two land outside it.
                 **_super_at(graphics, seconds, SUPER_EDGE_FRAMES / clock.fps),
+                # How the picture held up while this shot was on screen (#182), joined from
+                # an image-quality scan of the render. Measured over the shot rather than at
+                # its boundary: a take that goes soft halfway through is soft, and reading
+                # only the first frame of it would report the take before the focus slipped.
+                **_quality_over(
+                    takes, take_times, seconds, seconds + shot.duration / clock.fps
+                ),
             }
         )
     return rows
@@ -1178,6 +1210,84 @@ def _super_at(
     # the finding or the lower third that happened to be up over it.
     kind = supers.CARD if supers.CARD in kinds else kinds[0]
     return {"straddles_super": True, "super_kind": kind or None}
+
+
+def _quality_over(
+    takes: Sequence[Mapping[str, Any]] | None,
+    times: Sequence[float],
+    seconds: float,
+    until: float,
+) -> dict[str, Any]:
+    """The image-quality catalog rows this shot covers, as four columns and a count.
+
+    Aggregated the same way ``video.picture`` summarises a stretch, and for the reasons given
+    there: middles for sharpness and exposure, which are properties of the take, and the worst
+    moment for clipping and stability, which are the two a shot is only as good as.
+
+    A shot no sample landed inside is left null rather than borrowing its neighbour's
+    reading. A scan is sampled several times a second, so the only shots this loses are ones
+    shorter than a sample interval — and inventing a number for them would be inventing it
+    for exactly the cuts a fast passage is made of.
+    """
+    empty = {
+        "sharpness": None,
+        "exposure": None,
+        "clipped": None,
+        "stability": None,
+        "quality_samples": 0,
+    }
+    if not takes:
+        return empty
+    first, last = bisect_left(times, seconds), bisect_left(times, until)
+    inside = [takes[index] for index in range(first, last)]
+    if not inside:
+        return empty
+
+    # The aggregation rule itself belongs to ``video.picture`` and is taken from there rather
+    # than repeated: a shot in a correlate report and a shot in a blind pack have to be the
+    # same number, and two copies of a rule are two rules waiting to disagree. The import is
+    # here rather than at module scope because numpy and scipy load with that module, and this
+    # is the one path in this file that needs them (and only when a catalog was named).
+    from ..video.picture import summarize  # noqa: PLC0415 - see above
+
+    summary = summarize([_scanned(one) for one in inside])
+    return {
+        "sharpness": summary["sharpness"],
+        "exposure": summary["exposure"],
+        "clipped": summary["clipped"],
+        "stability": summary["stability"],
+        "quality_samples": len(inside),
+    }
+
+
+def _scanned(row: Mapping[str, Any]) -> picture.Reading:
+    """One catalog row read back as the reading that wrote it.
+
+    The catalog is JSON on disk, and the aggregation lives in a module that knows nothing
+    about files, so something has to carry a row across that line. This is the only place
+    that knows both shapes.
+
+    Every column is read with a default rather than by subscript. A row that is missing one is
+    a hand-edited or older catalog, and the job's answer to that should be a reading with a
+    hole in it — not a ``KeyError`` from inside a worker, two seconds after a call that looked
+    like it had been accepted.
+    """
+    from ..video.picture import Reading  # noqa: PLC0415 - numpy loads with that module
+
+    return Reading(
+        sharpness=_number(row, "sharpness"),
+        exposure=_number(row, "exposure"),
+        contrast=_number(row, "contrast"),
+        clipped=_number(row, "clipped"),
+        crushed=_number(row, "crushed"),
+        stability=None if row.get("stability") is None else float(row["stability"]),
+        discontinuity=bool(row.get("discontinuity")),
+    )
+
+
+def _number(row: Mapping[str, Any], field: str) -> float:
+    found = row.get(field)
+    return float(found) if isinstance(found, int | float) else 0.0
 
 
 def _delta_at(
@@ -1288,6 +1398,8 @@ def _summary(
     levels: Sequence[tuple[float, float]] | None = None,
     pictures: Sequence[Mapping[str, Any]] | None = None,
     graphics: Sequence[Mapping[str, Any]] | None = None,
+    takes: Sequence[Mapping[str, Any]] | None = None,
+    floors: Mapping[str, float] | None = None,
 ) -> dict[str, Any]:
     """The list-free reading: what a style profile is written from, and a self-review read.
 
@@ -1354,6 +1466,9 @@ def _summary(
         # answering None would report it as a call that never asked.
         "visual_delta": None if pictures is None else _deltas(rows, pictures),
         "supers": None if graphics is None else _supers(rows, graphics),
+        # Keyed the same way and for the same reason: a catalog measured off a different span
+        # joins nothing, and a null here would report that as a call that never asked.
+        "picture_quality": None if takes is None else _quality(rows, takes, floors),
         "clips": _usage(rows, "clip"),
         "roles": _usage(rows, "role") if _measured("role", rows) else None,
         "subjects": _usage(rows, "subject") if _measured("subject", rows) else None,
@@ -1430,6 +1545,82 @@ def _covered(graphics: Sequence[Mapping[str, Any]]) -> float:
         total += max(0.0, closes - max(opens, reached))
         reached = max(reached, closes)
     return round(total, 3)
+
+
+def _quality(
+    rows: Sequence[dict[str, Any]],
+    takes: Sequence[Mapping[str, Any]],
+    floors: Mapping[str, float] | None,
+) -> dict[str, Any]:
+    """How the picture held up across the cut, shot by shot (#182).
+
+    ``unjoined`` is what this reading lives or dies by, exactly as it is for the cut deltas: a
+    catalog scanned off one angle's own range, or off a render of a different length, still
+    produces a block — one drawn from whichever handful of shots happened to land inside it.
+
+    The three lists are the actionable part. A distribution says the cut is fine on average,
+    which is not a thing anybody watches; the shots that missed a floor are the ones to look
+    at, named by cut number so the builder can find them in the report and in Resolve.
+    """
+    joined = [row for row in rows if row["quality_samples"]]
+    return {
+        "catalog_rows": len(takes),
+        "joined": len(joined),
+        "unjoined": len(rows) - len(joined),
+        "floors": None if floors is None else dict(floors),
+        "sharpness": _lengths([float(row["sharpness"]) for row in joined]),
+        "exposure": _lengths([float(row["exposure"]) for row in joined]),
+        "clipped": _lengths([float(row["clipped"]) for row in joined]),
+        "stability": _lengths(
+            [float(row["stability"]) for row in joined if row["stability"] is not None]
+        ),
+        "soft_shots": _missing(joined, floors, "sharpness", "min_sharpness", below=True),
+        "blown_shots": _missing(joined, floors, "clipped", "max_clipped", below=False),
+        "shaky_shots": _missing(joined, floors, "stability", "min_stability", below=True),
+    }
+
+
+def _missing(
+    rows: Sequence[dict[str, Any]],
+    floors: Mapping[str, float] | None,
+    field: str,
+    floor: str,
+    below: bool,
+) -> dict[str, Any] | None:
+    """The cuts that missed one floor — ``None`` when the catalog named no floor to miss.
+
+    The count travels with the list because the list is capped. Twelve cut numbers and no
+    total reads as twelve bad shots whether there were twelve or forty, and the difference
+    between those two is the difference between fixing a few shots and rebuilding the cut.
+    """
+    if floors is None or floor not in floors:
+        return None
+    limit = float(floors[floor])
+    missed = [
+        int(row["cut"])
+        for row in rows
+        if row[field] is not None
+        and (float(row[field]) < limit if below else float(row[field]) > limit)
+    ]
+    return {"count": len(missed), "floor": limit, "cuts": missed[:INLINE_CUTS]}
+
+
+def _floors(file: str | None) -> dict[str, float] | None:
+    """The floors an image-quality catalog was scanned against, off its own header.
+
+    Read from the file rather than defaulted here on purpose: a catalog scanned with a floor
+    the director set is the only thing that can say which shots missed it, and re-deriving the
+    answer from this module's idea of a default would report shots against a rule nobody ran.
+    A catalog without the header — a hand-built one, an older scan — reports no floors and no
+    lists, rather than lists measured against a guess.
+    """
+    if file is None:
+        return None
+    doc = json.loads(Path(file).expanduser().read_text(encoding="utf-8"))
+    held = doc.get("floors") if isinstance(doc, Mapping) else None
+    if not isinstance(held, Mapping):
+        return None
+    return {str(name): float(value) for name, value in held.items()}
 
 
 def _outside(rows: Sequence[dict[str, Any]], grid: Sequence[float]) -> int:

@@ -50,6 +50,23 @@ def _clean_globals(request: pytest.FixtureRequest, tmp_path: Path) -> Iterator[N
 
 
 @pytest.fixture
+def machine_cache() -> Config:
+    """The machine's own cache, for the live tests that are about what is already in it.
+
+    ``_clean_globals`` redirects every test's cache into ``tmp_path``, which is right for every
+    test that makes its own inputs: nothing one writes can be read by the next. A live test over
+    the director's separated stems has the opposite need — the directory it is about is keyed on
+    a gigabyte of audio's own bytes and exists in exactly one place, and a temporary copy of it
+    under a temporary key would be a different question wearing the same shape.
+
+    Declared here, beside the redirect, so the exception is part of the contract rather than a
+    config a test quietly re-derives. It is never autouse: a test asking for this is asking to
+    read and write the real cache, and that has to be visible in its signature.
+    """
+    return Config.from_env(dict(os.environ))
+
+
+@pytest.fixture
 def attach() -> Attach:
     """Substitute the Resolve singleton with fakes, one per connect attempt."""
 

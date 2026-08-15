@@ -1,0 +1,207 @@
+{
+  "question": "where does the phase-correlation peak separate a pair inside a shot from a pair across a cut, and how far can a real in-shot pair move",
+  "generated_by": "gauntlet/recon/quality_cut_guard.py",
+  "sample_fps": 4.0,
+  "grid": "320x180",
+  "guards_under_test": {
+    "peak_floor": 0.01,
+    "cut_shift": 0.1
+  },
+  "in_shot": {
+    "peak": {
+      "n": 14397,
+      "p01": 0.28686,
+      "p05": 0.39684,
+      "median": 0.58339,
+      "p95": 0.78439,
+      "max": 0.99995
+    },
+    "shift_fraction": {
+      "n": 14397,
+      "p01": 0.0,
+      "p05": 0.0,
+      "median": 0.0,
+      "p95": 0.00313,
+      "max": 0.03125
+    }
+  },
+  "across_cut": {
+    "peak": {
+      "n": 601,
+      "p01": 0.0,
+      "p05": 0.01738,
+      "median": 0.46059,
+      "p95": 0.71318,
+      "max": 0.90106
+    },
+    "shift_fraction": {
+      "n": 601,
+      "p01": 0.0,
+      "p05": 0.0,
+      "median": 0.0,
+      "p95": 0.40313,
+      "max": 0.49688
+    }
+  },
+  "peak_sweep": [
+    {
+      "floor": 0.01,
+      "in_shot_refused": 0.0056,
+      "across_cut_caught": 0.015
+    },
+    {
+      "floor": 0.03,
+      "in_shot_refused": 0.0056,
+      "across_cut_caught": 0.3411
+    },
+    {
+      "floor": 0.05,
+      "in_shot_refused": 0.0056,
+      "across_cut_caught": 0.3411
+    },
+    {
+      "floor": 0.08,
+      "in_shot_refused": 0.0056,
+      "across_cut_caught": 0.3411
+    },
+    {
+      "floor": 0.12,
+      "in_shot_refused": 0.0058,
+      "across_cut_caught": 0.3411
+    },
+    {
+      "floor": 0.2,
+      "in_shot_refused": 0.0069,
+      "across_cut_caught": 0.3428
+    }
+  ],
+  "shift_sweep": [
+    {
+      "ceiling": 0.04,
+      "in_shot_refused": 0.0,
+      "across_cut_caught": 0.2978
+    },
+    {
+      "ceiling": 0.06,
+      "in_shot_refused": 0.0,
+      "across_cut_caught": 0.2829
+    },
+    {
+      "ceiling": 0.08,
+      "in_shot_refused": 0.0,
+      "across_cut_caught": 0.2779
+    },
+    {
+      "ceiling": 0.1,
+      "in_shot_refused": 0.0,
+      "across_cut_caught": 0.2562
+    },
+    {
+      "ceiling": 0.15,
+      "in_shot_refused": 0.0,
+      "across_cut_caught": 0.2163
+    }
+  ],
+  "per_song": [
+    {
+      "song": "6-17 - Zinc Set 2 - Hardest Part",
+      "cuts": 30,
+      "in_shot_peak": {
+        "n": 2047,
+        "p01": 0.0,
+        "p05": 0.35433,
+        "median": 0.53891,
+        "p95": 0.71429,
+        "max": 0.88429
+      },
+      "across_cut_peak": {
+        "n": 89,
+        "p01": 0.0,
+        "p05": 0.0,
+        "median": 0.41854,
+        "p95": 0.59767,
+        "max": 0.68043
+      }
+    },
+    {
+      "song": "6-17 - Zinc Set 2 - Maitland Boulevard",
+      "cuts": 63,
+      "in_shot_peak": {
+        "n": 4503,
+        "p01": 0.34102,
+        "p05": 0.4087,
+        "median": 0.56262,
+        "p95": 0.74572,
+        "max": 0.89544
+      },
+      "across_cut_peak": {
+        "n": 189,
+        "p01": 0.01728,
+        "p05": 0.01833,
+        "median": 0.48258,
+        "p95": 0.74779,
+        "max": 0.90106
+      }
+    },
+    {
+      "song": "6-17 - Zinc Set 2 - Sambra",
+      "cuts": 31,
+      "in_shot_peak": {
+        "n": 3044,
+        "p01": 0.16763,
+        "p05": 0.38534,
+        "median": 0.56149,
+        "p95": 0.72437,
+        "max": 0.85544
+      },
+      "across_cut_peak": {
+        "n": 92,
+        "p01": 0.0,
+        "p05": 0.01681,
+        "median": 0.54308,
+        "p95": 0.7599,
+        "max": 0.83264
+      }
+    },
+    {
+      "song": "6-17 - Zinc Set 2 - Soultrane",
+      "cuts": 0,
+      "in_shot_peak": {
+        "n": 3044,
+        "p01": 0.36662,
+        "p05": 0.47553,
+        "median": 0.68809,
+        "p95": 0.83471,
+        "max": 0.9366
+      },
+      "across_cut_peak": {
+        "n": 0,
+        "p01": null,
+        "p05": null,
+        "median": null,
+        "p95": null,
+        "max": null
+      }
+    },
+    {
+      "song": "6-17 - Zinc Set 2 - Taurus People",
+      "cuts": 77,
+      "in_shot_peak": {
+        "n": 1759,
+        "p01": 0.34799,
+        "p05": 0.39172,
+        "median": 0.57835,
+        "p95": 0.74422,
+        "max": 0.99995
+      },
+      "across_cut_peak": {
+        "n": 231,
+        "p01": 0.01667,
+        "p05": 0.01751,
+        "median": 0.45966,
+        "p95": 0.68791,
+        "max": 0.75338
+      }
+    }
+  ]
+}
