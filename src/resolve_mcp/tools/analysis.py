@@ -209,6 +209,7 @@ def correlate_timeline(
     tunes: str | None = None,
     solos: str | None = None,
     deltas: str | None = None,
+    supers: str | None = None,
     quality: str | None = None,
     bars: str | None = None,
     angles: dict[str, Any] | None = None,
@@ -248,6 +249,15 @@ def correlate_timeline(
     gauntlet/tools/ab_pack.py writes such a catalog as cuts.json. Render the whole timeline,
     not a span, or the times will not line up — the visual_delta block in the result says how
     many cuts joined and how many did not.
+
+    supers is the other catalog off that render: when each burned-in graphic — lower third,
+    title card, bug — is on screen, which again nothing on a timeline can answer. Every cut is
+    measured against them and gets straddles_super: true where a graphic is up on both sides
+    of it, plus super_kind. A super that arrives with the shot, or clears the frame before it,
+    is not a straddle. Read the two kinds differently: a lower third held across cuts is how
+    titling works and the human deliverables are full of them, while a cut inside a title card
+    is a finding. ab_pack.py writes this one as supers.json beside its cuts.json; same clock
+    rule as deltas.
 
     quality is an image-quality catalog analyze_quality wrote, and it answers the other
     question a still cannot: was this shot soft, blown out or shaky while it was on screen?
@@ -300,6 +310,7 @@ def correlate_timeline(
             tunes=tunes,
             solos=solos,
             deltas=deltas,
+            supers=supers,
             quality=quality,
             bars=bars,
             angles=angles,

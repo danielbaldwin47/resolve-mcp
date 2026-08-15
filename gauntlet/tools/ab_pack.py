@@ -59,6 +59,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import random
 import re
 import shutil
@@ -73,7 +74,8 @@ import numpy as np
 
 from resolve_mcp.analysis import subject as subject_module
 from resolve_mcp.analysis.correlate import RHYTHM_BINS
-from resolve_mcp.video import framing, picture
+from resolve_mcp.ffmpeg import hwaccels
+from resolve_mcp.video import framing, picture, supers
 from resolve_mcp.video.quality import (
     DEFAULT_MAX_CLIPPED,
     DEFAULT_MIN_SHARPNESS,
@@ -85,6 +87,16 @@ from resolve_mcp.video.quality import (
 
 SCENE_THRESHOLD = 0.10
 SCENE_SCALE_W = 320
+
+# Decode the pictures on the card where the box has one. Every grey decode in this tool
+# goes through decode_grey, which is where the whole cost of a pack lives: a deliverable is
+# 4K HEVC and software decoding one costs four times what NVDEC costs. Scene detection is
+# deliberately left in software -- it compares *scaled* frames, so moving its scale onto the
+# card would move the cut times with it, and the cut list is what everything else joins on.
+HWACCEL_DECODE = os.environ.get("ABPACK_HWACCEL", "auto") != "off"
+_CUDA: bool | None = None
+_DOWNLOAD: dict[Path, str] = {}
+_REFUSED: dict[Path, bool] = {}  # clips NVDEC turned down, so the refusal is paid once
 MAX_SHEET_SHOTS = 60
 TILE_COLS = 6
 TILE_ROWS = 5
@@ -161,6 +173,20 @@ SLOW_PLATEAU_SEC = 0.5  # the level the ramp leaves from, read just before it
 SLOW_RAMP_TOP_SHARE = 0.9  # the ramp starts where luma leaves that level
 SLOW_MIN_SHOT_SEC = 2.0  # shorter shots cannot hide a multi-second ramp
 SLOW_WEAK_PEAK_DELTA = 6.0  # boundary this soft is a candidate slow transition
+
+# burned-in supers. The scan reads each frame against the ones SUPER_LAGS_SEC
+# later, and two distances rather than one because the two shapes want opposite
+# things. A title card is read best from close together -- its frames are
+# identical -- but it is also the shortest super in the corpus at 2.3 s, and at a
+# two-second lag it fits into a single reading, which the same-pixels-twice test
+# will not take. An overlay is the reverse: a second apart the footage under it
+# has not moved enough to disagree with itself, and the pair is refused as too
+# still. Measured on the anchor: the card needs the 1 s lag, the Taurus People
+# personnel lower third needs the 2 s one.
+SUPER_RATE = 2.0  # scan rate; a whole song at the lettering grid is 280 MB here
+SUPER_LAGS_SEC = (1.0, 2.0)
+SUPER_PAD_SEC = 2.0  # native-fps window either side of a scanned edge
+SUPER_MERGE_SEC = 0.5  # refined spans of the same kind this close are one graphic
 
 # mid-shot blended double-image ("ghosting"): two pictures on screen at once,
 # inside what scene detection calls a single shot. The reliable signature is
@@ -445,6 +471,72 @@ def shot_stats(shots: list[tuple[float, float]], duration: float, n_cuts: int) -
 # grey decode (shared by the motion track and transition typing)
 
 
+def cuda_decode() -> bool:
+    """Whether this ffmpeg can decode on the card, probed once and remembered.
+
+    The probe is the server's (`resolve_mcp.ffmpeg.hwaccels`, #202) rather than a second
+    one: one answer to "what can this binary do" per box.
+    """
+    global _CUDA
+    if _CUDA is None:
+        _CUDA = "cuda" in hwaccels() if HWACCEL_DECODE else False
+    return _CUDA
+
+
+def download_format(clip: Path) -> str:
+    """The pixel format hardware frames of this clip come back to system memory in.
+
+    It has to be exactly right and there is no negotiating it: `hwdownload` refuses any
+    format but the one its frames actually hold, and offering it a choice
+    (`format=p010le|nv12`) makes it pick the wrong one and fail. So the source's own depth
+    decides -- p010 for the ten-bit deliverables, nv12 for eight-bit.
+    """
+    if clip not in _DOWNLOAD:
+        proc = run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=pix_fmt",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                str(clip),
+            ]
+        )
+        deep = any(mark in proc.stdout for mark in ("10le", "10be", "12le", "12be"))
+        _DOWNLOAD[clip] = "p010le" if deep else "nv12"
+    return _DOWNLOAD[clip]
+
+
+def grey_chain(width: int, height: int, fps: float | None, cuda: bool, download: str) -> str:
+    """The filter chain for one grey decode, on the card or off it.
+
+    The order is the whole point of the hardware path, and it is not the obvious one.
+    Decoding on the card is four times faster than in software on this footage, but a
+    hardware decode whose frames come straight back to system memory is *slower* than no
+    hardware decode at all -- every 4K frame is copied over the bus before anything drops
+    it. So the frames stay on the card through `fps`, which is what throws most of them
+    away, and only the survivors are downloaded.
+
+    They are then scaled by swscale exactly as the software path scales them, rather than
+    by `scale_cuda` or the decoder's own resizer. Both of those are faster still and both
+    give *different pixels* -- measured on a deliverable, a mean absolute difference of 1.6
+    grey levels and 7% of pixels off by more than three. This reading calls two pixels the
+    same when they are within three levels of each other, so a scaler that disagrees by
+    more than that is not a faster way to take this measurement, it is a different
+    measurement. Downloading the survivors at full size and scaling them here is
+    bit-identical to the software path, measured frame for frame.
+    """
+    steps = [] if fps is None else [f"fps={fps}"]
+    if cuda:
+        steps += ["hwdownload", f"format={download}"]
+    steps.append(f"scale={width}:{height}")
+    return ",".join(steps)
+
+
 def decode_grey(
     clip: Path,
     width: int,
@@ -463,14 +555,35 @@ def decode_grey(
     on uint8 would wrap a negative difference round to 255. Pass `np.uint8` to hold
     a whole song at once: 8k frames is 80 MB of bytes and 640 MB of doubles.
     """
-    cmd = ["ffmpeg", "-v", "error", "-nostdin"]
-    if start is not None:
-        cmd += ["-ss", f"{max(start, 0.0):.4f}"]
-    if dur is not None:
-        cmd += ["-t", f"{dur:.4f}"]
-    chain = f"scale={width}:{height}" if fps is None else f"fps={fps},scale={width}:{height}"
-    cmd += ["-i", str(clip), "-an", "-vf", chain, "-pix_fmt", "gray", "-f", "rawvideo", "-"]
-    proc = subprocess.run(cmd, capture_output=True, check=False)
+    def attempt(cuda: bool) -> subprocess.CompletedProcess[bytes]:
+        cmd = ["ffmpeg", "-v", "error", "-nostdin"]
+        if cuda:
+            cmd += ["-hwaccel", "cuda", "-hwaccel_output_format", "cuda"]
+        if start is not None:
+            cmd += ["-ss", f"{max(start, 0.0):.4f}"]
+        if dur is not None:
+            cmd += ["-t", f"{dur:.4f}"]
+        chain = grey_chain(width, height, fps, cuda, download_format(clip) if cuda else "")
+        cmd += ["-i", str(clip), "-an", "-vf", chain]
+        cmd += ["-pix_fmt", "gray", "-f", "rawvideo", "-"]
+        return subprocess.run(cmd, capture_output=True, check=False)
+
+    on_card = cuda_decode() and _REFUSED.get(clip) is not True
+    proc = attempt(on_card)
+    if proc.returncode != 0 and on_card:
+        # NVDEC refuses codecs and profiles it does not know -- this rig's camera originals
+        # are 4:2:2, which it cannot take (#202) -- and the file may be perfectly readable.
+        # Retried in software, loudly, because a fallback nothing records is the bug that
+        # ticket exists for, and remembered so the next window of the same clip does not pay
+        # for the same refusal again.
+        #
+        # Retried on the return code alone, *not* on "and nothing came back". A hardware
+        # decode that dies part-way through leaves a short run of good frames behind it, and
+        # taking those would hand back a clip that quietly ends early -- which this
+        # measurement would report as a stretch with no supers in it.
+        print(f"warning: hardware decode of {clip.name} failed; retrying in software", flush=True)
+        _REFUSED[clip] = True
+        proc = attempt(False)
     if proc.returncode != 0 and not proc.stdout:
         sys.exit(f"error: grey decode failed\n{proc.stderr[-2000:].decode('utf-8', 'replace')}")
     stride = width * height
@@ -824,6 +937,178 @@ def read_cut(
     arr, start = boundary_window(clip, cut, fps, duration)
     transition = transition_from(arr, start)
     return transition, cut_delta(arr, transition)
+
+
+# --------------------------------------------------------------------------
+# burned-in supers: lower thirds, title cards, and the cuts that land on one
+
+
+def super_lags() -> tuple[int, ...]:
+    """The scan distances in scanned frames, deduplicated and never zero."""
+    return tuple(sorted({max(1, round(one * SUPER_RATE)) for one in SUPER_LAGS_SEC}))
+
+
+def super_spans(scan: np.ndarray, lags: Sequence[int]) -> tuple[supers.Marked, ...]:
+    """The coarse pass: where in the scan a graphic is up, and which pixels it is.
+
+    The pixels come back with the span rather than being read out of the scan again. The
+    walk that follows needs the graphic's own pixels, and the scan has already decided what
+    they are -- recovering them a second way would be a second answer to the same question.
+    """
+    usable = [one for one in lags if one < len(scan)]
+    return supers.read_marked(scan, lags=usable) if usable else ()
+
+
+def refine_edge(
+    clip: Path, mask: np.ndarray, fps: float, scanned: float, inside: float
+) -> supers.Edges | None:
+    """One end of a super at native rate: a short window around it, walked frame by frame.
+
+    One end at a time, and never the whole span. A lower third can hold for two minutes,
+    and decoding two minutes of 4K at native rate to find out which frame it started on
+    reads a gigabyte to answer a question about its first six -- the middle of a super is
+    the part nobody is asking about.
+
+    `scanned` is where the coarse pass put this end and `inside` is a moment the graphic is
+    known to be up, both in seconds; the window spans the two with a pad either side. It is
+    cut on frame boundaries so the index the walk returns is a source frame number rather
+    than a rounding of one.
+    """
+    pad = int(round(SUPER_PAD_SEC * fps))
+    lead = max(0, int(round(min(scanned, inside) * fps)) - pad)
+    tail = int(round(max(scanned, inside) * fps)) + pad
+    window = decode_grey(
+        clip,
+        supers.GRID_WIDTH,
+        supers.GRID_HEIGHT,
+        start=lead / fps,
+        dur=(tail - lead + 1) / fps,
+        dtype=np.uint8,
+    )
+    if len(window) == 0:
+        return None
+    anchor = max(0, min(int(round(inside * fps)) - lead, len(window) - 1))
+    found = supers.edges(window, mask, anchor)
+    return supers.Edges(
+        first=lead + found.first,
+        last=lead + found.last,
+        ramp_in=found.ramp_in,
+        ramp_out=found.ramp_out,
+    )
+
+
+def refine_super(clip: Path, span: supers.Span, mask: np.ndarray, fps: float) -> supers.Span:
+    """The same super again at native rate, so its in and out are frames rather than scan
+    steps.
+
+    The scan runs at a couple of frames a second, which places a boundary to within half a
+    second -- useless for the convention this exists to check, where a card clearing one
+    frame before its entrance and a card clearing over it are the same reading half a second
+    wide. Each end is walked out of its own short window; an end whose window could not be
+    decoded keeps the coarse pass's answer rather than inventing one.
+    """
+    step = 1.0 / SUPER_RATE
+    opens = span.first * step
+    closes = span.last * step
+    # A moment the graphic is certainly up, to walk out from: one scan step inside the end,
+    # or the span's middle when it is too short to have an inside.
+    from_head = min(opens + step, (opens + closes) / 2)
+    from_tail = max(closes - step, (opens + closes) / 2)
+
+    head = refine_edge(clip, mask, fps, opens, from_head)
+    tail = refine_edge(clip, mask, fps, closes, from_tail)
+    return span._replace(
+        first=int(round(opens * fps)) if head is None else head.first,
+        last=int(round(closes * fps)) if tail is None else tail.last,
+        ramp_in=0 if head is None else head.ramp_in,
+        ramp_out=0 if tail is None else tail.ramp_out,
+    )
+
+
+def merge_supers(spans: Sequence[supers.Span], fps: float) -> list[supers.Span]:
+    """One super per graphic, where two scan spans refined onto the same one.
+
+    A super whose picture holds still in the middle comes back as two spans with an
+    unread stretch between them; refined, both walk out to the same frames. Merging on
+    the refined frames rather than bridging harder in the scan keeps the coarse pass
+    honest about what it actually saw.
+
+    Only spans of the same kind are merged. A title card that ends where a lower third
+    begins is two graphics, and folding them together would keep one kind for both -- so
+    the report would name a card that was half an overlay, or lose the card entirely.
+    """
+    merged: list[supers.Span] = []
+    gap = max(1, int(round(SUPER_MERGE_SEC * fps)))
+    for span in sorted(spans, key=lambda one: one.visible_first):
+        if (
+            merged
+            and merged[-1].kind == span.kind
+            and span.visible_first <= merged[-1].visible_last + gap
+        ):
+            last = merged[-1]
+            merged[-1] = last._replace(
+                first=min(last.first, span.first),
+                last=max(last.last, span.last),
+                ramp_in=last.ramp_in if last.first <= span.first else span.ramp_in,
+                ramp_out=last.ramp_out if last.last >= span.last else span.ramp_out,
+                top=min(last.top, span.top),
+                left=min(last.left, span.left),
+                bottom=max(last.bottom, span.bottom),
+                right=max(last.right, span.right),
+                pixels=max(last.pixels, span.pixels),
+                pairs=last.pairs + span.pairs,
+            )
+            continue
+        merged.append(span)
+    return merged
+
+
+def super_scan(clip: Path, fps: float, cuts: Sequence[float]) -> dict[str, Any]:
+    """Every burned-in graphic in the clip, and every cut that lands inside one.
+
+    Two passes for one reason: the coarse one can afford to look at the whole clip and
+    the fine one cannot. A scan of a whole song at the resolution lettering needs is a
+    few hundred megabytes at two frames a second and several gigabytes at twenty-four.
+    """
+    lags = super_lags()
+    scan = decode_grey(
+        clip, supers.GRID_WIDTH, supers.GRID_HEIGHT, fps=SUPER_RATE, dtype=np.uint8
+    )
+    refined = [
+        refine_super(clip, marked.span, marked.mask, fps) for marked in super_spans(scan, lags)
+    ]
+    spans = merge_supers(refined, fps)
+    frames = [int(round(cut * fps)) for cut in cuts]
+    review = supers.review(spans, frames)
+    # `t` and `end` in seconds beside the frames, exclusive at the end, because that is the
+    # shape every other catalog in this repo is read in -- and correlate_timeline joins this
+    # one the same way it joins tunes.
+    for record in review["supers"]:
+        record["t"] = round(record["visible_first"] / fps, 3)
+        record["end"] = round((record["visible_last"] + 1) / fps, 3)
+    review["scan"] = {
+        "rate_fps": SUPER_RATE,
+        "lag_frames": list(lags),
+        "grid": f"{supers.GRID_WIDTH}x{supers.GRID_HEIGHT}",
+        "frames_scanned": len(scan),
+    }
+    return review
+
+
+def straddled_cuts(review: dict[str, Any]) -> dict[int, str]:
+    """Cut frame -> the kind of super it lands inside, for tagging the cut list.
+
+    The kind travels with the flag rather than being left in the summary. A blind judge
+    reads `cuts[]` row by row, and `straddles_super: true` alone says "fault" about the
+    lower third a human deliberately held across the cut. Where a cut is inside both, the
+    card is the one named: it is the finding, and the overlay would hide it.
+    """
+    found: dict[int, str] = {}
+    for one in review["straddles"]:
+        cut, kind = int(one["cut"]), str(one["kind"])
+        if kind == supers.CARD or cut not in found:
+            found[cut] = kind
+    return found
 
 
 # --------------------------------------------------------------------------
@@ -1740,6 +2025,12 @@ def build_label(
     track = motion_track(clip)
     picture_track = quality_track(clip)
 
+    # What the graphics layer put on the picture, and which cuts land inside it. Measured
+    # off the render because nothing else can see it: a super is burned in by the time
+    # anybody watches, and the timeline it came from says only that a title track exists.
+    supers_review = super_scan(clip, fps, cuts)
+    straddled = straddled_cuts(supers_review)
+
     # v3: the same boundaries again at multi-second scale, where a dissolve
     # the +/-12-frame window cannot hold is the obvious shape.
     slow = luma_track(clip)
@@ -1788,6 +2079,7 @@ def build_label(
         },
         "motion_classes": motion_classes,
         "visual_delta": delta_summary,
+        "supers": supers_review,
         "picture_quality": {
             "sample_hz": QUALITY_RATE,
             "grid": f"{picture.GRID_WIDTH}x{picture.GRID_HEIGHT}",
@@ -1808,6 +2100,13 @@ def build_label(
                 "t": cut,
                 "transition": transitions[i],
                 "delta": deltas[i].as_record() if deltas[i] is not None else None,
+                # Whether a graphic was on screen either side of this cut, and which kind
+                # (#183). Not on its own a fault: a lower third held across cut after cut
+                # is how the human deliverables are titled, while a cut inside a card is
+                # the thing none of them does. A super arriving with the shot, or clearing
+                # the frame before it, is neither -- the review told those apart already.
+                "straddles_super": int(round(cut * fps)) in straddled,
+                "super_kind": straddled.get(int(round(cut * fps))),
                 "strip_sheet": row_of.get(i + 1, {}).get("sheet"),
                 "strip_row": row_of.get(i + 1, {}).get("row"),
             }
@@ -1842,6 +2141,19 @@ def build_label(
         }
 
     (label_dir / "cuts.json").write_text(json.dumps(cuts_doc, indent=2), encoding="utf-8")
+    # The supers again as a catalog of their own, so correlate_timeline can join them onto a
+    # timeline's cuts the way it joins the cut deltas: same records shape, one row per super.
+    (label_dir / "supers.json").write_text(
+        json.dumps(
+            {
+                "kind": "supers",
+                "count": len(supers_review["supers"]),
+                "supers": supers_review["supers"],
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
 
     final_clip = label_dir / "clip.mp4"
     shutil.move(str(clip), str(final_clip))
@@ -1862,6 +2174,19 @@ def build_label(
         "transition_types": cuts_doc["transition_types"],
         "motion_classes": motion_classes,
         "visual_delta": delta_summary,
+        "supers": {
+            key: supers_review[key]
+            for key in (
+                "cards",
+                "overlays",
+                "straddled",
+                # Both halves, because the total alone cannot be read: a straddled overlay
+                # is ordinary titling and a straddled card is the finding.
+                "straddled_cards",
+                "straddled_overlays",
+                "held_frames",
+            )
+        },
         "picture_quality": cuts_doc["picture_quality"],
         "ending": {
             k: ending.get(k) for k in ("kind", "black_at_sec", "ramp_sec", "black_hold_sec")
@@ -1870,7 +2195,7 @@ def build_label(
         "ghost_events": len(ghosts),
         "audio_classes": cuts_doc.get("audio_class_summary", {}).get("seconds_by_class"),
         "on_soloist": None if subject_track is None else subject_track["summary"],
-        "files": ["clip.mp4", "cuts.json", *sheets, *strips],
+        "files": ["clip.mp4", "cuts.json", "supers.json", *sheets, *strips],
     }
 
 
@@ -2121,6 +2446,46 @@ def main(argv: list[str] | None = None) -> int:
             "blind_spot": "no subject identity -- two cameras on the same soloist with "
             "different backgrounds read as a step, so the flag is a candidate for a human "
             "eye, not a verdict",
+        },
+        "supers": {
+            "question": "which burned-in graphics are on screen when -- lower thirds, "
+            "title cards, bugs -- and does any cut land inside one",
+            "method": f"each frame of a {SUPER_RATE} fps scan read against the one "
+            f"{' and '.join(str(one) for one in SUPER_LAGS_SEC)} s later on a "
+            f"{supers.GRID_WIDTH}x{supers.GRID_HEIGHT} grey grid. "
+            "A graphic is what two frames of different pictures agree about: the camera saw "
+            "something else, the graphics layer drew the same thing. Every span found is then "
+            "walked out at native rate so its in and out are frames rather than scan steps",
+            "classes": {
+                "overlay": f"the composition really changed between the two frames "
+                f"(framing delta >= {supers.STEP}) and a compact high-contrast region agrees "
+                "across them anyway",
+                "card": f"the frames agree over at least {supers.HELD} of the pixels -- the "
+                "screen is holding one picture -- and that picture carries such a region, "
+                "which is what keeps a black gap from reading as a card. A freeze frame is "
+                "held and detailed in the same way and will read as one",
+                "unread": "anything else, and deliberately most of it. Pixel agreement alone "
+                "cannot prove a graphic on this material: two frames of one still shot "
+                "disagree from noise while its brightest static object -- a piano keyboard "
+                "with a maker's name across it -- agrees perfectly, in the same place, every "
+                "time",
+            },
+            "believed_only_when_seen_twice": "a span is dropped unless two readings agree on "
+            "the same pixels, so a coincidence has to recur exactly to survive",
+            "straddle": "a cut with the graphic on screen either side of it. A super arriving "
+            "with the new shot (cut at its first frame) or clearing for it (cut one past its "
+            "last) is not one -- those are the edits the check exists to tell the fault from",
+            "clears_before": "frames between a super's last visible frame and the next cut, "
+            "which is the title-card convention as a number: the human's cards read 1",
+            "reported_fields": "kind, first, last, ramp_in, ramp_out, visible_first, "
+            "visible_last, frames, t, end, clears_before, and the box in frame "
+            "fractions (top, left, bottom, right)",
+            "blind_spot": "a super has to outlive the lag and to see the picture actually "
+            f"change while it is up, so one held under {min(SUPER_LAGS_SEC)} s, or one held "
+            "through a single long take, comes back as nothing rather than as absence. "
+            "Recall is traded "
+            "for precision on purpose: a graphic invented under a critic's cut misleads worse "
+            "than one missed",
         },
         "picture_quality": {
             "question": "was this shot worth cutting to at all -- soft, blown out, or shaky",

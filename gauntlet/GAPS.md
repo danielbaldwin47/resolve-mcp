@@ -248,6 +248,39 @@ Round 1 critic, verbatim needs; each is server measurement work:
    2-minute span, clean — so how often a source fails these floors is unknown, and
    that is the number that says how much an angle choice is really constrained.
 8. Super/graphic presence detection with in/out timecodes + straddle check.
+   **Done** (#183): `resolve_mcp.video.supers` reads burned-in graphics off a render —
+   a **card** holds the whole frame, an **overlay** sits on the picture — and the pack
+   carries a `supers` block in `cuts.json`, a `supers.json` catalog beside it, the
+   counts in the manifest, and `straddles_super`/`super_kind` on every cut;
+   `correlate_timeline(supers=...)` joins that catalog onto a timeline's own cuts.
+   Each end of a span is walked at native rate, so an in and an out are frames.
+
+   **The convention is now a number.** On Taurus People the title card measures
+   `clears_before: 1` — it clears one frame before the entrance it announces, which is
+   what #169 verified by hand off filmstrips.
+
+   **The check itself came back different from how the ticket asked for it.** "No cut
+   straddles a super" fails every deliverable in the corpus: the human holds a personnel
+   lower third across three and four cuts at a time, because a title track is laid over
+   the edit rather than into it. So a straddle is reported as a *fact* and its `kind` is
+   what makes it a finding — `straddled_cards` counted apart from `straddled_overlays`.
+   Across the five deliverables: one straddle, an overlay, on Taurus People.
+
+   Receipt: `recon/super_scan.json`, all five deliverables, decoded on NVDEC (bit-identical
+   to software, checked frame for frame). Six of the ten supers a human can see, **no false
+   positives**, every hit confirmed by eye and every box on the caption — the personnel
+   lower thirds at 0.86-0.93 of frame height, the title card at 0.47-0.61. Soultrane is
+   worth naming: the cut detector finds *zero* cuts in it (#203) and its lower third is
+   found anyway, which is what the reading needing no cut list buys.
+
+   Still open from this item: **recall.** Four supers are missed, all of them titles held
+   over a picture that never changes under them — either too still to be read at all, or
+   outside what a caption looks like. Precision comes from asking exactly that: big enough
+   to read (the six found run 819-3395 px) and shaped like a line of text (none taller than
+   0.141 of the frame) — against false readings that are either 118-212 px or 0.30-0.51 tall. A graphic outside those bounds, a corner bug most of all,
+   cannot be told from the lit nameplate on the piano lid and is not reported. An earlier
+   reading asked instead whether the picture changed while the graphic was up; it cost
+   seven of the ten and was removed.
 9. Head/tail treatment: fade-in vs dropped frames, audio floor handling.
 10. Audio feel across cuts (balance/room-tone jumps) beyond RMS level.
 

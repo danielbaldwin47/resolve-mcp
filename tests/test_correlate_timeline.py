@@ -188,6 +188,18 @@ def deltas_file(tmp_path: Path, rows: Sequence[dict[str, Any]], name: str = "pac
     )
 
 
+def supers_file(
+    tmp_path: Path, rows: Sequence[dict[str, Any]], name: str = "pack"
+) -> Path:
+    """A supers catalog, in the shape gauntlet/tools/ab_pack.py writes as supers.json."""
+    return records.write(
+        tmp_path / f"supers-{name}.json",
+        {"kind": "supers", "count": len(rows)},
+        "supers",
+        list(rows),
+    )
+
+
 def quality_file(
     tmp_path: Path,
     rows: Sequence[dict[str, Any]],
@@ -207,6 +219,11 @@ def quality_file(
         "samples",
         list(rows),
     )
+
+
+def _super(t: float, end: float, kind: str = "overlay") -> dict[str, Any]:
+    """One graphic, up from ``t`` until ``end`` — exclusive, as the pack writes it."""
+    return {"t": t, "end": end, "kind": kind, "top": 0.85, "left": 0.16, "clears_before": None}
 
 
 def _sample(
@@ -376,6 +393,8 @@ def test_every_shot_lands_on_disk_with_its_offsets_bar_and_section(
         "front": "drums",
         "delta": None,
         "jump_cut": None,
+        "straddles_super": None,
+        "super_kind": None,
         "sharpness": None,
         "exposure": None,
         "clipped": None,
@@ -460,6 +479,115 @@ def test_a_named_catalog_is_part_of_the_cache_key(attach: Attach, tmp_path: Path
 
     assert _rows(again)[1]["delta"] == 0.09
     assert _rows(again)[1]["jump_cut"] is True
+
+
+def test_a_cut_inside_a_super_is_flagged(attach: Attach, tmp_path: Path) -> None:
+    """The deliberate violation: a lower third is up, and the picture jumps under it."""
+    attach(studio(timeline=a_cut()))
+    catalog = supers_file(tmp_path, [_super(0.8, 1.5)])
+
+    result = _measured(tmp_path, supers=str(catalog))
+
+    cuts = _rows(result)
+    assert [one["straddles_super"] for one in cuts] == [False, True, False]
+    assert cuts[1]["super_kind"] == "overlay"
+    assert result["supers"]["straddled"] == 1
+    assert result["supers"]["flagged_cuts"] == [2]
+    assert result["supers"]["overlays"] == 1
+    # Counted apart because they are different claims: the human deliverables hold a lower
+    # third across cuts all night, and a cut inside a title card is the one they never make.
+    assert result["supers"]["straddled_overlays"] == 1
+    assert result["supers"]["straddled_cards"] == 0
+
+
+def test_a_super_that_arrives_with_a_shot_or_clears_for_one_passes(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The human deliverable's own convention, which a naive interval test would fail: the
+    card clears the frame before the entrance it announces, and the next super starts on a
+    cut rather than across it."""
+    attach(studio(timeline=a_cut()))
+    catalog = supers_file(
+        tmp_path,
+        [_super(0.0, 1.033, "card"), _super(2.483, 3.2)],
+        name="convention",
+    )
+
+    result = _measured(tmp_path, supers=str(catalog))
+
+    assert [one["straddles_super"] for one in _rows(result)] == [False, False, False]
+    assert result["supers"]["straddled"] == 0
+    assert result["supers"]["cards"] == 1
+    assert result["supers"]["catalog_rows"] == 2
+
+
+def test_a_super_carrying_one_frame_over_a_cut_is_still_a_straddle(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The edge guard absorbs a rounding, not an edit. One frame of graphic past the cut is
+    the smallest real violation there is, and it has to survive the tolerance that lets the
+    convention through — at 60 fps a frame is 17 ms, well inside any guard fixed in seconds."""
+    attach(studio(timeline=a_cut()))
+    over = round(1.033 + 1 / 60, 3)
+    catalog = supers_file(tmp_path, [_super(0.5, over)], name="byaframe")
+
+    result = _measured(tmp_path, supers=str(catalog))
+
+    assert _rows(result)[1]["straddles_super"] is True
+
+
+def test_a_cut_inside_both_a_card_and_an_overlay_is_named_for_the_card(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The card is the finding and the overlay is ordinary titling, so catalog order must
+    not decide which one the cut is reported under."""
+    attach(studio(timeline=a_cut()))
+    catalog = supers_file(
+        tmp_path,
+        [_super(0.5, 2.0), _super(0.6, 1.8, "card")],
+        name="both",
+    )
+
+    cuts = _rows(_measured(tmp_path, supers=str(catalog)))
+
+    assert cuts[1]["straddles_super"] is True
+    assert cuts[1]["super_kind"] == "card"
+
+
+def test_overlapping_supers_are_not_counted_twice_over(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """A bug over a lower third is two supers and one stretch of covered timeline."""
+    attach(studio(timeline=a_cut()))
+    catalog = supers_file(tmp_path, [_super(1.0, 3.0), _super(2.0, 4.0)], name="overlap")
+
+    result = _measured(tmp_path, supers=str(catalog))
+
+    assert result["supers"]["covered_sec"] == 3.0
+
+
+def test_no_supers_catalog_leaves_the_columns_null(attach: Attach, tmp_path: Path) -> None:
+    """A timeline nobody checked for graphics must not read as one that has none."""
+    attach(studio(timeline=a_cut()))
+
+    result = _measured(tmp_path)
+
+    assert all(one["straddles_super"] is None for one in _rows(result))
+    assert result["supers"] is None
+
+
+def test_a_named_supers_catalog_is_part_of_the_cache_key(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """Rerunning against a re-measured render measures again rather than answering from a file."""
+    attach(studio(timeline=a_cut()))
+    clean = supers_file(tmp_path, [_super(0.0, 1.033, "card")], name="clean")
+    violating = supers_file(tmp_path, [_super(0.0, 1.4, "card")], name="violating")
+
+    _measured(tmp_path, supers=str(clean))
+    again = _measured(tmp_path, supers=str(violating))
+
+    assert _rows(again)[1]["straddles_super"] is True
 
 
 def test_an_image_quality_scan_joins_over_each_shot(attach: Attach, tmp_path: Path) -> None:

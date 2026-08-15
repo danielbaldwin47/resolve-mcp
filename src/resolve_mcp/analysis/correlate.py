@@ -64,6 +64,7 @@ from ..resolve.timeline import (
     track_enabled,
 )
 from ..timing import SECONDS_PRECISION, dual_time, to_frames
+from ..video import supers
 from . import decode, energy, records, subject
 from .beats import GridTrust, nearest, spacing, trust
 
@@ -233,7 +234,7 @@ FLOOR_HEURISTIC = (
 )
 """The floor heuristic in words, carried in the report beside the numbers it was drawn from."""
 
-READING = 10
+READING = 11
 """What this measurement *is*; bumped whenever a rerun over unchanged inputs would differ.
 
 The cache is keyed on what was measured, not on the code that measured it, so a call whose
@@ -250,7 +251,9 @@ now carries ``delta`` and ``jump_cut``, which are ``None`` on a call that named 
 catalog — a cached hit from an earlier reading answers the self-review question with a file
 that never asked it, and a cached reading-8 file would hand back a report with no such
 columns at all. 10 rather than 9 for the same reason one step further on: every record now
-carries the four image-quality columns and a ``quality_samples`` count (#182).
+carries the four image-quality columns and a ``quality_samples`` count (#182), and 11
+rather than 10 because every record now carries ``straddles_super`` and ``super_kind`` on
+the same terms (#183).
 """
 
 DELTA_MATCH_SEC = 0.25
@@ -260,6 +263,17 @@ Six frames at 24 fps. A scene detector puts a boundary within a frame or two of 
 made it, so the tolerance only has to absorb rounding — and it is kept too narrow to reach the
 next cut on purpose. Were it wide enough to, a boundary the detector missed would silently
 borrow its neighbour's number, which is the one failure here that would not look like one."""
+
+SUPER_EDGE_FRAMES = 0.5
+"""How close to a super's own edge a cut may sit and still count as outside it, in frames.
+
+The catalog is measured off a render and the cuts are read off a timeline, so the two agree
+to the frame rather than to the millisecond: the super that ended *on* the entrance it
+cleared for is one rounding away from reading as landing just past it, which would report
+the convention as the violation it exists to be told apart from. Half a frame rather than a
+whole one so that a super genuinely carrying one frame over a cut is still a straddle —
+which is why it is counted in frames of the timeline's own clock instead of in seconds, a
+tolerance in seconds being a different number of frames on every project."""
 
 GIVEN = "given"
 """The alignment mode where the caller named the frame rather than the server reading it."""
@@ -341,6 +355,7 @@ def correlate_timeline(
     tunes: str | None = None,
     solos: str | None = None,
     deltas: str | None = None,
+    supers: str | None = None,
     quality: str | None = None,
     bars: str | None = None,
     angles: Mapping[str, Any] | None = None,
@@ -376,6 +391,13 @@ def correlate_timeline(
     catalog measured off a span joins nothing, and the summary says how many rows joined
     rather than leaving a silent hole.
 
+    ``supers`` is the other catalog off that render: when each burned-in graphic — lower
+    third, title card, bug — is on screen. Every cut is measured against them and carries
+    ``straddles_super`` where a graphic was up either side of it. That is a fact rather
+    than a fault, and ``super_kind`` is what tells them apart: a lower third held across
+    cuts is how titling works, a cut inside a title card is not. Same clock rule as
+    ``deltas``, and the same summary.
+
     ``quality`` is an image-quality catalog — the per-sample reading ``analyze_quality``
     writes (#182). Its ``t`` has to be in the same clock as this timeline, which a scan of a
     full-length render of the cut gives; a scan of one angle's own range is in that clip's
@@ -399,6 +421,12 @@ def correlate_timeline(
     subjects = _subjects(angles)
     music = _music(beats, audio, tunes, solos, bars, roles, subjects)
     pictures = _optional_rows(deltas, "cut delta catalog", "cuts")
+    graphics = _optional_rows(
+        supers,
+        "supers catalog",
+        "supers",
+        "gauntlet/tools/ab_pack.py writes one beside its cuts.json",
+    )
     takes = _optional_rows(quality, "image-quality catalog", "samples", "analyze_quality writes it")
     floors = _floors(quality)
     cut = _read_cut(connection, timeline, track, music.audio, audio_at)
@@ -412,6 +440,7 @@ def correlate_timeline(
         "tunes": _named(tunes),
         "solos": _named(solos),
         "deltas": _named(deltas),
+        "supers": _named(supers),
         "quality": _named(quality),
         "bars": _named(bars),
         "angles": dict(sorted(roles.items())) if roles is not None else None,
@@ -423,7 +452,7 @@ def correlate_timeline(
     watched = [
         {"reading": READING},
         cut.fingerprint,
-        *_fingerprints(beats, audio, tunes, solos, deltas, quality, bars),
+        *_fingerprints(beats, audio, tunes, solos, deltas, supers, quality, bars),
     ]
     key = cache.cache_key(KIND, watched, params)
 
@@ -441,6 +470,7 @@ def correlate_timeline(
             loudness,
             config,
             pictures,
+            graphics,
             takes,
             floors,
         )
@@ -461,6 +491,7 @@ def correlate(
     loudness: Levels | None = None,
     config: Config | None = None,
     pictures: Sequence[Mapping[str, Any]] | None = None,
+    graphics: Sequence[Mapping[str, Any]] | None = None,
     takes: Sequence[Mapping[str, Any]] | None = None,
     floors: Mapping[str, float] | None = None,
 ) -> JobOutput:
@@ -475,7 +506,7 @@ def correlate(
 
     progress(0.7, "measuring the cut against the music")
     grid = trust(music.beats)
-    rows = measure(shots, clock, music, transients, grid, pictures, takes)
+    rows = measure(shots, clock, music, transients, grid, pictures, graphics, takes)
     summary = _summary(
         rows,
         clock,
@@ -485,6 +516,7 @@ def correlate(
         grid,
         levels,
         pictures,
+        graphics,
         takes,
         floors,
     )
@@ -1033,6 +1065,7 @@ def measure(
     transients: Sequence[float] | None,
     grid: GridTrust | None = None,
     pictures: Sequence[Mapping[str, Any]] | None = None,
+    graphics: Sequence[Mapping[str, Any]] | None = None,
     takes: Sequence[Mapping[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """One record per shot: where it starts in the music, and how far off everything it is.
@@ -1128,6 +1161,11 @@ def measure(
                 # missed has no delta, and inventing one from the nearest boundary a second
                 # away would be a number about a different edit.
                 **_delta_at(pictures, picture_times, seconds),
+                # Whether a burned-in graphic is on screen either side of this cut (#183).
+                # Not "is a super up here": a super that arrives with this shot, or clears
+                # for it, is the convention rather than the fault, and the interval is read
+                # strictly at both ends so those two land outside it.
+                **_super_at(graphics, seconds, SUPER_EDGE_FRAMES / clock.fps),
                 # How the picture held up while this shot was on screen (#182), joined from
                 # an image-quality scan of the render. Measured over the shot rather than at
                 # its boundary: a take that goes soft halfway through is soft, and reading
@@ -1138,6 +1176,40 @@ def measure(
             }
         )
     return rows
+
+
+def _super_at(
+    graphics: Sequence[Mapping[str, Any]] | None,
+    seconds: float,
+    guard: float,
+) -> dict[str, Any]:
+    """Whether this cut lands inside a burned-in graphic, and which kind of one.
+
+    Strict at both ends on purpose. A super whose first frame *is* this cut arrived with the
+    new shot, and one whose last frame is the frame before it cleared for the shot — the two
+    edits the human's own deliverables are made of, and an inclusive test would report both
+    of those conventions as findings.
+
+    What the column means is left to the reader, which is why ``super_kind`` rides beside
+    it: measured on the corpus, a lower third held across a cut is ordinary craft and a cut
+    inside a title card is not.
+    """
+    if not graphics:
+        return {"straddles_super": None, "super_kind": None}
+    kinds = []
+    for row in graphics:
+        start, end = row.get("t"), row.get("end")
+        if not isinstance(start, int | float) or not isinstance(end, int | float):
+            continue
+        if supers.inside(float(start), float(end), seconds, guard):
+            kinds.append(str(row.get("kind") or ""))
+    if not kinds:
+        return {"straddles_super": False, "super_kind": None}
+    # A cut can sit inside two supers at once, and then the card is the one worth naming:
+    # taking whichever row came first would let catalog order decide whether a report shows
+    # the finding or the lower third that happened to be up over it.
+    kind = supers.CARD if supers.CARD in kinds else kinds[0]
+    return {"straddles_super": True, "super_kind": kind or None}
 
 
 def _quality_over(
@@ -1325,6 +1397,7 @@ def _summary(
     trusted: GridTrust,
     levels: Sequence[tuple[float, float]] | None = None,
     pictures: Sequence[Mapping[str, Any]] | None = None,
+    graphics: Sequence[Mapping[str, Any]] | None = None,
     takes: Sequence[Mapping[str, Any]] | None = None,
     floors: Mapping[str, float] | None = None,
 ) -> dict[str, Any]:
@@ -1392,6 +1465,7 @@ def _summary(
         # that lines up with nothing is the failure this block is here to make loud, and
         # answering None would report it as a call that never asked.
         "visual_delta": None if pictures is None else _deltas(rows, pictures),
+        "supers": None if graphics is None else _supers(rows, graphics),
         # Keyed the same way and for the same reason: a catalog measured off a different span
         # joins nothing, and a null here would report that as a call that never asked.
         "picture_quality": None if takes is None else _quality(rows, takes, floors),
@@ -1425,6 +1499,52 @@ def _deltas(
         "delta": _lengths([round(one, 4) for one in found]) if found else None,
         "match_tolerance_sec": DELTA_MATCH_SEC,
     }
+
+
+def _supers(
+    rows: Sequence[dict[str, Any]], graphics: Sequence[Mapping[str, Any]]
+) -> dict[str, Any]:
+    """The burned-in graphics this cut was measured against, and what it did to them.
+
+    ``straddled`` is the finding; the rest is what says whether to believe it. A catalog
+    measured off a different render joins nothing and would report a clean bill of health
+    from a measurement that never met this timeline, so the number of supers it holds and
+    the span they cover are reported beside the count of violations.
+    """
+    flagged = [row for row in rows if row.get("straddles_super")]
+    return {
+        "catalog_rows": len(graphics),
+        "cards": sum(1 for row in graphics if row.get("kind") == supers.CARD),
+        "overlays": sum(1 for row in graphics if row.get("kind") == supers.OVERLAY),
+        "straddled": len(flagged),
+        # Split, because they are different claims. A lower third held across a cut is how
+        # titling works and the human deliverables are full of them; a cut inside a title
+        # card — a graphic that is itself the shot — is the one nothing in the corpus does.
+        "straddled_cards": sum(1 for row in flagged if row.get("super_kind") == supers.CARD),
+        "straddled_overlays": sum(
+            1 for row in flagged if row.get("super_kind") == supers.OVERLAY
+        ),
+        "flagged_cuts": [row["cut"] for row in flagged[:INLINE_CUTS]],
+        "covered_sec": _covered(graphics),
+    }
+
+
+def _covered(graphics: Sequence[Mapping[str, Any]]) -> float:
+    """How much of the timeline has a graphic on it, counting overlap once.
+
+    Summed row by row it would not be that: two supers up together — a bug over a lower
+    third — would report more seconds of graphic than the piece has seconds.
+    """
+    spans = sorted(
+        (float(row["t"]), float(row["end"]))
+        for row in graphics
+        if isinstance(row.get("t"), int | float) and isinstance(row.get("end"), int | float)
+    )
+    total, reached = 0.0, float("-inf")
+    for opens, closes in spans:
+        total += max(0.0, closes - max(opens, reached))
+        reached = max(reached, closes)
+    return round(total, 3)
 
 
 def _quality(

@@ -85,6 +85,16 @@ timelines. The server measures; Claude decides.
   arrives as a mapping the agent lifted, never as a path.
   _Avoid_: `camera_sidecar` for this — that module reads a camera model off
   the card's own XML (#94) and is not an angle sidecar.
+- **super** — a burned-in graphic: a lower third, a title card, a bug. Read off a
+  render (`video/supers.py`), never off a timeline, because by then it is pixels.
+  Two shapes: a **card** holds the whole frame, an **overlay** sits on the picture.
+  The reading is what two frames whose footage has moved on still agree about, and
+  it is believed only where the *same* pixels agree twice — on a dark stage of
+  locked-off cameras a lit music stand carries across a reading as well as
+  lettering does, but never twice in the same place (#183).
+  _Avoid_: reading a **straddle** — a cut with a graphic up either side of it — as
+  a fault on its own. The human deliverables hold a lower third across cuts all
+  night.
 
 ## Module map — `src/resolve_mcp/`
 
@@ -266,6 +276,10 @@ a scan of a render onto the cut's own shots, #182), `framing`
 (how far the picture steps *across* a cut and the 30-degree-rule jump-cut
 flag: layout, content and size terms over two grey frames, numpy only, no
 I/O — the pack measures with it, `analysis/correlate` joins its catalog on),
+`supers` (the **super**: which burned-in graphics are up when, and which cuts land
+inside one. Pure numpy + scipy over frames somebody else decoded — the pack does
+both decodes, a coarse scan for where and a native-fps walk for the exact in and
+out, and `analysis/correlate` joins the catalog on as `straddles_super`, #183),
 `source` (clip name → file path + the clip's own frame numbering).
 
 ## Test map — `tests/`
