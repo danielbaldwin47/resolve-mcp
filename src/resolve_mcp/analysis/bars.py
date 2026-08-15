@@ -54,7 +54,7 @@ from ..jobs.runner import JobOutput, Progress, start_job
 from ..logging_config import get_logger
 from ..naming import slug
 from . import beats as beats_module
-from . import halves, music, records
+from . import halves, music
 
 log = get_logger("analysis")
 
@@ -555,7 +555,7 @@ def _inferred(
     """The bars a fold and a barring imply, back in the grid's own beat numbering.
 
     A phase past zero leaves beats in front of the first bar line; they are a pickup and get
-    bar one, which is what ``beats.numbered`` does with the beats before the model's first
+    bar one, which is what ``beats.rows`` does with the beats before the model's first
     downbeat. Numbering them zero, or dropping them, would leave the first real bar line
     somewhere other than the top of a group.
     """
@@ -878,7 +878,7 @@ def detect(
     progress(0.8, "looking for the bar line")
     floor = float(settings["minimum_confidence"])
     bar_map = mapped(grid, salience, floor)
-    summary = gist(bar_map, floor, label)
+    stats = gist(bar_map, floor, label)
     log.info(
         "Bar map over %s: %s, meter %s, %s bars (grid said meter %s at %s bpm)",
         source.name,
@@ -891,16 +891,18 @@ def detect(
 
     progress(0.9, "writing the bars")
     target = config.analysis_dir / f"{slug(source.stem, 'analysis')}-{key[:12]}-{BARS}.json"
-    header = {
-        "kind": BARS,
-        "audio": described["path"],
-        "duration_seconds": described["duration_seconds"],
-        "start_seconds": settings["start_seconds"],
-        "end_seconds": settings["end_seconds"],
-        "reasons": bar_map.reasons,
-        **summary,
-    }
-    records.write(target, header, BARS, rows(bar_map))
+    result = halves.written(
+        target,
+        BARS,
+        described,
+        stats,
+        rows(bar_map),
+        {
+            "start_seconds": settings["start_seconds"],
+            "end_seconds": settings["end_seconds"],
+            "reasons": bar_map.reasons,
+        },
+    )
 
     progress(0.95, "written")
-    return JobOutput({"path": str(target), **summary}, (target,))
+    return JobOutput(result, (target,))

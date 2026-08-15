@@ -291,7 +291,7 @@ def test_change_records_name_what_left_and_what_took_over() -> None:
         _voice("other", (-18.0, 12.0), (-30.0, 12.0)),
         _voice("vocals", (-30.0, 12.0), (-18.0, 12.0)),
     )
-    rows = solos.numbered(solos.snapped(solos.changes(runs, ()), (11.6,), tolerance=2.0))
+    rows = solos.rows(solos.snapped(solos.changes(runs, ()), (11.6,), tolerance=2.0))
 
     assert rows[0]["change"] == 1
     assert rows[0]["from"] == "other"
