@@ -392,6 +392,12 @@ def correlate(
     )
 
     target = config.analysis_dir / keyed_name(name, key, ".correlate.json", "correlate")
+    # The one report that does not go through ``halves.written``, and the reason is the header
+    # below: this is a join over one timeline's cut rows rather than a measurement of one audio
+    # file, so it names a ``timeline`` where every half names an ``audio`` and carries the
+    # inputs it joined. Routing it through the shared writer would mean a header shape with a
+    # hole in it (#223).
+    #
     # "count", not "cuts": the records themselves are the file's ``cuts`` field, and a header
     # key of the same name would be a second one that only the last reader of the two sees.
     header: dict[str, Any] = {

@@ -6,15 +6,18 @@ and that only works while every detector writes the same three keys in the same 
 enforced it: ``halves.written`` built the header for music and structure while bars, phrases
 and fills hand-rolled their own copy, and a copy is a thing that drifts (#223).
 
-So this file runs every detector that writes an analysis file, over the smallest fixtures each
+So this file runs every half that writes through the writer, over the smallest fixtures each
 one will accept, and compares the heads. It is deliberately the only test that knows about all
 of them at once: the per-detector tests own what each file *says*, and this one owns what they
 all say the same way. The fakes come from those tests rather than from copies here, so a
-detector whose inputs change breaks this in one place with the rest of its own suite.
+detector whose inputs change breaks this in one place with the rest of its own suite. The two
+stem layouts below are the exception, and only because their originals are pytest fixtures
+rather than callables: a fixture cannot be imported and called from another module's test.
 
-``correlate`` is not here on purpose. Its report is a join over cut rows rather than a
-measurement of one audio file — no ``audio`` to name — so it writes its own header through
-``records.write``, which is the exception ``halves.written`` documents.
+Two files in the analysis directory are not halves and are absent on purpose: ``correlate``'s
+report, a join over cut rows rather than a measurement of one audio file (no ``audio`` to
+name), and the transcript, a schema-versioned document with three record lists rather than
+one. Both are the exceptions ``halves.written`` documents, and both keep their own writers.
 """
 
 from __future__ import annotations
@@ -78,6 +81,11 @@ def _drum_stems(tmp_path: Path) -> dict[str, Path]:
     }
 
 
+def _master(tmp_path: Path, seconds: float) -> Path:
+    """The mix a bar map is read off — silent, since the accent reading is injected."""
+    return write_hits(tmp_path / "media" / "master.wav", [], seconds=seconds)
+
+
 def _every_report(tmp_path: Path) -> dict[str, dict[str, Any]]:
     """Run every detector that writes an analysis file, and read back what each one wrote."""
     written: dict[str, Path] = {}
@@ -128,7 +136,7 @@ def _every_report(tmp_path: Path) -> dict[str, dict[str, Any]]:
     grid = _onset_scale()
     bars = _result(
         bars_module.detect_bars(
-            _master_for(tmp_path, float(grid[-1]["t"]) + 1.0),
+            _master(tmp_path, float(grid[-1]["t"]) + 1.0),
             detector=_bar_detector(grid),
             accent=_accent_of(_accented(grid, every=8)),
         )
@@ -162,10 +170,6 @@ def _every_report(tmp_path: Path) -> dict[str, dict[str, Any]]:
     return {
         kind: json.loads(path.read_text(encoding="utf-8")) for kind, path in written.items()
     }
-
-
-def _master_for(tmp_path: Path, seconds: float) -> Path:
-    return write_hits(tmp_path / "media" / "master.wav", [], seconds=seconds)
 
 
 def test_every_analysis_file_opens_with_the_same_header_keys(tmp_path: Path) -> None:

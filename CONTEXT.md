@@ -331,6 +331,14 @@ them). Both drive the fake seam through `tools/media`, and both build their
 pools from `tests/mediapool.py` (`a_file`, `a_clip`, `a_shallow_copy_pool`) so
 the pair cannot drift on what a clip or a shadowed copy looks like.
 
+`test_analysis_reports.py` is the one test that spans detectors rather than
+following a module: it runs every half that writes an analysis file — beats,
+energy, tunes, solos, bars, phrases, fills — and asserts they all open
+`kind`/`audio`/`duration_seconds`, the header `analysis/halves.written`
+exists to keep (#223). It imports each detector's fakes from that detector's
+own test file, so the inputs have one home; what each file *says* stays with
+the per-detector tests.
+
 `tests/fakes/` is the fake Resolve API, one module per subsystem — open the
 module, not the package, and never the whole package at once:
 

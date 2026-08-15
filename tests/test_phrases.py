@@ -21,8 +21,9 @@ from typing import Any
 
 import pytest
 
+from resolve_mcp.analysis import beats as beats_module
 from resolve_mcp.analysis import melody, music, phrases
-from resolve_mcp.analysis.beats import BeatGrid, Detector, rows
+from resolve_mcp.analysis.beats import BeatGrid, Detector
 from resolve_mcp.analysis.melody import Note
 from resolve_mcp.audio.stems import DRUM_PASS, DRUM_STEMS, FOUR_STEMS, MIX_PASS
 from resolve_mcp.config import get_config
@@ -72,7 +73,7 @@ def _grid(bars: int = 8, tempo: float = TEMPO, meter: int = 4) -> tuple[dict[str
     step = 60.0 / tempo
     beats = tuple(round(index * step, 6) for index in range(bars * meter))
     downbeats = tuple(beats[index] for index in range(0, len(beats), meter))
-    return rows(BeatGrid(beats=beats, downbeats=downbeats))
+    return beats_module.rows(BeatGrid(beats=beats, downbeats=downbeats))
 
 
 def _line(
@@ -230,7 +231,7 @@ def test_a_line_of_one_note_reads_nothing() -> None:
 
 def test_a_grid_with_no_tempo_in_it_reads_nothing() -> None:
     """No beat to measure a rest in. Better nothing than a rest measured against zero."""
-    flat = rows(BeatGrid(beats=(0.0, 0.0, 0.0), downbeats=(0.0,)))
+    flat = beats_module.rows(BeatGrid(beats=(0.0, 0.0, 0.0), downbeats=(0.0,)))
 
     assert phrases.boundaries(_running(8), flat).boundaries == ()
 

@@ -18,8 +18,9 @@ from typing import Any
 
 import pytest
 
+from resolve_mcp.analysis import beats as beats_module
 from resolve_mcp.analysis import drums, fills, music
-from resolve_mcp.analysis.beats import BeatGrid, Detector, rows
+from resolve_mcp.analysis.beats import BeatGrid, Detector
 from resolve_mcp.analysis.drums import Hit
 from resolve_mcp.audio.stems import DRUM_PASS, DRUM_STEMS, MIX_PASS
 from resolve_mcp.config import get_config
@@ -68,7 +69,7 @@ def _grid(bars: int = 8, tempo: float = 120.0, meter: int = 4) -> tuple[dict[str
     step = 60.0 / tempo
     beats = tuple(round(index * step, 6) for index in range(bars * meter))
     downbeats = tuple(beats[index] for index in range(0, len(beats), meter))
-    return rows(BeatGrid(beats=beats, downbeats=downbeats))
+    return beats_module.rows(BeatGrid(beats=beats, downbeats=downbeats))
 
 
 def _comping(rows: Sequence[Mapping[str, Any]]) -> list[Hit]:
