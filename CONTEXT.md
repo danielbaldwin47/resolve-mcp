@@ -1,552 +1,150 @@
 # CONTEXT.md
 
-Repo map and vocabulary for agents. Structural on purpose — module names
-and responsibilities, no signatures or line numbers: those rot silently.
+Repo map for agents: every module under `src/resolve_mcp/`, what it owns, the test
+that covers it, the seam that test drives (`tests/test_context_map.py` keeps it
+complete). Structural — no signatures, no history. Narrative lives in
+`docs/context/`, one file per area, read ranged (or Grepped) only when you are
+about to work there: [vocabulary](docs/context/vocabulary.md) ·
+[analysis](docs/context/analysis.md) · [audio](docs/context/audio.md) ·
+[cut](docs/context/cut.md) · [jobs](docs/context/jobs.md) ·
+[resolve](docs/context/resolve.md) · [titles + tools](docs/context/tools.md) ·
+[video](docs/context/video.md) · [tests](docs/context/tests.md) ·
+[agent-owned trees + docs](docs/context/repo.md).
 
-## What this project is
+**What this is.** An MCP server that lets an agent edit concert footage in DaVinci
+Resolve Studio: analyse audio (beats, structure, transcription, stems), author cut
+and titles files as validated JSON, materialise them as timelines. The server
+measures; Claude decides. Seams — `fake`: the fake Resolve API in
+`tests/fakes/` swapped in at `resolve/connection` (`set_connection()`), tools
+called in-process; `pure`: no Resolve handle, direct calls over dicts, fixture
+audio or synthetic frames; `live`: a running Resolve Studio (`pytest -m live`);
+`sub`: the script run as a subprocess, the way the harness runs it.
 
-An MCP server that lets an agent edit concert footage in DaVinci Resolve
-Studio: analyse audio (beats, structure, transcription, stems), author cut
-and titles files as validated JSON, and materialise them as Resolve
-timelines. The server measures; Claude decides.
+| Module | Owns | Test | Seam |
+| --- | --- | --- | --- |
+| `__main__` | `python -m resolve_mcp` entry: start the server | `test_server` | fake |
+| `config` | zero-config defaults, `RESOLVE_MCP_*` env overrides | `test_config` | pure |
+| `deliver` | render preset + timeline span as a background job | `test_render_tools` | fake |
+| `document` | read agent JSON off disk, hash the bytes read; `Preflight`, the loaded-document + findings shape both contracts subclass | `test_findings` | pure |
+| `errors` | structured cause/fix errors; tracebacks never reach the agent | `test_connection` | pure |
+| `ffmpeg` | the one place the server shells out to ffmpeg; NVDEC probe | `test_hardware_decode` | pure |
+| `findings` | `{rule, id, message, fix_hint}`; `report` the one `{errors, warnings}` reply, `refuse` the one raise-if-errors preamble | `test_findings` | pure |
+| `interpreter` | which interpreters may attach to fusionscript (ADR 0001) | `test_interpreter` | pure |
+| `lease` | is the owner of a claim still alive: `SESSION`, `liveness`, `claim`/`holder` | `test_lease` | pure |
+| `logging_config` | stderr-only logging (stdout is MCP transport) | `test_server` | fake |
+| `naming` | names for written files and `<base> v<N>` timelines | `test_naming` | pure |
+| `server` | FastMCP app + tool registration from each module's `TOOLS`; no logic | `test_server` | fake |
+| `sharing` | the Windows retry for a file another handle holds | `test_sharing` | pure |
+| `spill` | oversized results → disk; `capped` is the one truncated-reply shape | `test_spill` | pure |
+| `timing` | frames authoritative; seconds/timecode/fps derived | `test_timing` | pure |
+| `analysis/applause` | applause bursts → tune boundaries, walked to the band's entry | `test_applause_spans` | pure |
+| `analysis/barmap` | a cut read against the bar map: `map_bar`, `in_group`, `bar_offset` | `test_bar_map_join` | pure |
+| `analysis/bars` | the bar map: meter + phase over the grid, or `refused` | `test_bar_map` | fake |
+| `analysis/beats` | grid + downbeats, model injected (ADR 0002); `trust`, `spacing` | `test_beat_grid` | pure |
+| `analysis/correlate` | a cut against its music: the join over the readings below | `test_correlate_timeline` | fake |
+| `analysis/cuda` | preload the CUDA runtime so CTranslate2 finds it on Windows | `test_whisper_runtime` | pure |
+| `analysis/decode` | WAV → numpy, no third-party decoder | `test_energy_curves` | pure |
+| `analysis/device` | which device the torch models infer on, named not defaulted | `test_device` | pure |
+| `analysis/drums` | hits per drum stem | `test_drum_fills` | fake |
+| `analysis/energy` | loudness curves; `rms_curve` the cheap level-only pass | `test_energy_curves` | pure |
+| `analysis/fills` | drum-fill candidates over the hits | `test_drum_fills` | fake |
+| `analysis/halves` | identify/cache/write shared by every detector; `written`, `collected` | `test_music_analysis` | fake |
+| `analysis/melody` | notes off one melodic stem, model injected | `test_melody` | pure |
+| `analysis/music` | beats + energy + gist job; `beats_of`/`energy_of` shared entries | `test_music_analysis` | fake |
+| `analysis/phrases` | phrase boundaries: where the soloist stops | `test_phrases` | fake |
+| `analysis/records` | sliceable record files: `write`, the one reader `rows(path, field)` | `test_records` | pure |
+| `analysis/rhythm` | how varied the cutting is: `shot_rhythm`, `gears`, `quiet_floor` | `test_rhythm` | pure |
+| `analysis/silence` | RMS silence spans | `test_transcript` | pure |
+| `analysis/solos` | front-of-band changes off stem energy and timbre | `test_solo_changes` | pure |
+| `analysis/stats` | offsets, histogram, measured-at-all over a record column | `test_correlate_timeline` | fake |
+| `analysis/structure` | tunes + solo changes job over the shared halves | `test_music_structure` | fake |
+| `analysis/subject` | what a shot frames × who is out front → `on_soloist` | `test_subject` | pure |
+| `analysis/transcribe` | transcription job | `test_transcription` | fake |
+| `analysis/transcript` | transcript document + Word/Transcription vocabulary | `test_transcript` | pure |
+| `analysis/virtual` | a cut file read back as its words: the P4 self-review | `test_virtual_transcript` | fake |
+| `analysis/whisper` | default backend: faster-whisper large-v3 | `test_whisper_runtime` | pure |
+| `audio/acquire` | concert audio out of Resolve onto disk, both routes | `test_audio_acquisition` | fake |
+| `audio/ffmpeg` | the per-source-clip acquisition route's ffmpeg commands | `test_audio_acquisition` | fake |
+| `audio/riff` | the WAV container: PCM, float and extensible headers | `test_wav_container` | pure |
+| `audio/separator` | python-audio-separator out of process; torch build probed | `test_stem_separation` | fake |
+| `audio/stems` | the two stem passes + opt-in `split_wind`; `claimed` claim policy | `test_stem_separation` | fake |
+| `audio/wav` | WAV header facts + the one unreadable-WAV error | `test_wav_container` | pure |
+| `cut/document` | cut file read off disk | `test_cut_tools` | fake |
+| `cut/layout` | where every entry lands: positions, placements, overlays | `test_cut_layout` | pure |
+| `cut/otio` | the tail's document surgery over exported OTIO, no Resolve | `test_cut_otio` | pure |
+| `cut/resolution` | the optional delivery resolution, one reading for rules and build | `test_cut_resolution` | fake |
+| `cut/schema` | schema v1 verbatim, served by `get_cut_schema` | `test_cut_tools` | fake |
+| `cut/tail` | the optional tail device: type, duration, audio fade | `test_cut_tail` | fake |
+| `cut/validate` | 12 errors + W1/W2/W8/W9 shared by dry run and build | `test_cut_validate` | pure |
+| `jobs/cache` | hash-keyed results; `audio_identity`, `fingerprint` (ADR 0003, 0007) | `test_job_cache` | pure |
+| `jobs/detached` | hand a job to a process that outlives this one | `test_detached_jobs` | fake |
+| `jobs/lifecycle` | job states; `verdict(record, now, alive)` from the record alone | `test_job_lifecycle` | pure |
+| `jobs/runner` | start heavy work without stalling stdio | `test_job_runner` | pure |
+| `jobs/store` | one JSON record per job on disk; `load` = read → verdict → write | `test_job_store` | pure |
+| `jobs/worker` | the detached process's entry point | `test_detached_jobs` | fake |
+| `resolve/apply` | titles file → the owned Titles track | `test_titles_tools` | fake |
+| `resolve/build` | materialise a cut file as a timeline | `test_build_timeline` | fake |
+| `resolve/camera_sidecar` | camera model off the card's own XML (not an angle sidecar) | `test_media_tools` | fake |
+| `resolve/connection` | **the seam**: lazy singleton, probe, one auto reconnect | `test_connection` | fake |
+| `resolve/cut` | the cut-file contract (`Preflight` subclass) | `test_findings` | pure |
+| `resolve/fusion` | Text+ node, text, opacity fade spline | `test_titles_tools` | fake |
+| `resolve/interchange` | timeline export/import | `test_timeline_interchange` | fake |
+| `resolve/loader` | import DaVinciResolveScript + direct-attach | `test_loader` | pure |
+| `resolve/markers` | marker read/write, the review loop's transport | `test_marker_tools` | fake |
+| `resolve/media` | the six media operations, all callers of `pool` | `test_media_tools` | fake |
+| `resolve/mix` | where the master mix sits under a timeline | `test_mix` | fake |
+| `resolve/pool` | the media pool adapter: bins, lookup, reading, frame bounds | `test_media_pool` | fake |
+| `resolve/render` | render queue | `test_render_queue` | fake |
+| `resolve/scripting` | `run_python` with handles pre-bound | `test_run_python` | fake |
+| `resolve/session` | session/project wrappers | `test_session_tools` | fake |
+| `resolve/settings` | the timeline settings the server writes; resolution read back | `test_cut_resolution` | fake |
+| `resolve/tail` | the tail's export/import round trip: `Staging` in, `Landed` out | `test_cut_tail` | fake |
+| `resolve/takes` | take selectors + in-place `swap_take` | `test_swap_take` | fake |
+| `resolve/timeline` | timeline read wrappers | `test_timeline_tools` | fake |
+| `resolve/title_edit` | edit one title already on the timeline, no re-apply | `test_title_edit` | fake |
+| `resolve/titles` | titles file against a project + dry run (`Preflight` subclass) | `test_findings` | pure |
+| `titles/assets` | PNG title cards: what an event points at, frames behind it | `test_titles_assets` | pure |
+| `titles/document` | titles file read off disk | `test_titles_tools` | fake |
+| `titles/schema` | titles schema verbatim, served by `get_titles_schema` | `test_titles_tools` | fake |
+| `titles/validate` | 9 errors + 2 warnings | `test_titles_validate` | pure |
+| `tools/analysis` | analysis + correlate tools | `test_correlate_timeline` | fake |
+| `tools/cut` | cut tools: schema, dry run, build, swap, virtual transcript | `test_cut_tools` | fake |
+| `tools/envelope` | shared envelope + `@tool` + handle-death retry + job-record wrap | `test_envelope` | fake |
+| `tools/escape_hatch` | `run_python` | `test_run_python` | fake |
+| `tools/jobs` | job status/list/cancel tools | `test_job_tools` | fake |
+| `tools/media` | the media tools over `resolve/media` | `test_media_tools` | fake |
+| `tools/project` | session/project tools | `test_session_tools` | fake |
+| `tools/render` | deliver tools | `test_render_tools` | fake |
+| `tools/stems` | `separate_stems` | `test_stem_separation` | fake |
+| `tools/timeline` | timeline, marker and interchange tools | `test_timeline_tools` | fake |
+| `tools/titles` | `apply_titles`, `list_titles`, `edit_title` | `test_titles_tools` | fake |
+| `tools/video` | frame grab, scene, occlusion, quality tools | `test_frame_grabs` | fake |
+| `video/blocking` | how blocked one frame is + the discriminator; numpy, no I/O | `test_occlusion` | pure |
+| `video/ffmpeg` | the commands video routes run; NVDEC flags, fallback, report | `test_hardware_decode` | pure |
+| `video/frames` | frame grabs — the one compute route that is not a job | `test_frame_grabs` | fake |
+| `video/framing` | how far the picture steps across a cut; the 30-degree flag | `test_visual_delta` | pure |
+| `video/jpeg` | read back dimensions | `test_frame_grabs` | fake |
+| `video/occlusion` | blocking as a cached job over a sampled range | `test_occlusion` | fake |
+| `video/picture` | sharpness, exposure, clipping, stability of one frame | `test_quality` | pure |
+| `video/quality` | picture as a cached job; three calibrated floors | `test_quality` | fake |
+| `video/sampled` | range check, sample grid, runs → windows shared by both scans | `test_occlusion` | fake |
+| `video/scenes` | scene-cut detection as a cached job | `test_scene_cuts` | fake |
+| `video/source` | clip name → file path + the clip's own frame numbering | `test_frame_grabs` | fake |
+| `video/supers` | burned-in graphics: which are up when, which cuts land inside | `test_supers` | pure |
 
-## Vocabulary
+**Tests not on a single row** (seam in parentheses). Spanning devices, one file each:
+`test_cut_devices` (gaps + overlays across layout/validate/build/takes/virtual; fake),
+`test_analysis_reports` (every detector's file opens `kind`/`audio`/`duration_seconds`;
+fake), `test_rough_cut_pillar` (the P4 pillar end to end; fake), `test_style_layer`
+(server code never touches `styles/`; pure), `test_text_plus_probe` (the Text+
+template-append probe; fake), `test_read_guard` and `test_context_guard` (the Read hook and
+the shell hook; sub), `test_context_map` (this map covers the tree; pure), `test_prune_merged` (`scripts/prune_merged.py` over an injected `Runner`; pure). Live tier: `test_live_smoke`, `test_live_analysis`, and
+the state it builds in `live_state` (decisions covered by `test_live_state`; fake).
+Fixtures and helpers: `conftest` (installs the fake seam, hermetic `Config`),
+`cutfile`, `roughcut`, `mediapool`, `otio`, `text_plus_probe`, `currency_probe`.
+The fake Resolve API, one module per subsystem — open the module, never the
+package: `fakes/core`, `fakes/connection`, `fakes/project`, `fakes/pool`,
+`fakes/media`, `fakes/timeline`, `fakes/timeline_item`, `fakes/fusion`,
+`fakes/interchange`, `fakes/separator`, `fakes/fixtures`, `fakes/builders`. `tests/data/`: the one committed real footage (occlusion evidence grids).
 
-- **cut file** — agent-authored JSON describing a timeline (schema v1,
-  `cut/schema.py`); validated then materialised, never edited in place.
-- **titles file** — agent-authored JSON of Text+ title events, applied to
-  one owned track.
-- **songs file** — `projects/<project>/songs.json`, song key → title +
-  personnel; agent-authored, never read by server code — the facts behind
-  the titles file (`docs/agents/rough-cut.md`, #132).
-- **job** — background compute (analysis, stems, scenes) with one JSON
-  record on disk; disk is the only source of truth.
-- **envelope** — the shared tool-result shape every MCP tool returns
-  (`tools/envelope.py`). A tool that hands back a job record replies
-  `{"job": record}`; the decorator recognises the record and wraps it, so no
-  starter builds that key itself (#219).
-- **spill** — oversized results written to disk for the agent to grep
-  instead of truncating. Every listing that can outgrow a reply is capped by
-  `spill.capped`, so `truncated` and `spilled_to` mean one thing everywhere and
-  a spilled file is the same reply carrying all of it (#224).
-- **bin path** — a media pool folder, slash-separated from the root. To a
-  tool addressing one clip by name: omitted is the whole pool, a name is
-  that bin and everything nested inside it, `""` is the root folder alone
-  — the value `list_media` reports for a root clip, so a listing reads
-  back verbatim (#122); `""` is never the whole pool — that is the
-  omitted form. Each media tool taking a bin — `list_media`,
-  `inspect_clip`, `relink_media`, and per item on `set_clip_metadata` and
-  `organize_media`'s `move_clips` — also takes `recursive`, false meaning
-  that bin's own clips alone: the address of a copy a subfolder shadows
-  (#134). The analysis and video tools resolve a clip by name too but take
-  no flag, so their refusals never offer the shallow form.
-- **the seam** — `resolve/connection.py` singleton, substituted by
-  `tests/fakes/` via `set_connection()`; the only place fakes attach.
-- **fake tier / live tier** — `pytest -m 'not live'` against fakes (the
-  default) vs `-m live` against a running Resolve Studio. See CLAUDE.md.
-- **stem** — separated audio (mix → vocals/drums/bass/other; drums →
-  kick/snare/toms/ride/crash), path is a content hash (ADR 0003). The drum
-  model writes `hh` too; it is not collected (#125).
-- **wind / comp** — the two halves of the opt-in third pass over `other`
-  (#153). `wind` is horns and reeds; `comp` is accompaniment — piano,
-  guitar, vibes, percussion, and the bass line itself on a capture whose
-  `bass` stem came back near-silent (#126). Where both are on disk they
-  replace `other` as voices in `solos` — `other` *is* their sum, and
-  measuring all three counts the residual twice (#157).
-  _Avoid_: "piano stem" as a name for `comp` — it is accompaniment, and
-  nothing may name it otherwise (#126).
-- **bar map** — `analysis/bars.py`'s reading: one record per bar, each with its
-  downbeat time, its length, the grid beat it starts on and its `in_group`
-  position in the four-bar group. Every map says its `source` — `model` when the
-  beat model committed to a meter and the map takes it at its word, `inferred`
-  when it was recovered from the accents, `refused` when neither reading was
-  worth having. The last is the point: the failure it ends is a grid quietly
-  reporting `meter: 1` and callers doing bar arithmetic on it (#180).
-  _Avoid_: reading `in_group` as a phrase — it is hypermeter, saying a bar line
-  is a plausible place for a phrase to turn over, never that one did.
-- **tactus** — the pulse the bars are counted in, and the thing a bar map folds
-  a subdivision-scale grid down to. Not the grid's own beat: on the corpus
-  anchor the grid is swung eighths and the tactus is every second one of them.
-- **phrase** — the cut-placement unit (#46, `styles/concert.md` §1): a
-  stretch of the soloist's line between two endings. `analysis/phrases.py`
-  reports the **boundaries**, each with two times — `measured_t`, where the
-  line actually stopped, and `t`, the beat inside the rest that a cut is
-  placed on. Not the `phrase` factor inside `fills`, which is only "how far
-  into a four-bar group does this land".
-- **style layer** — `styles/` at the repo root: layered Markdown style
-  profiles (`base.md` + `concert.md`), the corpus record (`corpus.md`) and
-  per-project angle sidecars (`angles/*.json`). Agent-authored,
-  director-editable, and **never touched by server code** — see
-  `docs/agents/style-layer.md`, guarded by `tests/test_style_layer.py`.
-- **provenance tag** — what every style claim ends with, saying how well it is
-  known. The vocabulary is settled in #13: `[stated principle]`,
-  `[measured — N projects, n=…, context]`, `[review feedback, YYYY-MM]`,
-  `[believed, unverified]`.
-- **angle sidecar** — one JSON file per Resolve project labelling each camera
-  by subject × character; `correlate_timeline` reads `role` and `subject`
-  (falling back to the subject half of a `subject-character` role) plus the
-  optional `voice`, which says what the solo map calls that subject, and it
-  arrives as a mapping the agent lifted, never as a path.
-  _Avoid_: `camera_sidecar` for this — that module reads a camera model off
-  the card's own XML (#94) and is not an angle sidecar.
-- **super** — a burned-in graphic: a lower third, a title card, a bug. Read off a
-  render (`video/supers.py`), never off a timeline, because by then it is pixels.
-  Two shapes: a **card** holds the whole frame, an **overlay** sits on the picture.
-  The reading is what two frames whose footage has moved on still agree about, and
-  it is believed only where the *same* pixels agree twice — on a dark stage of
-  locked-off cameras a lit music stand carries across a reading as well as
-  lettering does, but never twice in the same place (#183).
-  _Avoid_: reading a **straddle** — a cut with a graphic up either side of it — as
-  a fault on its own. The human deliverables hold a lower third across cuts all
-  night.
-
-## Module map — `src/resolve_mcp/`
-
-Top level:
-
-| Module | Responsibility |
-| --- | --- |
-| `config.py` | zero-config defaults, `RESOLVE_MCP_*` env overrides |
-| `deliver.py` | render preset + timeline span as a background job |
-| `document.py` | read agent-authored JSON off disk, hash exactly the bytes read; `Preflight` — the shared *loaded document + findings* shape both contracts subclass (#219) |
-| `errors.py` | structured cause/fix errors; tracebacks never reach the agent |
-| `ffmpeg.py` | the one place the server shells out to ffmpeg (argv lists) |
-| `findings.py` | shared finding shape `{rule, id, message, fix_hint}`; `report` is the one `{errors, warnings}` reply and `refuse` the one raise-if-errors preamble (#219) |
-| `interpreter.py` | guard on which interpreters may attach to fusionscript (ADR 0001) |
-| `lease.py` | is the owner of this claim still alive — `SESSION`, `liveness`, `claim`/`holder` (#217) |
-| `logging_config.py` | stderr-only logging (stdout belongs to MCP transport) |
-| `naming.py` | names for written files and `<base> v<N>` timelines |
-| `server.py` | FastMCP app + tool registration; no logic |
-| `sharing.py` | the Windows retry for a file another handle holds (#217) |
-| `spill.py` | oversized results → disk; `capped` is the one definition of a truncated reply |
-| `timing.py` | frames authoritative; seconds/timecode/fps derived |
-
-`analysis/` — compute jobs that read audio and write findings to disk:
-`applause` (bursts → tune boundaries, then a beat-density floor drops the calls
-with no pulse under them, #133; every boundary then walks forward off the applause
-to where the loudness curve says the band comes in, and a mix the threshold finds
-no clapping in at all is read at its own scale instead, #179),
-`barmap` (a cut read against the **bar map** `bars` writes: nearest bar line with a
-signed offset — a cut just before a downbeat is a cut on the one — giving `map_bar`,
-`in_group` and `bar_offset` per cut and the `bar_groups`/`bar_offsets` blocks over
-them, ungated on the beat gate since the map exists for the grids that gate refuses
-whole; pure, read by `correlate`, #180/#215),
-`bars` (the **bar map** itself: a rule layer over the grid for the material the beat
-model will not commit a meter to — folds a too-fast grid to the tactus, then
-scores every meter and phase against a per-beat accent reading and takes the
-widest lead over the runner-up, refusing rather than guessing when the accents
-say nothing. The accent reading is injected per ADR 0002 and defaults to RMS off
-the mix; a named stem reads that instead, #180),
-`beats` (grid + downbeats, model
-injected per ADR 0002; `trust` says which beats the grid describes well enough
-to count, #112; `spacing` says how wide a beat is at each beat), `correlate`
-(measure a cut against its music — by default the *visible* edit,
-every frame resolved to the topmost enabled video item with uncovered stretches
-as black shots, #142; `track=` measures one video track alone. Gates the beat
-statistics on `trust`, refuses as `stranded` a cut further from its beat than a
-beat is wide — the grid does not reach it, #160 — and leaves the transient ones
-ungated. Composes the readings other modules own rather than computing them:
-`rhythm` for `shot_rhythm`, `barmap` for a cut's place in the form (`bars=`, the
-optional **bar map**), `subject` for `on_soloist`. What is left here is the join —
-reading the timeline, putting every shot on the music's clock, writing the file,
-#215),
-`cuda` (preloads
-the CUDA runtime the `analysis` extra ships, so CTranslate2 finds it on Windows;
-pure decisions, #128),
-`decode` (WAV → numpy, no third-party decoder), `device` (which device the
-torch models infer on, announced once per process, carried in job records, and
-handed to the models rather than left to their defaults — no silent CPU
-fallback, #202, and CUDA since #245: `inference_device()`, the inventory and
-the record of the flip in
-`docs/reference/compute-device-inventory.md`), `drums` (hits per stem), `energy`
-(loudness curves; `rms_curve` is the cheap level-only pass, no K-weighting and
-no onsets), `fills` (drum-fill candidates), `halves` (shared
-identify/cache/write pattern — `written` is the one door every analysis file
-goes through, so every one of them opens `kind`/`audio`/`duration_seconds`
-(#223, guarded across detectors by `tests/test_analysis_reports.py`;
-`correlate`'s join over cut rows is the documented exception), and where the
-naming rule lives: a header-stats builder is `gist`, a record builder is
-`rows` — plus `collected`/`stem_named` — where a
-separation's melodic stems are, third pass included, and which one was asked
-for; one convention for every detector that reads one: `phrases` off the line,
-`bars` off the pulse, `structure` off all of them (#220). `fills` still finds
-the drum pass its own way),
-`melody` (notes off one melodic stem —
-monophonic pitch + gating, model injected per ADR 0002; the reading `phrases`
-is a rule layer over, as `drums` is to `fills`), `music` (beats + energy + gist
-job; `beats_of`/`energy_of` are the shared entries other jobs read a grid or a
-loudness curve through, one measurement per piece of audio), `phrases` (phrase boundaries: where the soloist stops, which is the
-cut-placement unit #46 named, #143),
-`records` (sliceable record files — `write` and, beside it, the one strong reader
-`rows(path, field)` every caller shares: four refusals over a file that is not one of
-these, plus the numeric-`t` filter and the time-order sort that make the rest a
-timeline. `allow_empty=` drops the empty-file refusal and is for the caller reading
-back a file it just wrote — nothing found is a wrong path only when an agent named
-the file, #222), `rhythm` (how varied the cutting is, one entry
-`read(rows, levels)` over per-cut rows and a level curve: `shot_rhythm` bins the
-shot lengths, measures the longest strict A/B alternation run and the longest
-monotonic duration `ramp`, and says `reads_metronomic` with the heuristic that drew
-it; its `gears` block splits the cut's span into loudness terciles off a 1 s RMS
-curve and reports cuts per minute in each, the loud/quiet `rate_ratio`, where the
-sub-2 s shots sit, `one_speed`, and `outside_shots` — shots past the analysed mix,
-counted apart rather than clamped into a tercile — plus `quiet_floor`, the passages
-the slow gear is held through, found by smoothing that curve rather than off the
-per-window tercile labels, each read for the spread its lone flashes are not holding
-up (#190). Warnings the report carries, never gates; pure, read by `correlate`,
-#215), `silence` (RMS spans), `solos` (front
-of band changes: lead off the stem energy, timbre off one stem's brightness —
-with the third pass on disk the voices are `wind`/`comp` rather than `other`
-and timbre reads `wind`, #157), `stats` (the readings taken over a column of
-records — signed offsets with early and late counted apart, a histogram, and
-whether a column was measured at all — shared by `correlate` and the joins it
-composes so the rules have one copy, #215), `structure` (tunes + solo changes job; both
-halves read the shared beats half and the tune half the shared energy half;
-its stem loader is error shaping over `halves.collected`, #220), `subject`
-(what a shot is framed on crossed with who is out front: the angle sidecar's subject read as
-player/ensemble/other, joined to the solo windows in seconds so a shot that
-outlives its solo is split where the front changed — pure, no I/O, read by
-`correlate`, #181), `transcribe`
-(job), `transcript` (document + Word/Transcription/Transcriber vocabulary),
-`virtual` (a cut file read back as the words it will contain — the P4
-self-review, warnings only, touches no Resolve handle), `whisper`
-(default backend: faster-whisper large-v3).
-
-`audio/` — concert audio out of Resolve onto disk: `acquire` (both routes),
-`ffmpeg` (per-source-clip route), `riff` (the WAV container itself: PCM,
-IEEE float and extensible headers, because stdlib `wave` opens PCM only),
-`separator` (python-audio-separator out of process; its torch build probed
-before a fresh separation and the device each pass announces read off that
-pass's banner, both onto the job record — #202, #188), `stems` (two passes —
-mix into four, then the drum stem into the kit — plus an opt-in third,
-`split_wind`, splitting `other` into `wind` and `comp`; `comp` is
-accompaniment, never a piano stem. A directory is judged pass by pass and
-only the passes it owes are run, so turning the third one on costs that pass
-alone — but a missing first pass redoes all three, since the later two are cut
-from what it wrote, #192. `claimed` is the policy over `lease.claim` — how long
-a claim may go quiet, how long a run waits for the separation already under
-way, and what the agent is told when it is refused — #217), `wav` (header facts + the one
-unreadable-WAV error).
-
-`cut/` — cut-file schema v1: `document` (read off disk), `resolution` (the
-optional **delivery resolution**: `timeline.resolution`, one reading of
-`{width, height}` for both the rules and the build — omitted means the timeline
-is created at the project's default, which on the corpus project is 4K against
-1080p deliverables, #187), `schema`
-(verbatim, served by `get_cut_schema`), `layout` (**where every entry lands** —
-pure, documents in and positions out: `positions`/`placements`/`total_frames`/
-`overlay_positions` are the one derivation the rules judge, the build places
-against and `virtual_transcript` reads back, #218), `validate` (12 errors + W1,
-W2, W8, W9 — W3-W7 are `virtual_transcript`'s over the same document — shared by
-dry run and build pre-flight; W9 is the one that reports a rule that *could
-not run*, where Resolve named no media bounds for E5 or E7 to check a range
-against, #186; E11 is the exception it cannot answer, raised in
-`resolve/build` where a live locked track can be observed), `tail` (the optional
-**tail** device: one reading of `{type, duration_frames, audio_fade_frames}` for
-both the rules and the build), `otio` (**the tail's document surgery** — pure,
-no Resolve import: `inject` cuts the dissolve and the audio fade into an
-exported OTIO document and reports what did *not* get one, `transitions` reads
-them back, and the span/rate arithmetic under both counts every track in the
-*timeline's* rate rather than each clip's own; `resolve/tail` is the only
-caller, #221 — not `tests/otio.py`, which hand-builds documents for the live
-tier). A `segments` entry is a shot or a **gap**
-(`{"id", "gap": <frames>}`, literal black); `is_gap`/`entry_duration`/
-`overlay_track` are the `layout` accessors every walker of that array shares.
-
-`jobs/` — `cache` (hash-keyed results; `audio_identity` is the content hash
-wherever the file sits, read off a `known_hash` note remembered against a
-stat, except under `audio_dir` where it is always read for real;
-`fingerprint` is path+size+mtime and stays the identity for video sources
-and stems — ADR 0007, ADR 0003), `runner` (start heavy work without
-stalling stdio), `lifecycle` (the job states and
-`verdict(record, now, alive)` — whether anything is still running a job and
-the sentence for it if not, decided from the record alone with liveness
-injected, so the truth table is testable in memory; the pid/session/silence
-reading inside it is `lease.liveness`, shared with the stems claim, and the
-process identity `SESSION` is `lease`'s too — #217), `store` (one JSON record
-per job on disk; `load` is read file → verdict → maybe write the failure
-back), `detached` (hand a job to a process that outlives this one — flags,
-command, environment), `worker` (that process's entry point: `python -m
-resolve_mcp.jobs.worker <job-id>`). A worker returning `runner.Detached`
-instead of a result moves the rest of its job into that process;
-`separate_stems` does, once the audio is acquired, so a half-hour separation
-survives the server exiting. A detached record is judged by its pid rather
-than by its session, and only the worker writes it — the launcher's reading
-of the worker pid goes to a `<job-id>.launcher` note beside the record,
-folded in by readers only while the record has no pid of its own, so a
-launcher can never overwrite a result.
-
-`resolve/` — connection management + thin scripting-API wrappers: `apply`
-(titles file → owned track), `build` (materialise cut file), `connection`
-(**the seam**: lazy singleton, probe, one auto reconnect), `cut` (cut-file
-contract), `fusion` (Text+ node, text, opacity fade spline), `interchange`
-(timeline export/import), `loader` (import DaVinciResolveScript +
-direct-attach), `markers` (read/write, review-loop transport), `media` (the
-six media operations: import, list, inspect, metadata, organize, relink —
-all of them callers of `pool`), `pool` (**the media pool adapter**: reaching
-the pool, bin addressing, clip lookup, clip reading, frame bounds, offline
-and still handling — what `cut`, `build`, `apply`, `titles`, `audio/acquire`
-and `video/source` consume; import it from here, never through `media`),
-`mix` (where the master
-mix sits under a timeline — the one axis a rebuild does not move; read by
-`build`'s marker carry and by `analysis/correlate`), `render` (render
-queue), `camera_sidecar` (camera model off the card's own XML, for media
-Resolve reports no camera metadata for — #94; not an **angle sidecar**),
-`scripting` (`run_python` with handles pre-bound), `session`
-(session/project wrappers), `settings` (the timeline settings the server
-*writes*, through the string-typed `GetSetting`/`SetSetting` pair: resolution,
-which needs `useCustomSettings` first and is judged by the read-back, never by
-the return value — #187), `tail` (**the tail's round trip**: the export/import
-`build` takes when a tail has a transition to cut in — a hard out that fades
-nothing builds directly — because the scripting API cannot cut a transition at
-all; the document edit itself is `cut/otio`. Takes one `Staging` — the project,
-pool, timeline and name the shots are on until the import lands — and returns a
-`Landed`: the imported cut plus `release`/`refuse`, so the staging timeline
-outlives the import until the caller has read the shots back on it, #221),
-`takes`
-(take selectors + in-place swap), `timeline` (timeline read wrappers),
-`titles` (titles file against a project + dry run).
-
-`titles/` — `document` (read off disk), `schema` (verbatim, served by
-`get_titles_schema`), `validate` (9 errors + 2 warnings).
-
-`tools/` — MCP tool layer, thin, grouped by workflow: `analysis`, `cut`,
-`envelope` (**shared envelope + `@tool` decorator + handle-death retry + the
-job-record wrap**),
-`escape_hatch` (`run_python`), `jobs`, `media`, `project`, `render`,
-`stems`, `timeline`, `titles`, `video`. Registration: each module exposes
-`TOOLS: tuple`; `server.build_server()` iterates every module's `TOOLS`
-and calls `mcp.tool(fn)` — nothing binds to FastMCP at import, so every
-tool is callable in tests without the transport.
-
-There is no `styles/` module and there never will be: the style layer is data
-the agent owns, not code the server runs.
-
-`video/` — `ffmpeg` (the commands video routes run), `frames` (frame
-grabs — the one compute route that is not a job), `jpeg` (read back
-dimensions), `scenes` (scene-cut detection as cached job), `blocking` (how
-blocked one frame is: the near-field obstruction arithmetic, numpy + scipy,
-no I/O — plus the **discriminator** that says which of its blobs matter,
-`novel` off the run's own occupancy and `hidden` off its per-pixel median,
-either clearing its level making the sample an obstruction, #189),
-`occlusion` (that arithmetic as a cached job over a sampled range —
-per-sample scores and the windows to keep a cut out of, every window classed
-`obstruction` or `scene` and none of them filtered out), `sampled`
-(what both sampled-decode scans share: the range check, the sample grid and
-the runs that become windows — one copy, because a range check that clamps
-instead of refusing answers for footage nobody decoded), `picture`
-(how good one frame looks: sharpness as acutance, exposure, clipped
-highlights, and stability as the residual after global motion compensation,
-so a pan is not a wobble and a pair across a cut is unmeasurable rather than
-unstable; numpy + scipy, no I/O), `quality` (that arithmetic as a cached job
-over a sampled range — the same window shape as `occlusion`, with three
-floors and a reason on every window; the floors are calibrated on the corpus,
-`docs/reference/image-quality-calibration.md`, and `analysis/correlate` joins
-a scan of a render onto the cut's own shots, #182), `framing`
-(how far the picture steps *across* a cut and the 30-degree-rule jump-cut
-flag: layout, content and size terms over two grey frames, numpy only, no
-I/O — the pack measures with it, `analysis/correlate` joins its catalog on),
-`supers` (the **super**: which burned-in graphics are up when, and which cuts land
-inside one. Pure numpy + scipy over frames somebody else decoded — the pack does
-both decodes, a coarse scan for where and a native-fps walk for the exact in and
-out, and `analysis/correlate` joins the catalog on as `straddles_super`, #183),
-`source` (clip name → file path + the clip's own frame numbering).
-
-## Test map — `tests/`
-
-Test files follow the module they cover, so the media pair splits the same way
-the source does: `test_media_pool.py` covers `resolve/pool` (bin addressing,
-clip lookup, clip reading, frame bounds, offline) and `test_media_tools.py`
-covers `resolve/media` (what the six operations do with what the adapter hands
-them). Both drive the fake seam through `tools/media`, and both build their
-pools from `tests/mediapool.py` (`a_file`, `a_clip`, `a_shallow_copy_pool`) so
-the pair cannot drift on what a clip or a shadowed copy looks like.
-
-`test_findings.py` covers `findings` and the pre-flight shape in `document`:
-the severity split, the packaged `{errors, warnings}` reply, the refusal
-sentence, and that the cut and titles contracts subclass the one shape.
-`test_envelope.py` covers the job-record wrap in `tools/envelope` — including
-the reconnect path, which is a second return statement and so a second place
-the shape can drift (#219).
-
-`test_lease.py` covers `lease` — the liveness truth table in memory, then the
-claim protocol with both the liveness answer and the read injected, so a dead
-process, a recycled pid and a refused read are arrangements rather than
-monkeypatches. `test_detached_jobs.py` keeps what is stems-shaped over it (the
-refusals' wording, the claim held across the passes and dropped after them) and
-`test_sharing.py` pins the retry both files depend on (#217).
-
-`test_analysis_reports.py` is the one test that spans detectors rather than
-following a module: it runs every half that writes an analysis file — beats,
-energy, tunes, solos, bars, phrases, fills — and asserts they all open
-`kind`/`audio`/`duration_seconds`, the header `analysis/halves.written`
-exists to keep (#223). It imports each detector's fakes from that detector's
-own test file, so the inputs have one home; what each file *says* stays with
-the per-detector tests.
-
-`test_device.py` is the second such spanning file, for the same reason in the
-other direction: it covers `analysis/device`, and then reaches into
-`beats.beat_this_detector` and `applause.panns_tagger` to assert each hands its
-model the announced device (#245). One device decision made in two places is
-one thing to verify, not two — split across the per-detector files, neither
-half would show that the two sites agree, which is the property ADR 0008 turns
-on. Everything else about those detectors stays in `test_beat_grid.py` and
-`test_applause_spans.py`. It also reads `pyproject.toml` directly, to pin the
-cu130 index shape that no import can observe.
-
-`tests/fakes/` is the fake Resolve API, one module per subsystem — open the
-module, not the package, and never the whole package at once:
-
-- `core.py` — `DroppedHandleError`, `AnswersNone` (the primitives)
-- `fusion.py` — `FakeSpline`, `FakeFusionInput`, `FakeFusionTool`,
-  `FakeFusionComp`
-- `timeline_item.py` — `FakeTimelineItem`
-- `timeline.py` — `FakeTrack`, `FakeTimeline`, `TrackSpec`, and the frame
-  arithmetic an append lands on
-- `media.py` — `FakeMediaPoolItem`, `FakeFolder`, `text_plus_template`, and
-  the helpers that build clips from paths
-- `pool.py` — `FakeMediaPool`, `media_pool()`
-- `project.py` — `FakeProject`, `FakeProjectManager`
-- `connection.py` — `FakeResolve`, `FakeConnector`, `EXPORT_TYPES`
-- `separator.py` — `FakeSeparator`
-- `fixtures.py` — `write_wav`/`write_clicks`/`write_hits`/`write_tones`
-  (a melodic stem: pitched notes of a known length with known gaps)/
-  `write_sections`/
-  `write_jpeg`, `ffmpeg_absent`, `ffmpeg_refusing`, `hwaccel_probe_reply`
-  (answers the `-hwaccels` capability probe so fake runners survive it);
-  and the headers stdlib
-  `wave` cannot write, built by hand — `write_float_wav`,
-  `write_extensible_pcm_wav`, `write_tagged_wav`
-- `builders.py` — `studio()`, `sync_reference()`, `with_a_mix()`
-
-`__init__.py` re-exports every public name, so `from .fakes import X` works
-whatever module `X` lives in and no test file names a submodule. Cross-module
-references that exist only in annotations sit under `if TYPE_CHECKING`; that
-is what keeps the runtime import graph acyclic. Installed by the `attach` fixture in
-`tests/conftest.py` (autouse `_clean_globals` resets the seam and pins a
-hermetic `Config` around every test). Other helpers: `tests/cutfile.py`
-(miniature concert cut file + media pool), `tests/roughcut.py` (the P4
-substrate: one talking head said twice, its transcript, and the b-roll that
-covers the join), `tests/otio.py` (hand-edited OTIO with a dissolve),
-`tests/text_plus_probe.py` (Text+ probe fixtures), `tests/live_state.py` (the
-state the live tier builds for itself: `sweep_suite_timelines()` clears the
-previous run's leftovers, `restore_current()` leaves the director's cut open,
-`write_hard_cut_clip()` generates the clip the scene scan needs — decisions
-covered by `test_live_state.py` in the fake tier).
-
-`tests/data/` is the one place real measured footage is committed rather than
-faked: `occlusion/*.npz` is the gauntlet's G11 evidence set as the 128x72 grey
-the detector reads — six adjudicated 90 s scans, regenerated by
-`gauntlet/recon/occl_fixture_grids.py`. It exists because every occlusion
-false positive is a real dark bottom-anchored blob, so a drawn fixture can
-only agree with the detector that drew it (#189).
-
-Test files pair 1:1 with the module they cover (`test_cut_validate.py` ↔
-`cut/validate.py`, `test_timeline_tools.py` ↔ `tools/timeline.py` +
-`resolve/timeline.py`, …). `test_wav_container.py` ↔ `audio/riff.py` is the
-exception that earns its keep: the headers it covers are read by `audio/wav.py`,
-`analysis/decode.py` and `analysis/silence.py` alike, and #110 was a bug in what
-all three agreed about. `test_rough_cut_pillar.py` is one of two other
-exceptions: it covers no single module, walking the P4 pillar across `cut`,
-`build`, `takes` and `virtual` in one pass because the joins are what a
-per-module test cannot see. `test_cut_devices.py` (#141) is the second, for the
-same reason: gaps and overlay tracks are one device each across `cut/layout`,
-`cut/validate`, `resolve/build`, `resolve/takes` and `analysis/virtual`, and the
-interesting failures are the disagreements between them. `test_cut_tail.py` is the third: the
-tail is one device across `cut/tail`, `cut/validate`, `resolve/tail` and
-`resolve/build`, and a dissolve that did not land looks exactly like a cut that
-never asked for one. (`test_cut_otio.py` is its pure half, split out with the
-module in #221: documents in, documents out, plain dicts and no fakes.)
-`test_hardware_decode.py` (#202) is the fourth: NVDEC is
-one decision across `ffmpeg` (the probe), `video/ffmpeg` (flags, fallback,
-report) and the three video routes that carry the report, and the failure worth
-testing is a decode that ran one way and reported another. `test_cut_resolution.py`
-(#187) is the fifth: the delivery resolution is one device across `cut/resolution`,
-`cut/validate`, `resolve/settings` and `resolve/build`, and a timeline that ignored
-the setting is indistinguishable from one that never asked for it until the render
-exists. Live tier: `test_live_smoke.py` (module-level
-`pytest.mark.live`) and five `@pytest.mark.live` tests in
-`test_live_analysis.py` — four over installed models, plus the #192 wind split
-over the director's own separated stems, the one test that opts out of the
-per-test cache redirect through conftest's `machine_cache` fixture; everything
-else is fake-tier. The live tier assumes no
-project state it can build itself (#135): a session-scoped sweep clears the last
-run's timelines, `a_known_cut` builds and makes current the short cut the export
-and round-trip tests read, and `a_clip_with_hard_cuts` generates the scan clip
-unless `RESOLVE_MCP_SCENE_SCAN_CLIP` names a real one. That variable is
-**unset on the live box**: its pool was checked in #135 and holds no flattened
-render, only raw continuous angles — so the generated clip is the default there,
-and the variable is for a project that does have an edit to scan.
-
-`test_prune_merged.py` covers `scripts/prune_merged.py` (Tooling, below) through
-its `Runner` seam — a fake answers every `gh`/`git` argv from fixtures and
-records the removals it would have run.
-
-## Agent-owned trees — `gauntlet/`, `projects/`
-
-Neither is read by server code; both are the agent's own working record, and
-like `styles/` they are data, not modules.
-
-`gauntlet/` — the gauntlet loop: agent-built cuts judged blind against the
-director's own final cuts, piece by piece, where every critic loss becomes
-server or workflow work and never a hand-tuned edit. `STATE.md` (protocol,
-close rule, where each piece stands), `GAPS.md` (the gap ledger — one entry
-per critic loss or prep finding, open/in-work/fixed), `HANDOFF.md`.
-`tools/ab_pack.py` is the harness proper: a **sealed blind A/B pack builder**
-— two videos in, deterministic A/B labels out, plus contact sheets,
-cut-boundary filmstrips and a measured `cuts.json`, with the label→source
-mapping quarantined in `assignment.json` so a critic reads the pack without
-knowing whose cut is whose; it refuses to seal when its scene scan finds far
-fewer cuts than the timeline holds (G3). Given each label's own
-`correlate_timeline` cuts file (`--a-subjects`/`--b-subjects`, both or
-neither) it also carries the on-soloist track, stripped to four columns so no
-timeline or clip name reaches the pack (#181). `recon/` is one-off instruments —
-one script plus its JSON receipt per question (plans, builds, pixel checks,
-occlusion scans). Renders, packs, frame dirs and the per-frame ffmpeg dumps
-under `recon/` are regenerable and gitignored; only scripts and receipts are
-committed.
-
-`projects/<project>/` — the agent-authored files for one Resolve project:
-`README.md` (its fixed facts — timelines, master mix, what is unverified),
-`songs.json`, the cut and titles files, and `cards/` — the PNG title-card
-route (`bake_taurus_cards.py` bakes a `%04d` RGBA frame run per card, fade
-ramps included, for a project whose media pool holds no GUI-authored Text+
-template; `titles/schema.py` §6).
-
-## Tooling — `scripts/`
-
-Repo maintenance, not server code. `prune_merged.py` — the post-merge sweep
-(CLAUDE.md step 6): lists, or with `--apply` removes, remote branches whose PR
-merged, their local branches, and `.claude/worktrees/` worktrees whose branch
-is merged. Merged means the tip is on `origin/main`, or a PR **into main** was
-squashed from exactly that tip — a PR merged into another branch does not count
-(the stacked-PR trap in CLAUDE.md step 6). Never a locked or dirty worktree, the
-branch a locked worktree holds, an open-PR branch, or a tip with commits
-`origin/main` lacks. Every `gh`/`git` call goes through one injectable
-`Runner`, which is the seam `tests/test_prune_merged.py` drives on fixtures.
-
-## Docs
-
-- `docs/adr/` — 0001 interpreter must be a registered install; 0002
-  analysis models are injected; 0003 stems fingerprinted (path is a
-  content hash); 0004 editor-state getters answer only for the current
-  timeline; 0005 source frames are read off the left offset, not the
-  source start; 0006 markers ride the mix across a rebuild; 0007 audio is
-  identified by content, the hash remembered against a stat; 0008 beats and
-  applause infer on CUDA, and the device is named rather than defaulted.
-- `docs/agents/` — issue-tracker conventions (wayfinder map ops), triage
-  labels, domain-docs usage, the style layer (sidecar + profile formats,
-  provenance tags, how a corpus pass is run), the concert pillar
-  (`concert.md`: the director's three inputs, session-start analysis prep,
-  song-by-song planning, the mandatory `correlate_timeline` self-review,
-  the cut report and review-round conventions, #16), the rough-cut pillar
-  (`rough-cut.md`: the brief and b-roll catalog the agent owns, the
-  assembly loop, the `virtual_transcript` self-review and the cut report;
-  also home of the `projects/<project>/` convention and the songs file's
-  ownership, #132).
-- Landing places for artifacts that today live only in issue and PR
-  threads: research reports → `docs/research/`, spike reports and design
-  bibles → `docs/reference/`, adversarial and other standalone reviews →
-  `reviews/` (dated filenames). All merge to `main` in the PR that
-  produced them — a finding on an unmerged branch or in a thread is
-  unreadable from here.
-- Wayfinder: map = issue #1, scope = #2, spec = #22, build tickets #23–#47.
+**Not modules.** `styles/`, `gauntlet/`, `projects/` — agent-owned data, never read by server code; `scripts/` — repo maintenance (`prune_merged.py`, CLAUDE.md step 6). Both: `docs/context/repo.md`. ADRs cited above: `docs/adr/`.

@@ -1,8 +1,8 @@
 # resolve-mcp
 
 An MCP server that lets an agent edit concert footage in DaVinci Resolve
-Studio — the server measures; Claude decides. Map and vocabulary:
-`CONTEXT.md`.
+Studio — the server measures; Claude decides. Map: `CONTEXT.md`;
+vocabulary: `docs/context/vocabulary.md`.
 
 ## Test seams
 
@@ -176,21 +176,26 @@ tools and every reader: a `pytest|mypy|ruff` run or `gh … view|diff` that
 does not land in a file, and any whole-file dump of a guarded file (`cat`,
 `sed -n p`, uncounted `head`/`tail`, `Get-Content`, `type`, readers fed by
 `ls`/`find`/`xargs` or a loop) are blocked; ranged reads pass (#249). They
-also block whole-file re-reads and whole-file Reads of code/config files
-over 400 lines (markdown exempt). A block from them is the rule firing,
-not an obstacle to route around; the block message names the fix, and
-`sed -n` or `head` on the same file is the same cost, not a way through.
+also block whole-file re-reads and whole-file Reads of code, config and
+markdown files over 400 lines (CLAUDE.md exempt). A block from them is the
+rule firing, not an obstacle to route around; the block message names the
+fix, and `sed -n` or `head` on the same file is the same cost, not a way
+through.
 
 The same scratch-file rule covers `gh` — issue bodies, comment threads,
 and PR diffs were the biggest single results in past sessions; a `--json`
 field filter that does not pull the body (`-q .title`) is fine.
 
-**Orient from `CONTEXT.md` first** — the repo map answers "which module
-owns X, where is the seam, which test file covers Y"; explores are for
-what a map can't hold (exact signatures, current behaviour). It is 500+
-lines (~9k tokens): Grep it for the area you are about to touch and Read
-that range, not the whole file (#247 splits it). A PR that adds, moves, or
-deletes a module updates the map in the same PR.
+**Orient from `CONTEXT.md` first** — the map is one table, ~150 lines:
+which module owns X, which test covers it, at which seam. The narrative
+behind each area (vocabulary, `analysis/`, `resolve/`, the test map, …)
+lives in `docs/context/<area>.md`: Grep it, or Read it ranged, only when
+you are about to work in that area — never whole (the read guard now
+blocks whole-file Reads of any markdown over 400 lines except this file).
+Explores are for what a map can't hold (exact signatures, current
+behaviour). A PR that adds, moves, or deletes a module or test file
+updates the map in the same PR — `tests/test_context_map.py` fails
+otherwise — and area narrative goes to the area doc, not the map.
 
 **Session budget.** Context starts at ~44k tokens and grows ~500 per
 message; a ticket that cannot land in ~150 tool calls does not fit one
@@ -284,7 +289,7 @@ The five canonical triage roles, each label string equal to its role name. See `
 
 ### Domain docs
 
-Single-context — `CONTEXT.md` (repo map + vocabulary) and `docs/adr/` at
+Single-context — `CONTEXT.md` (the map), `docs/context/` (vocabulary + area narrative) and `docs/adr/` at
 the repo root. See `docs/agents/domain.md`.
 
 ### The concert pillar

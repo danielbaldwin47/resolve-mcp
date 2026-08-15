@@ -478,8 +478,8 @@ def test_guarded_extension_list_is_defined_once_and_shared() -> None:
     # And the two hooks agree by construction: run each module's view of the list.
     probe = (
         "import sys; sys.path.insert(0, sys.argv[1]); "
-        "from guarded_ext import GUARDED_EXT, GUARDED_EXT_RE, SIZE_RULE_EXEMPT; "
-        "print(sorted(GUARDED_EXT)); print(GUARDED_EXT_RE); print(sorted(SIZE_RULE_EXEMPT))"
+        "from guarded_ext import GUARDED_EXT, GUARDED_EXT_RE, SIZE_RULE_EXEMPT_NAMES; "
+        "print(sorted(GUARDED_EXT)); print(GUARDED_EXT_RE); print(sorted(SIZE_RULE_EXEMPT_NAMES))"
     )
     r = subprocess.run(
         [sys.executable, "-c", probe, str(HOOKS)], capture_output=True, text=True, check=True
@@ -487,4 +487,4 @@ def test_guarded_extension_list_is_defined_once_and_shared() -> None:
     exts, alternation, exempt = r.stdout.splitlines()
     assert ".md" in exts and ".toml" in exts and ".py" in exts
     assert set(alternation.split("|")) == {e.lstrip(".") for e in ast.literal_eval(exts)}
-    assert exempt == "['.md']"
+    assert exempt == "['claude.md']"  # #247: markdown counts; only CLAUDE.md is exempt

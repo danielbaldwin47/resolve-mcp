@@ -123,8 +123,37 @@ def test_small_source_file_passes(tmp_path: Path) -> None:
     assert result.returncode == 0
 
 
-def test_markdown_passes_at_any_size(tmp_path: Path) -> None:
-    doc = write_lines(tmp_path / "docs" / "adr" / "0001-attach.md", 900)
+def test_big_markdown_blocks_like_code(tmp_path: Path) -> None:
+    """The map cannot silently regrow: markdown over the limit is a ranged read."""
+    doc = write_lines(tmp_path / "CONTEXT.md", 523)
+
+    result = run_hook(read_event(doc), tmp_path)
+
+    assert result.returncode == 2
+    assert "523 lines" in result.stderr
+
+
+def test_markdown_at_the_limit_passes(tmp_path: Path) -> None:
+    """Same limit as code: 400 lines is in, 401 is out."""
+    doc = write_lines(tmp_path / "CONTEXT.md", 400)
+
+    result = run_hook(read_event(doc), tmp_path)
+
+    assert result.returncode == 0
+
+
+def test_ranged_read_of_big_markdown_passes(tmp_path: Path) -> None:
+    doc = write_lines(tmp_path / "docs" / "context" / "analysis.md", 900)
+
+    result = run_hook(read_event(doc, offset=40, limit=30), tmp_path)
+
+    assert result.returncode == 0
+
+
+@pytest.mark.parametrize("name", ["CLAUDE.md", "claude.md"])
+def test_claude_md_is_exempt_at_any_size(tmp_path: Path, name: str) -> None:
+    """Read whole at session start by design; the exemption is by name, any case."""
+    doc = write_lines(tmp_path / name, 900)
 
     result = run_hook(read_event(doc), tmp_path)
 

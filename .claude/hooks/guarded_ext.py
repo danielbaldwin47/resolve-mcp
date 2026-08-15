@@ -6,9 +6,11 @@ ration: a whole-file dump of it — by any reader, from any shell tool — is th
 thing being blocked.
 
 GUARDED_EXT is the union. Markdown sits in it because catting a doc into
-context is still a whole-file read; the *size* rule in read-guard.py exempts it
-(reading a whole ADR or CONTEXT.md is the intended use), and names that
-exemption here so both hooks read from one place.
+context is still a whole-file read, and since #247 the *size* rule in
+read-guard.py counts it too (CONTEXT.md was the most expensive Read measured,
+and it regrew because nothing stopped it). Only CLAUDE.md — read whole at
+session start by design — is exempt there, by name, and that exemption lives
+here so both hooks read from one place.
 """
 
 GUARDED_EXT = {
@@ -31,8 +33,9 @@ GUARDED_EXT = {
     ".md",
 }
 
-# Extensions the big-file size rule (read-guard.py) leaves alone even when guarded.
-SIZE_RULE_EXEMPT = {".md"}
+# File names (lower-cased) the big-file size rule (read-guard.py) leaves alone
+# even when their extension is guarded.
+SIZE_RULE_EXEMPT_NAMES = {"claude.md"}
 
 # Regex alternation of the guarded extensions (without the dot), for command scanners.
 GUARDED_EXT_RE = "|".join(sorted(e.lstrip(".") for e in GUARDED_EXT))
