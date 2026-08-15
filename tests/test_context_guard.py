@@ -199,7 +199,51 @@ def test_gh_view_landing_or_filtered_passes(cmd: str) -> None:
     assert blocked(cmd) == "", cmd
 
 
-# ------------------------------------------------------------ 3. whole-file dumps
+# ------------------------------------------------------ 3. silent ticket closes
+
+CLOSE_BLOCKED = [
+    "gh issue close 251",
+    "gh issue close 251 --reason completed",
+    "gh issue close #251",
+    "gh issue close 251 -R danielbaldwin47/resolve-mcp",
+    "gh issue comment 249 --body 'done' && gh issue close 251",  # a different ticket
+    "for n in 167 168; do gh issue close $n; done",
+    'gh issue close 251 --comment ""',  # an empty record is no record
+    "gh issue close 251 -c ''",
+]
+
+
+@pytest.mark.parametrize("cmd", CLOSE_BLOCKED)
+def test_closing_a_ticket_without_a_comment_is_blocked(cmd: str) -> None:
+    msg = blocked(cmd)
+    assert msg, cmd
+    assert "implementation record" in msg and "--comment" in msg, msg
+
+
+def test_powershell_tool_silent_close_is_blocked() -> None:
+    assert "implementation record" in blocked("gh issue close 251", "PowerShell")
+
+
+CLOSE_PASSES = [
+    'gh issue close 251 --comment "landed as PR #260; live ACs run"',  # prose carries `;`
+    "gh issue close 251 --comment \"it's landed; see PR #260\"",  # ...and apostrophes
+    "gh issue close 251 -c 'see PR #260'",
+    "gh issue close 251 --comment='see PR #260'",
+    'gh issue close 251 --reason completed --comment "see PR #260"',
+    # The long record posted first, then the close, in one command.
+    "gh issue comment 251 -F - <<'EOF'\n## What landed\n...\nEOF\ngh issue close 251",
+    "gh issue comment 251 --body 'ready; do not gh issue close 251 yet'",  # prose
+    "gh pr close 260",  # a PR, not a ticket
+    "gh issue list --state closed",
+]
+
+
+@pytest.mark.parametrize("cmd", CLOSE_PASSES)
+def test_a_close_carrying_its_record_passes(cmd: str) -> None:
+    assert blocked(cmd) == "", cmd
+
+
+# ------------------------------------------------------------ 4. whole-file dumps
 
 WHOLE_FILE_DUMPS = [
     "cat src/resolve_mcp/config.py",

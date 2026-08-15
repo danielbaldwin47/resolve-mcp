@@ -86,7 +86,7 @@ produced no work; relaunch rather than assume.)
    - **Pure prose** — docs, README, CLAUDE.md — is written and reviewed
      under `/writing-for-agents` (load the skill before the first edit;
      the pass checks pointers, hierarchy, leading words, negation,
-     pruning), and the line reads `Review: clean — prose only,
+     pruning), and the line reads `Review: clean @<sha> — prose only,
      /writing-for-agents pass`.
 3. **Fix findings; re-check the fix diff only** — a focused pass over what
    changed, not a second full review. One full review per PR is the
@@ -94,12 +94,15 @@ produced no work; relaunch rather than assume.)
    diff.
 4. **Open the PR with the review record already in the body**: findings and
    their resolutions (if any) first, ending with the `Review:` line. The
-   gate reads only the **last** `Review:` line in the body and passes only
-   `Review: clean` (optionally followed by a summary) — any other last line
-   blocks merge — so a PR opened this way is green from its first gate run.
-   If a PR gains commits after opening (human feedback, CI failures),
-   re-review the new diff and append a fresh `Review:` line; the earlier
-   lines stay above it as the record.
+   line names the commit you reviewed — `Review: clean @<sha>` (the short
+   sha, `git rev-parse --short HEAD` on the reviewed branch), optionally
+   followed by a summary. The gate reads only the **last** `Review:` line
+   outside a fenced code block (leading `-`, `>` and `**` are tolerated) and
+   passes only when that sha is the PR head, so a PR opened this way is
+   green from its first gate run. Any commit pushed after the line — human
+   feedback, a CI fix, a merge from `origin/main` — reddens the gate until
+   you re-review the new diff and append a fresh `Review: clean @<newsha>`;
+   the earlier lines stay above it as the record.
 5. **Merge through the PR** — everything reaches `main` through a PR, never
    a direct commit.
 6. **After a stacked PR merges, verify its commits reached main by
@@ -118,9 +121,13 @@ produced no work; relaunch rather than assume.)
    the old branch would drag merged commits back in. After a merge-commit
    PR the same branch is safe.
 8. **Close the ticket with a comment** — PR link, what landed, the live
-   record, any unrun live ACs. Never a bare close: a ticket the PR
-   auto-closed still gets the comment (#219 closed with none; #167–#178
-   were bulk-closed silent and a reader has no outcome).
+   record, any unrun live ACs. The live record's home is the **ticket**; the
+   PR body may repeat it, and a record that lives only on the PR is lost to
+   anyone reading the ticket (#219's live pass survives only on PR #243).
+   Never a bare close: a ticket the PR auto-closed still gets the comment
+   (#167–#178 were bulk-closed silent and a reader has no outcome), and
+   `context-guard.py` blocks a `gh issue close` that carries no
+   `--comment`.
 
 When resolving merge conflicts, grep every conflicted file for `<<<<<<<`
 before committing — especially markdown: CI never reads it, and a leftover

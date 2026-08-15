@@ -28,7 +28,9 @@ filed via `/to-tickets` (user skill; if absent post-compact, ask or use
    `gauntlet/tools/`, hooks — everything.
 2. Fix findings; re-check fix diff only.
 3. PR body: findings + resolutions first, LAST line must read
-   `Review: clean` (gate reads only the last `Review:` line).
+   `Review: clean @<sha>`, the short sha of the reviewed commit — the gate
+   reads the last `Review:` line outside a code fence and passes only when
+   that sha is the PR head (#251).
 4. CI gates: `uv run pytest -m 'not live'` (last known 1721+ passing),
    `uv run mypy` strict, `ruff check` — all were green at each commit.
 5. Merge through the PR; never direct to main. After merge, verify commits

@@ -2,8 +2,8 @@
 
 Dry-run by default — prints what it would remove and why. ``--apply`` removes it.
 
-    uv run python scripts/prune_merged.py            # list
-    uv run python scripts/prune_merged.py --apply    # remove
+    uv run python -m scripts.prune_merged            # list
+    uv run python -m scripts.prune_merged --apply    # remove
 
 What counts as merged, for a branch ``N`` whose tip is ``T``:
 
@@ -28,20 +28,15 @@ from __future__ import annotations
 
 import argparse
 import json
-import subprocess
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 
-Runner = Callable[[Sequence[str]], str]
+from scripts._run import CommandError, Runner, subprocess_runner
 
 WORKTREE_DIR = ".claude/worktrees/"
 PROTECTED = frozenset({"main", "HEAD"})
 BASE = "main"
-
-
-class CommandError(RuntimeError):
-    """A command the Runner issued failed; the message carries argv and stderr."""
 
 
 @dataclass(frozen=True)
@@ -274,13 +269,6 @@ def render(plan: Plan, *, verbose: bool) -> str:
         f"{len(plan.remote_branches)} remote branch(es) to remove; {len(plan.skipped)} kept"
     )
     return "\n".join(lines)
-
-
-def subprocess_runner(argv: Sequence[str]) -> str:
-    proc = subprocess.run(list(argv), capture_output=True, text=True, encoding="utf-8")
-    if proc.returncode != 0:
-        raise CommandError(f"{' '.join(argv)} failed ({proc.returncode}): {proc.stderr.strip()}")
-    return proc.stdout
 
 
 def main(argv: Sequence[str] | None = None, run: Runner = subprocess_runner) -> int:
