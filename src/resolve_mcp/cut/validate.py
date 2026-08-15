@@ -793,7 +793,7 @@ def _dissolve_errors(doc: dict[str, Any], tail: Tail, declared: dict[str, Any]) 
 def _overlay_dissolve_errors(doc: dict[str, Any], tail: Tail) -> list[Finding]:
     """The layers the dissolve has to agree with — the injector's own precondition, as a rule.
 
-    :mod:`resolve_mcp.resolve.tail` fades *every* video track whose picture reaches the end
+    :mod:`resolve_mcp.cut.otio` fades *every* video track whose picture reaches the end
     of the cut, and refuses outright when a track stops somewhere inside the dissolve: it is
     opaque over part of the ramp and then gone, so the picture underneath comes back partway
     through a fade to black. Both of those are answerable from the cut file, and so they are
@@ -852,7 +852,7 @@ def _overlay_dissolve_errors(doc: dict[str, Any], tail: Tail) -> list[Finding]:
 def _video_ends(doc: dict[str, Any]) -> dict[int, tuple[int, str, int]]:
     """Each video track to ``(where its picture stops, what ends it, how long that runs)``.
 
-    The same measurement :mod:`resolve_mcp.resolve.tail` makes on the exported document, made
+    The same measurement :mod:`resolve_mcp.cut.otio` makes on the exported document, made
     here on the cut file instead: a track's picture stops at the end of its last *clip*, so
     the trailing black Resolve pads every exported track with is not part of the answer —
     and neither is a gap the cut file itself authored at the end of V1.
