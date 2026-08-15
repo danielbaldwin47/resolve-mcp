@@ -16,6 +16,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from resolve_mcp import lease
 from resolve_mcp.jobs import lifecycle
 from resolve_mcp.jobs.lifecycle import Outcome, verdict
 from resolve_mcp.jobs.store import JobRecord
@@ -48,7 +49,7 @@ def _record(
     state: str = lifecycle.RUNNING,
     *,
     detached: bool = False,
-    session: str = lifecycle.SESSION,
+    session: str = lease.SESSION,
     pid: int | None = None,
     launcher_pid: int | None = None,
     silence: float = 1.0,

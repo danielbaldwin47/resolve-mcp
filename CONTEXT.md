@@ -111,9 +111,11 @@ Top level:
 | `ffmpeg.py` | the one place the server shells out to ffmpeg (argv lists) |
 | `findings.py` | shared finding shape `{rule, id, message, fix_hint}` |
 | `interpreter.py` | guard on which interpreters may attach to fusionscript (ADR 0001) |
+| `lease.py` | is the owner of this claim still alive — `SESSION`, `liveness`, `claim`/`holder` (#217) |
 | `logging_config.py` | stderr-only logging (stdout belongs to MCP transport) |
 | `naming.py` | names for written files and `<base> v<N>` timelines |
 | `server.py` | FastMCP app + tool registration; no logic |
+| `sharing.py` | the Windows retry for a file another handle holds (#217) |
 | `spill.py` | oversized results → disk; `capped` is the one definition of a truncated reply |
 | `timing.py` | frames authoritative; seconds/timecode/fps derived |
 
@@ -216,7 +218,9 @@ mix into four, then the drum stem into the kit — plus an opt-in third,
 accompaniment, never a piano stem. A directory is judged pass by pass and
 only the passes it owes are run, so turning the third one on costs that pass
 alone — but a missing first pass redoes all three, since the later two are cut
-from what it wrote, #192), `wav` (header facts + the one
+from what it wrote, #192. `claimed` is the policy over `lease.claim` — how long
+a claim may go quiet, how long a run waits for the separation already under
+way, and what the agent is told when it is refused — #217), `wav` (header facts + the one
 unreadable-WAV error).
 
 `cut/` — cut-file schema v1: `document` (read off disk), `resolution` (the
@@ -249,10 +253,12 @@ wherever the file sits, read off a `known_hash` note remembered against a
 stat, except under `audio_dir` where it is always read for real;
 `fingerprint` is path+size+mtime and stays the identity for video sources
 and stems — ADR 0007, ADR 0003), `runner` (start heavy work without
-stalling stdio), `lifecycle` (the job states, this server's `SESSION`, and
+stalling stdio), `lifecycle` (the job states and
 `verdict(record, now, alive)` — whether anything is still running a job and
 the sentence for it if not, decided from the record alone with liveness
-injected, so the truth table is testable in memory), `store` (one JSON record
+injected, so the truth table is testable in memory; the pid/session/silence
+reading inside it is `lease.liveness`, shared with the stems claim, and the
+process identity `SESSION` is `lease`'s too — #217), `store` (one JSON record
 per job on disk; `load` is read file → verdict → maybe write the failure
 back), `detached` (hand a job to a process that outlives this one — flags,
 command, environment), `worker` (that process's entry point: `python -m
@@ -349,6 +355,13 @@ covers `resolve/media` (what the six operations do with what the adapter hands
 them). Both drive the fake seam through `tools/media`, and both build their
 pools from `tests/mediapool.py` (`a_file`, `a_clip`, `a_shallow_copy_pool`) so
 the pair cannot drift on what a clip or a shadowed copy looks like.
+
+`test_lease.py` covers `lease` — the liveness truth table in memory, then the
+claim protocol with both the liveness answer and the read injected, so a dead
+process, a recycled pid and a refused read are arrangements rather than
+monkeypatches. `test_detached_jobs.py` keeps what is stems-shaped over it (the
+refusals' wording, the claim held across the passes and dropped after them) and
+`test_sharing.py` pins the retry both files depend on (#217).
 
 `test_analysis_reports.py` is the one test that spans detectors rather than
 following a module: it runs every half that writes an analysis file — beats,

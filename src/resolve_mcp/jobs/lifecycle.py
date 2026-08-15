@@ -7,6 +7,11 @@ those pids. It reads nothing, writes nothing and decides nothing twice: the stor
 that touches a disk. Splitting it out is what makes the truth table below testable in memory —
 every row used to cost a save and a load.
 
+The pid/session/silence reading inside it is not this module's own either: a job record is a
+claim on the work exactly as a stems directory's marker file is, and ``lease.liveness`` is the
+one place that says whether the process behind a claim is still working. What is here is
+job-shaped — which pid to ask about and when, and the sentence the agent reads afterwards.
+
 Three rules decide all of it.
 
 * **A restart is detected by session, not by pid.** Every record carries the id of the server
@@ -42,17 +47,15 @@ is decided is the return value, and that depends on the arguments alone.
 
 from __future__ import annotations
 
-import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
+from ..lease import SESSION, Alive, Liveness, Owner, liveness
 from ..logging_config import get_logger
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     from .store import JobRecord
 
 log = get_logger("jobs")
@@ -61,9 +64,6 @@ RUNNING = "running"
 COMPLETED = "completed"
 FAILED = "failed"
 STATES = (RUNNING, COMPLETED, FAILED)
-
-SESSION = uuid.uuid4().hex
-"""This server process. Records written under any other session predate a restart."""
 
 LAUNCH_WINDOW = 120.0
 """How long a detached record may go with no worker pid before the launch is not in flight.
@@ -129,7 +129,7 @@ class Verdict:
     cause: str | None = None
 
 
-def verdict(record: JobRecord, now: datetime, alive: Callable[[int], bool]) -> Verdict:
+def verdict(record: JobRecord, now: datetime, alive: Alive) -> Verdict:
     """Whether anything is still running this job, and the sentence for it if not.
 
     ``alive`` is asked about at most one pid: the worker's when the record has one, the
@@ -148,8 +148,13 @@ def verdict(record: JobRecord, now: datetime, alive: Callable[[int], bool]) -> V
     )
 
 
-def _detached(record: JobRecord, now: datetime, alive: Callable[[int], bool]) -> Verdict:
+def _detached(record: JobRecord, now: datetime, alive: Alive) -> Verdict:
     """A detached job outlives its session on purpose, so its pid is what gets asked.
+
+    The reading itself is ``lease.liveness``: a record is a claim on the work, exactly as a
+    stems directory's marker file is, and both ask whether the process that wrote it is still
+    working. What is left here is the sentence — which record this was, and what to tell the
+    agent about a job nothing is running any more.
 
     ``None`` is a launch still in flight — the starter marks the record detached before it
     spawns, so that a reader in the microseconds between never mistakes it for a thread job
@@ -174,8 +179,16 @@ def _detached(record: JobRecord, now: datetime, alive: Callable[[int], bool]) ->
     """
     if record.pid is None:
         return _stalled_launch(record, now, alive)
-    if alive(record.pid):
-        return _running_or_silent(record, now)
+    silence = _age(record.updated_at, now)
+    reading = liveness(
+        Owner(pid=record.pid, silence=silence),
+        ceiling=HEARTBEAT_CEILING,
+        alive=alive,
+    )
+    if reading is Liveness.HELD:
+        return Verdict(Outcome.LIVE)
+    if reading is Liveness.SILENT and silence is not None:
+        return _silent(record, silence)
     log.info("Job %s lost its detached worker (pid %s)", record.job_id, record.pid)
     return Verdict(
         Outcome.WORKER_GONE,
@@ -184,17 +197,14 @@ def _detached(record: JobRecord, now: datetime, alive: Callable[[int], bool]) ->
     )
 
 
-def _running_or_silent(record: JobRecord, now: datetime) -> Verdict:
-    """A live pid is running, unless nothing has written to the record for longer than any job.
+def _silent(record: JobRecord, silence: float) -> Verdict:
+    """A live pid on a record nothing has written to for longer than the job can run silently.
 
     The worker owns this record from its adopt onwards and writes it as the work moves, so the
     time since the last write is the worker's heartbeat — the freshest one the record carries,
     and the only one that does not have to be paid for with a second file. Silence past the
     ceiling means the pid is a reissued number rather than the worker that wrote the record.
     """
-    silence = _age(record.updated_at, now)
-    if silence is None or silence <= HEARTBEAT_CEILING:
-        return Verdict(Outcome.LIVE)
     log.warning(
         "Job %s has not been written to in %.0f s while pid %s reads as alive; that number "
         "belongs to some other process now, not to the worker that ran the job",
@@ -210,7 +220,7 @@ def _running_or_silent(record: JobRecord, now: datetime) -> Verdict:
     )
 
 
-def _stalled_launch(record: JobRecord, now: datetime, alive: Callable[[int], bool]) -> Verdict:
+def _stalled_launch(record: JobRecord, now: datetime, alive: Alive) -> Verdict:
     """Why this pid-less record is not a launch in flight, or ``LIVE`` while it still is.
 
     The launcher's pid is asked first, and its own age second. A pid is a number the OS
@@ -225,34 +235,38 @@ def _stalled_launch(record: JobRecord, now: datetime, alive: Callable[[int], boo
     alive by definition, so nothing but the clock can tell a hand-off in flight from one whose
     worker died before it adopted (see ``_detached``).
     """
-    if record.launcher_pid is None or not alive(record.launcher_pid):
+    age = _age(record.updated_at, now)
+    reading = liveness(
+        Owner(pid=record.launcher_pid, silence=age),
+        ceiling=LAUNCH_WINDOW,
+        alive=alive,
+    )
+    if reading is Liveness.HELD:
+        log.debug(
+            "Job %s has no worker pid yet, but its launcher (pid %s) is still running",
+            record.job_id,
+            record.launcher_pid,
+        )
+        return Verdict(Outcome.LIVE)
+    if reading is not Liveness.SILENT or age is None:
         log.info("Job %s never got a detached worker: its launcher is gone", record.job_id)
         return Verdict(
             Outcome.STALLED_LAUNCH,
             f"The server handing {record.kind} to a detached worker exited before the worker "
             "was started, so nothing is running it.",
         )
-    age = _age(record.updated_at, now)
-    if age is not None and age > LAUNCH_WINDOW:
-        log.warning(
-            "Job %s has had no detached worker for %.0f s; pid %s is either a recycled number "
-            "rather than the launcher that wrote the record, or a launcher that never started "
-            "one",
-            record.job_id,
-            age,
-            record.launcher_pid,
-        )
-        return Verdict(
-            Outcome.STALLED_LAUNCH,
-            f"The server handing {record.kind} to a detached worker never started one: nothing "
-            f"has written to the record in {age:.0f} seconds, so the launch is not in flight.",
-        )
-    log.debug(
-        "Job %s has no worker pid yet, but its launcher (pid %s) is still running",
+    log.warning(
+        "Job %s has had no detached worker for %.0f s; pid %s is either a recycled number "
+        "rather than the launcher that wrote the record, or a launcher that never started one",
         record.job_id,
+        age,
         record.launcher_pid,
     )
-    return Verdict(Outcome.LIVE)
+    return Verdict(
+        Outcome.STALLED_LAUNCH,
+        f"The server handing {record.kind} to a detached worker never started one: nothing "
+        f"has written to the record in {age:.0f} seconds, so the launch is not in flight.",
+    )
 
 
 def _age(stamp: str, now: datetime) -> float | None:
