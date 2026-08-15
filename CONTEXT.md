@@ -164,7 +164,12 @@ is a rule layer over, as `drums` is to `fills`), `music` (beats + energy + gist
 job; `beats_of`/`energy_of` are the shared entries other jobs read a grid or a
 loudness curve through, one measurement per piece of audio), `phrases` (phrase boundaries: where the soloist stops, which is the
 cut-placement unit #46 named, #143),
-`records` (sliceable record files), `rhythm` (how varied the cutting is, one entry
+`records` (sliceable record files — `write` and, beside it, the one strong reader
+`rows(path, field)` every caller shares: four refusals over a file that is not one of
+these, plus the numeric-`t` filter and the time-order sort that make the rest a
+timeline. `allow_empty=` drops the empty-file refusal and is for the caller reading
+back a file it just wrote — nothing found is a wrong path only when an agent named
+the file, #222), `rhythm` (how varied the cutting is, one entry
 `read(rows, levels)` over per-cut rows and a level curve: `shot_rhythm` bins the
 shot lengths, measures the longest strict A/B alternation run and the longest
 monotonic duration `ramp`, and says `reads_metronomic` with the heuristic that drew

@@ -742,7 +742,7 @@ def _music(
 ) -> Music:
     """Every file the measurement joins — or a refusal naming the one that is not there."""
     return Music(
-        beats=_rows(_path(beats, "beat grid", "analyze_music writes it"), "beats"),
+        beats=records.rows(_path(beats, "beat grid", "analyze_music writes it"), "beats"),
         tunes=_optional_rows(tunes, "tune list", "tunes"),
         solos=_optional_rows(solos, "solo changes", "solos"),
         bars=_optional_rows(bars, "bar map", "bars", "detect_bars writes it"),
@@ -760,7 +760,7 @@ def _optional_rows(
 ) -> tuple[dict[str, Any], ...] | None:
     if file is None:
         return None
-    return _rows(_path(file, what, provenance), field)
+    return records.rows(_path(file, what, provenance), field)
 
 
 def _path(file: str, what: str, provenance: str) -> Path:
@@ -775,44 +775,6 @@ def _path(file: str, what: str, provenance: str) -> Path:
             detail={"file": str(path)},
         )
     return path
-
-
-def _rows(path: Path, field: str) -> tuple[dict[str, Any], ...]:
-    """One analysis file's records, in time order — the shape ``records.write`` leaves."""
-    try:
-        doc = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise InvalidRequestError(
-            cause=f"Could not read {path.name} as analysis JSON: {exc}.",
-            fix="Pass the path an analysis job returned, unedited.",
-            detail={"file": str(path), "field": field},
-        ) from exc
-
-    held = doc.get(field) if isinstance(doc, Mapping) else None
-    if not isinstance(held, list):
-        raise InvalidRequestError(
-            cause=f"{path.name} holds no {field!r} records.",
-            fix=f"That file is not the {field} analysis; pass the one whose kind is {field!r}.",
-            detail={"file": str(path), "field": field},
-        )
-    rows = [
-        dict(row)
-        for row in held
-        if isinstance(row, Mapping) and isinstance(row.get("t"), int | float)
-    ]
-    if not rows:
-        # A file that was named but says nothing must not read like a file nobody named:
-        # both would leave the column null, and only one of them is what the caller meant.
-        raise InvalidRequestError(
-            cause=f"{path.name} holds no {field} record with a time in it.",
-            fix=(
-                f"Pass the {field} file a finished analysis job wrote — its records each "
-                'carry a "t" in seconds. An analysis that found nothing is worth rerunning '
-                "rather than measuring against."
-            ),
-            detail={"file": str(path), "field": field},
-        )
-    return tuple(sorted(rows, key=lambda row: float(row["t"])))
 
 
 def _roles(angles: Mapping[str, Any] | None) -> dict[str, str] | None:

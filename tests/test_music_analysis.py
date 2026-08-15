@@ -17,8 +17,9 @@ from typing import Any
 import pytest
 
 from resolve_mcp.analysis import beats as beats_module
-from resolve_mcp.analysis import music
+from resolve_mcp.analysis import halves, music
 from resolve_mcp.analysis.beats import BeatGrid
+from resolve_mcp.audio import wav
 from resolve_mcp.config import get_config
 from resolve_mcp.jobs import cache, store
 from resolve_mcp.jobs.runner import wait_for
@@ -321,6 +322,35 @@ def test_a_detector_that_hears_nothing_is_an_empty_grid_not_a_crash(fixture_audi
     assert result["beats"]["count"] == 0
     assert result["beats"]["tempo_bpm"] is None
     assert Path(result["beats"]["path"]).exists()
+
+
+# --- reading the grid and the curve back ---------------------------------------------------
+
+
+def _read_back(audio: Path, grid: BeatGrid | None = None) -> list[dict[str, Any]]:
+    config = get_config()
+    return music.numbered_beats(
+        audio, wav.describe(audio), halves.identity(audio, config), _detector(grid), False, config
+    )
+
+
+def test_the_grid_reads_back_through_the_reader_that_wrote_it(fixture_audio: Path) -> None:
+    """``numbered_beats`` goes through ``records.rows`` now, so the records arrive in order."""
+    grid = _read_back(fixture_audio)
+
+    assert [beat["t"] for beat in grid][:3] == [0.0, 0.5, 1.0]
+    assert grid[0] == {"t": 0.0, "beat": 1, "bar": 1, "in_bar": 1, "downbeat": True}
+
+
+def test_a_grid_the_model_heard_nothing_in_reads_back_empty_rather_than_refusing(
+    fixture_audio: Path,
+) -> None:
+    """The bar map answers REFUSED on an empty grid, so the reader has to let it get there.
+
+    An empty analysis is a wrong path only when an agent named the file; here the worker
+    wrote it moments ago and nothing found is the real answer (#222).
+    """
+    assert _read_back(fixture_audio, BeatGrid((), ())) == []
 
 
 # --- progress and the tool seam ----------------------------------------------------------
