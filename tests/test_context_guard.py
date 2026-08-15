@@ -9,14 +9,16 @@ into silence.
 
 from __future__ import annotations
 
+import ast
 import json
-import os
 import re
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+
+from tests.test_read_guard import hook_env
 
 HOOKS = Path(__file__).resolve().parents[1] / ".claude" / "hooks"
 HOOK = HOOKS / "context-guard.py"
@@ -35,7 +37,7 @@ def run_hook(command: str, tool: str = "Bash") -> subprocess.CompletedProcess[st
         input=json.dumps(payload),
         capture_output=True,
         text=True,
-        env={"SYSTEMROOT": os.environ.get("SYSTEMROOT", "C:\\Windows"), "PATH": ""},
+        env=hook_env(HOOKS),
     )
 
 
@@ -58,6 +60,14 @@ BARE_NOISY = [
     "uv run pytest tests 2>&1",  # stderr dup is not a landing
     "uv run pytest tests 2> err.log",  # stderr only
     "uv run pytest tests | grep -E 'passed|FAILED'",  # a filter still floods the log
+    "py -m pytest tests",
+    "python.exe -m pytest",
+    "uv.exe run pytest",
+    "pytest.exe tests",
+    "uv run --directory C:\\repo pytest",
+    "uvx ruff check src",
+    "$x = uv run pytest",
+    "uv run pytest 2>&1 | Select-String passed",  # a filter, not a pager: still bare
 ]
 
 
@@ -65,7 +75,7 @@ BARE_NOISY = [
 def test_bare_noisy_run_is_blocked_with_redirect_shape(cmd: str) -> None:
     msg = blocked(cmd)
     assert msg, cmd
-    assert re.search(r"uv run (?:pytest|mypy|ruff) > \w+\.scratch\.log 2>&1", msg), msg
+    assert re.search(r"uv run (?:pytest|mypy|ruff check) > \w+\.scratch\.log 2>&1", msg), msg
 
 
 PIPED_NOISY = [
@@ -117,6 +127,7 @@ def test_noisy_run_landing_in_a_file_passes(cmd: str) -> None:
         "uv run pytest *> pytest.scratch.log",
         "uv run pytest 2>&1 | Out-File pytest.scratch.log",
         "uv run mypy | Set-Content mypy.scratch.log",
+        "uv run pytest | Out-Null",
     ],
 )
 def test_powershell_landings_pass(cmd: str) -> None:
@@ -153,6 +164,7 @@ GH_BLOCKED = [
     "gh issue view 249 --json comments -q '.comments[].body'",
     "gh pr view 5 --json body,title",  # no filter at all
     "gh pr diff 243 | grep '^+'",  # a filter is not a landing
+    "gh issue view 249 --json title,body --template '{{.body}}'",
 ]
 
 
@@ -171,6 +183,9 @@ GH_PASSES = [
     "gh issue view 249 --json title,labels -q '.title'",
     "gh pr diff 243 --name-only",
     "gh pr diff 243 --stat",
+    "gh issue view 249 --json body,title -q .title",  # the filter picks a small field
+    "gh issue view 249 --json title,url --template '{{.title}}'",
+    "gh pr view 5 -t '{{.state}}' --json state",
     "gh pr list --state merged --json headRefName",  # not a view
     "gh issue comment 249 --body 'see gh issue view 5'",  # prose
 ]
@@ -209,6 +224,11 @@ WHOLE_FILE_DUMPS = [
     "Get-Content -Path .claude/settings.json",
     "gc src/config.py -Raw",
     "Get-Content src/config.py | Out-String",
+    "cat src/config.py | nl",
+    "$c = Get-Content src/config.py; $c",
+    "sed --quiet p src/config.py",
+    'sed -n "1,\\$p" src/config.py',
+    "tail -n +10 src/config.py",  # an offset with no end is not a range
 ]
 
 
@@ -246,6 +266,8 @@ RANGED_READS = [
     "gc src/config.py -Head 20",
     "Get-Content src/config.py | Select-Object -First 30",
     "Get-Content src/config.py | Select-String -Pattern def",
+    "(Get-Content src/config.py).Count",
+    "(Get-Content src/config.py)[10..40]",
 ]
 
 
@@ -271,6 +293,14 @@ DUMP_ESCAPES = [
     "type python",  # bash `type` on a command name
     "echo 'cat src/config.py'",
     "head -20 pytest.scratch.log | grep FAILED",
+    "cat src/config.py.bak",  # a backup, not the file
+    "cat src/config.py.orig src/config.py.rej",
+    "cat src/config.py~",
+    "cat notes.md.gz | zcat | grep x",
+    "for f in a.py b.py; do cat $f > $f.bak; done",  # each cat lands
+    "for f in src/*.py; do cat $f; done > all.txt",  # the loop lands
+    "for f in src/*.py; do grep -c def $f; done # cat",
+    "for f in *.py; do wc -l $f; done",
 ]
 
 
@@ -294,9 +324,45 @@ def test_backslash_and_drive_letter_paths_are_seen(cmd: str) -> None:
     assert "whole-file dump" in blocked(cmd), cmd
 
 
-def test_cat_loop_over_source_files_is_blocked() -> None:
-    msg = blocked("for f in src/*.py; do cat $f; done")
-    assert "cat loop" in msg
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        "for f in src/*.py; do cat $f; done",
+        "for f in src/*.py; do cat $f | cat -n; done",
+        "foreach ($f in ls *.py) { cat $f }",
+        "Get-ChildItem *.py | % { gc $_ }",
+        "Get-ChildItem -r *.py | ForEach-Object { Get-Content $_ }",
+    ],
+)
+def test_loop_over_source_files_is_blocked(cmd: str) -> None:
+    assert "cat loop" in blocked(cmd), cmd
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        "ls src/*.py | xargs cat",
+        "find src -name '*.py' -exec cat {} +",
+        "find src -name '*.py' -exec cat {} \\;",
+        "Get-ChildItem *.py | Get-Content",
+        "gci -r *.py | gc",
+    ],
+)
+def test_reader_fed_by_pipe_xargs_or_exec_is_blocked(cmd: str) -> None:
+    assert "whole-file dump" in blocked(cmd), cmd
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        "ls src/*.py | xargs cat | grep def",
+        "find src -name '*.py' -exec cat {} + > all.txt",
+        "Get-ChildItem *.py | Get-Content | Select-String def",
+        "ls src/*.py | xargs wc -l",
+    ],
+)
+def test_reader_fed_by_pipe_but_filtered_or_landing_passes(cmd: str) -> None:
+    assert blocked(cmd) == "", cmd
 
 
 # ------------------------------------------------------------ false positives
@@ -354,7 +420,7 @@ def test_malformed_stdin_passes() -> None:
         input="not json",
         capture_output=True,
         text=True,
-        env={"SYSTEMROOT": os.environ.get("SYSTEMROOT", "C:\\Windows"), "PATH": ""},
+        env=hook_env(HOOKS),
     )
     assert r.returncode == 0
 
@@ -391,5 +457,5 @@ def test_guarded_extension_list_is_defined_once_and_shared() -> None:
     )
     exts, alternation, exempt = r.stdout.splitlines()
     assert ".md" in exts and ".toml" in exts and ".py" in exts
-    assert set(alternation.split("|")) == {e.lstrip(".") for e in eval(exts)}
+    assert set(alternation.split("|")) == {e.lstrip(".") for e in ast.literal_eval(exts)}
     assert exempt == "['.md']"

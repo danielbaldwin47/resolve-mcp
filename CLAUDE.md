@@ -155,15 +155,13 @@ runs repeat. The accepted one-command redirect shapes:
 Delegate exploration to
 a read-only subagent; Read only what you will edit, ranged (grep first) on
 big files; do not re-read a file after editing it. The hooks in
-`.claude/hooks/` enforce these on both shell tools (Bash and PowerShell)
-and every reader: a bare or piped `pytest|mypy|ruff` run, a `gh issue|pr
-view` or `pr diff` that does not land in a file, and any whole-file dump of
-a guarded file — `cat`, `sed -n p`, `head`/`tail` with no count, `head -c`,
-`Get-Content` without `-TotalCount`/`-Tail`, `type` — are blocked, while
-ranged reads (`sed -n 10,40p`, `head -50`, `Get-Content -TotalCount 50`)
-pass; plus whole-file re-reads, and whole-file Reads of code/config files
-over 400 lines (markdown exempt). A block from them is the rule firing, not
-an obstacle to route around; the block message names the fix (#249).
+`.claude/hooks/` enforce this on both shell tools and every reader: a
+`pytest|mypy|ruff` run or `gh … view|diff` that does not land in a file, and
+any whole-file dump of a guarded file (`cat`, `sed -n p`, uncounted
+`head`/`tail`, `Get-Content`, `type`) are blocked; ranged reads pass (#249).
+They also block whole-file re-reads and whole-file Reads of code/config
+files over 400 lines (markdown exempt). A block from them is the rule
+firing, not an obstacle to route around; the block message names the fix.
 
 The same scratch-file rule covers `gh` — issue bodies, comment threads,
 and PR diffs were the biggest single results in past sessions:
