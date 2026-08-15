@@ -14,6 +14,7 @@ whose bottom half goes black halfway through, and the scan has to find it.
 
 from __future__ import annotations
 
+import ast
 import json
 import shutil
 import subprocess
@@ -227,13 +228,32 @@ def test_a_wipe_can_never_lift_a_clear_frame() -> None:
 
 def test_half_a_frame_is_not_a_sample_and_not_a_verdict_either() -> None:
     """A partial tail is a refusal: reading the frames that survived answers for a range that
-    was never decoded, and the answer it gives is that the shot is clear."""
+    was never decoded, and the answer it gives is that the shot is clear. The refusal is about
+    the buffer — a plain ``ValueError``; the job that asked for the decode is where it becomes
+    an error with a cause and a fix."""
     grid = blocking.GRID_WIDTH * blocking.GRID_HEIGHT
 
-    with pytest.raises(OcclusionScanError) as raised:
+    with pytest.raises(ValueError, match=str(grid // 2)) as raised:
         blocking.read_grid(CLEAN + BLOCKED[: grid // 2])
 
-    assert raised.value.detail["remainder"] == grid // 2
+    assert type(raised.value) is ValueError
+
+
+def test_the_arithmetic_module_carries_no_job_knowledge() -> None:
+    """``blocking`` is grey bytes in, scores out. Importing a job's error to raise it inverts
+    the dependency: the pure measurement would then only be importable where its wrapper is."""
+    tree = ast.parse(Path(blocking.__file__).read_text(encoding="utf-8"))
+    # Both halves of every import statement: ``from ..errors import X`` names the module on the
+    # statement, ``from .. import errors`` names it on the alias, and a guard that reads only
+    # one of them passes the import it exists to catch.
+    imported = [
+        name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Import | ast.ImportFrom)
+        for name in [getattr(node, "module", None) or "", *(alias.name for alias in node.names)]
+    ]
+
+    assert not [name for name in imported if name.split(".")[-1] == "errors"]
 
 
 def test_a_whole_number_of_frames_reshapes_onto_the_grid() -> None:
@@ -506,7 +526,34 @@ def test_a_grey_file_cut_short_fails_the_scan_rather_than_reading_clear(
     assert record.state == "failed"
     assert record.error is not None
     assert record.error["code"] == "occlusion_scan_failed"
+    # The buffer's own arithmetic reaches the agent from here, where the job owns the error:
+    # how far past a whole frame the grey stopped is what says the decode was cut short.
+    assert record.error["detail"]["remainder"] == 1000
+    assert record.error["detail"]["bytes"] == len(CLEAN) * 2 + 1000
+    assert "did not finish" in record.error["cause"]
     assert list(get_config().analysis_dir.glob("*.gray")) == []
+
+
+def test_a_read_that_refuses_for_another_reason_is_not_dressed_as_a_short_decode(
+    attach: Attach,
+    fixture_video: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The job shapes the refusal it can explain and no other. A whole number of frames that
+    the read still turns down is not a decode cut short, and reporting it as one would send the
+    agent to run the scan again over a grey file that was never the problem."""
+    attach(_studio_holding(fixture_video))
+
+    def refusing(data: bytes, width: int = 0, height: int = 0) -> object:
+        raise ValueError("the grid is not a grid")
+
+    monkeypatch.setattr(blocking, "read_grid", refusing)
+    record = wait_for(_scan([], _run(2, 2, 2))["job_id"])
+
+    assert record.state == "failed"
+    assert record.error is not None
+    assert record.error["code"] != "occlusion_scan_failed"
+    assert "the grid is not a grid" in record.error["cause"]
 
 
 # --- the cache -------------------------------------------------------------------------------
