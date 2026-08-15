@@ -14,9 +14,10 @@ here is a file that will not abort a build on validation.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, NamedTuple
 
+from .. import document
 from ..cut.document import read_cut_file
 from ..cut.layout import gaps, shots, total_frames
 from ..cut.schema import ANNOTATED_EXAMPLE, SCHEMA_DOC, SCHEMA_VERSION
@@ -28,7 +29,6 @@ from ..cut.validate import (
     validate_project,
     validate_structure,
 )
-from ..document import Preflight as LoadedPreflight
 from ..findings import report, severity_of
 from ..logging_config import get_logger
 from ..timing import dual_time
@@ -74,10 +74,14 @@ class Source(NamedTuple):
 
 
 @dataclass(frozen=True)
-class Preflight(LoadedPreflight):
-    """One pass of the rules, and the pool reading they were judged against."""
+class Preflight(document.Preflight):
+    """One pass of the rules, and the pool reading they were judged against.
 
-    sources: list[Source] = field(default_factory=list)
+    ``sources`` has no default: a pre-flight that read no clips read none *because* the
+    rules stopped it, and that is a decision the caller states rather than one it omits.
+    """
+
+    sources: list[Source]
 
     @property
     def facts(self) -> list[ClipFacts]:

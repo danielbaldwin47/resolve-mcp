@@ -129,7 +129,7 @@ def test_the_shared_shape_splits_severity_for_both_contracts() -> None:
     loaded = a_document()
 
     for checked in (
-        cut_read.Preflight(loaded, findings),
+        cut_read.Preflight(loaded, findings, []),
         titles_read.Preflight(loaded, findings),
     ):
         assert checked.errors == [BAD_SCHEMA]
@@ -138,5 +138,5 @@ def test_the_shared_shape_splits_severity_for_both_contracts() -> None:
 
 def test_each_contract_still_carries_what_its_own_apply_needs() -> None:
     """One shared shape, not one shape: the pool reading and the events are not interchangeable."""
-    assert cut_read.Preflight(a_document(), []).sources == []
+    assert cut_read.Preflight(a_document(), [], []).sources == []
     assert titles_read.Preflight(a_document(), []).events == []

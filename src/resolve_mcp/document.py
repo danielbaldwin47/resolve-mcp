@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any, NamedTuple
 
 from .errors import InvalidRequestError
-from .findings import Finding
+from .findings import Finding, errors_in, warnings_in
 
 HASH_DIGEST_BYTES = 16
 """BLAKE2b digest length: 32 hex characters, short enough to read in a report."""
@@ -51,11 +51,11 @@ class Preflight:
 
     @property
     def errors(self) -> list[Finding]:
-        return [finding for finding in self.findings if finding.severity == "error"]
+        return errors_in(self.findings)
 
     @property
     def warnings(self) -> list[Finding]:
-        return [finding for finding in self.findings if finding.severity == "warning"]
+        return warnings_in(self.findings)
 
 
 def content_hash(data: bytes) -> str:

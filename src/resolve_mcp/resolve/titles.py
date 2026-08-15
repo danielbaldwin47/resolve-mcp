@@ -17,7 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..document import Preflight as LoadedPreflight
+from .. import document
 from ..findings import report, severity_of
 from ..logging_config import get_logger
 from ..titles.assets import Asset
@@ -63,7 +63,7 @@ def get_titles_schema() -> dict[str, Any]:
 
 
 @dataclass(frozen=True)
-class Preflight(LoadedPreflight):
+class Preflight(document.Preflight):
     """One pass of the rules, and everything the apply would need if they pass.
 
     The timeline, the templates and the events travel with the findings so the apply

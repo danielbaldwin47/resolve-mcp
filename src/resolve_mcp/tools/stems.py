@@ -26,7 +26,7 @@ def separate_stems(
 ) -> dict[str, Any]:
     """Split audio into stems on the GPU, in two passes or three, as a background job.
 
-    Returns a job to poll with get_job immediately. Pass one splits the mix into
+    Returns a job immediately — poll it with get_job. Pass one splits the mix into
     vocals, drums, bass and other; pass two decomposes the drum stem into kick, snare and
     toms, which is what fill detection reads. The result is paths on disk, not audio.
 

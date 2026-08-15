@@ -17,11 +17,22 @@ hand.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 
 from .errors import ResolveMcpError
+
+
+class Refusal(Protocol):
+    """The error a rule set raises when its own rules blocked.
+
+    A protocol rather than a bare callable so the two keywords ``refuse`` passes stay
+    checked: an error class that stopped taking a ``detail`` would be caught here rather
+    than at the raise.
+    """
+
+    def __call__(self, *, cause: str, detail: dict[str, Any]) -> ResolveMcpError: ...
 
 
 def severity_of(rule: str) -> str:
@@ -62,6 +73,16 @@ def ordered(findings: list[Finding]) -> list[Finding]:
     return [finding for _, finding in sorted(enumerate(findings), key=key)]
 
 
+def errors_in(findings: Iterable[Finding]) -> list[Finding]:
+    """The findings that block. One definition, so a pre-flight and a report cannot differ."""
+    return [finding for finding in findings if finding.severity == "error"]
+
+
+def warnings_in(findings: Iterable[Finding]) -> list[Finding]:
+    """The findings that are reported and never block."""
+    return [finding for finding in findings if finding.severity == "warning"]
+
+
 def report(findings: Iterable[Finding]) -> dict[str, list[dict[str, str | None]]]:
     """The ``{errors, warnings}`` pair, split by severity, in the order they were found.
 
@@ -71,15 +92,15 @@ def report(findings: Iterable[Finding]) -> dict[str, list[dict[str, str | None]]
     """
     listed = list(findings)
     return {
-        "errors": [finding.as_dict() for finding in listed if finding.severity == "error"],
-        "warnings": [finding.as_dict() for finding in listed if finding.severity == "warning"],
+        "errors": [finding.as_dict() for finding in errors_in(listed)],
+        "warnings": [finding.as_dict() for finding in warnings_in(listed)],
     }
 
 
 def refuse(
     findings: Iterable[Finding],
     *,
-    error: Callable[..., ResolveMcpError],
+    error: Refusal,
     what: str,
     consequence: str,
     detail: dict[str, Any],
@@ -101,4 +122,13 @@ def refuse(
     )
 
 
-__all__ = ["Finding", "ordered", "refuse", "report", "severity_of"]
+__all__ = [
+    "Finding",
+    "Refusal",
+    "errors_in",
+    "ordered",
+    "refuse",
+    "report",
+    "severity_of",
+    "warnings_in",
+]
