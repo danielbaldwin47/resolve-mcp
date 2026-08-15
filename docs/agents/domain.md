@@ -10,7 +10,7 @@ This repo is **single-context**.
 - **`docs/context/<area>.md`** — the vocabulary and each area's narrative; Grep or read ranged the area you are about to touch.
 - **`docs/adr/`** — read ADRs that touch the area you're about to work in.
 
-If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codebase-architecture`) creates them lazily when terms or decisions actually get resolved.
+If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The `/domain-modeling` skill (reached via `/grilling` and `/codebase-design`) creates them lazily when terms or decisions actually get resolved.
 
 ## File structure
 

@@ -137,8 +137,8 @@ audio or synthetic frames; `live`: a running Resolve Studio (`pytest -m live`);
 `test_analysis_reports` (every detector's file opens `kind`/`audio`/`duration_seconds`;
 fake), `test_rough_cut_pillar` (the P4 pillar end to end; fake), `test_style_layer`
 (server code never touches `styles/`; pure), `test_text_plus_probe` (the Text+
-template-append probe; fake), `test_read_guard` (the Read hook; sub), `test_context_map`
-(this map covers the tree; pure). Live tier: `test_live_smoke`, `test_live_analysis`, and
+template-append probe; fake), `test_read_guard` and `test_context_guard` (the Read hook and
+the shell hook; sub), `test_context_map` (this map covers the tree; pure). Live tier: `test_live_smoke`, `test_live_analysis`, and
 the state it builds in `live_state` (decisions covered by `test_live_state`; fake).
 Fixtures and helpers: `conftest` (installs the fake seam, hermetic `Config`),
 `cutfile`, `roughcut`, `mediapool`, `otio`, `text_plus_probe`, `currency_probe`.
