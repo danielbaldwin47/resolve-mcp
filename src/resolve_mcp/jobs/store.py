@@ -4,10 +4,10 @@
   and would vanish on restart, which is precisely the case ``list_jobs`` exists for. The
   running thread updates its record as it goes; readers always read the file.
 
-* **A restart is detected by session, not by pid.** Every record carries the id of the
-  server process that wrote it. A record still marked ``running`` whose session is not
-  this one belongs to a server that is gone — its worker thread died with the process, so
-  nothing will ever finish it. pids get recycled; a per-process uuid cannot be mistaken.
+* **Whether anything is still running a job is decided elsewhere.** ``lifecycle.verdict``
+  answers that from the record alone — session for a thread job, pid for a detached one —
+  and this module is what reads the file, asks it, and writes the answer back. Nothing here
+  re-decides; nothing there touches a disk.
 
 * **That verdict is written back.** The interrupted record is rewritten as failed under
   this session, so the reasoning happens once and the log carries one line for it rather
@@ -16,22 +16,6 @@
 * **A corrupt record loses itself, not the listing.** A record half-written when the
   process died is skipped with a warning; one unreadable file must not hide every other
   job from the agent.
-
-* **A detached job is judged by its pid instead, because the session rule is backwards for
-  it.** A record marked ``detached`` names a worker process of its own, and outliving the
-  server that started it is the whole point (G4: a 30-minute separation died with every
-  session that launched it). So the session check is skipped for those and the pid answers
-  instead: alive means running, gone means interrupted, and no pid yet means a launch still
-  in flight — in this session, or in whichever server is named by ``launcher_pid`` while that
-  process is still alive *and* the record is younger than ``LAUNCH_WINDOW``, because those are
-  the only two processes that will ever write the worker's pid and neither takes two minutes
-  to do it. A pid-less record whose launcher is gone, or one that has sat pid-less far longer
-  than any launch takes, is closed rather than left running forever. pids do get recycled —
-  a recycled one can only make a dead job read as running a while longer, never the reverse,
-  and the worker writes its own ending in every path it can still reach. "A while longer" is
-  the ceiling's doing: a live pid is believed only while the record is still being written to
-  (``HEARTBEAT_CEILING``), because a reboot reissues every number on the machine and nothing
-  else would ever close the record it left behind.
 
 * **Only the worker writes the record of a detached job.** The launching process has one
   thing to add — its reading of the worker's pid, for the second before the worker adopts —
@@ -61,48 +45,13 @@ from ..config import Config, get_config
 from ..errors import JobInterruptedError, JobNotFoundError
 from ..logging_config import get_logger
 from ..naming import slug
+from .lifecycle import COMPLETED, FAILED, RUNNING, SESSION, Outcome, verdict
 
 log = get_logger("jobs")
-
-RUNNING = "running"
-COMPLETED = "completed"
-FAILED = "failed"
-STATES = (RUNNING, COMPLETED, FAILED)
-
-SESSION = uuid.uuid4().hex
-"""This server process. Records written under any other session predate a restart."""
 
 SHARING_ATTEMPTS = 20
 SHARING_PAUSE = 0.01
 """How long either side of a poll waits out the other's handle. See ``_sharing``."""
-
-LAUNCH_WINDOW = 120.0
-"""How long a detached record may go with no worker pid before the launch is not in flight.
-
-Generous by an order of magnitude: what has to fit inside it is a ``Popen`` and the worker's
-own start-up as far as its adopt, which is a second or two even with a cold interpreter and a
-Windows trampoline in the way. Long enough that a slow box is never judged, short enough that
-a recycled launcher pid cannot hold a dead record open for the life of the machine. See
-``_stalled_launch``.
-"""
-
-HEARTBEAT_CEILING = 6 * 60 * 60
-"""How long a detached record may go unwritten before its live pid stops being believed.
-
-The same recycling problem one step later. A worker's pid answers "still running" for as long
-as *some* process wears that number, and a reboot hands every number out again: the record a
-worker left running when the machine went down names a stranger, reads as running at every
-poll for the life of the machine, and the only way out was to delete the file. But a bare
-``LAUNCH_WINDOW`` here would close the jobs this whole path exists to protect — a separation
-is half an hour of GPU work. What separates them is that a worker writes as it works
-(``runner.execute`` saves the bar as it moves), so what ages here is silence, not runtime, and
-the record's own ``updated_at`` is the heartbeat. Deliberately far longer than any job, for
-the same reason stems' ``CLAIM_CEILING`` is: the longest measured pass is under an hour and
-reports throughout, so six of them without one write is nobody working. Long silences are
-legal — a cold model download reports nothing for a while — and the ceiling is set to outlast
-them, because closing a live separation is a worse failure than a dead record read as running
-for an afternoon. See ``_recovered_detached``.
-"""
 
 WORKER_TAIL_LINES = 200
 """Lines of a dead worker's own output kept on the record.
@@ -784,7 +733,11 @@ else:
 
 
 def _recovered(record: JobRecord, config: Config, sweep: bool = True) -> JobRecord:
-    """A job still running under a dead session cannot finish. Say so, once.
+    """Ask ``lifecycle.verdict`` what this record is, and write the answer back if it closes.
+
+    The whole of the reasoning is over there and none of the writing is: this reads the clock
+    and hands over ``pid_alive``, then either leaves the record alone or fails it, once, with
+    the cause the verdict came with.
 
     Also the launching process's only news of a detached job that ended well. ``finish`` runs
     in the worker, where the handle dict is empty, so a normally-completed detached job would
@@ -795,7 +748,8 @@ def _recovered(record: JobRecord, config: Config, sweep: bool = True) -> JobReco
     remembered worker at once, so a listing runs it once at the end rather than once per
     finished record it happens to contain (see ``load_all``).
     """
-    if record.state != RUNNING:
+    call = verdict(record, datetime.now(UTC), pid_alive)
+    if call.outcome is Outcome.SETTLED:
         if record.detached:
             release_child(record.pid)
             # And the sweep, because the record's pid is not always the pid the handle is
@@ -808,139 +762,26 @@ def _recovered(record: JobRecord, config: Config, sweep: bool = True) -> JobReco
             if sweep:
                 _prune_children()
         return record
-    if record.detached:
-        return _recovered_detached(record, config)
-    if record.session == SESSION:
+    if call.cause is None:
         return record
-    log.info("Job %s was interrupted by a server restart", record.job_id)
+    if call.outcome is Outcome.RESTARTED:
+        return _restarted(record, call.cause, config)
+    return _interrupted(record, call.cause, config)
+
+
+def _restarted(record: JobRecord, cause: str, config: Config) -> JobRecord:
+    """Close a thread job whose server is gone. There is no worker log to fold in.
+
+    Every other way a job stops running is a detached worker that died with something to say
+    (``_interrupted``); this one died as part of a process that took the thread with it, and
+    what it had printed went to the server's own log.
+    """
     interrupted = JobInterruptedError(
-        cause=f"The server restarted while {record.kind} was running, so the job died with it.",
+        cause=cause,
         detail={"job_id": record.job_id, "progress": record.progress, "step": record.step},
     )
     record.session = SESSION
     return finish(record, error=interrupted.payload(), config=config)
-
-
-def _recovered_detached(record: JobRecord, config: Config) -> JobRecord:
-    """A detached job outlives its session on purpose, so its pid is what gets asked.
-
-    ``None`` is a launch still in flight — the starter marks the record detached before it
-    spawns, so that a reader in the microseconds between never mistakes it for a thread job
-    whose thread has ended. In flight in *some live process*, though: the only process that
-    will ever write that pid is the launcher, between its own two saves. Which session wrote
-    the record does not answer that, in either direction. A foreign session is not a dead one
-    — a second server mid-spawn is a launch in flight exactly as ours is, and judging it by
-    session alone would fail a job whose worker was about to start. And our own session is no
-    proof that the launch is still happening: noting the worker's pid is best-effort by design
-    (``note_worker_pid`` swallows a note it cannot write, because the alternative is the
-    launcher failing a job a live worker owns), so a worker that dies before it adopts leaves
-    a pid-less record here, in this session, that nothing will ever write again — read as "in
-    flight in this process" it would run for the life of the server, and a chained job
-    following it would poll for exactly as long (``runner.follow`` skips its stalled-thread
-    escape for a detached job, on purpose: a detached job has no thread to be missing). So
-    every pid-less record is asked the same two questions, its launcher and its age.
-
-    A pid that answers is asked its age too, for the same reason and one step later: a number
-    the OS has reissued — after a reboot, every number — reads as a worker still running at
-    every poll for ever. What is asked is not how long the job has run but how long the record
-    has gone unwritten, because the worker writes as it works. See ``HEARTBEAT_CEILING``.
-    """
-    if record.pid is None:
-        stalled = _stalled_launch(record)
-        if stalled is None:
-            return record
-        return _interrupted(record, stalled, config)
-    if pid_alive(record.pid):
-        return _running_or_silent(record, config)
-    log.info("Job %s lost its detached worker (pid %s)", record.job_id, record.pid)
-    return _interrupted(
-        record,
-        f"The detached worker running {record.kind} exited before the job finished "
-        f"(pid {record.pid}).",
-        config,
-    )
-
-
-def _running_or_silent(record: JobRecord, config: Config) -> JobRecord:
-    """The record of a live pid, unless nothing has written to it for longer than any job runs.
-
-    The worker owns this record from its adopt onwards and writes it as the work moves, so the
-    time since the last write is the worker's heartbeat — the freshest one the record carries,
-    and the only one that does not have to be paid for with a second file. Silence past the
-    ceiling means the pid is a reissued number rather than the worker that wrote the record.
-    """
-    silence = _age(record.updated_at)
-    if silence is None or silence <= HEARTBEAT_CEILING:
-        return record
-    log.warning(
-        "Job %s has not been written to in %.0f s while pid %s reads as alive; that number "
-        "belongs to some other process now, not to the worker that ran the job",
-        record.job_id,
-        silence,
-        record.pid,
-    )
-    return _interrupted(
-        record,
-        f"Nothing has written to the record of {record.kind} in {silence:.0f} seconds, far "
-        f"longer than the job can run silently, so pid {record.pid} is a reissued number "
-        "rather than the detached worker — nothing is running the job.",
-        config,
-    )
-
-
-def _stalled_launch(record: JobRecord) -> str | None:
-    """Why this pid-less record is not a launch in flight, or ``None`` while it still is.
-
-    The launcher's pid is asked first, and its own age second. A pid is a number the OS
-    re-issues: a record left by a server that died mid-launch names a launcher that may since
-    have been recycled onto some long-lived process, and liveness alone then reads that record
-    as launching forever. Nothing is a launch for long — the spawn and the note that follows it
-    are a second's work, and the worker writes the record from its adopt onwards — so a record
-    with no worker pid that has not been touched in ``LAUNCH_WINDOW`` is a launch that is not
-    happening, whatever its launcher's number now belongs to.
-
-    The age question is the one that answers for *this* session's own records: our launcher is
-    alive by definition, so nothing but the clock can tell a hand-off in flight from one whose
-    worker died before it adopted (see ``_recovered_detached``).
-    """
-    if record.launcher_pid is None or not pid_alive(record.launcher_pid):
-        log.info("Job %s never got a detached worker: its launcher is gone", record.job_id)
-        return (
-            f"The server handing {record.kind} to a detached worker exited before the worker "
-            "was started, so nothing is running it."
-        )
-    age = _age(record.updated_at)
-    if age is not None and age > LAUNCH_WINDOW:
-        log.warning(
-            "Job %s has had no detached worker for %.0f s; pid %s is either a recycled number "
-            "rather than the launcher that wrote the record, or a launcher that never started "
-            "one",
-            record.job_id,
-            age,
-            record.launcher_pid,
-        )
-        return (
-            f"The server handing {record.kind} to a detached worker never started one: nothing "
-            f"has written to the record in {age:.0f} seconds, so the launch is not in flight."
-        )
-    log.debug(
-        "Job %s has no worker pid yet, but its launcher (pid %s) is still running",
-        record.job_id,
-        record.launcher_pid,
-    )
-    return None
-
-
-def _age(stamp: str) -> float | None:
-    """How long ago that timestamp was, in seconds; ``None`` if it is not one."""
-    try:
-        written = datetime.fromisoformat(stamp)
-    except ValueError:
-        log.warning("Cannot read a job record's timestamp: %r", stamp)
-        return None
-    if written.tzinfo is None:
-        written = written.replace(tzinfo=UTC)
-    return (datetime.now(UTC) - written).total_seconds()
 
 
 def _interrupted(record: JobRecord, cause: str, config: Config) -> JobRecord:

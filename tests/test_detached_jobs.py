@@ -53,7 +53,7 @@ from resolve_mcp.errors import (
     InvalidRequestError,
     SeparationInProgressError,
 )
-from resolve_mcp.jobs import cache, detached, store
+from resolve_mcp.jobs import cache, detached, lifecycle, store
 from resolve_mcp.jobs import worker as job_worker
 from resolve_mcp.jobs.runner import (
     Detached,
@@ -215,7 +215,7 @@ def test_the_record_says_detached_before_a_pid_exists_so_no_poller_calls_it_dead
 
     assert seen[0].detached is True
     assert seen[0].pid is None
-    assert seen[0].state == store.RUNNING
+    assert seen[0].state == lifecycle.RUNNING
     assert seen[0].plan == {"audio": {"path": "x.wav"}}
 
 
@@ -226,7 +226,7 @@ def test_a_handed_off_job_stays_running_and_names_the_process_that_has_it() -> N
     pid = detached.launch(record, {"audio": {"path": "x.wav"}}, spawn=spawn)
 
     landed = store.load(record.job_id)
-    assert (landed.state, landed.detached, landed.pid) == (store.RUNNING, True, pid)
+    assert (landed.state, landed.detached, landed.pid) == (lifecycle.RUNNING, True, pid)
     assert str(pid) in landed.step
     assert spawn.calls[0][0] == detached.command(record.job_id)
     assert spawn.calls[0][1] == store.worker_log(record.job_id, get_config())
@@ -242,7 +242,7 @@ def test_a_worker_that_hands_off_neither_finishes_the_job_nor_caches_a_result(
     started = start_job(KIND, {}, lambda progress: Detached({"audio": {}}), "the-key")
     record = wait_for(str(started["job_id"]))
 
-    assert record.state == store.RUNNING
+    assert record.state == lifecycle.RUNNING
     assert record.pid == spawn.pid
     assert cache.lookup("the-key") is None
 
@@ -260,7 +260,7 @@ def test_a_launch_the_operating_system_refuses_fails_the_job_rather_than_strandi
     started = start_job(KIND, {}, lambda progress: Detached({"audio": {}}))
     record = wait_for(str(started["job_id"]))
 
-    assert record.state == store.FAILED
+    assert record.state == lifecycle.FAILED
     assert record.error is not None
     assert "no such interpreter" in record.error["cause"]
 
@@ -392,7 +392,7 @@ def test_a_launcher_does_not_reopen_a_job_its_worker_had_already_finished(
     detached.launch(record, {}, spawn=FakeSpawn(pid=424242, watching=arm))
 
     landed = store.load(record.job_id)
-    assert landed.state == store.FAILED
+    assert landed.state == lifecycle.FAILED
     assert landed.error is not None
     assert landed.error["cause"] == "the worker gave up"
 
@@ -432,7 +432,7 @@ def test_a_worker_that_finished_inside_the_launchers_window_keeps_its_result(
 
     landed = store.load(record.job_id)
     assert ended, "the finish was never injected, so the window was never exercised"
-    assert landed.state == store.COMPLETED
+    assert landed.state == lifecycle.COMPLETED
     assert landed.result == {"directory": "/stems/sunset-set-abc123"}
     assert landed.pid == os.getpid(), "the launcher's note answered for a record that had ended"
 
@@ -469,7 +469,7 @@ def test_a_note_that_lands_after_the_worker_finished_is_taken_back(
     note = store._note_path(store._path(record.job_id, get_config()))
     assert not note.exists(), "the launcher's note outlived the record it answered for"
     landed = store.load(record.job_id)
-    assert landed.state == store.COMPLETED
+    assert landed.state == lifecycle.COMPLETED
     assert landed.result == {"directory": "/stems/sunset-set-abc123"}
 
 
@@ -493,14 +493,14 @@ def test_a_note_that_cannot_be_written_does_not_fail_the_launch(
     pid = detached.launch(record, {}, spawn=FakeSpawn())
 
     assert pid == os.getpid()
-    assert store.load(record.job_id).state == store.RUNNING, "the launcher closed a live job"
+    assert store.load(record.job_id).state == lifecycle.RUNNING, "the launcher closed a live job"
 
 
 def test_a_detached_job_outlives_the_session_that_started_it() -> None:
     """The session rule is backwards for these: surviving the server is the whole point."""
     record = _running_under_a_dead_server(os.getpid())
 
-    assert store.load(record.job_id).state == store.RUNNING
+    assert store.load(record.job_id).state == lifecycle.RUNNING
 
 
 def test_a_detached_job_whose_worker_is_gone_is_failed_and_says_so() -> None:
@@ -509,12 +509,12 @@ def test_a_detached_job_whose_worker_is_gone_is_failed_and_says_so() -> None:
 
     failed = store.load(record.job_id)
 
-    assert failed.state == store.FAILED
+    assert failed.state == lifecycle.FAILED
     assert failed.error is not None
     assert failed.error["code"] == "job_interrupted"
     assert str(pid) in failed.error["cause"]
     assert failed.error["detail"]["step"] == "separating four stems (50%)"
-    assert store.load(record.job_id).state == store.FAILED  # written back, judged once
+    assert store.load(record.job_id).state == lifecycle.FAILED  # written back, judged once
 
 
 def test_a_dead_workers_own_output_arrives_on_the_record_that_says_it_died() -> None:
@@ -534,7 +534,7 @@ def test_a_dead_workers_own_output_arrives_on_the_record_that_says_it_died() -> 
 
     failed = store.load(record.job_id)
 
-    assert failed.state == store.FAILED
+    assert failed.state == lifecycle.FAILED
     assert failed.error is not None
     assert "CUDA error: out of memory" in failed.error["detail"]["output"]
     assert failed.error["detail"]["worker_log"] == str(log_file)
@@ -546,7 +546,7 @@ def test_a_worker_that_died_before_it_printed_anything_still_names_where_it_woul
 
     failed = store.load(record.job_id)
 
-    assert failed.state == store.FAILED
+    assert failed.state == lifecycle.FAILED
     assert failed.error is not None
     assert failed.error["detail"]["output"] is None
     assert failed.error["detail"]["worker_log"].endswith(".worker.log")
@@ -584,16 +584,16 @@ def test_a_worker_that_has_said_nothing_far_longer_than_any_job_takes_is_not_bel
     run.
     """
     record = _running_under_a_dead_server(os.getpid(), step="separating four stems (50%)")
-    _last_written(record.job_id, store.HEARTBEAT_CEILING + 60)
+    _last_written(record.job_id, lifecycle.HEARTBEAT_CEILING + 60)
 
     failed = store.load(record.job_id)
 
-    assert failed.state == store.FAILED
+    assert failed.state == lifecycle.FAILED
     assert failed.error is not None
     assert failed.error["code"] == "job_interrupted"
     assert str(os.getpid()) in failed.error["cause"]
     assert failed.error["detail"]["step"] == "separating four stems (50%)"
-    assert store.load(record.job_id).state == store.FAILED  # written back, judged once
+    assert store.load(record.job_id).state == lifecycle.FAILED  # written back, judged once
 
 
 def test_a_separation_that_has_run_for_half_an_hour_is_not_closed_for_taking_its_time() -> None:
@@ -605,7 +605,7 @@ def test_a_separation_that_has_run_for_half_an_hour_is_not_closed_for_taking_its
     record = _running_under_a_dead_server(os.getpid(), step="decomposing the drum stem")
     _last_written(record.job_id, 30 * 60)
 
-    assert store.load(record.job_id).state == store.RUNNING
+    assert store.load(record.job_id).state == lifecycle.RUNNING
 
 
 def test_a_follower_of_a_detached_job_hears_its_worker_died_not_that_a_thread_is_missing() -> None:
@@ -634,11 +634,11 @@ def test_a_launch_that_never_happened_is_closed_rather_than_left_running_forever
 
     failed = store.load(record.job_id)
 
-    assert failed.state == store.FAILED
+    assert failed.state == lifecycle.FAILED
     assert failed.error is not None
     assert failed.error["code"] == "job_interrupted"
     assert "before the worker was started" in failed.error["cause"]
-    assert store.load(record.job_id).state == store.FAILED  # written back, judged once
+    assert store.load(record.job_id).state == lifecycle.FAILED  # written back, judged once
 
 
 def test_a_launch_in_flight_in_this_session_is_still_a_running_job() -> None:
@@ -653,7 +653,7 @@ def test_a_launch_in_flight_in_this_session_is_still_a_running_job() -> None:
     record.step = detached.HANDING_OFF
     store.save(record)
 
-    assert store.load(record.job_id).state == store.RUNNING
+    assert store.load(record.job_id).state == lifecycle.RUNNING
 
 
 def test_a_launch_of_our_own_that_never_produced_a_worker_is_closed_like_anybody_elses() -> None:
@@ -670,12 +670,12 @@ def test_a_launch_of_our_own_that_never_produced_a_worker_is_closed_like_anybody
     record.launcher_pid = os.getpid()
     record.step = detached.HANDING_OFF
     store.save(record)
-    _last_written(record.job_id, store.LAUNCH_WINDOW + 60)
+    _last_written(record.job_id, lifecycle.LAUNCH_WINDOW + 60)
 
     failed = store.load(record.job_id)
 
-    assert failed.session == store.SESSION
-    assert failed.state == store.FAILED
+    assert failed.session == lifecycle.SESSION
+    assert failed.state == lifecycle.FAILED
     assert failed.error is not None
     assert failed.error["code"] == "job_interrupted"
     assert "never started one" in failed.error["cause"]
@@ -688,7 +688,7 @@ def test_a_follower_of_our_own_stalled_launch_is_not_left_polling_for_ever() -> 
     record.launcher_pid = os.getpid()
     record.step = detached.HANDING_OFF
     store.save(record)
-    _last_written(record.job_id, store.LAUNCH_WINDOW + 60)
+    _last_written(record.job_id, lifecycle.LAUNCH_WINDOW + 60)
 
     with pytest.raises(ChainedJobError) as raised:
         follow(record.job_id, poll=0.0, sleep=lambda seconds: None)
@@ -714,7 +714,7 @@ def test_a_launch_in_flight_in_another_live_server_is_not_closed_as_one_that_nev
     record.step = detached.HANDING_OFF
     store.save(record)
 
-    assert store.load(record.job_id).state == store.RUNNING
+    assert store.load(record.job_id).state == lifecycle.RUNNING
 
 
 def test_a_launch_whose_launcher_died_before_the_spawn_is_still_closed() -> None:
@@ -728,7 +728,7 @@ def test_a_launch_whose_launcher_died_before_the_spawn_is_still_closed() -> None
 
     failed = store.load(record.job_id)
 
-    assert failed.state == store.FAILED
+    assert failed.state == lifecycle.FAILED
     assert failed.error is not None
     assert "before the worker was started" in failed.error["cause"]
 
@@ -749,11 +749,11 @@ def test_a_launch_that_has_had_no_worker_far_longer_than_a_launch_takes_is_close
     record.launcher_pid = os.getpid()
     record.step = detached.HANDING_OFF
     store.save(record)
-    _last_written(record.job_id, store.LAUNCH_WINDOW + 60)
+    _last_written(record.job_id, lifecycle.LAUNCH_WINDOW + 60)
 
     failed = store.load(record.job_id)
 
-    assert failed.state == store.FAILED
+    assert failed.state == lifecycle.FAILED
     assert failed.error is not None
     assert failed.error["code"] == "job_interrupted"
     assert "never started one" in failed.error["cause"]
@@ -767,9 +767,9 @@ def test_a_launch_in_flight_is_not_closed_for_being_a_few_seconds_old() -> None:
     record.launcher_pid = os.getpid()
     record.step = detached.HANDING_OFF
     store.save(record)
-    _last_written(record.job_id, store.LAUNCH_WINDOW / 2)
+    _last_written(record.job_id, lifecycle.LAUNCH_WINDOW / 2)
 
-    assert store.load(record.job_id).state == store.RUNNING
+    assert store.load(record.job_id).state == lifecycle.RUNNING
 
 
 def test_the_launcher_lets_go_of_a_worker_that_finished_the_job_itself() -> None:
@@ -784,7 +784,7 @@ def test_the_launcher_lets_go_of_a_worker_that_finished_the_job_itself() -> None
     record.detached = True
     record.session = "the-worker-that-ran-it"
     record.pid = 4242
-    record.state = store.COMPLETED
+    record.state = lifecycle.COMPLETED
     record.result = {"directory": "/stems/sunset-set-abc123"}
     store.save(record)
     store.remember_child(4242, _FakeProcess(4242, returncode=0))
@@ -808,11 +808,11 @@ def test_the_launcher_lets_go_of_a_trampoline_whose_worker_ran_under_another_pid
     record.detached = True
     record.session = "the-worker-that-ran-it"
     record.pid = 4243  # the real interpreter: what the worker wrote when it adopted the record
-    record.state = store.COMPLETED
+    record.state = lifecycle.COMPLETED
     store.save(record)
     store.remember_child(4242, _FakeProcess(4242, returncode=0))  # the trampoline Popen returned
 
-    assert store.load(record.job_id).state == store.COMPLETED
+    assert store.load(record.job_id).state == lifecycle.COMPLETED
     assert 4242 not in store._children, "the launcher is still holding the trampoline it started"
 
 
@@ -949,10 +949,10 @@ def test_the_worker_takes_the_record_over_closes_it_and_caches_what_it_made(
     monkeypatch.setattr(job_worker, "worker_for", lambda kind: work)
     finished = job_worker.run(record.job_id)
 
-    assert finished.state == store.COMPLETED
+    assert finished.state == lifecycle.COMPLETED
     assert finished.result == {"from": {"audio": {"path": "mix.wav"}}}
     assert finished.pid == os.getpid()
-    assert finished.session == store.SESSION
+    assert finished.session == lifecycle.SESSION
     assert cache.lookup("the-key") == {"from": {"audio": {"path": "mix.wav"}}}
 
 
@@ -987,7 +987,7 @@ def test_the_worker_refuses_a_kind_it_cannot_run_by_failing_the_job() -> None:
 
     finished = job_worker.run(record.job_id)
 
-    assert finished.state == store.FAILED
+    assert finished.state == lifecycle.FAILED
     assert finished.error is not None
     assert "No detached worker" in finished.error["cause"]
 
@@ -1054,12 +1054,12 @@ def test_a_real_detached_worker_finds_the_record_and_closes_it() -> None:
     detached.launch(record, {})
 
     finished = _until_finished(record.job_id)
-    assert finished.state == store.FAILED, _why_the_worker_did_not_finish(finished)
+    assert finished.state == lifecycle.FAILED, _why_the_worker_did_not_finish(finished)
     assert finished.error is not None
     assert "No detached worker" in finished.error["cause"]
     assert finished.pid is not None
     assert finished.pid != os.getpid()
-    assert finished.session != store.SESSION
+    assert finished.session != lifecycle.SESSION
     assert store.worker_log(record.job_id, get_config()).exists()
 
 
@@ -1078,7 +1078,7 @@ def test_the_separation_hands_off_once_the_audio_is_on_disk_and_not_before(
     started = separate_stems(get_connection(), detach=True)
     record = wait_for(str(started["job_id"]))
 
-    assert record.state == store.RUNNING
+    assert record.state == lifecycle.RUNNING
     assert record.detached is True
     assert record.pid == spawn.pid
     assert record.plan is not None
@@ -1190,7 +1190,7 @@ def test_a_stems_claim_left_by_a_run_that_is_gone_is_taken_over_even_wearing_thi
     with claimed(directory):
         held = json.loads((directory / CLAIM).read_text(encoding="utf-8"))
 
-    assert held["session"] == store.SESSION
+    assert held["session"] == lifecycle.SESSION
     assert not (directory / CLAIM).exists()
 
 
@@ -1296,7 +1296,7 @@ def test_a_claim_is_refreshed_by_the_run_that_is_holding_it(tmp_path: Path) -> N
 
     assert refreshed["claimed_at"] > aged + CLAIM_CEILING, "the claim was left at its old age"
     assert refreshed["pid"] == os.getpid()
-    assert refreshed["session"] == store.SESSION
+    assert refreshed["session"] == lifecycle.SESSION
 
 
 def test_a_claim_this_process_no_longer_holds_stops_the_separation(tmp_path: Path) -> None:
@@ -1662,7 +1662,7 @@ def test_a_bar_that_moves_a_thousand_times_does_not_write_the_record_a_thousand_
     assert len(saved) <= 5, f"the bar wrote the record {len(saved)} times: {saved}"
     # A step change is never held back: it is the line an agent reads to know what is happening.
     assert [step for _, step in saved].count("decomposing the drum stem") >= 1
-    assert store.load(record.job_id).state == store.COMPLETED, "the ending was throttled away"
+    assert store.load(record.job_id).state == lifecycle.COMPLETED, "the ending was throttled away"
 
 
 # --- helpers -------------------------------------------------------------------------------
@@ -1796,7 +1796,7 @@ def _until_finished(job_id: str, budget: float = WORKER_BUDGET) -> JobRecord:
     """Poll the record the way an agent does, and give up rather than hang the suite."""
     deadline = time.monotonic() + budget
     record = store.load(job_id)
-    while record.state == store.RUNNING and time.monotonic() < deadline:
+    while record.state == lifecycle.RUNNING and time.monotonic() < deadline:
         time.sleep(POLL)
         record = store.load(job_id)
     return record
