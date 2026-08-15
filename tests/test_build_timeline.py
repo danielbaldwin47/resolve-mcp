@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from resolve_mcp.document import content_hash
+from resolve_mcp.resolve.build import locked_track_finding
 from resolve_mcp.tools.cut import build_timeline
 
 from .conftest import Attach
@@ -845,6 +846,21 @@ def test_a_locked_target_track_is_reported_instead_of_silently_dropping_the_cut(
     assert [finding["rule"] for finding in findings] == ["E11", "E11"]
     assert [finding["id"] for finding in findings] == ["V1", "A1"]
     assert "AppendToTimeline" not in pool.calls
+
+
+def test_e11_shapes_a_locked_track_finding_like_every_other_rule() -> None:
+    """E11 is raised here rather than in the rules, and still reports in their shape (#218)."""
+    finding = locked_track_finding("V1")
+
+    assert finding.rule == "E11"
+    assert finding.id == "V1"
+    assert finding.fix_hint
+    assert finding.as_dict() == {
+        "rule": "E11",
+        "id": "V1",
+        "message": finding.message,
+        "fix_hint": finding.fix_hint,
+    }
 
 
 def test_a_still_gets_its_out_written_once_so_endframe_is_honoured(

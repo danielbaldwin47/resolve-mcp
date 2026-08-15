@@ -27,7 +27,8 @@ from dataclasses import dataclass
 from typing import Any, Final
 
 from ..cut.document import read_cut_file
-from ..cut.validate import is_gap, placements, validate_structure
+from ..cut.layout import is_gap, placements
+from ..cut.validate import validate_structure
 from ..document import LoadedDocument
 from ..errors import (
     BuildFailedError,

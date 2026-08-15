@@ -1,7 +1,10 @@
-"""Pure-function tests for the cut-file validation rules E1-E11 and warnings W1-W2.
+"""Pure-function tests for the cut-file validation rules E1-E10, E12 and the warnings.
 
 No Resolve, no fakes: the structural pass takes a parsed document, the project
 pass takes gathered clip facts. Both are plain functions over plain data.
+
+Where the entries land is ``test_cut_layout.py``'s, and E11 — the build-time rule, whose
+condition is a live locked track — is ``test_build_timeline.py``'s (#218).
 """
 
 from __future__ import annotations
@@ -14,8 +17,6 @@ import pytest
 
 from resolve_mcp.cut.validate import (
     ClipFacts,
-    locked_track_finding,
-    overlay_positions,
     validate_project,
     validate_structure,
 )
@@ -494,33 +495,6 @@ def test_e9_catches_an_overlay_running_past_the_end_of_the_cut() -> None:
     assert "E9" in rules(findings)
 
 
-# --- overlay placement: the numbers E9 judges and the build places against ----------------
-
-
-def test_overlay_positions_resolve_each_anchor_to_an_absolute_span() -> None:
-    """One function answers where an overlay goes, so the rule and the build cannot differ."""
-    doc = valid_doc()
-    doc["overlays"].append(
-        {
-            "id": "b04",
-            "source": "broll_pan",
-            "in": 1400,
-            "out": 1440,
-            "over": {"segment": "s002", "offset": 50},
-        }
-    )
-
-    assert overlay_positions(doc) == {"b03": (24, 100), "b04": (250, 40)}
-
-
-def test_overlay_positions_skip_an_anchor_that_does_not_exist() -> None:
-    """E9 has already refused such a document; there is no position to invent for it."""
-    doc = valid_doc()
-    doc["overlays"][0]["over"]["segment"] = "s999"
-
-    assert overlay_positions(doc) == {}
-
-
 # --- E10: overlays do not overlap each other --------------------------------------------
 
 
@@ -603,23 +577,6 @@ def test_e10_compares_positions_across_different_anchors() -> None:
     findings = validate_structure(doc)
 
     assert "E10" in rules(findings)
-
-
-# --- E11: build-time, target tracks unlocked --------------------------------------------
-
-
-def test_e11_shapes_a_locked_track_finding_like_every_other_rule() -> None:
-    finding = locked_track_finding("V1")
-
-    assert finding.rule == "E11"
-    assert finding.id == "V1"
-    assert finding.fix_hint
-    assert finding.as_dict() == {
-        "rule": "E11",
-        "id": "V1",
-        "message": finding.message,
-        "fix_hint": finding.fix_hint,
-    }
 
 
 # --- W1: flash-frame guard --------------------------------------------------------------

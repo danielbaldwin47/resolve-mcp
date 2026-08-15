@@ -50,15 +50,15 @@ from typing import Any, Final
 
 from ..cut import resolution as cut_resolution
 from ..cut import tail as cut_tail
-from ..cut.validate import gaps as cut_gaps
-from ..cut.validate import (
+from ..cut.layout import gaps as cut_gaps
+from ..cut.layout import (
     is_gap,
-    locked_track_finding,
     overlay_positions,
     overlay_track,
     placements,
 )
 from ..errors import BuildFailedError, CutInvalidError, TimelineNotFoundError
+from ..findings import Finding
 from ..logging_config import get_logger
 from ..naming import latest_version, next_version_name, version_name
 from . import cut, markers, media, mix, settings, takes
@@ -645,6 +645,24 @@ def _tracks(shots: list[Shot]) -> list[Track]:
     return sorted(
         {shot.track for shot in shots},
         key=lambda track: (order.index(track.type), track.index),
+    )
+
+
+def locked_track_finding(track: str) -> Finding:
+    """E11: Resolve accepts an append onto a locked track and silently drops it.
+
+    E11 is the one rule :mod:`resolve_mcp.cut.validate` cannot answer — the condition is a
+    live Resolve track, not anything in the document — so the finding is shaped here, beside
+    the check that can observe it, in the same ``{rule, id, message, fix_hint}`` shape every
+    other rule reports (#218). The catalogue entry stays with the rest in
+    :data:`resolve_mcp.cut.validate.RULE_DESCRIPTIONS`.
+    """
+    return Finding(
+        rule="E11",
+        id=track,
+        message=f"Track {track} is locked; Resolve would report the append as successful "
+        f"and place nothing.",
+        fix_hint="Unlock the track in Resolve's timeline header and build again.",
     )
 
 

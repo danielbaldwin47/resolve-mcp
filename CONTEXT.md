@@ -199,15 +199,19 @@ optional **delivery resolution**: `timeline.resolution`, one reading of
 `{width, height}` for both the rules and the build — omitted means the timeline
 is created at the project's default, which on the corpus project is 4K against
 1080p deliverables, #187), `schema`
-(verbatim, served by `get_cut_schema`), `validate` (12 errors + W1, W2,
-W8, W9 — W3-W7 are `virtual_transcript`'s over the same document — shared by
+(verbatim, served by `get_cut_schema`), `layout` (**where every entry lands** —
+pure, documents in and positions out: `positions`/`placements`/`total_frames`/
+`overlay_positions` are the one derivation the rules judge, the build places
+against and `virtual_transcript` reads back, #218), `validate` (12 errors + W1,
+W2, W8, W9 — W3-W7 are `virtual_transcript`'s over the same document — shared by
 dry run and build pre-flight; W9 is the one that reports a rule that *could
 not run*, where Resolve named no media bounds for E5 or E7 to check a range
-against, #186), `tail` (the optional **tail** device: one
-reading of `{type, duration_frames, audio_fade_frames}` for both the rules
-and the build). A `segments` entry is a shot or a **gap**
+against, #186; E11 is the exception it cannot answer, raised in
+`resolve/build` where a live locked track can be observed), `tail` (the optional
+**tail** device: one reading of `{type, duration_frames, audio_fade_frames}` for
+both the rules and the build). A `segments` entry is a shot or a **gap**
 (`{"id", "gap": <frames>}`, literal black); `is_gap`/`entry_duration`/
-`overlay_track` are the accessors every walker of that array shares.
+`overlay_track` are the `layout` accessors every walker of that array shares.
 
 `jobs/` — `cache` (hash-keyed results; `audio_identity` is the content hash
 wherever the file sits, read off a `known_hash` note remembered against a
@@ -349,8 +353,8 @@ all three agreed about. `test_rough_cut_pillar.py` is one of two other
 exceptions: it covers no single module, walking the P4 pillar across `cut`,
 `build`, `takes` and `virtual` in one pass because the joins are what a
 per-module test cannot see. `test_cut_devices.py` (#141) is the second, for the
-same reason: gaps and overlay tracks are one device each across `cut/validate`,
-`resolve/build`, `resolve/takes` and `analysis/virtual`, and the interesting
+same reason: gaps and overlay tracks are one device each across `cut/layout`,
+`cut/validate`, `resolve/build`, `resolve/takes` and `analysis/virtual`, and the interesting
 failures are the disagreements between them. `test_cut_tail.py` is the third: the
 tail is one device across `cut/tail`, `cut/validate`, `resolve/tail` and
 `resolve/build`, and a dissolve that did not land looks exactly like a cut that
