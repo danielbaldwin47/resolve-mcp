@@ -53,7 +53,7 @@ from ..errors import (
 from ..logging_config import get_logger
 from ..naming import write_target
 from .connection import ResolveConnection
-from .media import pool_of
+from .pool import pool_of
 from .timeline import (
     Reader,
     current_name,

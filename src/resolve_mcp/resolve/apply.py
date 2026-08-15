@@ -42,7 +42,8 @@ from ..timing import dual_time
 from ..titles.assets import Asset
 from ..titles.schema import TRACK_NAME
 from ..titles.validate import Event
-from . import fusion, media
+from . import fusion
+from . import pool as mediapool
 from . import timeline as timeline_read
 from . import titles as titles_read
 from .connection import ResolveConnection
@@ -118,7 +119,7 @@ def apply_titles(connection: ResolveConnection, titles_file: str) -> dict[str, A
     # No error means the document parsed, matched the schema and resolved against the
     # project — every reading below is one the rules have already been over.
     project, timeline = checked.project, checked.timeline
-    pool = media.media_pool(connection)
+    pool = mediapool.media_pool(connection)
 
     track = _own_track(timeline, timeline_read.name_of(timeline))
     # The switch comes first: ``GetIsTrackLocked`` answers ``False`` for every track of a
@@ -314,7 +315,7 @@ def _import_cards(
     pool: Pool,
     cards: dict[str, Asset],
     track: OwnedTrack,
-) -> dict[str, media.LocatedClip]:
+) -> dict[str, mediapool.LocatedClip]:
     """Every PNG card in the pool exactly once, with its duration unlocked.
 
     Deduplicated by the bin and the card's first frame: two events sharing one card share
@@ -323,8 +324,8 @@ def _import_cards(
     apply that imported afresh every time would grow the media pool by a copy of every
     card on every run, and the pool is the operator's, not this tool's.
     """
-    located: dict[str, media.LocatedClip] = {}
-    already: dict[tuple[str, str], media.LocatedClip] = {}
+    located: dict[str, mediapool.LocatedClip] = {}
+    already: dict[tuple[str, str], mediapool.LocatedClip] = {}
     for event_id, card in cards.items():
         key = (card.bin_path, card.first_frame())
         if key not in already:
@@ -335,12 +336,12 @@ def _import_cards(
     return located
 
 
-def _card_clip(pool: Pool, card: Asset, track: OwnedTrack) -> media.LocatedClip:
+def _card_clip(pool: Pool, card: Asset, track: OwnedTrack) -> mediapool.LocatedClip:
     """The pool clip for one card: the one already there, or a fresh import of it."""
-    target = media.ensure_bin(pool, card.bin_path)
-    standing = media.clip_at_path(pool, target.path, card.first_frame())
+    target = mediapool.ensure_bin(pool, card.bin_path)
+    standing = mediapool.clip_at_path(pool, target.path, card.first_frame())
     if standing is None:
-        imported = media.import_into(pool, [card.request()], target)
+        imported = mediapool.import_into(pool, [card.request()], target)
         if not imported:
             raise TitlesApplyFailedError(
                 cause=f"Resolve imported nothing for the card {card.declared!r} of "
@@ -350,7 +351,7 @@ def _card_clip(pool: Pool, card: Asset, track: OwnedTrack) -> media.LocatedClip:
                 "that the sequence is numbered without gaps, then apply again.",
                 detail=track.detail(id=card.event, asset=card.declared, bin=target.path),
             )
-        standing = media.LocatedClip(target.path, imported[0])
+        standing = mediapool.LocatedClip(target.path, imported[0])
         log.info("Imported the card %s into %r", card.declared, target.path or "the root")
     # The out point is written on every apply, not only on the import: a card put into the
     # pool by hand has never had one, and without it Resolve ignores ``endFrame`` outright
@@ -361,15 +362,15 @@ def _card_clip(pool: Pool, card: Asset, track: OwnedTrack) -> media.LocatedClip:
     # is what an HTML export writes — the ramps composite correctly untouched. The property
     # is settable if that ever stops being true; writing it now would only be a chance to
     # premultiply a card that was not.
-    media.apply_still_workaround(standing.clip, media.properties(standing.clip))
+    mediapool.apply_still_workaround(standing.clip, mediapool.properties(standing.clip))
     return standing
 
 
 def _place(
     pool: Pool,
     events: list[Event],
-    templates: dict[str, media.LocatedClip],
-    cards: dict[str, media.LocatedClip],
+    templates: dict[str, mediapool.LocatedClip],
+    cards: dict[str, mediapool.LocatedClip],
     track: OwnedTrack,
 ) -> None:
     """One call for the whole file, both routes in it. Its return value is counted,

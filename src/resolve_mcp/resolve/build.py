@@ -60,7 +60,8 @@ from ..cut.validate import (
 from ..errors import BuildFailedError, CutInvalidError, TimelineNotFoundError
 from ..logging_config import get_logger
 from ..naming import latest_version, next_version_name, version_name
-from . import cut, markers, media, mix, takes
+from . import cut, markers, mix, takes
+from . import pool as mediapool
 from . import tail as tail_route
 from . import timeline as timeline_read
 from .connection import ResolveConnection
@@ -186,7 +187,7 @@ def build_timeline(
     doc: dict[str, Any] = checked.loaded.doc
 
     project = timeline_read.open_project(connection)
-    pool = media.media_pool(connection)
+    pool = mediapool.media_pool(connection)
     base = str(doc["timeline"]["name"])
     existing = timeline_read.timeline_names(project)
     # Read before the build, because creating the new version is what makes it the latest:
@@ -434,7 +435,7 @@ def _write_entry(marker: dict[str, Any], shift: int) -> dict[str, Any]:
 
 def _shots(
     doc: dict[str, Any],
-    clips: dict[str, media.LocatedClip],
+    clips: dict[str, mediapool.LocatedClip],
     start: int,
     stills: Stills,
 ) -> list[Shot]:
@@ -498,7 +499,7 @@ def _shots(
 def _shot(
     id: str,
     track: Track,
-    located: media.LocatedClip,
+    located: mediapool.LocatedClip,
     source_in: int,
     record: int,
     duration: int,
@@ -516,14 +517,14 @@ def _shot(
     )
 
 
-def _clip_name(located: media.LocatedClip) -> str:
+def _clip_name(located: mediapool.LocatedClip) -> str:
     """What to call the clip in a failure — read once, since a dead handle answers nothing."""
     return str(located.clip.GetName() or "")
 
 
 def _selectors(
     doc: dict[str, Any],
-    clips: dict[str, media.LocatedClip],
+    clips: dict[str, mediapool.LocatedClip],
     shots: list[Shot],
     shift: int = 0,
 ) -> list[takes.Selector]:
@@ -550,7 +551,7 @@ def _selectors(
     return found
 
 
-def _take(alternate: dict[str, Any], clips: dict[str, media.LocatedClip]) -> takes.Take:
+def _take(alternate: dict[str, Any], clips: dict[str, mediapool.LocatedClip]) -> takes.Take:
     source = str(alternate["source"])
     located = clips[source]
     return takes.Take(
@@ -661,7 +662,7 @@ def _handle(clip: Clip) -> int:
     return id(clip)
 
 
-def _prepare_sources(clips: dict[str, media.LocatedClip]) -> Stills:
+def _prepare_sources(clips: dict[str, mediapool.LocatedClip]) -> Stills:
     """Get every source clip ready to be appended, and answer with the stills among them.
 
     One pass, because each clip's properties are a round trip to Resolve and there is
@@ -684,18 +685,18 @@ def _prepare_sources(clips: dict[str, media.LocatedClip]) -> Stills:
         if _handle(located.clip) in seen:
             continue
         seen.add(_handle(located.clip))
-        reported = media.properties(located.clip)
-        start, _ = media.frame_bounds(reported)
+        reported = mediapool.properties(located.clip)
+        start, _ = mediapool.frame_bounds(reported)
         if start:
             log.info(
                 "%s counts its own frames from %d, not 0; source frames are read back per shot",
                 located.clip.GetName(),
                 start,
             )
-        if not media.is_still(reported):
+        if not mediapool.is_still(reported):
             continue
         stills.add(_handle(located.clip))
-        if media.apply_still_workaround(located.clip, reported):
+        if mediapool.apply_still_workaround(located.clip, reported):
             log.info("Unlocked exact durations on the still %s", located.clip.GetName())
     return frozenset(stills)
 

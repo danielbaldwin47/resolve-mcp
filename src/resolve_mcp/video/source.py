@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import Any, NamedTuple
 
 from ..errors import InvalidRequestError, ResolveMcpError
-from ..resolve import media
+from ..resolve import pool as mediapool
 from ..resolve.connection import ResolveConnection
 from ..timing import dual_time
 
@@ -73,21 +73,21 @@ def locate(
     and a scan that cannot find its media are the same problem to the director and different
     tools to the agent.
     """
-    pool = media.media_pool(connection)
-    located = media.find_clip(pool, clip, bin_path)
-    reported = media.properties(located.clip)
-    path = reported.get(media.FILE_PATH, "")
-    if not path or media.is_offline(path):
+    pool = mediapool.media_pool(connection)
+    located = mediapool.find_clip(pool, clip, bin_path)
+    reported = mediapool.properties(located.clip)
+    path = reported.get(mediapool.FILE_PATH, "")
+    if not path or mediapool.is_offline(path):
         raise failure(
             cause=f"{clip!r} has no readable file on disk.",
             fix=RELINK_FIX,
             detail={"clip": clip, "file_path": path},
         )
 
-    fps = media.frame_rate(reported)
+    fps = mediapool.frame_rate(reported)
     # The clip's own rate is the only one this seam has; it feeds the Duration fallback
     # so a grab sees the same bounds a listing and a cut do.
-    start, out = media.frame_bounds(reported, fps=fps)
+    start, out = mediapool.frame_bounds(reported, fps=fps)
     return Source(
         name=clip,
         path=path,

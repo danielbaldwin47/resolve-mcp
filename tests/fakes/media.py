@@ -149,7 +149,7 @@ def _import_one(item: str | dict[str, Any]) -> FakeMediaPoolItem | None:
 
     ``Type`` is ``Video``, live-verified twice (#85 body, #95 probe): Resolve does not
     separate a sequence from moving footage here, which is why
-    :func:`resolve_mcp.resolve.media.is_still` keys off the file suffix instead.
+    :func:`resolve_mcp.resolve.pool.is_still` keys off the file suffix instead.
     """
     if isinstance(item, dict):
         pattern = str(item.get("FilePath", ""))
