@@ -30,10 +30,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..config import Config, get_config
+from ..config import Config
 from ..errors import InvalidRequestError, ResolveMcpError, TimelineOperationError
 from ..logging_config import get_logger
-from ..spill import spill
+from ..spill import capped
 from ..timing import dual_time, to_frames
 from .connection import ResolveConnection
 from .session import frame_rate
@@ -185,27 +185,24 @@ def list_markers(
     window = frame_window(start, end, clock.fps)
     wanted = [marker for marker in markers if _matches(marker, color) and _touches(marker, window)]
 
-    cap = max(int(limit), 0)
-    truncated = len(wanted) > cap
-    result: dict[str, Any] = {
-        "timeline": {
-            "name": clock.name,
-            "fps": clock.fps,
-            "start": dual_time(clock.start, clock.fps),
-            "end": dual_time(clock.end, clock.fps),
+    return capped(
+        {
+            "timeline": {
+                "name": clock.name,
+                "fps": clock.fps,
+                "start": dual_time(clock.start, clock.fps),
+                "end": dual_time(clock.end, clock.fps),
+            },
+            "count": len(wanted),
+            "colors": _colors(wanted),
         },
-        "count": len(wanted),
-        "markers": wanted[:cap] if truncated else wanted,
-        "colors": _colors(wanted),
-        "truncated": truncated,
-        "spilled_to": None,
-    }
-    if truncated:
-        full = {**result, "markers": wanted, "truncated": False, "spilled_to": None}
-        result["spilled_to"] = spill(
-            f"{clock.name} markers", full, config or get_config(), fallback="markers"
-        )
-    return result
+        key="markers",
+        whole=wanted,
+        limit=limit,
+        label=f"{clock.name} markers",
+        fallback="markers",
+        config=config,
+    )
 
 
 def _touches(marker: dict[str, Any], window: tuple[int | None, int | None]) -> bool:
