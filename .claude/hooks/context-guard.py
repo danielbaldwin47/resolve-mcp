@@ -96,7 +96,7 @@ ARG = r"[\w$./*:\\~{}%+=@,-]+"
 # A guarded extension ends the argument: `foo.py.bak`, `foo.py~`, `x.py.orig`
 # are not the file.
 GUARDED = r"\.(?:" + GUARDED_EXT_RE + r")(?![\w.~-])"
-STATEMENT_SEP = r"&&|[;\n]"
+STATEMENT_SEP = r"&&|\|\||[;\n]"
 
 
 def statement(text: str, start: int) -> str:
@@ -175,7 +175,7 @@ for m in re.finditer(GH_VIEW, blanked):
     f = re.search(FILTER, args)
     if "diff" not in m.group("sub") and re.search(r"--json\b", args) and f:
         expr = next(g for g in f.groups() if g is not None)
-        if not re.search(r"\b(?:body|comments)\b", expr):
+        if not re.search(r"\b(?:body(?:Text|HTML)?|comments)\b", expr):
             continue
     if "--comments" in args:
         block(
@@ -216,16 +216,18 @@ def dump_block(names: list, seg: str) -> None:
 # is where the extension is seen; the body is judged like any statement.
 READERS = r"(?:cat|more|less|type|Get-Content|gc)"
 LOOP = (
-    r"(?:\bfor\b|\bforeach\b|\bForEach-Object\b|%)(?P<head>[^;{\n]*)(?:;\s*do\b|\{)"
-    r"(?P<body>[\s\S]*?)(?:\bdone\b|\})"
+    r"(?:\bfor\b|\bforeach\b|\bForEach-Object\b|\|\s*%)(?P<head>[^;{\n]*)"
+    r"(?:;\s*do\b(?P<do>[\s\S]*?)\bdone\b|\{(?P<brace>[\s\S]*?)\})"
 )
+BODY_POS = r"(?:^|[;{|&\n]|\$\(|\b(?:then|do|else))\s*"
 for m in re.finditer(LOOP, scan_cat):
     header = scan_cat[: m.start()].rsplit("\n", 1)[-1] + m.group("head")
     if not guarded_names(header):
         continue
     if lands_in_file(statement(scan_cat, m.end())):
         continue  # `for …; done > all.txt`: the loop's output lands
-    for r in re.finditer(r"(?:^|[;{|&\n])\s*" + READERS + r"\b(?P<rest>[^;}\n]*)", m.group("body"), re.I):
+    body = m.group("do") if m.group("do") is not None else m.group("brace")
+    for r in re.finditer(BODY_POS + READERS + r"\b(?P<rest>[^;}\n]*)", body, re.I):
         if not lands_in_file(r.group("rest")) and not piped_to_filter(r.group("rest")):
             block(
                 "Blocked (context discipline): a cat loop over source files is a mass whole-file Read.\n"
@@ -236,9 +238,15 @@ for m in re.finditer(LOOP, scan_cat):
 # and PowerShell parameters are stepped over; `-TotalCount`/`-Tail`/`-Head`/
 # `-First`/`-Last` bound the read and clear it, as does indexing or counting
 # the result (`(Get-Content f)[10..40]`, `.Count`). `cat < x.py` counts too. A
-# reader with no file arg fed by `xargs`, `find -exec`, or a pipe reads what
-# the stage before it named.
+# reader with no file arg fed by `xargs`, `find -exec`, or a lister's pipe
+# (`ls`, `find`, `Get-ChildItem`) reads what that stage named — `git diff
+# a.py | cat` is a no-pager idiom, not a dump, so only listers feed.
 READER_POS = r"(?:" + CMD_POS + r"|\bxargs\s+(?:-\S+\s+)*|-exec\s+)"
+LISTERS = r"(?:ls|find|fd|dir|Get-ChildItem|gci)"
+FED_BY = (
+    r"(?:\bxargs\s+(?:-\S+\s+)*|-exec\s+|(?:^|[;&(|])\s*" + LISTERS + r"\b[^|]*\|\s*)"
+    + READERS + r"$"
+)
 for stmt in re.split(STATEMENT_SEP, scan_cat):
     for m in re.finditer(READER_POS + READERS + r"\b(?P<rest>[^|;&\n]*)", stmt, re.I):
         rest = m.group("rest")
@@ -252,7 +260,7 @@ for stmt in re.split(STATEMENT_SEP, scan_cat):
             # The position match swallowed the `|` / `xargs` / `-exec` that feeds
             # this reader; look at everything before the reader's own name.
             fed = stmt[: m.start("rest")]
-            if re.search(r"(?:\|\s*|\bxargs\s+(?:-\S+\s+)*|-exec\s+)" + READERS + r"$", fed, re.I):
+            if re.search(FED_BY, fed, re.I):
                 names = guarded_names(fed)
         dump_block(names, seg)
 

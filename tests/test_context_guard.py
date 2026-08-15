@@ -165,6 +165,7 @@ GH_BLOCKED = [
     "gh pr view 5 --json body,title",  # no filter at all
     "gh pr diff 243 | grep '^+'",  # a filter is not a landing
     "gh issue view 249 --json title,body --template '{{.body}}'",
+    "gh issue view 249 --json bodyText -q .bodyText",
 ]
 
 
@@ -226,6 +227,7 @@ WHOLE_FILE_DUMPS = [
     "Get-Content src/config.py | Out-String",
     "cat src/config.py | nl",
     "$c = Get-Content src/config.py; $c",
+    "cat src/config.py || true",  # `||` is not a pipe
     "sed --quiet p src/config.py",
     'sed -n "1,\\$p" src/config.py',
     "tail -n +10 src/config.py",  # an offset with no end is not a range
@@ -301,6 +303,12 @@ DUMP_ESCAPES = [
     "for f in src/*.py; do cat $f; done > all.txt",  # the loop lands
     "for f in src/*.py; do grep -c def $f; done # cat",
     "for f in *.py; do wc -l $f; done",
+    "git diff src/a.py | cat",  # the no-pager idiom: nothing is dumped
+    "git log --oneline -- src/a.py | cat",
+    "grep -n def src/a.py | cat -n",
+    "head -50 src/a.py | cat -A",
+    "python -c \"print('%s' % 'a.py')\" && echo '{ cat }'",
+    "if [ -f src/a.py ]; then echo hi; fi",
 ]
 
 
@@ -332,6 +340,9 @@ def test_backslash_and_drive_letter_paths_are_seen(cmd: str) -> None:
         "foreach ($f in ls *.py) { cat $f }",
         "Get-ChildItem *.py | % { gc $_ }",
         "Get-ChildItem -r *.py | ForEach-Object { Get-Content $_ }",
+        "for f in src/*.py; do echo ${f}; cat $f; done",
+        "for f in src/*.py; do if grep -q foo $f; then cat $f; fi; done",
+        "for f in src/*.py; do echo \"$f: $(cat $f)\"; done",
     ],
 )
 def test_loop_over_source_files_is_blocked(cmd: str) -> None:
