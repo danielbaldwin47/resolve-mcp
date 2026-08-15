@@ -45,6 +45,8 @@ class FakeMediaPool:
         # Held-open exports on the timeline a build makes for itself, which is the only
         # timeline whose export a tail build ever rewrites.
         self.new_timeline_locks_exports = False
+        #: Settings a timeline created here takes and drops — see ``FakeTimeline.SetSetting``.
+        self.new_timeline_settings_that_ignore_writes: set[str] = set()
         # An import that answers with a timeline and leaves the transitions out — the
         # failure a tail build cannot see from the return value, since the cut it hands
         # back is a perfectly good cut with a hard edge where its tail should be.
@@ -223,6 +225,7 @@ class FakeMediaPool:
             timeline.adopt(self._owner)
             project = self._owner.current_project
             if project is not None:
+                timeline.created_by(project)
                 project.add_timeline(timeline)
         return timeline
 
@@ -291,6 +294,9 @@ class FakeMediaPool:
         timeline = FakeTimeline(
             name,
             fps=project_fps or "59.94",
+            # Born at the project's size, on the project's settings — the inheritance a cut
+            # file's own resolution has to override (#187).
+            resolution=project.timeline_resolution() if project is not None else None,
             start_frame=self.new_timeline_start,
             video=[
                 FakeTrack(
@@ -311,6 +317,7 @@ class FakeMediaPool:
         # export failure has to be settable *before* the timeline the test never sees exists.
         timeline.export_result = self.new_timeline_export_result
         timeline.locks_written_exports = self.new_timeline_locks_exports
+        timeline.settings_that_ignore_writes = set(self.new_timeline_settings_that_ignore_writes)
         if project is not None:
             project.add_timeline(timeline)
             if self.switches_current_timeline:

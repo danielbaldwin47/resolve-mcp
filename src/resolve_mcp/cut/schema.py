@@ -17,7 +17,8 @@ ANNOTATED_EXAMPLE: Final = """\
   "timeline": {
     "name": "sunset-set",            // version base name (§6)
     "fps": 59.94,                    // declared; sources validated against it
-    "bin": "Cuts"                    // optional; default media pool root
+    "bin": "Cuts",                   // optional; default media pool root
+    "resolution": { "width": 1920, "height": 1080 }  // optional; §9
   },
 
   // Source aliases: segments reference by alias. Identity = clip name
@@ -201,6 +202,25 @@ The list is identical in the `validate_cut` dry run and `build_timeline`'s pre-f
 and a failing file aborts before Resolve is touched. Every finding is
 `{rule, id, message, fix_hint}` — see the `rules` field of this result."""
 
+_RESOLUTION: Final = """\
+## 9. Delivery resolution
+
+`timeline.resolution` is the frame size the cut is *for*: `{"width": 1920, "height": 1080}`,
+stated beside the frame rate because it is the same kind of fact. Omit it and the build does
+what v1 always did — the timeline is created at whatever the project creates timelines at,
+which is the right answer only when the project's default already is the delivery.
+
+It is worth stating because the two differ exactly when it matters. A 4K project cutting a
+1080p deliverable produces a timeline at 4K, a render at 4K, and no message anywhere saying
+so; the correction was a hand step in Resolve before every render. With the field set, the
+build puts the timeline on its own settings before the first shot lands, reads the size back
+off it, and **fails** if what it reads is not what was asked for — a build that reported a
+resolution the timeline does not have would be worse than no field at all.
+
+Both sides are required together and both are integers in pixels: half a frame size is not a
+delivery, and the missing half is not the server's to infer. The build report echoes what the
+timeline ended up at under `timeline.resolution`."""
+
 SCHEMA_DOC: Final = "\n\n".join(
     [
         "# Cut-file schema v1",
@@ -213,6 +233,7 @@ SCHEMA_DOC: Final = "\n\n".join(
         _VERSIONING,
         _RULES,
         _TAIL,
+        _RESOLUTION,
     ]
 )
 """The full schema document: prose contract with the annotated example embedded."""

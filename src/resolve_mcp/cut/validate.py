@@ -32,6 +32,7 @@ from typing import Any, Final, TypeGuard
 from ..findings import Finding, ordered
 from ..logging_config import get_logger
 from ..timing import duration_frames, ranges_overlap
+from . import resolution as cut_resolution
 from . import tail as tail_device
 from .schema import SCHEMA_VERSION
 from .tail import Tail
@@ -203,6 +204,67 @@ def _timeline_errors(doc: dict[str, Any]) -> Iterator[Finding]:
         yield _finding("E1", None, f"'timeline.fps' must be a positive number, got {fps!r}.")
     if "bin" in timeline and not isinstance(timeline["bin"], str):
         yield _finding("E1", None, "'timeline.bin' must be a string when present.")
+    yield from _resolution_shape_errors(timeline)
+
+
+def _unknown_key_errors(
+    where: str,
+    block: dict[str, Any],
+    defined: Sequence[str],
+) -> Iterator[Finding]:
+    """E1 for a key the schema does not define, on the blocks that refuse rather than ignore.
+
+    Both blocks this serves are optional and silent when a field is missing, which is what
+    makes a typo in one dangerous: ``audio_fade`` for ``audio_fade_frames`` builds a dissolve
+    over a hot mix, ``w`` for ``width`` builds at the project's own size — and both report
+    success. One reading of "that key is not in the schema", so the next device that needs it
+    does not write a third.
+    """
+    unknown = sorted(key for key in block if key not in defined)
+    if unknown:
+        yield _finding(
+            "E1",
+            None,
+            f"'{where}' carries {_listed(unknown)}, which the schema does not define; "
+            f"it takes {_listed(list(defined))}.",
+        )
+
+
+def _resolution_shape_errors(timeline: dict[str, Any]) -> Iterator[Finding]:
+    """E1 for ``timeline.resolution``: a block that does not read builds at the wrong size.
+
+    Every failure here is silent otherwise. A misspelt side, a string ``"1920"``, a height
+    left out — each one would leave the timeline on the project's own default and report a
+    successful build, which is the hand step this device exists to remove (G13, #187).
+    """
+    if "resolution" not in timeline:
+        return
+    stated = timeline["resolution"]
+    if not isinstance(stated, dict):
+        yield _finding(
+            "E1",
+            None,
+            f"'timeline.resolution' must be an object with 'width' and 'height', got "
+            f"{_kind(stated)}.",
+        )
+        return
+
+    yield from _unknown_key_errors("timeline.resolution", stated, cut_resolution.KEYS)
+    for side in cut_resolution.KEYS:
+        value = stated.get(side)
+        if not _is_int(value):
+            yield _finding(
+                "E1",
+                None,
+                f"'timeline.resolution.{side}' must be an integer pixel count, got {value!r}.",
+            )
+        elif not cut_resolution.MIN_SIDE <= value <= cut_resolution.MAX_SIDE:
+            yield _finding(
+                "E1",
+                None,
+                f"'timeline.resolution.{side}' is {value}; it must be between "
+                f"{cut_resolution.MIN_SIDE} and {cut_resolution.MAX_SIDE} pixels.",
+            )
 
 
 def _sources_errors(doc: dict[str, Any]) -> Iterator[Finding]:
@@ -250,14 +312,7 @@ def _tail_shape_errors(doc: dict[str, Any]) -> Iterator[Finding]:
         yield _finding("E1", None, "'tail' must be an object with a 'type'.")
         return
 
-    unknown = sorted(key for key in tail if key not in tail_device.KEYS)
-    if unknown:
-        yield _finding(
-            "E1",
-            None,
-            f"'tail' carries {_listed(unknown)}, which the schema does not define; "
-            f"it takes {_listed(list(tail_device.KEYS))}.",
-        )
+    yield from _unknown_key_errors("tail", tail, tail_device.KEYS)
 
     kind = tail.get("type")
     if kind not in tail_device.TYPES:
