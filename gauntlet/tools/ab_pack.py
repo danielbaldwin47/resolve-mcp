@@ -59,6 +59,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import random
 import re
 import shutil
@@ -73,6 +74,7 @@ import numpy as np
 
 from resolve_mcp.analysis import subject as subject_module
 from resolve_mcp.analysis.correlate import RHYTHM_BINS
+from resolve_mcp.ffmpeg import hwaccels
 from resolve_mcp.video import framing, supers
 
 # --------------------------------------------------------------------------
@@ -80,6 +82,15 @@ from resolve_mcp.video import framing, supers
 
 SCENE_THRESHOLD = 0.10
 SCENE_SCALE_W = 320
+
+# Decode the pictures on the card where the box has one. Every grey decode in this tool
+# goes through decode_grey, which is where the whole cost of a pack lives: a deliverable is
+# 4K HEVC and software decoding one costs four times what NVDEC costs. Scene detection is
+# deliberately left in software -- it compares *scaled* frames, so moving its scale onto the
+# card would move the cut times with it, and the cut list is what everything else joins on.
+HWACCEL_DECODE = os.environ.get("ABPACK_HWACCEL", "auto") != "off"
+_CUDA: bool | None = None
+_DOWNLOAD: dict[Path, str] = {}
 MAX_SHEET_SHOTS = 60
 TILE_COLS = 6
 TILE_ROWS = 5
@@ -447,6 +458,72 @@ def shot_stats(shots: list[tuple[float, float]], duration: float, n_cuts: int) -
 # grey decode (shared by the motion track and transition typing)
 
 
+def cuda_decode() -> bool:
+    """Whether this ffmpeg can decode on the card, probed once and remembered.
+
+    The probe is the server's (`resolve_mcp.ffmpeg.hwaccels`, #202) rather than a second
+    one: one answer to "what can this binary do" per box.
+    """
+    global _CUDA
+    if _CUDA is None:
+        _CUDA = "cuda" in hwaccels() if HWACCEL_DECODE else False
+    return _CUDA
+
+
+def download_format(clip: Path) -> str:
+    """The pixel format hardware frames of this clip come back to system memory in.
+
+    It has to be exactly right and there is no negotiating it: `hwdownload` refuses any
+    format but the one its frames actually hold, and offering it a choice
+    (`format=p010le|nv12`) makes it pick the wrong one and fail. So the source's own depth
+    decides -- p010 for the ten-bit deliverables, nv12 for eight-bit.
+    """
+    if clip not in _DOWNLOAD:
+        proc = run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=pix_fmt",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                str(clip),
+            ]
+        )
+        deep = any(mark in proc.stdout for mark in ("10le", "10be", "12le", "12be"))
+        _DOWNLOAD[clip] = "p010le" if deep else "nv12"
+    return _DOWNLOAD[clip]
+
+
+def grey_chain(width: int, height: int, fps: float | None, cuda: bool, download: str) -> str:
+    """The filter chain for one grey decode, on the card or off it.
+
+    The order is the whole point of the hardware path, and it is not the obvious one.
+    Decoding on the card is four times faster than in software on this footage, but a
+    hardware decode whose frames come straight back to system memory is *slower* than no
+    hardware decode at all -- every 4K frame is copied over the bus before anything drops
+    it. So the frames stay on the card through `fps`, which is what throws most of them
+    away, and only the survivors are downloaded.
+
+    They are then scaled by swscale exactly as the software path scales them, rather than
+    by `scale_cuda` or the decoder's own resizer. Both of those are faster still and both
+    give *different pixels* -- measured on a deliverable, a mean absolute difference of 1.6
+    grey levels and 7% of pixels off by more than three. This reading calls two pixels the
+    same when they are within three levels of each other, so a scaler that disagrees by
+    more than that is not a faster way to take this measurement, it is a different
+    measurement. Downloading the survivors at full size and scaling them here is
+    bit-identical to the software path, measured frame for frame.
+    """
+    steps = [] if fps is None else [f"fps={fps}"]
+    if cuda:
+        steps += ["hwdownload", f"format={download}"]
+    steps.append(f"scale={width}:{height}")
+    return ",".join(steps)
+
+
 def decode_grey(
     clip: Path,
     width: int,
@@ -465,14 +542,28 @@ def decode_grey(
     on uint8 would wrap a negative difference round to 255. Pass `np.uint8` to hold
     a whole song at once: 8k frames is 80 MB of bytes and 640 MB of doubles.
     """
-    cmd = ["ffmpeg", "-v", "error", "-nostdin"]
-    if start is not None:
-        cmd += ["-ss", f"{max(start, 0.0):.4f}"]
-    if dur is not None:
-        cmd += ["-t", f"{dur:.4f}"]
-    chain = f"scale={width}:{height}" if fps is None else f"fps={fps},scale={width}:{height}"
-    cmd += ["-i", str(clip), "-an", "-vf", chain, "-pix_fmt", "gray", "-f", "rawvideo", "-"]
-    proc = subprocess.run(cmd, capture_output=True, check=False)
+    def attempt(cuda: bool) -> subprocess.CompletedProcess[bytes]:
+        cmd = ["ffmpeg", "-v", "error", "-nostdin"]
+        if cuda:
+            cmd += ["-hwaccel", "cuda", "-hwaccel_output_format", "cuda"]
+        if start is not None:
+            cmd += ["-ss", f"{max(start, 0.0):.4f}"]
+        if dur is not None:
+            cmd += ["-t", f"{dur:.4f}"]
+        chain = grey_chain(width, height, fps, cuda, download_format(clip) if cuda else "")
+        cmd += ["-i", str(clip), "-an", "-vf", chain]
+        cmd += ["-pix_fmt", "gray", "-f", "rawvideo", "-"]
+        return subprocess.run(cmd, capture_output=True, check=False)
+
+    on_card = cuda_decode()
+    proc = attempt(on_card)
+    if proc.returncode != 0 and not proc.stdout and on_card:
+        # NVDEC refuses codecs and profiles it does not know -- this rig's camera originals
+        # are 4:2:2, which it cannot take (#202) -- and the file may be perfectly readable.
+        # Retried in software, loudly, because a fallback nothing records is the bug that
+        # ticket exists for.
+        print(f"warning: hardware decode of {clip.name} failed; retrying in software", flush=True)
+        proc = attempt(False)
     if proc.returncode != 0 and not proc.stdout:
         sys.exit(f"error: grey decode failed\n{proc.stderr[-2000:].decode('utf-8', 'replace')}")
     stride = width * height
