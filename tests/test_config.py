@@ -132,6 +132,14 @@ def test_the_transcriber_takes_the_backends_own_device_and_precision_unless_told
     assert config.whisper_compute_type == "float32"
 
 
+def test_the_separator_refuses_a_cpu_torch_build_unless_the_box_opts_in() -> None:
+    """GPU-first is the default (CLAUDE.md, Compute device): a +cpu separator build refuses
+    the job, and only an explicit env opt-in accepts the slow run — the choice goes on record."""
+    assert Config.from_env({}).separator_allow_cpu is False
+    assert Config.from_env({"RESOLVE_MCP_SEPARATOR_ALLOW_CPU": "1"}).separator_allow_cpu
+    assert Config.from_env({"RESOLVE_MCP_SEPARATOR_ALLOW_CPU": "0"}).separator_allow_cpu is False
+
+
 def test_ffmpeg_is_a_bare_name_on_path_until_told_otherwise() -> None:
     assert Config.from_env({}).ffmpeg == "ffmpeg"
     assert Config.from_env({"RESOLVE_MCP_FFMPEG": r"D:\tools\ffmpeg.exe"}).ffmpeg == (

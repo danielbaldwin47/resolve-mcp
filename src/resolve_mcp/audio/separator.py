@@ -33,7 +33,7 @@ from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 from typing import Any
 
-from ..config import Config, get_config
+from ..config import SEPARATOR_ALLOW_CPU_ENV, Config, get_config
 from ..errors import SeparatorUnavailableError, StemSeparationError
 from ..logging_config import get_logger
 
@@ -147,8 +147,10 @@ def environment(
     ``config.audio_separator`` names a binary, and PATH decides which install — and which
     torch — that is. A CPU-build torch turns a forty-minute separation into a day's, and the
     only symptom used to be that it was slow; here the build goes into the log and the job
-    record, and a ``+cpu`` build is a warning. A separator too old to answer ``--env_info``
-    still separates: the report says the build is unknown rather than failing the job.
+    record, and a ``+cpu`` build refuses the job unless the box opted into the CPU run
+    (``RESOLVE_MCP_SEPARATOR_ALLOW_CPU``), where it is a warning. A separator too old to
+    answer ``--env_info`` still separates: the report says the build is unknown rather than
+    failing the job.
     """
     config = config or get_config()
     lines: list[str] = []
@@ -176,12 +178,26 @@ def environment(
         )
         log.warning("%s", report["warning"])
     elif "+cpu" in report["torch"]:
-        report["warning"] = (
+        message = (
             f"The separator's torch is the CPU build ({report['torch']}): separations run "
             "on the CPU at a fraction of GPU speed. Install CUDA torch into the "
             "environment that owns the audio-separator on PATH, or point "
             "RESOLVE_MCP_AUDIO_SEPARATOR at one that has it."
         )
+        if not config.separator_allow_cpu:
+            # G10 ran for hours under a warning nobody acted on; refusing is the only
+            # signal that stops a job. A box that really has no card says so once, in env.
+            log.error("%s", message)
+            raise SeparatorUnavailableError(
+                cause=message,
+                fix=(
+                    "Install CUDA torch for the separator (see CLAUDE.md, Compute device), "
+                    f"or set {SEPARATOR_ALLOW_CPU_ENV}=1 on a box with no CUDA device to "
+                    "accept the CPU run."
+                ),
+                detail={"executable": config.audio_separator, "torch": report["torch"]},
+            )
+        report["warning"] = message
         log.warning("%s", report["warning"])
     else:
         log.info("audio-separator torch build: %s", report["torch"])

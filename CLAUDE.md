@@ -179,8 +179,11 @@ path, and when you add one — a new path takes its own row in the same PR.
 A CPU reading where the table says a GPU path exists is a **broken install,
 not a slow box**: stop, fix it (or hand it to the human under `## Needs
 from you`), then run. Waiting it out is the G10 failure (#202) — the
-separator ran hours on the CPU for a week because the log said "slow".
-Check before a live run:
+separator ran hours on the CPU under a WARNING nobody acted on. The
+server now refuses a `+cpu` separator outright
+(`RESOLVE_MCP_SEPARATOR_ALLOW_CPU`, README) and the live separator test
+is red on a CPU device; treat either as the install fix below, never as
+a reason to set the override on this box. Check before a live run:
 
     audio-separator --env_info 2>&1 | grep -E "PyTorch|ONNX"
 
