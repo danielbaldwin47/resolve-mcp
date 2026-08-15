@@ -12,6 +12,14 @@ policy 3).
 Sections follow the schema settled in #13. Every claim carries a provenance
 tag; the vocabulary is in `docs/agents/style-layer.md`.
 
+**Confirmed on the CUDA torch build, 2026-08-15 (#245).** Every `[measured]`
+claim here was computed on the CPU torch build. The beat grid and the applause
+curve were re-run on CUDA and the grid-dependent numbers re-derived over the
+same cut lists: the bar-position shares in §1, the meter and tempo readings, and
+the paired-round histograms all come back **identical**. Nothing here was
+re-derived because nothing moved. Working in `corpus.md`, "Every measurement
+below was confirmed on the CUDA torch build".
+
 ## 1. Cut placement — transients, not the beat grid
 
 The base transient philosophy applies as written. What is concert-specific is

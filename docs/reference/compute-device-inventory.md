@@ -122,12 +122,49 @@ stored CPU results:
   kept** — per `docs/agents/style-layer.md`. Below it, the profile keeps its
   claims and gains a note that they were confirmed on the CUDA build.
 
-**Outcome: pending.** The corpus diff runs on the director's box — the
-projects live nowhere else — and is recorded on #245 as it completes. Until
-it is recorded, the profiles' `[measured]` tags stand on the CPU numbers and
-this row is a flip of the *compute path*, not yet a re-confirmation of the
-corpus. The two are separable on purpose: a new job today should use the
-card whatever the diff says about claims made a month ago.
+**Outcome: every corpus claim survives, 2026-08-15.** The diff ran on the
+director's box against the cached artifacts — the stored `*-beats.json` carry
+per-beat times and the stored `*.correlate.json` carry every cut's position, so
+the cut lists are byte-identical to the ones the published numbers came from and
+the grid underneath them is the only thing that changed. Nine stored beat grids
+and nine stored `tunes` variants were recomputed from the same master audio the
+originals were measured from. Full working: `styles/corpus.md`, "Every
+measurement below was confirmed on the CUDA torch build".
+
+- **Beat grid — inside tolerance.** Median delta **0.000 s on every file**, and
+  no beat moved by as much as a frame at any fps. Five of nine files are
+  bit-identical or inside 20 ms. The other four each disagree at exactly one
+  beat: three insertions, three deletions and three 20 ms nudges across the
+  ~45,300 beats in those four files. `Unisphere` and its independently-rendered copy produce the *same*
+  insertion and deletion, so this is beat_this's own edge behaviour at marginal
+  points, not GPU nondeterminism.
+- **Applause curve — inside tolerance, with room to spare.** All nine variants
+  reproduce: span counts identical, total span seconds identical to the
+  millisecond. No boundary moved at all. The raw evidence the tolerance asks for
+  had to be produced rather than read, since the curve is never persisted: PANNs
+  was run on both devices over the same audio, giving **max |Δp| = 5.8 × 10⁻⁴**
+  over 1,578,763 frames, median below 5 × 10⁻⁸, with **no frame** over 10⁻³. The CPU arm
+  reproduces the stored peaks exactly at four decimals, which is what makes the
+  CPU-to-CUDA gap readable as signal.
+- **Nothing was re-derived, because nothing moved.** Every grid-dependent number
+  was recomputed against the CUDA grid over the stored cut lists and compared to
+  the same derivation over the CPU grid — same code both sides. On all six
+  measured timelines `beat_offsets`, `bars`, `gated` and `grid_meter` are
+  identical. The only key that shifts anywhere is `grid_refused`, the tally of
+  beats the #112 gate discarded (Zinc 11,130 → 11,131; Concert Full Cut 267 →
+  266; Monkfish 1,486 → 1,483). That counter describes the grid, not a cut.
+
+The case that looked dangerous and was not: the anchor gained a beat, moved one
+downbeat flag and gave two more beats downbeat status — and its grid is
+`meter: 1`, refused whole, so it contributes to no beat claim and could not have
+moved one.
+
+Note for anyone re-running this: the stored `*.correlate.json` were written by
+older code (they predate the #160 `stranded` field, and Zinc predates the #112
+gate), so a replay under current code does *not* reproduce them and should not be
+expected to. That drift is documented history, not a fault. Compare CPU-grid and
+CUDA-grid derivations under one version of the code; comparing either against the
+stored header measures the code, not the card.
 
 Cost either way: beats + applause over a full concert were minutes-scale on
 this box's CPU, not the hours-scale the separator's bug was (#202, G10). The
