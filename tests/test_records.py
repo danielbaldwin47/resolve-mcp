@@ -118,3 +118,23 @@ def test_a_file_whose_records_all_lack_a_time_is_the_same_refusal(tmp_path: Path
         records.rows(path, "beats")
 
     assert "record with a time in it" in caught.value.payload()["cause"]
+
+
+def test_a_caller_reading_back_its_own_file_gets_the_empty_analysis_it_wrote(
+    tmp_path: Path,
+) -> None:
+    """A beat model that heard nothing wrote a real answer — only a named path is refused."""
+    path = _written(tmp_path / "beats.json", [])
+
+    assert records.rows(path, "beats", allow_empty=True) == ()
+
+
+def test_the_other_refusals_still_stand_for_a_caller_reading_its_own_file(
+    tmp_path: Path,
+) -> None:
+    """Empty is the one refusal ``allow_empty`` drops; a file that is not one still refuses."""
+    path = tmp_path / "beats.json"
+    path.write_text("not json at all", encoding="utf-8")
+
+    with pytest.raises(InvalidRequestError):
+        records.rows(path, "beats", allow_empty=True)

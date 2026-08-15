@@ -149,7 +149,7 @@ def numbered_beats(
     a second time on audio music analysis already ran over.
     """
     document = beats_of(source, described, identity, detector, refresh, config)
-    return list(records.rows(Path(document["path"]), BEATS))
+    return list(records.rows(Path(document["path"]), BEATS, allow_empty=True))
 
 
 def energy_of(
@@ -192,7 +192,7 @@ def numbered_energy(
     file's layout stays the business of the module that writes it.
     """
     document = energy_of(source, described, identity, shape, refresh, config)
-    return list(records.rows(Path(document["path"]), ENERGY))
+    return list(records.rows(Path(document["path"]), ENERGY, allow_empty=True))
 
 
 def analyze(

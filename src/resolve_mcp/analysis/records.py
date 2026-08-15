@@ -50,7 +50,7 @@ def read(path: Path) -> dict[str, Any]:
     return loaded
 
 
-def rows(path: Path, field: str) -> tuple[dict[str, Any], ...]:
+def rows(path: Path, field: str, allow_empty: bool = False) -> tuple[dict[str, Any], ...]:
     """One file's ``field`` records, in time order — the shape ``write`` leaves, read back.
 
     The strong reader, and the reason it lives beside the writer: what a record file has to
@@ -59,6 +59,11 @@ def rows(path: Path, field: str) -> tuple[dict[str, Any], ...]:
     holding no record with a time — cover the ways a path an agent typed can be the wrong
     path, and the ``"t"`` filter with the sort is what makes the rest of them a timeline
     rather than a list (#222).
+
+    ``allow_empty`` turns the last refusal off, and only a caller reading a file it wrote
+    itself moments ago should pass it: an analysis that found nothing is a wrong path when
+    an agent named the file and a real answer when the worker just produced it — a beat
+    model that hears nothing is a grid the bar map refuses on purpose, not a bad request.
     """
     try:
         doc = json.loads(path.read_text(encoding="utf-8"))
@@ -81,7 +86,7 @@ def rows(path: Path, field: str) -> tuple[dict[str, Any], ...]:
         for row in held
         if isinstance(row, Mapping) and isinstance(row.get("t"), int | float)
     ]
-    if not found:
+    if not found and not allow_empty:
         # A file that was named but says nothing must not read like a file nobody named:
         # both would leave the column null, and only one of them is what the caller meant.
         raise InvalidRequestError(
