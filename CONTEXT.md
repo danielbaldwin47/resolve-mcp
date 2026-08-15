@@ -182,7 +182,11 @@ alone — but a missing first pass redoes all three, since the later two are cut
 from what it wrote, #192), `wav` (header facts + the one
 unreadable-WAV error).
 
-`cut/` — cut-file schema v1: `document` (read off disk), `schema`
+`cut/` — cut-file schema v1: `document` (read off disk), `resolution` (the
+optional **delivery resolution**: `timeline.resolution`, one reading of
+`{width, height}` for both the rules and the build — omitted means the timeline
+is created at the project's default, which on the corpus project is 4K against
+1080p deliverables, #187), `schema`
 (verbatim, served by `get_cut_schema`), `validate` (12 errors + W1, W2,
 W8, W9 — W3-W7 are `virtual_transcript`'s over the same document — shared by
 dry run and build pre-flight; W9 is the one that reports a rule that *could
@@ -221,7 +225,10 @@ mix sits under a timeline — the one axis a rebuild does not move; read by
 queue), `camera_sidecar` (camera model off the card's own XML, for media
 Resolve reports no camera metadata for — #94; not an **angle sidecar**),
 `scripting` (`run_python` with handles pre-bound), `session`
-(session/project wrappers), `tail` (materialising a cut's tail: the OTIO
+(session/project wrappers), `settings` (the timeline settings the server
+*writes*, through the string-typed `GetSetting`/`SetSetting` pair: resolution,
+which needs `useCustomSettings` first and is judged by the read-back, never by
+the return value — #187), `tail` (materialising a cut's tail: the OTIO
 document edit + the export/import round trip `build` takes when a tail has
 a transition to cut in — a hard out that fades nothing builds directly —
 because the scripting API cannot cut a transition at all), `takes`
@@ -334,7 +341,11 @@ tail is one device across `cut/tail`, `cut/validate`, `resolve/tail` and
 never asked for one. `test_hardware_decode.py` (#202) is the fourth: NVDEC is
 one decision across `ffmpeg` (the probe), `video/ffmpeg` (flags, fallback,
 report) and the three video routes that carry the report, and the failure worth
-testing is a decode that ran one way and reported another. Live tier: `test_live_smoke.py` (module-level
+testing is a decode that ran one way and reported another. `test_cut_resolution.py`
+(#187) is the fifth: the delivery resolution is one device across `cut/resolution`,
+`cut/validate`, `resolve/settings` and `resolve/build`, and a timeline that ignored
+the setting is indistinguishable from one that never asked for it until the render
+exists. Live tier: `test_live_smoke.py` (module-level
 `pytest.mark.live`) and five `@pytest.mark.live` tests in
 `test_live_analysis.py` — four over installed models, plus the #192 wind split
 over the director's own separated stems, the one test that opts out of the

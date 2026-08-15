@@ -79,6 +79,7 @@ from resolve_mcp.tools.timeline import (
 from resolve_mcp.tools.titles import apply_titles, edit_title, list_titles
 from resolve_mcp.tools.video import analyze_quality, detect_scene_cuts, grab_frames
 from resolve_mcp.video import ffmpeg as video_ffmpeg
+from resolve_mcp.video import jpeg
 
 from . import otio
 from .fakes import write_wav
@@ -559,6 +560,7 @@ def a_smoke_cut(
     alternate_at: int | None = None,
     audio_in: int | None = None,
     name: str = "smoke.cut.json",
+    resolution: tuple[int, int] | None = None,
 ) -> str:
     """A rough-cut shaped file (no master audio) built from one real clip.
 
@@ -594,6 +596,8 @@ def a_smoke_cut(
         "sources": {"angle": angle},
         "segments": segments,
     }
+    if resolution is not None:
+        doc["timeline"]["resolution"] = {"width": resolution[0], "height": resolution[1]}
     if audio_in is not None:
         doc["audio"] = {"source": "angle", "in": audio_in, "out": audio_in + sum(durations)}
     path = tmp_path / name
@@ -677,6 +681,60 @@ def test_a_real_build_places_every_shot_exactly_where_the_cut_puts_it(tmp_path: 
     timeline_start = built["timeline"]["start"]["frames"]
     assert [item["record"]["duration"]["frames"] for item in video["items"]] == list(durations)
     assert starts == [timeline_start, timeline_start + 48, timeline_start + 72]
+
+
+def test_a_real_build_delivers_the_resolution_the_cut_asked_for(tmp_path: Path) -> None:
+    """#187's live AC: 1920x1080 out of a project that creates timelines at 4K.
+
+    Nothing below this is checkable against a fake. Whether ``useCustomSettings`` is what
+    detaches a timeline from its project, whether the resolution keys take a string, and
+    whether a render then follows the *timeline* rather than the project are three facts
+    about Resolve, and the whole device is worthless if any of them is different from what
+    the wrapper assumes.
+
+    The render is the evidence, not the timeline setting: the frame grabbed back off the
+    file is what the delivery actually is. ``max_edge`` is far past 4K on purpose — the
+    still command only ever scales down, so an unchanged grab is the render's own size.
+
+    Skips unless the open project creates timelines at something other than the cut's own
+    resolution: a 1080p project would pass this test without the device doing anything.
+    Leaves one more ``resolve-mcp-smoke`` version and one rendered file behind.
+    """
+    if get_status()["context"]["project"] is None:
+        pytest.skip("No project open in Resolve")
+    project_size = run_python("result = [project.GetSetting('timelineResolutionWidth')]")
+    assert project_size["ok"] is True, project_size.get("error")
+    if str(project_size["result"][0]) == "1920":
+        pytest.skip("This project already creates timelines at 1920 wide")
+
+    presets = list_render_presets()
+    assert presets["ok"] is True, presets.get("error")
+    if not presets["presets"]:
+        pytest.skip("No render presets in this project")
+    preset = os.environ.get("RESOLVE_MCP_RENDER_PRESET") or presets["presets"][0]
+
+    source = a_source_clip()
+    built = build_timeline(a_smoke_cut(tmp_path, source, (48, 24), resolution=(1920, 1080)))
+    assert built["ok"] is True, built.get("error")
+    assert built["timeline"]["resolution"] == {"width": 1920, "height": 1080}
+
+    project = current_project(get_connection())
+    with current_timeline(project, find_timeline(project, str(built["timeline"]["name"]))):
+        started = render_timeline(
+            preset=preset,
+            name="resolve-mcp-smoke-1080",
+            target_dir=str(tmp_path),
+        )
+        assert started["ok"] is True, started.get("error")
+        record = wait_for(started["job"]["job_id"], timeout=1800.0)
+
+    assert record.state == "completed", record.error
+    assert record.result is not None
+    written = Path(record.result["path"])
+    grabbed = video_ffmpeg.grab(written, tmp_path / "delivered.jpg", seconds=0.2, max_edge=8192)
+    delivered = jpeg.describe(grabbed.path)
+    print(f"\n{written} delivered {delivered['width']}x{delivered['height']}")
+    assert (delivered["width"], delivered["height"]) == (1920, 1080)
 
 
 def a_device_cut(tmp_path: Path, source: dict[str, Any]) -> str:

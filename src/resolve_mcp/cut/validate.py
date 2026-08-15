@@ -32,6 +32,7 @@ from typing import Any, Final, TypeGuard
 from ..findings import Finding, ordered
 from ..logging_config import get_logger
 from ..timing import duration_frames, ranges_overlap
+from . import resolution as cut_resolution
 from . import tail as tail_device
 from .schema import SCHEMA_VERSION
 from .tail import Tail
@@ -203,6 +204,51 @@ def _timeline_errors(doc: dict[str, Any]) -> Iterator[Finding]:
         yield _finding("E1", None, f"'timeline.fps' must be a positive number, got {fps!r}.")
     if "bin" in timeline and not isinstance(timeline["bin"], str):
         yield _finding("E1", None, "'timeline.bin' must be a string when present.")
+    yield from _resolution_shape_errors(timeline)
+
+
+def _resolution_shape_errors(timeline: dict[str, Any]) -> Iterator[Finding]:
+    """E1 for ``timeline.resolution``: a block that does not read builds at the wrong size.
+
+    Every failure here is silent otherwise. A misspelt side, a string ``"1920"``, a height
+    left out — each one would leave the timeline on the project's own default and report a
+    successful build, which is the hand step this device exists to remove (G13, #187).
+    """
+    if "resolution" not in timeline:
+        return
+    stated = timeline["resolution"]
+    if not isinstance(stated, dict):
+        yield _finding(
+            "E1",
+            None,
+            f"'timeline.resolution' must be an object with 'width' and 'height', got "
+            f"{_kind(stated)}.",
+        )
+        return
+
+    unknown = sorted(key for key in stated if key not in cut_resolution.KEYS)
+    if unknown:
+        yield _finding(
+            "E1",
+            None,
+            f"'timeline.resolution' carries {_listed(unknown)}, which the schema does not "
+            f"define; it takes {_listed(list(cut_resolution.KEYS))}.",
+        )
+    for side in cut_resolution.KEYS:
+        value = stated.get(side)
+        if not _is_int(value):
+            yield _finding(
+                "E1",
+                None,
+                f"'timeline.resolution.{side}' must be an integer pixel count, got {value!r}.",
+            )
+        elif not cut_resolution.MIN_SIDE <= value <= cut_resolution.MAX_SIDE:
+            yield _finding(
+                "E1",
+                None,
+                f"'timeline.resolution.{side}' is {value}; it must be between "
+                f"{cut_resolution.MIN_SIDE} and {cut_resolution.MAX_SIDE} pixels.",
+            )
 
 
 def _sources_errors(doc: dict[str, Any]) -> Iterator[Finding]:

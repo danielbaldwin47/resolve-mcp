@@ -116,6 +116,13 @@ def build_timeline(
     *shot* lands on the same music, and moving the shots is what this build just did — so
     re-read those against the new cut.
 
+    `timeline.resolution` in the cut file is the frame size the build delivers: the new
+    timeline is put on it before the first shot lands, and the build fails rather than hand
+    back a size the timeline does not have. Leave it out and the timeline is created at the
+    project's own default — which is the wrong frame whenever the project cuts at a
+    different size from the delivery, and nothing downstream says so. `timeline.resolution`
+    in the report is what it ended up at.
+
     The validate_cut rules run first: a single error aborts before any timeline is created,
     and comes back with the same per-segment findings. The report echoes the cut file's
     content hash, which is what ties the timeline back to the exact cut that made it —
