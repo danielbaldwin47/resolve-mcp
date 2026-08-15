@@ -57,6 +57,27 @@ a full-timeline export or the director rather than getting measured against a
 guess. Its 19 shots are the smallest sample in the corpus; publishing them
 against the wrong zero would cost more than leaving them out.
 
+## Every measurement below was made on the CPU torch build
+
+**Open, 2026-08-15 (#245).** The beat grid and the applause curve now infer on
+CUDA — the analysis extra sources torch from the cu130 wheel index on Windows,
+where it used to get PyPI's CPU build. Every `[measured — …]` row in this file
+predates that flip and was computed on the CPU one.
+
+The re-computation is **pending**: per corpus project, beat grid and applause
+curve are recomputed on the CUDA build and diffed against the stored CPU
+results. A beat grid survives if its max delta is under one frame at the
+timeline's fps; an applause curve survives if no span appears, disappears or
+moves a boundary by more than a frame. Rows that survive get a line saying they
+were confirmed on the CUDA build; rows that do not are re-derived, and the
+profile claims resting on them are re-tagged per
+`docs/agents/style-layer.md`. The tolerance and the reasoning are recorded in
+`docs/reference/compute-device-inventory.md`, "The torch decision".
+
+Until that diff is recorded on #245, read every tag below as measured on the
+CPU build — the numbers are what they always were, but nothing has yet
+confirmed the GPU produces them.
+
 ## Excluded, and why
 
 - **Jaded Symphony - The Sinclair** — colour grade only; the cutting is not the

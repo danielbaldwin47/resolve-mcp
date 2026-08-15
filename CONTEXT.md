@@ -383,6 +383,16 @@ exists to keep (#223). It imports each detector's fakes from that detector's
 own test file, so the inputs have one home; what each file *says* stays with
 the per-detector tests.
 
+`test_device.py` is the second such spanning file, for the same reason in the
+other direction: it covers `analysis/device`, and then reaches into
+`beats.beat_this_detector` and `applause.panns_tagger` to assert each hands its
+model the announced device (#245). One device decision made in two places is
+one thing to verify, not two — split across the per-detector files, neither
+half would show that the two sites agree, which is the property ADR 0008 turns
+on. Everything else about those detectors stays in `test_beat_grid.py` and
+`test_applause_spans.py`. It also reads `pyproject.toml` directly, to pin the
+cu130 index shape that no import can observe.
+
 `tests/fakes/` is the fake Resolve API, one module per subsystem — open the
 module, not the package, and never the whole package at once:
 
@@ -505,7 +515,8 @@ template; `titles/schema.py` §6).
   content hash); 0004 editor-state getters answer only for the current
   timeline; 0005 source frames are read off the left offset, not the
   source start; 0006 markers ride the mix across a rebuild; 0007 audio is
-  identified by content, the hash remembered against a stat.
+  identified by content, the hash remembered against a stat; 0008 beats and
+  applause infer on CUDA, and the device is named rather than defaulted.
 - `docs/agents/` — issue-tracker conventions (wayfinder map ops), triage
   labels, domain-docs usage, the style layer (sidecar + profile formats,
   provenance tags, how a corpus pass is run), the concert pillar

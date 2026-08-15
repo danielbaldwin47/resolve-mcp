@@ -14,8 +14,9 @@ log alone.
 Announcing is not enough on its own, because neither model follows torch. beat_this
 defaults to ``device="cpu"`` whatever wheel is installed, and PANNs defaults to ``"cuda"``
 and falls back silently — so a record saying `cuda` could sit over a grid the CPU
-computed. Both inference sites hand the model `inference_device()` rather than let it
-pick, which is what makes the note answerable for the run.
+computed. Both inference sites hand the model `inference_device(note)` — off the note
+they just announced, not a fresh reading — which is what makes the logged line and the
+job record answerable for the run rather than for the install.
 """
 
 from __future__ import annotations
@@ -48,14 +49,17 @@ def torch_note() -> dict[str, Any] | None:
     }
 
 
-def inference_device() -> str:
-    """``"cuda"`` where torch sees a card, ``"cpu"`` otherwise — what the models are told.
+def inference_device(note: dict[str, Any] | None) -> str:
+    """The device ``note`` describes — ``"cuda"`` where torch saw a card, else ``"cpu"``.
 
-    No torch is ``"cpu"``: the caller is about to import a model that raises its own
-    dependency error with a fix in it, and a device string is not the place to report a
-    missing stack.
+    Takes the note rather than reading torch again, so the line a caller logged and the
+    device it then hands the model come from the same reading. Two reads could disagree,
+    and the pair that disagreed would be exactly the log and the run it claims to describe.
+
+    ``None`` — no torch at all — is ``"cpu"``: the caller is about to import a model that
+    raises its own dependency error with a fix in it, and a device string is not the place
+    to report a missing stack.
     """
-    note = torch_note()
     return "cpu" if note is None else str(note["device"])
 
 
@@ -73,9 +77,12 @@ def announce(component: str) -> dict[str, Any] | None:
             # name the build and the command that replaces it, because "it was slow" is
             # how G10 lasted (#202).
             log.warning(
-                "%s inference on the CPU: torch %s is the CPU build. Reinstall the CUDA "
-                "wheels into this venv — `uv sync --extra analysis --reinstall-package "
-                "torch` on a box with an NVIDIA card (see "
+                "%s inference on the CPU: torch %s is the CPU build. Reinstall all three "
+                "torch packages into this venv from the CUDA index — `uv sync --extra "
+                "analysis --reinstall-package torch --reinstall-package torchaudio "
+                "--reinstall-package torchcodec` on a box with an NVIDIA card. All three, "
+                "because a venv that took the CPU torch took the CPU torchaudio and "
+                "torchcodec with it, and mismatched minors die at import (see "
                 "docs/reference/compute-device-inventory.md).",
                 component,
                 note["torch"],
