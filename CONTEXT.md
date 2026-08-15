@@ -508,6 +508,15 @@ route (`bake_taurus_cards.py` bakes a `%04d` RGBA frame run per card, fade
 ramps included, for a project whose media pool holds no GUI-authored Text+
 template; `titles/schema.py` §6).
 
+## Tooling — `scripts/`
+
+Repo maintenance, not server code. `prune_merged.py` — the post-merge sweep
+(CLAUDE.md step 6): lists, or with `--apply` removes, remote branches whose PR
+merged, their local branches, and `.claude/worktrees/` worktrees whose branch
+is merged; never a locked or dirty worktree, an open-PR branch, or a tip with
+commits `origin/main` lacks. Every `gh`/`git` call goes through one injectable
+`Runner`, which is the seam `tests/test_prune_merged.py` drives on fixtures.
+
 ## Docs
 
 - `docs/adr/` — 0001 interpreter must be a registered install; 0002

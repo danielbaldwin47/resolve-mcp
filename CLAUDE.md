@@ -97,7 +97,10 @@ produced no work; relaunch rather than assume.)
    alone proves nothing (#45: squashed PR #109 read as unlanded). The risk
    the check exists for is real either way: a PR that merges into a
    just-consumed parent branch reads MERGED while its commits never reach
-   main.
+   main. Then prune the residue: `uv run python scripts/prune_merged.py`
+   lists the merged remote branches, local branches and worktrees it would
+   drop; `--apply` drops them (locked, dirty, open-PR and unmerged-commit
+   items are never touched).
 7. **If the PR was squashed, continue its ticket on a fresh branch.** The
    old branch then sits on history main no longer shares; a second PR from
    it drags the already-merged commits back in. Branch from `origin/main`
