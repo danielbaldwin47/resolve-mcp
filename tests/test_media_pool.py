@@ -24,19 +24,8 @@ from resolve_mcp.tools.media import (
 )
 
 from .conftest import Attach
-from .fakes import FakeMediaPool, FakeMediaPoolItem, media_pool, studio
-
-
-def a_file(tmp_path: Path, name: str, content: bytes = b"media") -> Path:
-    target = tmp_path / name
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(content)
-    return target
-
-
-def a_clip(path: Path | str, **properties: str) -> FakeMediaPoolItem:
-    return FakeMediaPoolItem(Path(path).name, str(path), properties)
-
+from .fakes import media_pool, studio
+from .mediapool import a_clip, a_file, a_shallow_copy_pool
 
 # --- offline and sequence identity -------------------------------------------------------
 
@@ -296,17 +285,6 @@ def test_inspect_of_a_missing_root_clip_says_it_searched_the_root(
 
 
 # --- recursive -------------------------------------------------------------------------
-
-
-def a_shallow_copy_pool(tmp_path: Path) -> FakeMediaPool:
-    """The #134 shape: one clip name held by a bin *and* by a bin nested inside it."""
-    same = a_file(tmp_path, "C0012.mp4")
-    return media_pool(
-        bins={
-            "Angles": [a_clip(same, Description="in Angles")],
-            "Angles/Cam A": [a_clip(same, Description="nested")],
-        }
-    )
 
 
 def test_a_shallow_lookup_reaches_the_copy_held_by_the_named_bin_itself(

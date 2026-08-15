@@ -224,13 +224,13 @@ the record has no pid of its own, so a launcher can never overwrite a result.
 (**the seam**: lazy singleton, probe, one auto reconnect), `cut` (cut-file
 contract), `fusion` (Text+ node, text, opacity fade spline), `interchange`
 (timeline export/import), `loader` (import DaVinciResolveScript +
-direct-attach), `markers` (read/write, review-loop transport), `media`
-(the six media operations: import, list, inspect, metadata, organize,
-relink — all of them callers of `pool`), `pool` (**the media pool adapter**:
-reaching the pool, bin addressing, clip lookup, clip reading, frame bounds,
-offline and still handling — what `cut`, `build`, `apply`, `titles`,
-`audio/acquire` and `video/source` consume; import it from here, never
-through `media`), `mix` (where the master
+direct-attach), `markers` (read/write, review-loop transport), `media` (the
+six media operations: import, list, inspect, metadata, organize, relink —
+all of them callers of `pool`), `pool` (**the media pool adapter**: reaching
+the pool, bin addressing, clip lookup, clip reading, frame bounds, offline
+and still handling — what `cut`, `build`, `apply`, `titles`, `audio/acquire`
+and `video/source` consume; import it from here, never through `media`),
+`mix` (where the master
 mix sits under a timeline — the one axis a rebuild does not move; read by
 `build`'s marker carry and by `analysis/correlate`), `render` (render
 queue), `camera_sidecar` (camera model off the card's own XML, for media
@@ -293,7 +293,9 @@ Test files follow the module they cover, so the media pair splits the same way
 the source does: `test_media_pool.py` covers `resolve/pool` (bin addressing,
 clip lookup, clip reading, frame bounds, offline) and `test_media_tools.py`
 covers `resolve/media` (what the six operations do with what the adapter hands
-them). Both drive the fake seam through `tools/media`.
+them). Both drive the fake seam through `tools/media`, and both build their
+pools from `tests/mediapool.py` (`a_file`, `a_clip`, `a_shallow_copy_pool`) so
+the pair cannot drift on what a clip or a shadowed copy looks like.
 
 `tests/fakes/` is the fake Resolve API, one module per subsystem — open the
 module, not the package, and never the whole package at once:

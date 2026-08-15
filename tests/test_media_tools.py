@@ -24,6 +24,7 @@ from resolve_mcp.tools.media import (
 
 from .conftest import Attach
 from .fakes import FakeFolder, FakeMediaPool, FakeMediaPoolItem, media_pool, studio
+from .mediapool import a_clip, a_file, a_shallow_copy_pool
 
 AUDIO_MAPPING = json.dumps(
     {
@@ -32,17 +33,6 @@ AUDIO_MAPPING = json.dumps(
         "track_mapping": {"1": {"channel_idx": [1, 3], "mute": False, "type": "Stereo"}},
     }
 )
-
-
-def a_file(tmp_path: Path, name: str, content: bytes = b"media") -> Path:
-    target = tmp_path / name
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(content)
-    return target
-
-
-def a_clip(path: Path | str, **properties: str) -> FakeMediaPoolItem:
-    return FakeMediaPoolItem(Path(path).name, str(path), properties)
 
 
 # --- import ----------------------------------------------------------------------------
@@ -679,13 +669,7 @@ def test_a_recursive_key_that_is_not_a_boolean_is_refused_not_coerced(
     attach: Attach, tmp_path: Path
 ) -> None:
     """A JSON string reads as True under bool(), which would search the opposite way."""
-    same = a_file(tmp_path, "C0012.mp4")
-    pool = media_pool(
-        bins={
-            "Angles": [a_clip(same, Description="in Angles")],
-            "Angles/Cam A": [a_clip(same, Description="nested")],
-        }
-    )
+    pool = a_shallow_copy_pool(tmp_path)
     attach(studio(pool=pool))
 
     result = set_clip_metadata(

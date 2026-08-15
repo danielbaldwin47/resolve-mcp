@@ -41,7 +41,10 @@ from ..logging_config import get_logger
 from ..timing import frames_from_timecode
 from .connection import ResolveConnection
 
-log = get_logger("media")
+# A child of the operations module's logger, so anything configured for "media" still
+# catches the adapter — but a bin creation or a still-workaround refusal says which half
+# of the old module it came from, which is the whole point of the line in a live failure.
+log = get_logger("media.pool")
 
 BIN_SEPARATOR = "/"
 IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".tif", ".tiff", ".exr", ".dpx", ".tga"})

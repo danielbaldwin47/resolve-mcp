@@ -51,9 +51,7 @@ from .connection import ResolveConnection
 from .pool import (
     BIN_SEPARATOR,
     FILE_PATH,
-    Clip,
     LocatedBin,
-    Pool,
     apply_still_workaround,
     audio_mapping,
     clips_under,
@@ -72,6 +70,11 @@ from .pool import (
 )
 
 log = get_logger("media")
+
+# Declared here rather than imported from :mod:`.pool`, the way every other module in this
+# package declares them: they are untyped scripting-API handles, not a shared type.
+Clip = Any
+Pool = Any
 
 DEFAULT_LIST_LIMIT = 200
 AUDIO_SUFFIXES = frozenset({".aac", ".aif", ".aiff", ".flac", ".m4a", ".mp3", ".ogg", ".wav"})
