@@ -242,6 +242,7 @@ WHOLE_FILE_DUMPS = [
     "Get-Content src/x.py | Write-Output",  # pass-through, not a filter
     "Get-Content src/x.py | Format-Table",
     "gc src/x.py -tal 5",  # not a prefix of any bounding parameter
+    "gc src/x.py -t 5",  # a single letter is ambiguous, not a bound
 ]
 
 

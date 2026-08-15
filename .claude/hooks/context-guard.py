@@ -246,14 +246,14 @@ for m in re.finditer(LOOP, scan_cat):
 # a.py | cat` is a no-pager idiom, not a dump, so only listers feed.
 # PowerShell accepts any unambiguous prefix of a parameter name (`-tot 5`,
 # `-Total 5`, `-Fi 3`), so every prefix of the bounding parameters clears a
-# read; `-t` alone is ambiguous (Tail/TotalCount) and the shell rejects it, so
-# the guard errs towards passing a read the shell will refuse anyway.
+# read; a single letter does not (`-t` is ambiguous, `-h`/`-f`/`-l` read like
+# Unix flags).
 BOUNDING_PARAM = (
     r"-(?:"
     + "|".join(
         name[:n]
         for name in ("TotalCount", "Tail", "Head", "First", "Last")
-        for n in range(len(name), 0, -1)
+        for n in range(len(name), 1, -1)  # `-t`/`-h`/`-f`/`-l` alone do not clear
     )
     + r")\b"
 )
