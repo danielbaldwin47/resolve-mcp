@@ -13,9 +13,10 @@ from pathlib import Path
 
 import pytest
 
+from resolve_mcp import lease
 from resolve_mcp.config import get_config
 from resolve_mcp.errors import JobNotFoundError
-from resolve_mcp.jobs import lifecycle, store
+from resolve_mcp.jobs import store
 
 SAVES = 300
 
@@ -41,41 +42,13 @@ def test_progress_reads_back_from_disk_not_from_memory() -> None:
     assert reloaded.step == "separating"
 
 
-def test_a_write_that_loses_the_race_with_a_reader_is_tried_again() -> None:
-    """The rule the retry encodes, testable off Windows where the race cannot happen.
-
-    A reader holding the file is a refusal to wait out, not a failure to report: giving up
-    would kill the worker thread mid-save and leave the record saying running forever.
-    """
-    attempts: list[int] = []
-
-    def flaky() -> str:
-        attempts.append(len(attempts))
-        if len(attempts) < 3:
-            raise PermissionError(32, "The process cannot access the file")
-        return "written"
-
-    assert store._sharing(flaky) == "written"
-    assert len(attempts) == 3
-
-
-def test_a_reader_that_never_lets_go_is_still_an_error() -> None:
-    """Retrying forever would hide a genuinely locked cache directory."""
-
-    def locked() -> str:
-        raise PermissionError(32, "The process cannot access the file")
-
-    with pytest.raises(PermissionError):
-        store._sharing(locked)
-
-
 def test_a_record_written_while_it_is_being_polled_survives_both_sides() -> None:
     """The bug this guards, found by the first job to follow another job's record.
 
     On Windows a replace fails while a reader holds the file, and a read fails mid-replace.
     Unguarded, the write killed the worker thread mid-save and left the record saying
     running forever — which is exactly what a polling agent, or a chained job, provokes.
-    Only Windows can fail this one; the retry itself is pinned by the two tests above.
+    Only Windows can fail this one; the retry itself is pinned in ``test_sharing``.
     """
     record = store.new_job("separate_stems", {"scope": "timeline"})
     done = threading.Event()
@@ -152,7 +125,7 @@ def test_the_interruption_is_written_back_so_the_verdict_is_reached_once() -> No
 
     on_disk = json.loads(_record_path(record.job_id).read_text(encoding="utf-8"))
     assert on_disk["state"] == "failed"
-    assert on_disk["session"] == lifecycle.SESSION
+    assert on_disk["session"] == lease.SESSION
 
 
 def test_a_finished_job_from_a_previous_server_is_left_alone() -> None:

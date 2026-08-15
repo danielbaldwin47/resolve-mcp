@@ -12,6 +12,7 @@ rather than empty files.
 
 from __future__ import annotations
 
+import ast
 import locale
 import shutil
 import sys
@@ -21,7 +22,7 @@ from typing import Any
 
 import pytest
 
-from resolve_mcp.audio import separator
+from resolve_mcp.audio import separator, stems
 from resolve_mcp.audio.acquire import audio_source
 from resolve_mcp.audio.stems import (
     DRUM_PASS,
@@ -95,6 +96,28 @@ def splitting() -> FakeSeparator:
 
 
 # --- the two passes ----------------------------------------------------------------------
+
+
+def test_the_stems_module_reaches_for_no_private_name_in_the_job_store() -> None:
+    """The seam, asserted rather than admitted in a comment.
+
+    This module used to import ``store._sharing`` deliberately — a general Windows retry that
+    happened to live in the store — and a private name reached for across a package boundary is
+    a seam that is not one: nothing warns when the owner changes it, and the next module with
+    the same need copies it instead. The retry has a neutral home now (``sharing``), the
+    process identity and the claim protocol have theirs (``lease``), and what is left of this
+    import is job-shaped: the record type, and the liveness the launcher can answer for.
+    """
+    tree = ast.parse(Path(stems.__file__).read_text(encoding="utf-8"))
+    imported = [
+        alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and (node.module or "").endswith("jobs.store")
+        for alias in node.names
+    ]
+
+    assert imported, "the import this is about has moved; point it at wherever it went"
+    assert [name for name in imported if name.startswith("_")] == []
 
 
 def test_four_stems_land_on_disk_keyed_by_content_hash_and_params(

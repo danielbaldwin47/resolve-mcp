@@ -33,9 +33,7 @@ import json
 import os
 import sys
 import threading
-import time
 import uuid
-from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -43,15 +41,13 @@ from typing import Any, Protocol
 
 from ..config import Config, get_config
 from ..errors import JobInterruptedError, JobNotFoundError
+from ..lease import SESSION
 from ..logging_config import get_logger
 from ..naming import slug
-from .lifecycle import COMPLETED, FAILED, RUNNING, SESSION, Outcome, verdict
+from ..sharing import sharing
+from .lifecycle import COMPLETED, FAILED, RUNNING, Outcome, verdict
 
 log = get_logger("jobs")
-
-SHARING_ATTEMPTS = 20
-SHARING_PAUSE = 0.01
-"""How long either side of a poll waits out the other's handle. See ``_sharing``."""
 
 WORKER_TAIL_LINES = 200
 """Lines of a dead worker's own output kept on the record.
@@ -239,7 +235,7 @@ def _write(record: JobRecord, config: Config) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     scratch = _scratch(target)
     scratch.write_text(json.dumps(record.payload(), indent=2), encoding="utf-8")
-    _sharing(lambda: os.replace(scratch, target))
+    sharing(lambda: os.replace(scratch, target))
 
 
 def _unclaimed(record: JobRecord) -> bool:
@@ -362,7 +358,7 @@ def _write_note(target: Path, pid: int, step: str) -> None:
     note = _note_path(target)
     scratch = _scratch(note)
     scratch.write_text(json.dumps({"pid": pid, "step": step}), encoding="utf-8")
-    _sharing(lambda: os.replace(scratch, note))
+    sharing(lambda: os.replace(scratch, note))
     log.info(
         "Job %s: its launcher noted detached worker pid %s beside the record", target.stem, pid
     )
@@ -372,7 +368,7 @@ def _read_note(target: Path) -> dict[str, Any] | None:
     """The launcher's note, or ``None`` if there is none or it is not legible."""
     note = _note_path(target)
     try:
-        raw = json.loads(_sharing(lambda: note.read_text(encoding="utf-8")))
+        raw = json.loads(sharing(lambda: note.read_text(encoding="utf-8")))
     except FileNotFoundError:
         return None
     except (OSError, ValueError):
@@ -455,27 +451,6 @@ def load_all(state: str | None = None, config: Config | None = None) -> list[Job
     return [one for one in found if one.state == state]
 
 
-def _sharing[T](attempt: Callable[[], T]) -> T:
-    """Do it again if the other side of a poll had the file open.
-
-    Windows refuses to replace a file while another handle holds it, and refuses the read
-    that lands mid-replace — and polling is exactly two handles on one record: ``get_job``
-    or a chained job on one side, the worker saving its progress on the other. The window
-    is microseconds wide, so a short retry closes it. Letting the error out would kill the
-    worker thread mid-save and leave the record saying ``running`` forever, which is the
-    one failure the whole store exists to prevent; on the reading side it would report a
-    running job as gone.
-    """
-    for attempt_number in range(SHARING_ATTEMPTS):
-        try:
-            return attempt()
-        except PermissionError:
-            if attempt_number == SHARING_ATTEMPTS - 1:
-                raise
-            time.sleep(SHARING_PAUSE)
-    raise AssertionError("unreachable")  # pragma: no cover
-
-
 def _read(path: Path) -> JobRecord | None:
     record = _read_raw(path)
     return None if record is None else _noted(record, path)
@@ -488,7 +463,7 @@ def _read_raw(path: Path) -> JobRecord | None:
     that question with the note itself (see ``note_worker_pid``).
     """
     try:
-        raw = json.loads(_sharing(lambda: path.read_text(encoding="utf-8")))
+        raw = json.loads(sharing(lambda: path.read_text(encoding="utf-8")))
     except FileNotFoundError:
         return None
     except (OSError, ValueError):

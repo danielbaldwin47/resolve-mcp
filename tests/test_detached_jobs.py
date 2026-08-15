@@ -36,6 +36,7 @@ from typing import Any
 
 import pytest
 
+from resolve_mcp import lease
 from resolve_mcp.audio import stems
 from resolve_mcp.audio.stems import (
     CLAIM,
@@ -674,7 +675,7 @@ def test_a_launch_of_our_own_that_never_produced_a_worker_is_closed_like_anybody
 
     failed = store.load(record.job_id)
 
-    assert failed.session == lifecycle.SESSION
+    assert failed.session == lease.SESSION
     assert failed.state == lifecycle.FAILED
     assert failed.error is not None
     assert failed.error["code"] == "job_interrupted"
@@ -952,7 +953,7 @@ def test_the_worker_takes_the_record_over_closes_it_and_caches_what_it_made(
     assert finished.state == lifecycle.COMPLETED
     assert finished.result == {"from": {"audio": {"path": "mix.wav"}}}
     assert finished.pid == os.getpid()
-    assert finished.session == lifecycle.SESSION
+    assert finished.session == lease.SESSION
     assert cache.lookup("the-key") == {"from": {"audio": {"path": "mix.wav"}}}
 
 
@@ -1059,7 +1060,7 @@ def test_a_real_detached_worker_finds_the_record_and_closes_it() -> None:
     assert "No detached worker" in finished.error["cause"]
     assert finished.pid is not None
     assert finished.pid != os.getpid()
-    assert finished.session != lifecycle.SESSION
+    assert finished.session != lease.SESSION
     assert store.worker_log(record.job_id, get_config()).exists()
 
 
@@ -1174,141 +1175,22 @@ def test_a_second_thread_of_this_process_is_refused_a_directory_this_one_is_sepa
     assert refused[0].detail["pid"] == os.getpid()
 
 
-def test_a_stems_claim_left_by_a_run_that_is_gone_is_taken_over_even_wearing_this_pid(
+def test_a_claim_this_process_no_longer_holds_stops_the_separation(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """pids are reissued, and the one it names can end up being ours.
-
-    Then the claim is read as our own, which used to mean the directory was locked out for
-    good behind an error saying this process was already separating into it. The session the
-    claim carries is what tells the two apart, and it has been written since the claim
-    existed without anything ever reading it.
-    """
-    directory = tmp_path / "stems-abc123"
-    _claim_held_by(directory, os.getpid())
-
-    with claimed(directory):
-        held = json.loads((directory / CLAIM).read_text(encoding="utf-8"))
-
-    assert held["session"] == lifecycle.SESSION
-    assert not (directory / CLAIM).exists()
-
-
-def test_a_stems_claim_older_than_any_separation_is_taken_over_however_alive_its_pid_looks(
-    tmp_path: Path,
-) -> None:
-    """The last way a claim outlives its run: a recycled pid that belongs to a live stranger.
-
-    Nothing about that pid says it is not the separator, so the age is the only evidence left.
-    The ceiling is far longer than the longest measured pass, so crossing it cannot be a
-    separation that is merely slow.
-    """
-    directory = tmp_path / "stems-abc123"
-
-    with _a_live_process() as other:
-        marker = _claim_held_by(directory, other.pid, claimed_at=time.time() - CLAIM_CEILING - 60)
-
-        with claimed(directory):
-            held = json.loads(marker.read_text(encoding="utf-8"))
-
-    assert held["pid"] == os.getpid()
-
-
-def test_a_claim_that_changed_after_it_was_judged_abandoned_is_left_alone(tmp_path: Path) -> None:
-    """Two processes reading one abandoned claim is two processes deciding to clear it.
-
-    The first clears it, wins the create and starts separating; the second arrives a moment
-    later with the same verdict and unlinks — by name — the claim the first is now holding.
-    Nothing then refuses the second, and two separators write one directory, which is the
-    exact failure the claim exists to prevent. So the bytes that were judged are matched
-    against the bytes on disk before anything is unlinked.
-    """
-    directory = tmp_path / "stems-abc123"
-    marker = _claim_held_by(directory, _a_pid_that_has_exited())
-    judged = marker.read_bytes()
-    live = json.dumps({"pid": os.getpid(), "session": "the-winner", "claimed_at": time.time()})
-    marker.write_text(live, encoding="utf-8")
-
-    stems._discard(marker, judged)
-
-    assert marker.exists(), "a live claim was cleared by a process judging a stale one"
-    assert marker.read_text(encoding="utf-8") == live
-
-
-def test_a_claim_that_cannot_be_read_is_waited_out_rather_than_taken_over(tmp_path: Path) -> None:
-    """An empty claim is what a claim being written *right now* looks like.
-
-    An exclusive create publishes the name before the content lands, so a rival reading in
-    that instant sees zero bytes — and reading that as abandoned has it clear the winner's
-    fresh claim and walk in. The claim is linked into place rather than created empty, so the
-    window is gone on this filesystem; read as held, an unreadable claim also costs nothing on
-    one where the fallback create is what ran.
-    """
-    directory = tmp_path / "stems-abc123"
-    directory.mkdir(parents=True)
-    (directory / CLAIM).write_bytes(b"")
-
-    with pytest.raises(SeparationInProgressError) as raised, claimed(directory):
-        pass  # pragma: no cover - the claim is refused on the way in
-
-    assert raised.value.detail["pid"] is None
-    assert (directory / CLAIM).read_bytes() == b"", "the claim being written was cleared"
-
-
-def test_an_unreadable_claim_older_than_the_ceiling_is_still_taken_over(tmp_path: Path) -> None:
-    """Held is not held for ever: a genuinely corrupt claim ages out like any other.
-
-    Its age cannot come from its content — that is the part that could not be read — so it
-    comes from the file's own timestamp.
-    """
-    directory = tmp_path / "stems-abc123"
-    directory.mkdir(parents=True)
-    marker = directory / CLAIM
-    marker.write_bytes(b"{ half a claim")
-    aged = time.time() - CLAIM_CEILING - 60
-    os.utime(marker, (aged, aged))
-
-    with claimed(directory):
-        held = json.loads(marker.read_text(encoding="utf-8"))
-
-    assert held["pid"] == os.getpid()
-
-
-def test_a_claim_is_refreshed_by_the_run_that_is_holding_it(tmp_path: Path) -> None:
-    """The ceiling has to measure silence, not runtime, or it steals from a live separation.
-
-    Six hours is longer than any measured pass, but the claim is written once at the start and
-    never touched again — so a separation that is genuinely slow (a full set, a busy box, a
-    model downloading) has its own claim read as abandoned while it is still writing, and the
-    ceiling built to rescue a dead run hands a second separator into a live one instead.
-    """
-    directory = tmp_path / "stems-abc123"
-
-    with claimed(directory) as refresh:
-        marker = directory / CLAIM
-        held = json.loads(marker.read_text(encoding="utf-8"))
-        aged = time.time() - CLAIM_CEILING - 60
-        marker.write_text(json.dumps({**held, "claimed_at": aged}), encoding="utf-8")
-
-        refresh()
-
-        refreshed = json.loads(marker.read_text(encoding="utf-8"))
-
-    assert refreshed["claimed_at"] > aged + CLAIM_CEILING, "the claim was left at its old age"
-    assert refreshed["pid"] == os.getpid()
-    assert refreshed["session"] == lifecycle.SESSION
-
-
-def test_a_claim_this_process_no_longer_holds_stops_the_separation(tmp_path: Path) -> None:
-    """A refresh is a write, and a write onto somebody else's claim is the theft it prevents.
+    """A separation that has lost its directory hears it in this module's words, not the lease's.
 
     Not refreshing is only half of it: the claim says who may write the directory, so a run
     that reads somebody else's is a run whose stem files are landing in a directory another
     separator owns — the interleaving the claim exists to stop, reached from the inside. It
     stops rather than carrying on quietly, because what carrying on produces is a set of
-    stems from two runs that looks complete to the reuse check reading it next.
+    stems from two runs that looks complete to the reuse check reading it next. The reading
+    itself is ``lease``'s; what is asked here is that it arrives as a separation error, at the
+    moment the bar reports, naming the directory and whoever holds it now.
     """
     directory = tmp_path / "stems-abc123"
+    monkeypatch.setattr(stems, "CLAIM_REFRESH", 0.0)  # every reading of the bar, not one a minute
 
     with claimed(directory) as refresh:
         marker = directory / CLAIM
@@ -1323,9 +1205,13 @@ def test_a_claim_this_process_no_longer_holds_stops_the_separation(tmp_path: Pat
         assert marker.read_text(encoding="utf-8") == theirs
 
 
-def test_a_claim_that_vanished_under_a_running_separation_also_stops_it(tmp_path: Path) -> None:
+def test_a_claim_that_vanished_under_a_running_separation_also_stops_it(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """No claim is no better than a rival's: nothing is holding the directory for this run."""
     directory = tmp_path / "stems-abc123"
+    monkeypatch.setattr(stems, "CLAIM_REFRESH", 0.0)
 
     with claimed(directory) as refresh:
         (directory / CLAIM).unlink()
@@ -1336,42 +1222,12 @@ def test_a_claim_that_vanished_under_a_running_separation_also_stops_it(tmp_path
         assert raised.value.detail["pid"] is None
 
 
-def test_a_refresh_that_cannot_be_written_leaves_the_separation_running(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The other half: a claim that could not be rewritten is ours still, only older.
-
-    Both the write and the cleanup of what it left behind are refused here — Windows refuses
-    to unlink a file another handle holds, and that unlink runs inside the handler for the
-    write that already failed. Unguarded it escapes ``_touch`` and takes half an hour of GPU
-    work with it, over a scratch file named for this process that nothing else ever reads.
-    """
-    directory = tmp_path / "stems-abc123"
-
-    with claimed(directory) as refresh:
-        marker = directory / CLAIM
-        held = marker.read_text(encoding="utf-8")
-
-        def refuses(*args: Any, **kwargs: Any) -> None:
-            raise PermissionError("the file is open in another process")
-
-        monkeypatch.setattr(os, "replace", refuses)
-        monkeypatch.setattr(Path, "unlink", refuses)
-
-        refresh()  # the separation carries on
-
-        monkeypatch.undo()
-        assert marker.read_text(encoding="utf-8") == held
-
-
-def test_the_bar_a_separation_reports_through_keeps_the_claim_young(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_the_bar_a_separation_reports_through_keeps_the_claim_young() -> None:
     """Hung off the progress bar because that is the only thing reporting from inside a pass.
 
-    Throttled because the bar moves several times a second and the claim only has to stay
-    younger than a ceiling measured in hours.
+    The throttle that turns several readings a second into one write a minute is the lease's
+    (``CLAIM_REFRESH``, tested in ``test_lease``); what is asked here is the wiring — every
+    reading tells the claim it is still being worked on, and the bar still reports.
     """
     refreshed: list[int] = []
     reported: list[tuple[float, str]] = []
@@ -1382,12 +1238,9 @@ def test_the_bar_a_separation_reports_through_keeps_the_claim_young(
 
     beat(0.1, "separating four stems (10%)")
     beat(0.2, "separating four stems (20%)")
-    assert refreshed == [], "the claim was rewritten twice in a second"
-
-    monkeypatch.setattr(stems, "CLAIM_REFRESH", 0.0)
     beat(0.3, "separating four stems (30%)")
 
-    assert refreshed == [1]
+    assert refreshed == [1, 1, 1], "a reading of the bar did not reach the claim"
     assert reported == [
         (0.1, "separating four stems (10%)"),
         (0.2, "separating four stems (20%)"),
@@ -1451,66 +1304,6 @@ def test_a_finished_separation_holds_the_claim_for_the_passes_and_leaves_none_be
 
     assert held and all(held), "the separator ran without the directory being claimed"
     assert not (Path(str(output.result["directory"])) / CLAIM).exists()
-
-
-def test_a_claim_read_the_filesystem_refused_for_an_instant_is_read_again_not_believed(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A sharing violation is the file being read, not the directory being held.
-
-    Two handles land on a claim whenever anything is looking — a rival deciding whether to
-    wait, the run holding it refreshing once a minute — and Windows refuses the read that
-    arrives while the other side has it open. Believed the first time, that verdict reads an
-    unreadable claim as held and costs this run a directory whose owner is long gone. The
-    store retries its record reads for exactly this reason; a claim file is the same file.
-    """
-    directory = tmp_path / "stems-abc123"
-    _claim_held_by(directory, _a_pid_that_has_exited())
-    refused: list[int] = []
-    read_bytes = Path.read_bytes
-
-    def refuses_once(self: Path) -> bytes:
-        if self.name == CLAIM and not refused:
-            refused.append(1)
-            raise PermissionError("the file is open in another process")
-        return read_bytes(self)
-
-    monkeypatch.setattr(Path, "read_bytes", refuses_once)
-
-    with claimed(directory):
-        held = json.loads((directory / CLAIM).read_text(encoding="utf-8"))
-
-    assert refused == [1], "the refused read this test is about never happened"
-    assert held["pid"] == os.getpid(), "one refused read locked this run out of a dead run's claim"
-
-
-def test_a_refresh_whose_read_is_refused_leaves_the_separation_running(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The other half of the refresh: a claim that could not be *read* is this run's still.
-
-    The refresh runs once a minute from inside a pass that lasts half an hour, and a read the
-    filesystem refuses used to arrive as "somebody else has the directory" — ending the
-    separation, and all the GPU time in it, over a file nothing had touched. It is the same
-    verdict as a refresh that could not be written: the claim is ours, only older.
-    """
-    directory = tmp_path / "stems-abc123"
-
-    with claimed(directory) as refresh:
-        marker = directory / CLAIM
-        held = marker.read_text(encoding="utf-8")
-
-        def refuses(self: Path) -> bytes:
-            raise PermissionError("the file is open in another process")
-
-        monkeypatch.setattr(Path, "read_bytes", refuses)
-
-        refresh()  # the separation carries on
-
-        monkeypatch.undo()
-        assert marker.read_text(encoding="utf-8") == held, "an unreadable claim was written over"
 
 
 def test_a_run_waits_out_the_separation_already_under_way_rather_than_refusing_it(
