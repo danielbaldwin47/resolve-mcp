@@ -107,7 +107,10 @@ The server now probes `--env_info` before each fresh separation, logs the
 build, carries it in the job record, and warns on `+cpu`. The fix — CUDA
 torch installed into whatever environment owns the PATH
 `audio-separator`, or `RESOLVE_MCP_AUDIO_SEPARATOR` pointed at one that
-has it — is an install action on the box, recorded on ticket #202.
+has it — is an install action on the box. Still `+cpu` on 2026-08-15 (a
+live run was on the CPU as this was written); the exact command is in
+CLAUDE.md, "Compute device", and the live separator test now fails on a
+CPU device so the state cannot go unnoticed again.
 
 The build says what the install *can* do; it does not say what a run
 *did*. Each pass announces its own device in its opening banner, and that
