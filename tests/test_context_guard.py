@@ -303,6 +303,7 @@ DUMP_ESCAPES = [
     "for f in src/*.py; do cat $f; done > all.txt",  # the loop lands
     "for f in src/*.py; do grep -c def $f; done # cat",
     "for f in *.py; do wc -l $f; done",
+    "for f in src/*.py; do cat $f; done | grep -c import",  # the loop's output is filtered
     "git diff src/a.py | cat",  # the no-pager idiom: nothing is dumped
     "git log --oneline -- src/a.py | cat",
     "grep -n def src/a.py | cat -n",
@@ -343,6 +344,9 @@ def test_backslash_and_drive_letter_paths_are_seen(cmd: str) -> None:
         "for f in src/*.py; do echo ${f}; cat $f; done",
         "for f in src/*.py; do if grep -q foo $f; then cat $f; fi; done",
         "for f in src/*.py; do echo \"$f: $(cat $f)\"; done",
+        "for f in src/*.py; do cat $f || true; done",
+        "for f in src/*.py\ndo\n  cat $f\ndone",
+        "find src -name '*.py' | while read f; do cat $f; done",
     ],
 )
 def test_loop_over_source_files_is_blocked(cmd: str) -> None:

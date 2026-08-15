@@ -216,17 +216,19 @@ def dump_block(names: list, seg: str) -> None:
 # is where the extension is seen; the body is judged like any statement.
 READERS = r"(?:cat|more|less|type|Get-Content|gc)"
 LOOP = (
-    r"(?:\bfor\b|\bforeach\b|\bForEach-Object\b|\|\s*%)(?P<head>[^;{\n]*)"
-    r"(?:;\s*do\b(?P<do>[\s\S]*?)\bdone\b|\{(?P<brace>[\s\S]*?)\})"
+    r"(?:\bfor\b|\bforeach\b|\bwhile\b|\bForEach-Object\b|\|\s*%)(?P<head>[^;{\n]*)"
+    r"(?:[;\n]\s*do\b(?P<do>[\s\S]*?)\bdone\b|\{(?P<brace>[\s\S]*?)\})"
 )
 BODY_POS = r"(?:^|[;{|&\n]|\$\(|\b(?:then|do|else))\s*"
 for m in re.finditer(LOOP, scan_cat):
     header = scan_cat[: m.start()].rsplit("\n", 1)[-1] + m.group("head")
     if not guarded_names(header):
         continue
-    if lands_in_file(statement(scan_cat, m.end())):
-        continue  # `for …; done > all.txt`: the loop's output lands
+    after = statement(scan_cat, m.end())
+    if lands_in_file(after) or piped_to_filter(after):
+        continue  # `for …; done > all.txt` / `… done | grep x`: the loop's output is bounded
     body = m.group("do") if m.group("do") is not None else m.group("brace")
+    body = body.replace("||", ";")  # `cat $f || true` is not a pipe
     for r in re.finditer(BODY_POS + READERS + r"\b(?P<rest>[^;}\n]*)", body, re.I):
         if not lands_in_file(r.group("rest")) and not piped_to_filter(r.group("rest")):
             block(
@@ -241,10 +243,10 @@ for m in re.finditer(LOOP, scan_cat):
 # reader with no file arg fed by `xargs`, `find -exec`, or a lister's pipe
 # (`ls`, `find`, `Get-ChildItem`) reads what that stage named — `git diff
 # a.py | cat` is a no-pager idiom, not a dump, so only listers feed.
-READER_POS = r"(?:" + CMD_POS + r"|\bxargs\s+(?:-\S+\s+)*|-exec\s+)"
+READER_POS = r"(?:" + CMD_POS + r"|\bxargs\s+(?:-\S+\s+)*|-(?:exec|x|X)\s+)"
 LISTERS = r"(?:ls|find|fd|dir|Get-ChildItem|gci)"
 FED_BY = (
-    r"(?:\bxargs\s+(?:-\S+\s+)*|-exec\s+|(?:^|[;&(|])\s*" + LISTERS + r"\b[^|]*\|\s*)"
+    r"(?:\bxargs\s+(?:-\S+\s+)*|-(?:exec|x|X)\s+|(?:^|[;&(|])\s*" + LISTERS + r"\b[^|]*\|\s*)"
     + READERS + r"$"
 )
 for stmt in re.split(STATEMENT_SEP, scan_cat):
