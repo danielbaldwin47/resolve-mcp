@@ -218,15 +218,25 @@ Round 1 critic, verbatim needs; each is server measurement work:
    Calibrated on the five deliverables against the same footage degraded three ways
    (`recon/image_quality_calib.json`, read in
    `docs/reference/image-quality-calibration.md`): 3600 samples, floors at
-   sharpness 0.40 / clipped 0.015 / stability 0.75 by one stated rule, vetoing none
-   of the corpus on sharpness or clipping and catching a one-sigma defocus in full.
+   sharpness 0.40 / clipped 0.015 / stability 0.75 by one stated rule, vetoing **none**
+   of the corpus on any of the three while catching a one-sigma defocus in full, a
+   stop-and-a-half of overexposure 94% of the time and a 1%-of-frame wobble 99.9%.
+
    Found while calibrating, and fixed in the same ticket: the guard that refuses to
-   score a frame pair across a cut was too loose, so one cut in the Taurus People
-   deliverable (correlation peak 0.02 against an in-shot floor of 0.01) was scored
-   as movement and dragged six samples of a locked-off shot to zero — a delivered
-   shot the report called shaky. The guard is now calibrated too
-   (`recon/quality_cut_guard.json`). Still open from this item: nothing measures the
-   *raw angles*, so how often a source fails these floors is unknown.
+   score a frame pair across a cut was set by eye and was too loose, so one cut in the
+   Taurus People deliverable (correlation peak 0.02 against a floor of 0.01) was scored
+   as movement and dragged six samples of a locked-off shot to zero — a delivered shot
+   the report called shaky. The guard is measured now too
+   (`recon/quality_cut_guard.json`): in-shot pairs correlate at 0.29 or better at the
+   1st percentile, crossing pairs cluster below 0.03, and the floor sits in the gap at
+   0.05. That took the corpus's below-floor stability samples from 40 to 0 and the
+   Taurus People cut from one shot called shaky to none of 78 — and it retired two
+   workarounds (a median-instead-of-worst aggregate, a minimum window length) that had
+   been papering over it.
+
+   Still open from this item: nothing has measured the *raw angles* at scale — one
+   2-minute span, clean — so how often a source fails these floors is unknown, and
+   that is the number that says how much an angle choice is really constrained.
 8. Super/graphic presence detection with in/out timecodes + straddle check.
 9. Head/tail treatment: fade-in vs dropped frames, audio floor handling.
 10. Audio feel across cuts (balance/room-tone jumps) beyond RMS level.

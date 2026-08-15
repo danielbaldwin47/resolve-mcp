@@ -79,15 +79,25 @@ FLAT_CONTRAST = 0.01
 """Luma standard deviation below which a frame carries nothing to align against. A black
 hold, a whiteout, a strobe frame: the correlator would answer, and the answer would be noise."""
 
-PEAK_FLOOR = 0.01
+PEAK_FLOOR = 0.05
 """Normalised phase-correlation peak below which two frames are not the same picture at all.
-Deliberately low — it is a guard against nonsense, not a judgement about how similar the
-frames are, and a shot that changes fast is still the same shot."""
 
-CUT_SHIFT = 0.10
+Measured, not guessed, and the measurement is why it is not lower: across the five delivered
+songs, pairs *inside* a shot correlate at 0.29 or better at the 1st percentile, while pairs
+across a cut cluster below 0.03 — and the sweep between 0.03 and 0.12 is perfectly flat,
+because nothing at all lies in that gap (`gauntlet/recon/quality_cut_guard.json`). This sits
+in the middle of it. The 0.01 it started at caught 1.5% of the cut pairs where 0.03 catches
+all of them, and the ones it let through are the expensive kind: a cut scored as a lurch
+poisons the trend its neighbours are judged against, which put six samples of a locked-off
+delivered shot at zero stability (#182)."""
+
+CUT_SHIFT = 0.04
 """Fraction of frame width a single-pair shift may reach before it is read as a different
-picture rather than a move. A tenth of the frame between neighbouring samples is a whip pan
-at best and a cut at worst; either way there is no wobble to measure across it."""
+picture rather than a move. Above the largest step any in-shot pair of the corpus actually
+took (3.1% of frame width, at four samples a second), rounded up to the next grid line: past
+that it is a whip pan at best and a cut at worst, and either way there is no wobble to
+measure across it. Belt and braces behind the peak floor, which is what catches a cut whose
+two sides happen to sit in the same place."""
 
 SMOOTH_WINDOW = 5
 """How many neighbouring shifts the trend is taken over, samples. Wide enough that a steady
@@ -314,18 +324,21 @@ def failures(reading: Reading, floors: Floors) -> tuple[str, ...]:
 def summarize(readings: list[Reading], floors: Floors | None = None) -> dict[str, Any]:
     """One block describing a stretch of samples — a shot, a window, a whole scan.
 
-    Middles for what describes the picture, and the worst moment for clipping: a frame with a
-    stage light burned through it is visible the instant it is on screen, so the maximum is
-    what a veto is about.
+    Middles for the two readings that describe the picture, and the worst moment for the two
+    that veto it. A frame with a stage light burned through it, or a half-second where the
+    camera lurches, is visible the instant it is on screen — a shot is as usable as its worst
+    moment, not as its average one. Sharpness and exposure are the opposite: they are
+    properties of the take, and their extremes over a stretch are a focus pull and a lighting
+    change rather than a defect.
 
-    Stability is the exception in the other direction — a median, with the worst single
-    sample beside it rather than in place of it. A quarter-second dip is what a whip pan, a
-    strobe frame or an unlucky correlation looks like, and on the delivered corpus about one
-    sample in a hundred dips below the floor while the footage around it is locked off. Taken
-    as a minimum, that one sample would call a five-second hold shaky, so shots would be
-    vetoed at a rate that says more about the estimator than about the camera. Wobble is a
-    property of a hold, not of an instant, so the middle of the hold is what says whether it
-    held. ``stability_min`` keeps the dip visible for anyone who wants to look at it.
+    Taking stability as a minimum is only honest because the estimator is quiet enough to
+    bear it: over 3553 measurable samples of the delivered corpus the *lowest single sample*
+    is 0.844, well clear of the 0.75 floor
+    (`gauntlet/recon/image_quality_calib.json`). It was not always — the guard that refuses
+    to score a pair across a cut used to let some through, and the resulting one-in-a-hundred
+    false dips would have made a minimum unusable. That was worth fixing at the source rather
+    than smoothing over here (#182). ``stability_median`` is carried beside it, because the
+    difference between the two is what says whether a shot wobbled once or throughout.
 
     A stretch nothing could be measured over reports ``samples: 0`` rather than zeroes.
     """
@@ -339,8 +352,8 @@ def summarize(readings: list[Reading], floors: Floors | None = None) -> dict[str
         "contrast": _rounded(statistics.median(one.contrast for one in readings)),
         "clipped": _rounded(max(one.clipped for one in readings)),
         "crushed": _rounded(max(one.crushed for one in readings)),
-        "stability": _rounded(statistics.median(steady)) if steady else None,
-        "stability_min": _rounded(min(steady)) if steady else None,
+        "stability": _rounded(min(steady)) if steady else None,
+        "stability_median": _rounded(statistics.median(steady)) if steady else None,
         "stability_samples": len(steady),
     }
     if floors is not None:

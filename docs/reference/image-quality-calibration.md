@@ -1,8 +1,11 @@
 # Image-quality calibration
 
-Where the floors in `resolve_mcp.video.quality` come from, and what they were
-measured against. Receipt: `gauntlet/recon/image_quality_calib.json`, written by
-`gauntlet/recon/image_quality_calib.py`. Measured 2026-08-14 for #182.
+Where the floors and guards in `resolve_mcp.video.picture` and
+`resolve_mcp.video.quality` come from, and what they were measured against.
+Receipts: `gauntlet/recon/image_quality_calib.json` (the floors),
+`gauntlet/recon/quality_cut_guard.json` (the discontinuity guard),
+`gauntlet/recon/quality_shots.json` (both, on a real cut and a real angle).
+Measured 2026-08-14 for #182.
 
 ## The question
 
@@ -38,14 +41,12 @@ synthetic pair could be separated by a measurement that says nothing about a con
 | reading | delivered corpus | mildest failure |
 | --- | --- | --- |
 | sharpness | min 0.582, p05 0.647, median 0.705, max 0.810 | defocus σ=1: 0.157–0.197 |
-| clipped | max 0.0002 (one pixel in ~5000) | blown ×1.6: median 0.029 |
-| stability | p05 0.938, median 1.000 | shake 3 px: median 0.605 |
+| clipped | max 0.0002 (two pixels in ten thousand) | blown ×1.6: median 0.029 |
+| stability | min 0.844, p05 0.938, median 1.000 | shake 3 px: median 0.605 |
 
-Sharpness separates completely — the whole corpus sits above 0.58 and every
-defocused frame below 0.20, with nothing in between. Clipping separates by two
-orders of magnitude: this room's lighting essentially never burns a highlight
-through. Stability separates with an overlap of about 1% of samples, which is the
-interesting number below.
+Every reading separates completely. Nothing in the corpus overlaps any of the three
+degraded distributions, and the gaps are wide: the softest delivered frame is three
+times sharper than the sharpest defocused one.
 
 ## The rule, and the floors it gives
 
@@ -55,39 +56,72 @@ interesting number below.
 
 Percentiles rather than extremes on both sides: the tails of a 3600-sample scan are
 whip pans and strobe frames, and a floor set on those is a floor set on the
-estimator's worst moment rather than on the footage. Rounding towards the laxer grid
-point so no floor vetoes delivered footage because of where a grid line fell.
+estimator's worst moment. Rounding towards the laxer grid point so no floor vetoes
+delivered footage because of where a grid line fell.
 
 | floor | value | vetoes of the corpus | catches of the mildest failure |
 | --- | --- | --- | --- |
 | `min_sharpness` | 0.40 | 0 of 3600 | 100% |
 | `max_clipped` | 0.015 | 0 of 3600 | 94.3% |
-| `min_stability` | 0.75 | 40 of 3561 (1.1%) | 99.9% |
+| `min_stability` | 0.75 | 0 of 3553 measurable | 99.9% |
 
-The sharpness floor is nowhere near a cliff: every candidate from 0.25 to 0.50 vetoes
-none of the corpus and catches all of the defocus. The stability floor is the one
-worth arguing about, and the sweep in the receipt is why 0.75 rather than 0.60: at
-0.60 a 1%-of-frame wobble is caught 10% of the time, at 0.65 it is caught 94%, and
-the corpus veto rate is flat at ~1.1% across the whole range. The overlap is not the
-floor's fault and moving it does not fix it.
+None of the three is near a cliff. Every sharpness candidate from 0.25 to 0.50
+vetoes none of the corpus and catches all of the defocus; every stability candidate
+from 0.60 to 0.80 vetoes none of the corpus, and the 3 px shake goes from 10% caught
+at 0.60 to 99% at 0.70 as the floor crosses its distribution. The whole sweep,
+including what each candidate would have let past, is in the receipt.
 
-## What the 1.1% is, and what it changed
+## The discontinuity guard, and the bug it was hiding
 
-Those 40 samples are inside delivered, accepted footage. They are quarter-second
-dips — a whip pan, a strobe frame, a correlation that landed badly — with locked-off
-footage either side. Two decisions follow from them, both in the code:
+Stability is measured between neighbouring frames, so it depends entirely on
+refusing to score a pair the correlator cannot align — a pair across a cut is two
+different pictures, and the correlator answers anyway, with a large meaningless
+shift that then poisons the trend its neighbours are judged against.
 
-- **A stretch is judged on its median stability, not its minimum**
-  (`picture.summarize`, and the per-shot column in `analysis.correlate`). At a 1.1%
-  sample rate, a five-second shot holds about twenty samples, so judging a shot on
-  its unluckiest one would veto roughly a fifth of a clean edit. `stability_min` is
-  carried beside the median so the dip stays visible.
-- **A lone unusable sample is not a window** (`quality.MIN_WINDOW_SAMPLES`). The
-  sample stays in the curve and in `unusable_samples`; what it does not do is become
-  a stretch to keep a cut out of.
+The first pass at this guard was set by eye, and it was too loose. On the Taurus
+People deliverable one cut (phase-correlation peak 0.020 against a 0.01 floor, a
+30 px shift against a 32 px ceiling) went unrecognised, and dragged six samples of a
+locked-off shot to a stability of zero — a delivered shot the report called shaky.
+`quality_cut_guard.py` measures every frame pair of every deliverable and splits
+them by whether a detected cut falls inside the pair:
 
-Clipping keeps its maximum: a frame with a stage light burned through it is visible
-the instant it is on screen, and it has no estimator noise to speak of.
+| | pairs | peak p01 | peak p05 | peak median |
+| --- | --- | --- | --- | --- |
+| inside a shot | 14397 | 0.287 | 0.397 | 0.583 |
+| across a cut | (601 labelled, ~1 in 3 truly crossing) | 0.000 | 0.017 | — |
+
+The two are cleanly separated and the sweep between them is flat: a peak floor of
+0.03 catches every crossing pair, 0.12 catches no more, and nothing at all lies in
+between. `PEAK_FLOOR` sits in the middle of that gap at **0.05**, refusing 0.6% of
+in-shot pairs — which are flat frames the contrast guard would refuse anyway.
+Separately, no in-shot pair anywhere in the corpus moves more than 3.1% of frame
+width between samples, so `CUT_SHIFT` came down from 0.10 to **0.04**.
+
+What that fix was worth, measured the same way on the same footage:
+
+| | before | after |
+| --- | --- | --- |
+| corpus samples under the stability floor | 40 of 3561 (1.1%) | 0 of 3553 |
+| lowest single corpus stability sample | 0.000 | 0.844 |
+| shots of the human's Taurus People cut called shaky | 1 of 78 | 0 of 78 |
+
+The 1.1% was not estimator noise to be smoothed over in the aggregation — it was
+this bug, and two decisions taken to work around it (judging a stretch on its median
+stability, and refusing to publish a one-sample window) were reverted once it was
+fixed. A stretch is judged on its worst moment, which is what a veto means.
+
+## On a real cut and a real angle (#182 AC1)
+
+`quality_shots.py`, against the same corpus and the live Resolve project:
+
+- **Per shot** — the human's Taurus People cut, 78 shots from the scene detector.
+  Sharpness spreads 0.62 to 0.85 across shots, so the reading discriminates between
+  a delivered cut's own shots rather than saturating; stability — each shot's own
+  worst sample — runs 0.875 to 1.00, and no shot misses a floor. A delivered cut
+  vetoing none of itself is the result to want.
+- **Per window** — a 2-minute span of a raw A7IV angle out of the open project,
+  scanned through `analyze_quality`: 480 samples, none unusable, no windows, median
+  sharpness 0.686. Raw footage from this rig reads much like the cut made from it.
 
 ## What this does not calibrate
 
@@ -95,11 +129,15 @@ the instant it is on screen, and it has no estimator noise to speak of.
   acutance. A shallow-focus shot whose subject is sharp and whose frame is mostly
   bokeh scores low and is not wrong. Treat a low score as a frame to look at.
 - **Other rooms.** Every number here is one session at one club with one lighting
-  rig. The rule travels; the floors are this corpus's. Re-run the script against a
+  rig. The rule travels; the floors are this corpus's. Re-run the scripts against a
   new corpus before trusting them on it.
 - **Fine jitter.** Stability is read between samples, so 4 samples a second sees
   sway up to about 2 Hz. A true micro-jitter needs `sample_fps` raised.
-- **Raw angles.** Only the deliverables were measured. The raw camera masters have
-  not been swept, so the rate at which the *sources* fail these floors is unknown —
-  which is the number that would say how much a builder's angle choice is actually
-  being constrained (#182 leaves this open).
+- **Footage that actually failed.** The bad side is degraded good footage, not a
+  take the director rejected for being soft. Nobody keeps those, which is why it was
+  done this way — but it means the readings are calibrated against a *model* of each
+  failure rather than against the real thing.
+- **Raw angles at scale.** One angle span was scanned, not the card. How often a
+  source fails these floors is still unknown, and that is the number that would say
+  how much a builder's angle choice is really being constrained (#182 leaves it
+  open).
