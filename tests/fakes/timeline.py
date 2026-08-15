@@ -17,6 +17,12 @@ from .media import IMAGE_SUFFIXES, STILL_DEFAULT_FRAMES
 READ_ONLY = 0o444
 """What a file Resolve is holding open behaves like to a rewrite — see ``Export``."""
 
+CUSTOM_SETTINGS = "useCustomSettings"
+WIDTH = "timelineResolutionWidth"
+HEIGHT = "timelineResolutionHeight"
+"""The settings a build writes. Spelled here rather than imported from the server, so a
+rename in the wrapper has to face a fake that still says what Resolve calls them."""
+
 if TYPE_CHECKING:
     from .connection import FakeResolve
     from .media import FakeMediaPoolItem
@@ -65,10 +71,26 @@ class FakeTimeline(AnswersNone):
         end_frame: int | None = None,
         missing: frozenset[str] | set[str] | None = None,
         owner: FakeResolve | None = None,
+        # Strings, like every other setting: Resolve answers "1920", never 1920. A timeline
+        # that says nothing about its size is one whose project said nothing either.
+        resolution: tuple[str, str] | None = None,
     ) -> None:
         self._missing = set(missing or ())
         self._name = name
         self._fps = fps
+        self._settings: dict[str, str] = {"timelineFrameRate": fps, CUSTOM_SETTINGS: "0"}
+        if resolution is not None:
+            self._settings[WIDTH], self._settings[HEIGHT] = resolution
+        #: Every ``SetSetting`` this timeline was given, refused and ignored ones included.
+        self.setting_writes: list[tuple[str, Any]] = []
+        #: How many items stood on the timeline as each of those writes went in. A cut that
+        #: was filled and then resized is not the same edit as one built at its own size,
+        #: and nothing in the finished timeline tells the two apart.
+        self.setting_writes_at_item_count: list[int] = []
+        #: Keys whose writes are taken and dropped — a caller that trusts the return value
+        #: cannot tell them from the ones that landed. Models the real failure the build's
+        #: read-back exists for: a timeline that will not leave the project's settings.
+        self.settings_that_ignore_writes: set[str] = set()
         self._start_frame = start_frame
         self._end_frame = end_frame
         self._tracks: dict[str, list[FakeTrack]] = {
@@ -114,6 +136,15 @@ class FakeTimeline(AnswersNone):
         self.delete_clips_leaves_them = False
         self.deleted_clips: list[tuple[list[FakeTimelineItem], bool]] = []
 
+    def created_by(self, project: Any) -> None:
+        """Take the project's timeline settings, as any newly created timeline does.
+
+        The import half of the tail round trip needs this as much as ``CreateEmptyTimeline``
+        does: the timeline the import makes is new, so it is born at the project's size and
+        not at the size of the staging timeline the document came out of.
+        """
+        self._settings[WIDTH], self._settings[HEIGHT] = project.timeline_resolution()
+
     def adopt(self, owner: FakeResolve) -> None:
         self._owner = owner
         for tracks in self._tracks.values():
@@ -155,7 +186,33 @@ class FakeTimeline(AnswersNone):
 
     def GetSetting(self, key: str) -> str | None:  # noqa: N802
         self._check()
-        return self._fps if key == "timelineFrameRate" else None
+        return self._settings.get(key)
+
+    def SetSetting(self, key: str, value: Any) -> bool:  # noqa: N802
+        """Write one setting, with the two ways Resolve takes a write and changes nothing.
+
+        A non-string value is refused outright — the API is string-in, string-out, and
+        ``SetSetting("timelineResolutionWidth", 1920)`` is not the same call. The resolution
+        keys are inert while ``useCustomSettings`` is off: the write answers True and the
+        timeline stays on the project's size, which is the order the live probe established
+        (``gauntlet/recon/r3_reso.py``) and the reason the build reads back rather than
+        trusting the answer.
+        """
+        self._check()
+        self.setting_writes.append((key, value))
+        self.setting_writes_at_item_count.append(
+            sum(len(track.items) for tracks in self._tracks.values() for track in tracks)
+        )
+        if not isinstance(value, str):
+            return False
+        if key in self.settings_that_ignore_writes:
+            return True
+        if key in (WIDTH, HEIGHT) and self._settings.get(CUSTOM_SETTINGS) != "1":
+            return True
+        self._settings[key] = value
+        if key == "timelineFrameRate":
+            self._fps = value
+        return True
 
     def GetStartFrame(self) -> int:  # noqa: N802
         self._check()

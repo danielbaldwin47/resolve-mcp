@@ -48,6 +48,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Final
 
+from ..cut import resolution as cut_resolution
 from ..cut import tail as cut_tail
 from ..cut.validate import gaps as cut_gaps
 from ..cut.validate import (
@@ -60,7 +61,7 @@ from ..cut.validate import (
 from ..errors import BuildFailedError, CutInvalidError, TimelineNotFoundError
 from ..logging_config import get_logger
 from ..naming import latest_version, next_version_name, version_name
-from . import cut, markers, mix, takes
+from . import cut, markers, mix, settings, takes
 from . import pool as mediapool
 from . import tail as tail_route
 from . import timeline as timeline_read
@@ -208,6 +209,14 @@ def build_timeline(
     writing = tail_route.staging_name(name, existing) if round_tripped else name
 
     built = _create(pool, project, writing)
+    # Before anything is appended, because the cut states the size it is *for* and a
+    # timeline is created at the project's own default — 4K on the corpus project, against
+    # 1080p deliverables (G13). A cut that says nothing keeps the v1 behaviour: whatever the
+    # project makes. A round-tripped build sets it again on the timeline the import made,
+    # below: the staging timeline's settings are not the ones that ship.
+    stated = cut_resolution.read(doc)
+    if stated is not None:
+        settings.apply_resolution(built, stated, writing)
     # The frame the shots are positioned against. Kept, rather than re-read per check: a
     # round-tripped build reads its placements back on a *second* timeline, whose own start
     # is Resolve's to choose, and the comparison there is offset against offset.
@@ -234,6 +243,11 @@ def build_timeline(
             tail,
             verify=lambda landed: _verify(reader, landed, shots, name, origin),
         )
+        if stated is not None:
+            # The import is a different timeline and Resolve creates it at the project's
+            # default like any other, so the staging timeline's setting does not travel with
+            # the OTIO document. This is the one that ships.
+            settings.apply_resolution(built, stated, name)
     elif tail is not None:
         # Nothing was injected and nothing was round-tripped, but the cut file did ask for a
         # tail — so the report says what it asked for and that it took no route.
