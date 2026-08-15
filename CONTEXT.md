@@ -138,7 +138,7 @@ audio or synthetic frames; `live`: a running Resolve Studio (`pytest -m live`);
 fake), `test_rough_cut_pillar` (the P4 pillar end to end; fake), `test_style_layer`
 (server code never touches `styles/`; pure), `test_text_plus_probe` (the Text+
 template-append probe; fake), `test_read_guard` and `test_context_guard` (the Read hook and
-the shell hook; sub), `test_context_map` (this map covers the tree; pure), `test_prune_merged` (`scripts/prune_merged.py` over an injected `Runner`; pure). Live tier: `test_live_smoke`, `test_live_analysis`, and
+the shell hook; sub), `test_context_map` (this map covers the tree; pure), `test_prune_merged` (`scripts/prune_merged.py` over an injected `Runner`; pure), `test_review_gate` (`scripts/review_gate.py` over an injected `Runner`; pure). Live tier: `test_live_smoke`, `test_live_analysis`, and
 the state it builds in `live_state` (decisions covered by `test_live_state`; fake).
 Fixtures and helpers: `conftest` (installs the fake seam, hermetic `Config`),
 `cutfile`, `roughcut`, `mediapool`, `otio`, `text_plus_probe`, `currency_probe`.
@@ -147,4 +147,4 @@ package: `fakes/core`, `fakes/connection`, `fakes/project`, `fakes/pool`,
 `fakes/media`, `fakes/timeline`, `fakes/timeline_item`, `fakes/fusion`,
 `fakes/interchange`, `fakes/separator`, `fakes/fixtures`, `fakes/builders`. `tests/data/`: the one committed real footage (occlusion evidence grids).
 
-**Not modules.** `styles/`, `gauntlet/`, `projects/` — agent-owned data, never read by server code; `scripts/` — repo maintenance (`prune_merged.py`, CLAUDE.md step 6). Both: `docs/context/repo.md`. ADRs cited above: `docs/adr/`.
+**Not modules.** `styles/`, `gauntlet/`, `projects/` — agent-owned data, never read by server code; `scripts/` — repo maintenance (`prune_merged.py`, CLAUDE.md step 6) and the workflows' own logic (`review_gate.py`, the `Review: clean @<sha>` verdict `.github/workflows/review-gate.yml` runs). Both: `docs/context/repo.md`. ADRs cited above: `docs/adr/`.
