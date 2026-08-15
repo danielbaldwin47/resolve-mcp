@@ -19,12 +19,13 @@ from typing import Any
 import pytest
 
 from resolve_mcp.analysis import applause as applause_module
+from resolve_mcp.analysis import bars, decode, music, phrases, structure
 from resolve_mcp.analysis import beats as beats_module
-from resolve_mcp.analysis import decode, music, structure
 from resolve_mcp.analysis import solos as solos_module
 from resolve_mcp.analysis.beats import BeatGrid
 from resolve_mcp.audio import stems as stems_module
 from resolve_mcp.config import get_config
+from resolve_mcp.errors import InvalidRequestError
 from resolve_mcp.jobs import store
 from resolve_mcp.jobs.runner import wait_for
 from resolve_mcp.tools import analysis as analysis_tools
@@ -237,6 +238,89 @@ def test_the_third_pass_halves_are_read_alongside_the_stems_from_the_first(
     found = structure._stems(split_stems, solos=True)
 
     assert sorted(found) == ["comp", "drums", "other", "vocals", "wind"]
+
+
+def test_one_discovery_carries_the_third_pass_to_every_consumer(split_stems: Path) -> None:
+    """#220: structure and a stem-named detector read the same convention, wind pass included.
+
+    Asserted together because the whole point of the shared function is that there is no
+    "structure sees it and bars does not" — that gap is what the inline copy in ``structure``
+    was.
+    """
+    found = structure._stems(split_stems, solos=True)
+    chosen = bars._stem(split_stems, stems_module.WIND)
+
+    assert {stems_module.WIND, stems_module.COMP} <= set(found)
+    assert chosen == found[stems_module.WIND]
+
+
+def test_the_wind_stem_the_shared_discovery_reaches_is_not_warned_about(
+    split_stems: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The busy-reading warning is for bass and drums, and #220 made ``wind`` reachable.
+
+    The kit is read in the same test as the control: a negative assertion about a log line
+    passes just as well when nothing is being captured at all.
+    """
+    with caplog.at_level("WARNING", logger=phrases.log.name):
+        phrases._stem(split_stems, stems_module.WIND)
+        quiet = "busy reading" in caplog.text
+        phrases._stem(split_stems, "drums")
+
+    assert not quiet
+    assert "busy reading" in caplog.text
+
+
+def test_each_caller_keeps_its_own_advice_about_a_stem_it_cannot_find(
+    tmp_path: Path,
+    stems: Path,
+) -> None:
+    """One discovery, but the fix sentence still comes from the job that asked."""
+    empty = tmp_path / "empty"
+    empty.mkdir()
+
+    with pytest.raises(InvalidRequestError) as for_structure:
+        structure._stems(empty, solos=True)
+    with pytest.raises(InvalidRequestError) as for_bars:
+        bars._stem(stems, "tuba")
+    with pytest.raises(InvalidRequestError) as for_phrases:
+        phrases._stem(stems, "tuba")
+
+    assert "check the job completed" in str(for_structure.value.fix)
+    assert "the master mix is read" in str(for_bars.value.fix)
+    assert "its first pass writes" in str(for_phrases.value.fix)
+
+
+def test_a_stems_directory_that_is_not_there_still_gets_the_structure_job_its_advice(
+    tmp_path: Path,
+) -> None:
+    """The shared function raises, and says so plainly; the advice is still structure's.
+
+    The cause is narrower than it was — the inline copy could only say it found no stems,
+    where the shared function knows the directory itself is missing — and an agent that
+    mistyped a path is told which of the two went wrong.
+    """
+    with pytest.raises(InvalidRequestError) as raised:
+        structure._stems(tmp_path / "never-separated", solos=True)
+
+    assert "There is no directory at" in raised.value.cause
+    assert "check the job completed" in str(raised.value.fix)
+
+
+def test_stems_beside_an_empty_mix_pass_are_still_found(tmp_path: Path) -> None:
+    """The shared function tries the pass and then the parent, where the inline copy tried one.
+
+    A pass directory that exists and holds nothing used to end the search; a director whose
+    stems sit in the parent now gets them, which is what every other detector already did.
+    """
+    loose = _stems(tmp_path)
+    for stem in sorted((loose / stems_module.MIX_PASS).glob("*.wav")):
+        stem.rename(loose / stem.name)
+
+    found = structure._stems(loose, solos=True)
+
+    assert sorted(found) == ["drums", "other", "vocals"]
 
 
 def test_a_stems_directory_with_no_third_pass_reads_exactly_as_it_did(stems: Path) -> None:

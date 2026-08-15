@@ -154,8 +154,10 @@ no silent CPU fallback, #202; the inventory and the stays-on-CPU corpus policy:
 (loudness curves; `rms_curve` is the cheap level-only pass, no K-weighting and
 no onsets), `fills` (drum-fill candidates), `halves` (shared
 identify/cache/write pattern, plus `collected`/`stem_named` — where a
-separation's stems are and which one was asked for, shared by every detector
-that reads one: `phrases` off the line, `bars` off the pulse),
+separation's melodic stems are, third pass included, and which one was asked
+for; one convention for every detector that reads one: `phrases` off the line,
+`bars` off the pulse, `structure` off all of them (#220). `fills` still finds
+the drum pass its own way),
 `melody` (notes off one melodic stem —
 monophonic pitch + gating, model injected per ADR 0002; the reading `phrases`
 is a rule layer over, as `drums` is to `fills`), `music` (beats + energy + gist
@@ -180,9 +182,9 @@ and timbre reads `wind`, #157), `stats` (the readings taken over a column of
 records — signed offsets with early and late counted apart, a histogram, and
 whether a column was measured at all — shared by `correlate` and the joins it
 composes so the rules have one copy, #215), `structure` (tunes + solo changes job; both
-halves read the shared beats half and the tune half the shared energy half; its
-stem loader is what reaches the third pass), `subject` (what a shot is framed
-on crossed with who is out front: the angle sidecar's subject read as
+halves read the shared beats half and the tune half the shared energy half;
+its stem loader is error shaping over `halves.collected`, #220), `subject`
+(what a shot is framed on crossed with who is out front: the angle sidecar's subject read as
 player/ensemble/other, joined to the solo windows in seconds so a shot that
 outlives its solo is split where the front changed — pure, no I/O, read by
 `correlate`, #181), `transcribe`
