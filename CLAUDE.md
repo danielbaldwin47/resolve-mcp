@@ -108,7 +108,11 @@ produced no work; relaunch rather than assume.)
    `(#<n>)`, and the files are there. `merge-base --is-ancestor` exits 1
    for every squashed PR, so a failing check alone proves nothing. The risk
    is real either way: a PR merged into a just-consumed parent branch reads
-   MERGED while its commits never reach main.
+   MERGED while its commits never reach main. Then prune the residue:
+   `uv run python scripts/prune_merged.py` lists the merged remote
+   branches, local branches and worktrees it would drop; `--apply` drops
+   them (locked, dirty, open-PR and unmerged-commit items are never
+   touched).
 7. **If the PR was squashed, continue on a fresh branch** from
    `origin/main`, cherry-picking only the new commits — never force-push;
    the old branch would drag merged commits back in. After a merge-commit

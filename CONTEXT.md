@@ -477,6 +477,10 @@ unless `RESOLVE_MCP_SCENE_SCAN_CLIP` names a real one. That variable is
 render, only raw continuous angles — so the generated clip is the default there,
 and the variable is for a project that does have an edit to scan.
 
+`test_prune_merged.py` covers `scripts/prune_merged.py` (Tooling, below) through
+its `Runner` seam — a fake answers every `gh`/`git` argv from fixtures and
+records the removals it would have run.
+
 ## Agent-owned trees — `gauntlet/`, `projects/`
 
 Neither is read by server code; both are the agent's own working record, and
@@ -507,6 +511,18 @@ committed.
 route (`bake_taurus_cards.py` bakes a `%04d` RGBA frame run per card, fade
 ramps included, for a project whose media pool holds no GUI-authored Text+
 template; `titles/schema.py` §6).
+
+## Tooling — `scripts/`
+
+Repo maintenance, not server code. `prune_merged.py` — the post-merge sweep
+(CLAUDE.md step 6): lists, or with `--apply` removes, remote branches whose PR
+merged, their local branches, and `.claude/worktrees/` worktrees whose branch
+is merged. Merged means the tip is on `origin/main`, or a PR **into main** was
+squashed from exactly that tip — a PR merged into another branch does not count
+(the stacked-PR trap in CLAUDE.md step 6). Never a locked or dirty worktree, the
+branch a locked worktree holds, an open-PR branch, or a tip with commits
+`origin/main` lacks. Every `gh`/`git` call goes through one injectable
+`Runner`, which is the seam `tests/test_prune_merged.py` drives on fixtures.
 
 ## Docs
 
