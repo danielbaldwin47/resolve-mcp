@@ -899,4 +899,4 @@ def _expected(shot: Shot) -> dict[str, Any]:
     }
 
 
-__all__ = ["Shot", "Track", "build_timeline"]
+__all__ = ["Shot", "Track", "build_timeline", "locked_track_finding"]

@@ -1213,7 +1213,6 @@ def _audio_errors(doc: dict[str, Any], resolved: dict[str, ClipFacts]) -> list[F
 
 __all__ = [
     "DEFAULT_MIN_SEGMENT_FRAMES",
-    "MAX_OVERLAY_TRACK",
     "RULE_DESCRIPTIONS",
     "ClipFacts",
     "parse_failure_finding",

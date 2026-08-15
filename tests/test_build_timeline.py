@@ -16,6 +16,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from resolve_mcp.cut.validate import RULE_DESCRIPTIONS
 from resolve_mcp.document import content_hash
 from resolve_mcp.resolve.build import locked_track_finding
 from resolve_mcp.tools.cut import build_timeline
@@ -849,9 +850,15 @@ def test_a_locked_target_track_is_reported_instead_of_silently_dropping_the_cut(
 
 
 def test_e11_shapes_a_locked_track_finding_like_every_other_rule() -> None:
-    """E11 is raised here rather than in the rules, and still reports in their shape (#218)."""
+    """E11 is raised here rather than in the rules, and still reports in their shape (#218).
+
+    The catalogue entry stayed behind in ``RULE_DESCRIPTIONS`` when the finding moved, so
+    the rule number is asserted against it: that is the one seam the split can drift at,
+    and a rule the agent cannot look up is a finding it cannot act on.
+    """
     finding = locked_track_finding("V1")
 
+    assert finding.rule in RULE_DESCRIPTIONS
     assert finding.rule == "E11"
     assert finding.id == "V1"
     assert finding.fix_hint

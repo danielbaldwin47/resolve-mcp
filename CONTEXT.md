@@ -354,8 +354,8 @@ exceptions: it covers no single module, walking the P4 pillar across `cut`,
 `build`, `takes` and `virtual` in one pass because the joins are what a
 per-module test cannot see. `test_cut_devices.py` (#141) is the second, for the
 same reason: gaps and overlay tracks are one device each across `cut/layout`,
-`cut/validate`, `resolve/build`, `resolve/takes` and `analysis/virtual`, and the interesting
-failures are the disagreements between them. `test_cut_tail.py` is the third: the
+`cut/validate`, `resolve/build`, `resolve/takes` and `analysis/virtual`, and the
+interesting failures are the disagreements between them. `test_cut_tail.py` is the third: the
 tail is one device across `cut/tail`, `cut/validate`, `resolve/tail` and
 `resolve/build`, and a dissolve that did not land looks exactly like a cut that
 never asked for one. `test_hardware_decode.py` (#202) is the fourth: NVDEC is
