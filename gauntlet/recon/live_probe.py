@@ -197,7 +197,7 @@ def main() -> None:
 
     # --- media pool ------------------------------------------------------
     try:
-        from resolve_mcp.resolve import media as media_wrapper
+        from resolve_mcp.resolve import pool as media_wrapper
 
         connection = get_connection()
         pool = media_wrapper.media_pool(connection)

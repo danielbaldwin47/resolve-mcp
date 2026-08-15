@@ -49,7 +49,7 @@ from resolve_mcp.jobs import cache
 from resolve_mcp.jobs.runner import wait_for
 from resolve_mcp.naming import timestamped_name
 from resolve_mcp.resolve.connection import get_connection
-from resolve_mcp.resolve.media import (
+from resolve_mcp.resolve.pool import (
     AUDIO_CHANNELS,
     apply_still_workaround,
     audio_channels,

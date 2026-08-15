@@ -28,7 +28,7 @@ from .schema import ASSET_BIN
 
 SEQUENCE_TOKEN: Final = "%"
 BIN_SEPARATOR: Final = "/"
-# Both mirror ``resolve.media`` deliberately rather than importing it: this layer is the
+# Both mirror ``resolve.pool`` deliberately rather than importing it: this layer is the
 # pure one, and a titles file has to be judged on a machine with no Resolve on it.
 
 SEQUENCE_INDEX: Final = re.compile(r"%0?\d*d")

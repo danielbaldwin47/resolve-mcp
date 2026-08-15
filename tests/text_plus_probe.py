@@ -45,7 +45,7 @@ from typing import Any, NamedTuple
 from resolve_mcp.logging_config import get_logger
 from resolve_mcp.naming import timestamped_name
 from resolve_mcp.resolve.connection import ResolveConnection
-from resolve_mcp.resolve.media import media_pool
+from resolve_mcp.resolve.pool import media_pool
 
 log = get_logger("probe.textplus")
 
