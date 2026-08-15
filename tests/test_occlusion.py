@@ -243,15 +243,14 @@ def test_the_arithmetic_module_carries_no_job_knowledge() -> None:
     """``blocking`` is grey bytes in, scores out. Importing a job's error to raise it inverts
     the dependency: the pure measurement would then only be importable where its wrapper is."""
     tree = ast.parse(Path(blocking.__file__).read_text(encoding="utf-8"))
+    # Both halves of every import statement: ``from ..errors import X`` names the module on the
+    # statement, ``from .. import errors`` names it on the alias, and a guard that reads only
+    # one of them passes the import it exists to catch.
     imported = [
-        node.module or ""
+        name
         for node in ast.walk(tree)
-        if isinstance(node, ast.ImportFrom)
-    ] + [
-        alias.name
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Import)
-        for alias in node.names
+        if isinstance(node, ast.Import | ast.ImportFrom)
+        for name in [getattr(node, "module", None) or "", *(alias.name for alias in node.names)]
     ]
 
     assert not [name for name in imported if name.split(".")[-1] == "errors"]
@@ -533,6 +532,28 @@ def test_a_grey_file_cut_short_fails_the_scan_rather_than_reading_clear(
     assert record.error["detail"]["bytes"] == len(CLEAN) * 2 + 1000
     assert "did not finish" in record.error["cause"]
     assert list(get_config().analysis_dir.glob("*.gray")) == []
+
+
+def test_a_read_that_refuses_for_another_reason_is_not_dressed_as_a_short_decode(
+    attach: Attach,
+    fixture_video: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The job shapes the refusal it can explain and no other. A whole number of frames that
+    the read still turns down is not a decode cut short, and reporting it as one would send the
+    agent to run the scan again over a grey file that was never the problem."""
+    attach(_studio_holding(fixture_video))
+
+    def refusing(data: bytes, width: int = 0, height: int = 0) -> object:
+        raise ValueError("the grid is not a grid")
+
+    monkeypatch.setattr(blocking, "read_grid", refusing)
+    record = wait_for(_scan([], _run(2, 2, 2))["job_id"])
+
+    assert record.state == "failed"
+    assert record.error is not None
+    assert record.error["code"] != "occlusion_scan_failed"
+    assert "the grid is not a grid" in record.error["cause"]
 
 
 # --- the cache -------------------------------------------------------------------------------

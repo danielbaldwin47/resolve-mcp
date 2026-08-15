@@ -182,12 +182,18 @@ def scan_occlusion(
         grey = raw.read_bytes()
         try:
             frames = blocking.read_grid(grey)
-        except ValueError as short:
+        except ValueError as partial:
             # The arithmetic only knows the buffer is the wrong size. This is the job that
             # asked ffmpeg for those bytes, so this is where a short read becomes a cause and
-            # a fix the agent can act on.
+            # a fix the agent can act on — and the grid is this job's own number, the one it
+            # handed ffmpeg to decode onto a few lines up.
             frame_bytes = blocking.GRID_WIDTH * blocking.GRID_HEIGHT
             remainder = len(grey) % frame_bytes
+            if not remainder:
+                # Some other refusal from the read, and this job has nothing to say about it:
+                # dressing it as a short decode would report a frame count that is not the
+                # problem. Let it travel as itself.
+                raise
             raise OcclusionScanError(
                 cause=(
                     f"The sampled grey is {len(grey)} bytes — {remainder} past a whole number "
@@ -200,7 +206,7 @@ def scan_occlusion(
                     "than the one asked about, and report it as clear."
                 ),
                 detail={"bytes": len(grey), "frame_bytes": frame_bytes, "remainder": remainder},
-            ) from short
+            ) from partial
         scan = blocking.measure(frames)
     finally:
         # The grey file is scratch: the catalog is the artifact, and a cache hit must not
