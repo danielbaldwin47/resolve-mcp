@@ -115,7 +115,7 @@ def lands_in_file(seg: str) -> bool:
 
 # Pipe targets that re-emit rather than filter: after one of these a dump still
 # enters context whole.
-REEMITTERS = r"less|more|cat|nl|tee|Tee-Object|Out-Host|Out-String"
+REEMITTERS = r"less|more|cat|nl|tee|Tee-Object|Out-Host|Out-String|Out-Default|Write-Output|Format-\w+"
 # For a noisy run, a capping pipe (tail/head/Select-Object) is no better: it caps
 # one run, and runs repeat.
 PAGERS = REEMITTERS + r"|tail|head|Select-Object|select(?![\w-])"
@@ -168,8 +168,8 @@ FILTER = r"(?:-q|--jq|-t|--template)(?:=|\s+)(?:'([^']*)'|\"([^\"]*)\"|(\S+))"
 for m in re.finditer(GH_VIEW, blanked):
     seg = statement(blanked, m.end())
     args = seg.split("|", 1)[0]
-    if lands_in_file(seg):
-        continue
+    if lands_in_file(seg) or re.search(r"(?<!\S)(?:--web|-w)(?!\S)", args):
+        continue  # --web opens the browser; nothing enters context
     if "diff" in m.group("sub") and re.search(r"--(?:name-only|stat)\b", args):
         continue
     f = re.search(FILTER, args)
@@ -194,13 +194,14 @@ for m in re.finditer(GH_VIEW, blanked):
 DUMP_MSG = (
     "Blocked (context discipline): a whole-file dump of {name} puts the whole file in context - "
     "the rules govern content entering context, not which tool fetched it.\n"
-    "Grep for the lines you need first, then Read with offset/limit around the hit - or a ranged read "
+    "Grep for the lines you need first, then the Read tool with offset/limit around the hit - or a ranged read "
     "(sed -n 10,40p, head -50, Get-Content -TotalCount 50); a dump piped to grep or redirected to a file passes."
 )
 
 
 def guarded_names(args: str) -> list:
-    return [a for a in re.findall(ARG, args) if re.search(GUARDED, a)]
+    # Case-insensitive: Windows paths spell `SRC\\CONFIG.JSON` and `X.PY` too.
+    return [a for a in re.findall(ARG, args) if re.search(GUARDED, a, re.I)]
 
 
 def dump_block(names: list, seg: str) -> None:
@@ -253,7 +254,8 @@ for stmt in re.split(STATEMENT_SEP, scan_cat):
     for m in re.finditer(READER_POS + READERS + r"\b(?P<rest>[^|;&\n]*)", stmt, re.I):
         rest = m.group("rest")
         seg = stmt[m.start("rest"):]
-        if re.search(r"-(?:TotalCount|Tail|Head|First|Last)\b", rest, re.I):
+        # PowerShell accepts any unambiguous prefix: `-tot 5`, `-Total 5`, `-Fi 3`.
+        if re.search(r"-(?:tot[a-z]*|tai?l?|hea?d?|fir?s?t?|las?t?)\b", rest, re.I):
             continue
         if re.search(r"\)\s*(?:\.\w+|\[)", rest):
             continue
@@ -266,7 +268,7 @@ for stmt in re.split(STATEMENT_SEP, scan_cat):
                 names = guarded_names(fed)
         dump_block(names, seg)
 
-# sed: only an unbounded script (`p`, `1,$p`, or empty) is a dump; any range,
+# sed: only an unbounded script (`p`, `1,$p`, `1,$ p`, `$!p`, or empty) is a dump; any range,
 # address or substitution is a targeted read or an edit. Quotes intact here so
 # the script token is one group; a `\$` is a `$`.
 SED = (
@@ -277,7 +279,7 @@ SED = (
 )
 for m in re.finditer(SED, blanked):
     script = next(s for s in (m.group("sq"), m.group("dq"), m.group("bare")) if s is not None)
-    if script.replace("\\", "").strip() in ("", "p", "1,$p"):
+    if re.sub(r"[\\\s]", "", script) in ("", "p", "1,$p", "$!p"):
         dump_block(guarded_names(m.group("args")), statement(blanked, m.end("args")))
 
 # head / tail: a count bounds the read; `-c` (bytes) is a dump by another name.

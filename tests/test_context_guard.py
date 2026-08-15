@@ -189,6 +189,8 @@ GH_PASSES = [
     "gh pr view 5 -t '{{.state}}' --json state",
     "gh pr list --state merged --json headRefName",  # not a view
     "gh issue comment 249 --body 'see gh issue view 5'",  # prose
+    "gh issue view 248 --web",  # opens the browser (#248 probe set)
+    "gh pr view 252 -w",
 ]
 
 
@@ -231,6 +233,14 @@ WHOLE_FILE_DUMPS = [
     "sed --quiet p src/config.py",
     'sed -n "1,\\$p" src/config.py',
     "tail -n +10 src/config.py",  # an offset with no end is not a range
+    # From the #248 probe set (merged alongside #249):
+    "cat src/X.PY",  # extension match is case-insensitive
+    r"cat SRC\CONFIG.JSON",
+    r"Get-Content SRC\X.PY",
+    "sed -n '1,$ p' src/x.py",
+    "sed -n '$!p' src/x.py",
+    "Get-Content src/x.py | Write-Output",  # pass-through, not a filter
+    "Get-Content src/x.py | Format-Table",
 ]
 
 
@@ -270,6 +280,8 @@ RANGED_READS = [
     "Get-Content src/config.py | Select-String -Pattern def",
     "(Get-Content src/config.py).Count",
     "(Get-Content src/config.py)[10..40]",
+    "gc src/x.py -tot 5",  # PowerShell accepts any unambiguous parameter prefix
+    "Get-Content src/x.py -Total 5",
 ]
 
 
