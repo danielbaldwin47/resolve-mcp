@@ -55,10 +55,13 @@ Everything is measured on a 720x405 grey grid rather than the 128x72 one a cut's
 composition is read on. Text is the subject, and text is the first thing a small grid
 destroys.
 
-What this cannot do: it cannot see a super held for less than the lag it is read across,
-and it cannot see one too small or too tall to look like a caption — a corner bug of a few
-hundred pixels reads as the furniture it cannot be told apart from. Both come back as
-nothing rather than as absence.
+What this cannot do, and it is a third of the corpus: it cannot see a super held for less
+than the lag it is read across; it cannot see one too small or too tall to look like a
+caption, so a corner bug of a few hundred pixels reads as the furniture it cannot be told
+apart from; and it cannot see one whose two frames never disagree enough to be read at all
+(``CHANGED``), which is what a title held over a picture that barely moves looks like. Four
+of the ten supers in the corpus are missed that way. All of them come back as nothing rather
+than as absence — this measurement's silence is never evidence there was no graphic.
 """
 
 from __future__ import annotations
@@ -100,28 +103,30 @@ shot dips to 0.55 with the same picture throughout. All this decides is whether 
 disagree enough for what they *do* agree on to be worth looking at."""
 
 MIN_SUPER = 0.0025
+"""How much lettering a graphic has to carry to be reported: about 730 pixels here.
+
+The small half of the precision. What this refuses is the lit nameplate on a piano lid,
+which agrees with itself in every reading, in the same place, forever. Measured across all
+five deliverables: every super found runs 819-3395 pixels (receipt:
+``gauntlet/recon/super_scan.json``) and every false reading measured against them ran
+118-212. The threshold sits in that empty middle."""
+
 MAX_HEIGHT = 0.20
-"""What a graphic has to be before it is reported as a super: about 730 pixels of lettering
-here, in a band no more than a fifth of the frame tall. Together these are the whole
-precision of the overlay reading.
+"""How tall a graphic may be and still be a caption: a fifth of the frame.
 
-They say a caption is *big enough to read* and *shaped like a line of text*, and both halves
-are needed because the two things this measurement gets wrong are different sizes. Small and
-static: the lit nameplate on a piano lid, which agrees with itself in every reading, in the
-same place, forever. Large and shapeless: half a dark curtain that two frames of a still
-shot happen to agree about.
+The large half. What this refuses is half a dark curtain that two frames of a still shot
+happen to agree about — big enough to pass ``MIN_SUPER`` and nothing like a line of text.
+Measured on the same corpus: no super found is taller than 0.141 of the frame — the title
+card at 0.141, the personnel lower thirds at 0.069-0.096 — and the large false readings run
+0.30-0.51.
 
-Measured across all five deliverables, over their ten known supers and three windows known
-to hold none. Every real super runs 819-3440 pixels and none is taller than 0.14 of the
-frame — a title card at 0.14, the personnel lower thirds at 0.07. Every false reading is
-either 118-212 pixels or 0.30-0.51 of the frame tall. Both thresholds sit in empty middles,
-and no real super and no false reading is on the wrong side of either.
-
-An earlier reading asked instead whether the *picture* changed while the graphic was up, on
-the theory that a graphic is what survives the picture being replaced. It is true and it is
-useless: on this corpus the picture routinely does not change while a super is up — a lower
-third holds through one long take — and the test cost seven of the ten real supers to catch
-false readings that these two catch on shape alone."""
+Together with ``MIN_SUPER`` this says a caption is *big enough to read* and *shaped like a
+line of text*, which is the whole precision of the overlay reading. An earlier reading asked
+instead whether the *picture* changed while the graphic was up, on the theory that a graphic
+is what survives the picture being replaced. It is true and it is useless: on this corpus the
+picture routinely does not change while a super is up — a lower third holds through one long
+take — and the test cost seven of the ten real supers to catch false readings that these two
+catch on shape alone."""
 
 HELD = 0.98
 """At or above this share, nothing changed at all — the screen is holding one picture.
@@ -137,9 +142,12 @@ the words of a line — become one graphic rather than forty. Sized to close the
 between letters at this grid without reaching across the frame to an unrelated one."""
 
 MIN_AREA = 0.0004
-"""The share of the frame a graphic has to cover to be reported: about 120 pixels here.
-Below it sit the coincidences — the handful of specular highlights that happen to agree
-across a shot change — which run to a few dozen pixels and no more."""
+"""The share of the frame a region has to cover to be worth *tracking*: about 120 pixels.
+
+Not the floor for reporting a super — that is ``MIN_SUPER``, six times higher. This one
+throws away the handful of specular highlights that happen to agree across a shot change,
+which run to a few dozen pixels and no more, and it is also what two readings must share
+before they are taken to be readings of the same graphic."""
 
 MAX_BOX = 0.35
 """The share of the frame a graphic's bounding box may cover. A super is a caption, not
@@ -259,16 +267,6 @@ def read_pair(before: NDArray[Any], after: NDArray[Any]) -> Reading:
     camera are the case this refuses.
     """
     return _read(before, after)[0]
-
-
-def carried(before: NDArray[Any], after: NDArray[Any]) -> NDArray[np.bool_]:
-    """The graphic's own pixels, as a mask over the frame.
-
-    The same reading :func:`read_pair` boxes, handed back unboxed — because walking a
-    super's edges has to ask about the lettering rather than about the rectangle around
-    it, and over moving footage that rectangle is mostly footage.
-    """
-    return _read(before, after)[1]
 
 
 def _read(
@@ -602,9 +600,6 @@ class _Group:
         self.last = seen.last
         self.held = seen.mask.copy()
         self.kinds = [seen.kind]
-        self.seen = {seen.first, seen.last}
-        """Every frame the graphic was actually seen on — the only frames another reading
-        of these two is entitled to be taken between."""
 
     def shares(self, mask: NDArray[np.bool_]) -> bool:
         return bool((self.held & mask).sum() >= MIN_AREA * self.held.size)
@@ -614,7 +609,6 @@ class _Group:
         self.last = max(self.last, seen.last)
         self.held &= seen.mask
         self.kinds.append(seen.kind)
-        self.seen |= {seen.first, seen.last}
 
     def believable(self) -> bool:
         """Whether this is a caption rather than something the room happens to contain.

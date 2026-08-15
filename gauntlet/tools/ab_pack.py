@@ -91,6 +91,7 @@ SCENE_SCALE_W = 320
 HWACCEL_DECODE = os.environ.get("ABPACK_HWACCEL", "auto") != "off"
 _CUDA: bool | None = None
 _DOWNLOAD: dict[Path, str] = {}
+_REFUSED: dict[Path, bool] = {}  # clips NVDEC turned down, so the refusal is paid once
 MAX_SHEET_SHOTS = 60
 TILE_COLS = 6
 TILE_ROWS = 5
@@ -555,14 +556,21 @@ def decode_grey(
         cmd += ["-pix_fmt", "gray", "-f", "rawvideo", "-"]
         return subprocess.run(cmd, capture_output=True, check=False)
 
-    on_card = cuda_decode()
+    on_card = cuda_decode() and _REFUSED.get(clip) is not True
     proc = attempt(on_card)
-    if proc.returncode != 0 and not proc.stdout and on_card:
+    if proc.returncode != 0 and on_card:
         # NVDEC refuses codecs and profiles it does not know -- this rig's camera originals
         # are 4:2:2, which it cannot take (#202) -- and the file may be perfectly readable.
         # Retried in software, loudly, because a fallback nothing records is the bug that
-        # ticket exists for.
+        # ticket exists for, and remembered so the next window of the same clip does not pay
+        # for the same refusal again.
+        #
+        # Retried on the return code alone, *not* on "and nothing came back". A hardware
+        # decode that dies part-way through leaves a short run of good frames behind it, and
+        # taking those would hand back a clip that quietly ends early -- which this
+        # measurement would report as a stretch with no supers in it.
         print(f"warning: hardware decode of {clip.name} failed; retrying in software", flush=True)
+        _REFUSED[clip] = True
         proc = attempt(False)
     if proc.returncode != 0 and not proc.stdout:
         sys.exit(f"error: grey decode failed\n{proc.stderr[-2000:].decode('utf-8', 'replace')}")

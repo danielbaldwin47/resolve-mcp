@@ -227,10 +227,10 @@ Round 1 critic, verbatim needs; each is server measurement work:
    found anyway, which is what the reading needing no cut list buys.
 
    Still open from this item: **recall.** Four supers are missed, all of them titles held
-   over a picture that never changes under them. Precision comes from asking what a caption
-   looks like — big enough to read (819-3440 px on the corpus) and shaped like a line of
-   text (never over 0.14 of the frame tall) — against false readings that are either
-   118-212 px or 0.30-0.51 tall. A graphic outside those bounds, a corner bug most of all,
+   over a picture that never changes under them — either too still to be read at all, or
+   outside what a caption looks like. Precision comes from asking exactly that: big enough
+   to read (the six found run 819-3395 px) and shaped like a line of text (none taller than
+   0.141 of the frame) — against false readings that are either 118-212 px or 0.30-0.51 tall. A graphic outside those bounds, a corner bug most of all,
    cannot be told from the lit nameplate on the piano lid and is not reported. An earlier
    reading asked instead whether the picture changed while the graphic was up; it cost
    seven of the ten and was removed.
