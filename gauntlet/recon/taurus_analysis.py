@@ -64,7 +64,7 @@ def main() -> None:
     from resolve_mcp.audio import separator
     from resolve_mcp.audio import stems as stems_module
     from resolve_mcp.config import get_config
-    from resolve_mcp.jobs import store
+    from resolve_mcp.jobs import lifecycle, store
 
     config = get_config()
 
@@ -125,7 +125,7 @@ def main() -> None:
         for name, job_id in list(pending.items()):
             loaded = store.load(job_id, config)
             report["jobs"][name] = loaded.payload()
-            if loaded.state != store.RUNNING:
+            if loaded.state != lifecycle.RUNNING:
                 del pending[name]
         report["elapsed_seconds"] = round(time.time() - began, 1)
         write()

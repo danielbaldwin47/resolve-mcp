@@ -57,13 +57,13 @@ from ..errors import InternalError, InvalidRequestError, SeparationInProgressErr
 from ..ffmpeg import Runner
 from ..jobs import cache
 from ..jobs import runner as job_runner
+from ..jobs.lifecycle import SESSION
+from ..jobs.runner import Detached, JobOutput, Progress, start_job
 
 # ``_sharing`` is the store's, and is reached for by its private name deliberately: a claim file
 # and a job record are the same Windows problem — another handle holding the file for the
 # microsecond of a poll — and a second copy of the retry here would be a second policy to keep in
 # step with that one.
-from ..jobs.lifecycle import SESSION
-from ..jobs.runner import Detached, JobOutput, Progress, start_job
 from ..jobs.store import JobRecord, _sharing, pid_alive
 from ..logging_config import get_logger
 from ..naming import slug

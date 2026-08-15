@@ -1,4 +1,4 @@
-"""One JSON record per job, on disk. Four things here are decisions, not bookkeeping.
+"""One JSON record per job, on disk. Five things here are decisions, not bookkeeping.
 
 * **Disk is the only source of truth.** An in-memory registry would be faster to read
   and would vanish on restart, which is precisely the case ``list_jobs`` exists for. The
@@ -762,7 +762,7 @@ def _recovered(record: JobRecord, config: Config, sweep: bool = True) -> JobReco
             if sweep:
                 _prune_children()
         return record
-    if call.cause is None:
+    if call.cause is None:  # ``Outcome.LIVE`` — the one verdict with nothing to write
         return record
     if call.outcome is Outcome.RESTARTED:
         return _restarted(record, call.cause, config)

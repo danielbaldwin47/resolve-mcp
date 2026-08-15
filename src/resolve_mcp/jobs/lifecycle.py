@@ -118,15 +118,15 @@ class Outcome(StrEnum):
 
 @dataclass(frozen=True)
 class Verdict:
-    """The outcome, and the sentence the agent reads when the job is being closed."""
+    """The outcome, and the sentence the agent reads when the job is being closed.
+
+    A cause is set for exactly the four outcomes that close a job, so ``cause is None`` is the
+    same question as "is anything still running it" — and it is the one the store asks, because
+    it narrows the type it is about to pass on.
+    """
 
     outcome: Outcome
     cause: str | None = None
-
-    @property
-    def closes(self) -> bool:
-        """Whether this verdict ends the job. Exactly the verdicts that carry a cause."""
-        return self.cause is not None
 
 
 def verdict(record: JobRecord, now: datetime, alive: Callable[[int], bool]) -> Verdict:

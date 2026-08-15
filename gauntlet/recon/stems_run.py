@@ -33,7 +33,7 @@ def main() -> None:
     write()
 
     from resolve_mcp.audio import stems as stems_module
-    from resolve_mcp.jobs import runner, store
+    from resolve_mcp.jobs import lifecycle, runner
     from resolve_mcp.resolve.connection import get_connection
 
     began = time.time()
@@ -46,7 +46,7 @@ def main() -> None:
 
     while True:
         got = runner.wait_for(job_id, timeout=30.0)
-        if got.state != store.RUNNING:
+        if got.state != lifecycle.RUNNING:
             break
         report["step"] = got.step
         report["progress"] = got.progress

@@ -34,7 +34,7 @@ def note(where: str, exc: BaseException) -> None:
 
 
 def run(label: str, start, **kwargs: Any) -> dict[str, Any] | None:
-    from resolve_mcp.jobs import runner, store
+    from resolve_mcp.jobs import lifecycle, runner
 
     began = time.time()
     try:
@@ -48,7 +48,7 @@ def run(label: str, start, **kwargs: Any) -> dict[str, Any] | None:
     write()
     while True:
         got = runner.wait_for(job_id, timeout=30.0)
-        if got.state != store.RUNNING:
+        if got.state != lifecycle.RUNNING:
             break
         report["jobs"][label]["step"] = got.step
         report["jobs"][label]["progress"] = got.progress

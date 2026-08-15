@@ -22,7 +22,7 @@ report: dict[str, Any] = {"mix": MIX, "human_cut_starts_s": TRUTH, "runs": {}}
 
 def main() -> None:
     from resolve_mcp.analysis import structure
-    from resolve_mcp.jobs import runner, store
+    from resolve_mcp.jobs import lifecycle, runner
 
     for threshold in THRESHOLDS:
         began = time.time()
@@ -32,7 +32,7 @@ def main() -> None:
         job_id = record["job_id"]
         while True:
             got = runner.wait_for(job_id, timeout=30.0)
-            if got.state != store.RUNNING:
+            if got.state != lifecycle.RUNNING:
                 break
         payload = got.payload()
         entry: dict[str, Any] = {

@@ -21,7 +21,7 @@ TOLERANCE = 5.0
 
 def main() -> None:
     from resolve_mcp.analysis import structure
-    from resolve_mcp.jobs import runner, store
+    from resolve_mcp.jobs import lifecycle, runner
 
     began = time.time()
     # refresh, always: the half is keyed on the audio and the settings, neither of which
@@ -31,7 +31,7 @@ def main() -> None:
     job_id = record["job_id"]
     while True:
         got = runner.wait_for(job_id, timeout=60.0)
-        if got.state != store.RUNNING:
+        if got.state != lifecycle.RUNNING:
             break
     payload = got.payload()
     report: dict[str, Any] = {

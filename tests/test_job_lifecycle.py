@@ -198,11 +198,15 @@ def test_the_verdict_truth_table(
 def test_a_verdict_closes_the_job_exactly_when_nothing_is_running_it(
     record: JobRecord, live: tuple[int, ...], expected: Outcome
 ) -> None:
-    """``cause`` is the whole of what the store needs to write back, and it is set or it isn't."""
+    """``cause`` is the whole of what the store needs to write back, and it is set or it isn't.
+
+    The store branches on ``cause is None`` alone, so the invariant it leans on is that a cause
+    is present for exactly the four outcomes that end a job and absent for the two that do not.
+    """
     call = verdict(record, NOW, Liveness(*live))
 
-    assert call.closes is (expected not in (Outcome.SETTLED, Outcome.LIVE))
-    assert (call.cause is not None) is call.closes
+    closes = expected not in (Outcome.SETTLED, Outcome.LIVE)
+    assert (call.cause is not None) is closes
 
 
 def test_a_settled_record_is_never_asked_about_a_pid() -> None:

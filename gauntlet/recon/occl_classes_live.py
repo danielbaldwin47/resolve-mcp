@@ -71,7 +71,7 @@ def main() -> None:
     from resolve_mcp import interpreter as interp
 
     interp.ensure_supported()
-    from resolve_mcp.jobs import runner, store
+    from resolve_mcp.jobs import lifecycle, runner
     from resolve_mcp.tools import video as video_tools
 
     for angle in ANGLES:
@@ -103,7 +103,7 @@ def main() -> None:
             continue
 
         got = runner.wait_for(envelope["job_id"], timeout=120.0)
-        while got.state == store.RUNNING:
+        while got.state == lifecycle.RUNNING:
             entry["step"] = got.step
             write()
             got = runner.wait_for(envelope["job_id"], timeout=120.0)
