@@ -66,7 +66,7 @@ from . import pool as mediapool
 from . import tail as tail_route
 from . import timeline as timeline_read
 from .connection import ResolveConnection
-from .session import frame_rate
+from .session import current_project, frame_rate
 
 log = get_logger("build")
 
@@ -187,7 +187,7 @@ def build_timeline(
     # the schema — every read of it below is a field the rules have already been over.
     doc: dict[str, Any] = checked.loaded.doc
 
-    project = timeline_read.open_project(connection)
+    project = current_project(connection)
     pool = mediapool.media_pool(connection)
     base = str(doc["timeline"]["name"])
     existing = timeline_read.timeline_names(project)

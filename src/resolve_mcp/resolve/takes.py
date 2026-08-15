@@ -42,6 +42,7 @@ from ..logging_config import get_logger
 from ..timing import dual_time
 from . import timeline as timeline_read
 from .connection import ResolveConnection
+from .session import current_project
 
 log = get_logger("takes")
 
@@ -168,7 +169,7 @@ def swap_take(
     listed = _selector_of(doc, chosen)
     _refuse_index(segment, take, listed)
 
-    project = timeline_read.open_project(connection)
+    project = current_project(connection)
     target = timeline_read.find_timeline(project, timeline)
     name = timeline_read.name_of(target)
     record, duration = placements(doc, timeline_read.start_frame(target))[segment]

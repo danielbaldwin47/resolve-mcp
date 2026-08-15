@@ -26,7 +26,7 @@ def main() -> None:
     from resolve_mcp.resolve.timeline import Reader, find_timeline
 
     connection = get_connection()
-    project = current_project(connection, "No project is open.")
+    project = current_project(connection)
     timeline = find_timeline(project, TIMELINE)
     reader = Reader(connection)
 

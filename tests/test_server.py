@@ -22,7 +22,7 @@ def test_registers_the_p1_session_media_timeline_cut_titling_render_and_job_tool
     assert tool_names() == {
         "get_status",
         "list_projects",
-        "open_project",
+        "load_project",
         "snapshot_project",
         "import_media",
         "list_media",
@@ -93,7 +93,7 @@ def test_the_injected_connection_never_reaches_the_transport() -> None:
 
 def test_a_tool_s_own_parameters_survive_the_injection() -> None:
     """Stripping one parameter must not strip the ones the agent is supposed to fill in."""
-    assert schemas()["open_project"]["required"] == ["name"]
+    assert schemas()["load_project"]["required"] == ["name"]
     assert set(schemas()["grab_frames"]["properties"]) >= {"clip", "times", "max_edge"}
 
 
