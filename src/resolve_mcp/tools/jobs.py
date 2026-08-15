@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..errors import InvalidRequestError
-from ..jobs import lifecycle, store
+from ..jobs import store
+from ..spill import capped
 from .envelope import tool
 
 DEFAULT_JOB_LIMIT = 50
@@ -36,21 +36,19 @@ def list_jobs(state: str | None = None, limit: int = DEFAULT_JOB_LIMIT) -> dict[
     state filters to running, completed or failed. Jobs survive a server restart because
     their records live in the cache directory; one that was still running when the server
     went down comes back failed with code job_interrupted, which means start it again —
-    finished work is already in the result cache and is not paid for twice.
+    finished work is already in the result cache and is not paid for twice. count is how
+    many there are, not how many came back: past limit the reply is capped and the whole
+    listing spills to disk (spilled_to).
     """
-    if state is not None and state not in lifecycle.STATES:
-        raise InvalidRequestError(
-            cause=f"{state!r} is not a job state.",
-            fix=f"Use one of {', '.join(lifecycle.STATES)}, or leave state out for all of them.",
-            detail={"requested": state, "states": list(lifecycle.STATES)},
-        )
-    found = store.load_all(state=state)
-    shown = found[:limit]
-    return {
-        "jobs": [one.payload() for one in shown],
-        "count": len(shown),
-        "total": len(found),
-    }
+    found = [one.payload() for one in store.load_all(state=state)]
+    return capped(
+        {"count": len(found)},
+        key="jobs",
+        whole=found,
+        limit=limit,
+        label="jobs",
+        fallback="jobs",
+    )
 
 
 TOOLS: tuple[Any, ...] = (

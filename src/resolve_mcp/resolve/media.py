@@ -33,7 +33,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, NamedTuple
 
-from ..config import Config, get_config
+from ..config import Config
 from ..errors import (
     AmbiguousClipError,
     BinNotFoundError,
@@ -44,7 +44,7 @@ from ..errors import (
     RelinkFailedError,
 )
 from ..logging_config import get_logger
-from ..spill import spill
+from ..spill import capped
 from ..timing import dual_time
 from .camera_sidecar import camera_model as recorded_camera_model
 from .connection import ResolveConnection
@@ -373,23 +373,15 @@ def list_media(
             continue
         clips.append(summary)
 
-    cap = max(int(limit), 0)
-    truncated = len(clips) > cap
-    result: dict[str, Any] = {
-        "bin": where.path,
-        "count": len(clips),
-        "clips": clips[:cap] if truncated else clips,
-        "truncated": truncated,
-        "spilled_to": None,
-    }
-    if truncated:
-        result["spilled_to"] = spill(
-            result["bin"],
-            {"bin": result["bin"], "count": len(clips), "clips": clips},
-            config or get_config(),
-            fallback="media-pool",
-        )
-    return result
+    return capped(
+        {"bin": where.path, "count": len(clips)},
+        key="clips",
+        whole=clips,
+        limit=limit,
+        label=where.path,
+        fallback="media-pool",
+        config=config,
+    )
 
 
 # --- inspect ----------------------------------------------------------------------------

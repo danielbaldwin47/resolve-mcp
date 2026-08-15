@@ -24,7 +24,9 @@ timelines. The server measures; Claude decides.
 - **envelope** — the shared tool-result shape every MCP tool returns
   (`tools/envelope.py`).
 - **spill** — oversized results written to disk for the agent to grep
-  instead of truncating.
+  instead of truncating. Every listing that can outgrow a reply is capped by
+  `spill.capped`, so `truncated` and `spilled_to` mean one thing everywhere and
+  a spilled file is the same reply carrying all of it (#224).
 - **bin path** — a media pool folder, slash-separated from the root. To a
   tool addressing one clip by name: omitted is the whole pool, a name is
   that bin and everything nested inside it, `""` is the root folder alone
@@ -112,7 +114,7 @@ Top level:
 | `logging_config.py` | stderr-only logging (stdout belongs to MCP transport) |
 | `naming.py` | names for written files and `<base> v<N>` timelines |
 | `server.py` | FastMCP app + tool registration; no logic |
-| `spill.py` | oversized results → disk |
+| `spill.py` | oversized results → disk; `capped` is the one definition of a truncated reply |
 | `timing.py` | frames authoritative; seconds/timecode/fps derived |
 
 `analysis/` — compute jobs that read audio and write findings to disk:
