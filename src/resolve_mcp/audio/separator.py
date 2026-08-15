@@ -57,6 +57,18 @@ TORCH_BUILD = re.compile(r"PyTorch Version:\s*(\S+)", re.IGNORECASE)
 DOWNLOAD = re.compile(r"download", re.IGNORECASE)
 """A first run fetches its model and prints a bar for that too. It is not the separation."""
 
+DEVICE_SET = re.compile(r"setting\s+(?:the\s+)?torch\s+device\s+to\s+(\S+)", re.IGNORECASE)
+"""The line a pass opens with: ``CUDA is available in Torch, setting Torch device to CUDA``."""
+DEVICE_NAMED = re.compile(r"torch\s+device\s*[:=]\s*(\S+)", re.IGNORECASE)
+"""The other shape the same fact is printed in, ``Torch device: cuda:0``."""
+CPU_MODE = re.compile(r"running\s+in\s+CPU\s+mode", re.IGNORECASE)
+"""What it says instead when it configured no acceleration at all — G10's own line."""
+
+CPU_DEVICE = "cpu"
+UNKNOWN_DEVICE = "unknown"
+"""A banner that named no device. Not a failure: half an hour of GPU is not worth a
+wording change."""
+
 FULL = 100.0
 
 
@@ -70,6 +82,9 @@ the process exits.
 """
 
 Fraction = Callable[[float], None]
+
+Device = Callable[[str], None]
+"""Told which device a pass announced, once, as the pass announces it."""
 
 
 def command(executable: str, model: str, source: Path | str, out_dir: Path | str) -> list[str]:
@@ -90,6 +105,22 @@ def label_of(path: Path | str) -> str | None:
     """The stem this file holds, read off the label the separator wrote into its name."""
     found = LABEL.findall(Path(path).stem)
     return found[-1].strip().lower() if found else None
+
+
+def device_of(line: str) -> str | None:
+    """The device this line of a pass's banner names — ``None`` for every other line.
+
+    Read off the pass's own output rather than off ``--env_info``, because the probe answers
+    for the *install* and this answers for the *run*: a CUDA build that cannot reach the card
+    falls back to the CPU and says so here, in a line that used to scroll past between two
+    progress bars. That fallback, unseen, is the whole of G10 (#188).
+    """
+    if CPU_MODE.search(line):
+        return CPU_DEVICE
+    found = DEVICE_SET.search(line) or DEVICE_NAMED.search(line)
+    if found is None:
+        return None
+    return found.group(1).strip().strip(".,;:'\"").lower() or None
 
 
 def collect(out_dir: Path | str) -> dict[str, Path]:
@@ -157,6 +188,32 @@ def environment(
     return report
 
 
+def record_device(report: dict[str, Any], readings: Sequence[str]) -> None:
+    """Fold what the passes announced into the environment report, as ``device`` (#188).
+
+    The *last* reading wins: each pass is its own process and answers for itself, so a run
+    whose second pass could not reach the card ran on the CPU — reporting the first pass's
+    ``cuda`` would hide the fallback this record exists to show. No reading at all is
+    ``unknown``, never an error.
+
+    A CPU device earns a warning against every build but ``+cpu``: that one is the same news
+    with the fix attached, and replacing it would cost the reader the one line that says what
+    to do. A build that could not be read is *not* that case — "whether this runs on the GPU
+    is unknown" is exactly the sentence a known CPU device has just answered.
+
+    The reading is not logged again here. Each pass already warned as it announced, which is
+    where a run diagnosed from the log alone is read from; this only shapes the record.
+    """
+    report["device"] = readings[-1] if readings else UNKNOWN_DEVICE
+    if report["device"] == CPU_DEVICE and "+cpu" not in (report.get("torch") or ""):
+        report["warning"] = (
+            f"The separator ran on the CPU under torch {report.get('torch') or 'unknown'}: "
+            "separations run at a fraction of GPU speed. Check that the GPU is visible to the "
+            "environment that owns the audio-separator on PATH (drivers, CUDA runtime, another "
+            "process already holding the card)."
+        )
+
+
 def separate(
     source: Path | str,
     out_dir: Path | str,
@@ -165,6 +222,7 @@ def separate(
     progress: Fraction | None = None,
     runner: Runner | None = None,
     config: Config | None = None,
+    on_device: Device | None = None,
 ) -> dict[str, Path]:
     """Run one pass, and return the stems it wrote — or fail naming what it left out."""
     config = config or get_config()
@@ -172,12 +230,21 @@ def separate(
     destination.mkdir(parents=True, exist_ok=True)
     argv = command(config.audio_separator, model, source, destination)
     tail: deque[str] = deque(maxlen=OUTPUT_TAIL)
+    announced: str | None = None
 
     def on_line(line: str) -> None:
+        nonlocal announced
         text = line.strip()
         if not text:
             return
         tail.append(text)
+        # Only until the pass has named its device: it names it once, in the banner, and the
+        # lines after that are a progress bar redrawn several times a second.
+        if announced is None:
+            named = device_of(text)
+            if named is not None:
+                announced = named
+                _report_device(named, model)
         fraction = _percent(text)
         if fraction is not None and progress is not None:
             progress(fraction)
@@ -190,6 +257,14 @@ def separate(
             cause=f"No audio-separator at {config.audio_separator!r}.",
             detail={"executable": config.audio_separator, "model": model},
         ) from exc
+
+    # Reported before the refusals below are raised: a pass that died still ran somewhere, and
+    # on the CPU that is often why it died (a wall-clock ceiling, a watchdog). The caller keeps
+    # the reading only if the job survives to write a record.
+    if announced is None:
+        log.info("audio-separator named no device while running %s; it stays unknown", model)
+    elif on_device is not None:
+        on_device(announced)
 
     output = "\n".join(tail)
     if returncode != 0:
@@ -220,6 +295,22 @@ def missing_from(out_dir: Path | str, wanted: Iterable[str]) -> list[str]:
     """Which of these stems are not already sitting in this directory."""
     produced = collect(out_dir)
     return [one for one in wanted if one not in produced]
+
+
+def _report_device(device: str, model: str) -> None:
+    """Say what this pass runs on, at the moment it says so itself.
+
+    A CPU pass is a warning even where the build explains it: this is the line a live failure
+    outside a session gets diagnosed from, and "it was slow" is not a diagnosis.
+    """
+    if device == CPU_DEVICE:
+        log.warning(
+            "audio-separator is running %s on the CPU: a pass that takes minutes on the GPU "
+            "takes hours here. See docs/reference/compute-device-inventory.md",
+            model,
+        )
+    else:
+        log.info("audio-separator is running %s on %s", model, device)
 
 
 def _percent(line: str) -> float | None:

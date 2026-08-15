@@ -33,6 +33,7 @@ from typing import Any, NamedTuple
 
 import pytest
 
+from resolve_mcp.audio import separator
 from resolve_mcp.audio.acquire import acquire_timeline_audio
 from resolve_mcp.audio.stems import (
     DRUM_STEMS,
@@ -1136,6 +1137,7 @@ def test_the_real_separator_produces_the_stems_the_passes_expect(tmp_path: Path)
         separation_params(),
         lambda fraction, step: None,
         split_wind=True,
+        reuse=False,
     )
 
     assert set(output.result["stems"]) >= set(FOUR_STEMS)
@@ -1144,6 +1146,11 @@ def test_the_real_separator_produces_the_stems_the_passes_expect(tmp_path: Path)
     assert all(Path(one).stat().st_size > 0 for one in output.result["stems"].values())
     assert all(Path(one).stat().st_size > 0 for one in output.result["drums"].values())
     assert all(Path(one).stat().st_size > 0 for one in output.result["other"].values())
+    # The other thing no fake can answer: that the real banner still names its device in
+    # words ``device_of`` reads (#188). Which device it is depends on the install and is the
+    # box's business — that it parsed at all is this tier's. ``reuse=False`` because the
+    # fixture tone hashes the same every run, and stems read off disk announce nothing.
+    assert output.result["separator"]["device"] != separator.UNKNOWN_DEVICE
 
 
 @pytest.mark.skipif(

@@ -20,7 +20,7 @@ says so in the log and the job record.**
 | Beat grid | `analysis/beats` (beat_this, torch) | **CPU by policy** — see below | exists upstream (CUDA torch) | `device.announce("beat_this")` at inference; `torch` note in the music/structure job results |
 | Applause curve | `analysis/applause` (PANNs, torch) | **CPU by policy** — same decision | exists upstream | `device.announce("PANNs")`; same `torch` note |
 | Transcription | `analysis/whisper` (faster-whisper/CTranslate2) | **CUDA** (`whisper_device=auto`, runtime shipped by the analysis extra, #128) | yes — already wired | resolved device logged after model load; `auto`→CPU resolve is a WARNING |
-| Stem separation | `audio/separator` (external CLI, its own torch) | whatever the PATH install has — **found `2.13.0+cpu` on the live box, 2026-08-14** | yes — CUDA torch in the separator's env | `--env_info` probed before every fresh separation; build in the log + job record; `+cpu` build is a WARNING |
+| Stem separation | `audio/separator` (external CLI, its own torch) | whatever the PATH install has — **found `2.13.0+cpu` on the live box, 2026-08-14** | yes — CUDA torch in the separator's env | `--env_info` probed before every fresh separation; build in the log + job record; `+cpu` build is a WARNING; each pass's own device read off its banner into `separator.device` (#188), CPU under a GPU build is a WARNING |
 | Rendering | `resolve/render`, `deliver` | Resolve's own GPU pipeline | Resolve's business | out of scope — Resolve manages its own devices |
 
 Deliberately out of scope: the gauntlet A/B pack's decodes
@@ -108,3 +108,17 @@ build, carries it in the job record, and warns on `+cpu`. The fix — CUDA
 torch installed into whatever environment owns the PATH
 `audio-separator`, or `RESOLVE_MCP_AUDIO_SEPARATOR` pointed at one that
 has it — is an install action on the box, recorded on ticket #202.
+
+The build says what the install *can* do; it does not say what a run
+*did*. Each pass announces its own device in its opening banner, and that
+line is read back into `separator.device` on the job record — whatever the
+banner named, lowercased (`cuda`, `cuda:0`, `mps`, `cpu`), or `unknown`
+where it named nothing (#188). A reader after the GPU wants "not `cpu`",
+not `== "cuda"`: the device is a reading, not an enum. The last pass's
+reading is the one recorded, because a run that reached the card once and
+then could not is a CPU run. A CPU device under a GPU-capable build is the
+fallback G10 hid behind "it was slow": it is a WARNING in the log at the
+pass that announced it, and a `warning` on the record — except under a
+`+cpu` build, whose warning is the same news with the fix attached. A
+build the probe could not read is not that case: its warning says whether
+this ran on the GPU is unknown, which a CPU reading has just answered.
