@@ -10,6 +10,7 @@ dependencies = [
     # loudness standard needs. Both are imported inside workers, never at startup.
     "numpy>=2.0,<3",
     "scipy>=1.14,<2",
+    "packaging>=24",  # probe (#251): a dependency uv.lock does not carry
 ]
 
 [project.optional-dependencies]
