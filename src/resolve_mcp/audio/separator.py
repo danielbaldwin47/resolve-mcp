@@ -188,7 +188,7 @@ def environment(
     return report
 
 
-def record_device(report: dict[str, Any], readings: Sequence[str]) -> dict[str, Any]:
+def record_device(report: dict[str, Any], readings: Sequence[str]) -> None:
     """Fold what the passes announced into the environment report, as ``device`` (#188).
 
     The *last* reading wins: each pass is its own process and answers for itself, so a run
@@ -196,20 +196,22 @@ def record_device(report: dict[str, Any], readings: Sequence[str]) -> dict[str, 
     ``cuda`` would hide the fallback this record exists to show. No reading at all is
     ``unknown``, never an error.
 
-    A CPU device earns a warning only where nothing has warned already: a ``+cpu`` build is
-    the same news with the fix attached, and replacing that message would cost the reader the
-    one line that says what to do.
+    A CPU device earns a warning against every build but ``+cpu``: that one is the same news
+    with the fix attached, and replacing it would cost the reader the one line that says what
+    to do. A build that could not be read is *not* that case — "whether this runs on the GPU
+    is unknown" is exactly the sentence a known CPU device has just answered.
+
+    The reading is not logged again here. Each pass already warned as it announced, which is
+    where a run diagnosed from the log alone is read from; this only shapes the record.
     """
     report["device"] = readings[-1] if readings else UNKNOWN_DEVICE
-    if report["device"] == CPU_DEVICE and "warning" not in report:
+    if report["device"] == CPU_DEVICE and "+cpu" not in (report.get("torch") or ""):
         report["warning"] = (
-            "The separator ran on the CPU although its torch build "
-            f"({report.get('torch')}) can use a GPU: separations run at a fraction of GPU "
-            "speed. Check that the GPU is visible to the environment that owns the "
-            "audio-separator on PATH (drivers, CUDA runtime, another process holding the card)."
+            f"The separator ran on the CPU under torch {report.get('torch') or 'unknown'}: "
+            "separations run at a fraction of GPU speed. Check that the GPU is visible to the "
+            "environment that owns the audio-separator on PATH (drivers, CUDA runtime, another "
+            "process already holding the card)."
         )
-        log.warning("%s", report["warning"])
-    return report
 
 
 def separate(
@@ -256,6 +258,9 @@ def separate(
             detail={"executable": config.audio_separator, "model": model},
         ) from exc
 
+    # Reported before the refusals below are raised: a pass that died still ran somewhere, and
+    # on the CPU that is often why it died (a wall-clock ceiling, a watchdog). The caller keeps
+    # the reading only if the job survives to write a record.
     if announced is None:
         log.info("audio-separator named no device while running %s; it stays unknown", model)
     elif on_device is not None:

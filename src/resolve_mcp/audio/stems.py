@@ -918,7 +918,8 @@ def multi_pass(
     if separator_env is not None:
         # What the passes said they ran on, beside the build they ran under (#188). Only the
         # fresh path has either: a reuse ran no process, and no process said anything.
-        result["separator"] = separator.record_device(separator_env, devices)
+        separator.record_device(separator_env, devices)
+        result["separator"] = separator_env
     if split_wind:
         # Keyed like ``drums`` is: the name of the stem this pass took apart. Absent rather
         # than empty when the pass is off, so the envelope never offers a stem nobody made.

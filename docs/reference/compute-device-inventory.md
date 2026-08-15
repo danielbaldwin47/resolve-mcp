@@ -111,10 +111,14 @@ has it — is an install action on the box, recorded on ticket #202.
 
 The build says what the install *can* do; it does not say what a run
 *did*. Each pass announces its own device in its opening banner, and that
-line is read back into `separator.device` on the job record — `cuda`,
-`cpu`, or `unknown` where the banner named nothing (#188). The last pass's
+line is read back into `separator.device` on the job record — whatever the
+banner named, lowercased (`cuda`, `cuda:0`, `mps`, `cpu`), or `unknown`
+where it named nothing (#188). A reader after the GPU wants "not `cpu`",
+not `== "cuda"`: the device is a reading, not an enum. The last pass's
 reading is the one recorded, because a run that reached the card once and
 then could not is a CPU run. A CPU device under a GPU-capable build is the
-fallback G10 hid behind "it was slow": it is a WARNING in the log and a
-`warning` on the record, except where the `+cpu` build already warned —
-that message names the fix and this one would only replace it.
+fallback G10 hid behind "it was slow": it is a WARNING in the log at the
+pass that announced it, and a `warning` on the record — except under a
+`+cpu` build, whose warning is the same news with the fix attached. A
+build the probe could not read is not that case: its warning says whether
+this ran on the GPU is unknown, which a CPU reading has just answered.

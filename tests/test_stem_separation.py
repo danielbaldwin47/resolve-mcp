@@ -1013,6 +1013,19 @@ def test_a_cpu_build_keeps_its_own_warning_because_that_one_names_the_fix(
     assert "RESOLVE_MCP_AUDIO_SEPARATOR" in report["warning"]
 
 
+def test_an_unreadable_build_plus_a_cpu_device_is_still_warned_about(tmp_path: Path) -> None:
+    """The probe's own warning says whether this runs on the GPU is *unknown*. The passes have
+    since answered that, so the CPU warning replaces it rather than being suppressed by it."""
+    fake = FakeSeparator(FOUR_STEMS, SIX_DRUM_STEMS, torch_build="", banners=(CPU_BANNER,))
+
+    output = multi_pass(_acquired(tmp_path), {"scope": "timeline"}, _ignored, runner=fake)
+
+    report = output.result["separator"]
+    assert report["torch"] is None
+    assert report["device"] == "cpu"
+    assert "ran on the CPU" in report["warning"]
+
+
 def test_a_separator_that_names_no_device_records_unknown_rather_than_failing(
     tmp_path: Path,
 ) -> None:
