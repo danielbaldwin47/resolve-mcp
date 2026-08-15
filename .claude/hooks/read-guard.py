@@ -8,7 +8,7 @@ PreToolUse on Read, blocking (exit 2) on either rule:
      buys nothing. Any offset/limit is the escape: wanting a different section
      of a big file is legitimate.
   2. Big first read: a whole-file Read of a guarded-extension repo file
-     (GUARDED_EXT below) over BIG_FILE_LINES — CLAUDE.md's "ranged (grep first)
+     (guarded_ext.py, shared with context-guard.py) over BIG_FILE_LINES — CLAUDE.md's "ranged (grep first)
      on big files". Here the escape is `limit`, since a bare `offset` still
      pulls Read's 2000-line default. A deliberate `offset: 1, limit: <n>` passes,
      so this is a speed bump rather than a wall.
@@ -29,28 +29,16 @@ import tempfile
 
 BIG_FILE_LINES = 400
 
-# Text formats where a whole-file pull is the thing being rationed. Markdown is
-# deliberately absent: reading a whole ADR or CONTEXT.md is the intended use.
+# The guarded-extension list is shared with context-guard.py (guarded_ext.py):
+# text formats where a whole-file pull is the thing being rationed. Markdown is
+# guarded there (a cat of a doc is still a whole-file read) but exempt from the
+# size rule here: reading a whole ADR or CONTEXT.md is the intended use.
 # Anything unlisted (images, PDFs, notebooks, extensionless files) passes — a
 # line count is meaningless there.
-GUARDED_EXT = {
-    ".py",
-    ".pyi",
-    ".js",
-    ".jsx",
-    ".ts",
-    ".tsx",
-    ".json",
-    ".yml",
-    ".yaml",
-    ".toml",
-    ".sh",
-    ".ini",
-    ".cfg",
-    ".conf",
-    ".txt",
-    ".log",
-}
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from guarded_ext import GUARDED_EXT, SIZE_RULE_EXEMPT  # noqa: E402
+
+SIZE_GUARDED_EXT = GUARDED_EXT - SIZE_RULE_EXEMPT
 
 
 def in_project(path):
@@ -121,7 +109,7 @@ if event == "PreToolUse" and tool == "Read":
     # whole of any file this rule covers.
     if (
         "limit" not in tool_input
-        and os.path.splitext(path)[1].lower() in GUARDED_EXT
+        and os.path.splitext(path)[1].lower() in SIZE_GUARDED_EXT
         and in_project(path)
     ):
         lines = line_count(path)

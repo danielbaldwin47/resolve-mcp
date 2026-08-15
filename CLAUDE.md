@@ -143,18 +143,32 @@ worktree — to a gitignored repo-local log:
 
 then Grep `FAILED|passed|error` in `pytest.scratch.log` (`*.scratch.log` is
 gitignored; never commit a log). Never `| tail` — a tail caps one run and
-runs repeat. Delegate exploration to
+runs repeat. The accepted one-command redirect shapes:
+
+    uv run pytest -m 'not live' > pytest.scratch.log 2>&1
+    uv run mypy > mypy.scratch.log 2>&1
+    uv run ruff check > ruff.scratch.log 2>&1
+    gh issue view <n> --json body -q .body > issue.scratch.log
+    gh pr diff <n> > pr.scratch.log
+    git merge origin/main > merge.scratch.log 2>&1
+
+Delegate exploration to
 a read-only subagent; Read only what you will edit, ranged (grep first) on
 big files; do not re-read a file after editing it. The hooks in
-`.claude/hooks/` enforce the cat/tail rules, whole-file re-reads, and
-whole-file reads of code/config files over 400 lines (markdown exempt) — a
-block from them is the rule firing, not an obstacle to route around; the
-block message names the fix.
+`.claude/hooks/` enforce these on both shell tools (Bash and PowerShell)
+and every reader: a bare or piped `pytest|mypy|ruff` run, a `gh issue|pr
+view` or `pr diff` that does not land in a file, and any whole-file dump of
+a guarded file — `cat`, `sed -n p`, `head`/`tail` with no count, `head -c`,
+`Get-Content` without `-TotalCount`/`-Tail`, `type` — are blocked, while
+ranged reads (`sed -n 10,40p`, `head -50`, `Get-Content -TotalCount 50`)
+pass; plus whole-file re-reads, and whole-file Reads of code/config files
+over 400 lines (markdown exempt). A block from them is the rule firing, not
+an obstacle to route around; the block message names the fix (#249).
 
 The same scratch-file rule covers `gh` — issue bodies, comment threads,
 and PR diffs were the biggest single results in past sessions:
 `gh issue view <n> --json body -q .body > issue.scratch.log`, then Grep
-back the section you need.
+back the section you need; a `--json` field filter (`-q .title`) is fine.
 
 **Orient from `CONTEXT.md` first** — the repo map answers "which module
 owns X, where is the seam, which test file covers Y"; explores are for
