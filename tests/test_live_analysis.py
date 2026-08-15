@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from resolve_mcp.analysis import applause, bars, beats
+from resolve_mcp.analysis import applause, bars, beats, device
 from resolve_mcp.audio import separator, stems, wav
 from resolve_mcp.config import Config
 from resolve_mcp.jobs import cache
@@ -32,6 +32,35 @@ ROOM_SECONDS = 6.0
 
 BAR_METER = 4
 BAR_SECONDS = 60.0 / CLICK_BPM * BAR_METER
+
+
+@pytest.mark.live
+def test_the_installed_torch_is_a_cuda_build_and_the_beat_model_is_told(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """#245's live half: the wheels the extra actually installed, and the device the model
+    was actually handed.
+
+    Red rather than skipped on a `+cpu` build, deliberately — same shape as the live
+    separator test. The fake tier can prove which device string the site asks for; only a
+    real install can say whether `uv sync --extra analysis` produced a torch that can
+    honour it.
+    """
+    pytest.importorskip("torch", reason="the analysis extra is not installed")
+    pytest.importorskip("beat_this.inference", reason="beat_this is not installed")
+
+    note = device.torch_note()
+    assert note is not None
+    assert "+cu" in note["torch"], f"the analysis extra installed {note['torch']}, not a CUDA build"
+    assert note["cuda_available"] is True
+    assert note["device"] == "cuda"
+    assert device.inference_device() == "cuda"
+
+    path = write_clicks(tmp_path / "clicks.wav", beats_per_minute=CLICK_BPM, seconds=CLICK_SECONDS)
+    with caplog.at_level("INFO"):
+        beats.detect(path)
+    assert any("inference on CUDA" in one.message for one in caplog.records)
 
 
 @pytest.mark.live

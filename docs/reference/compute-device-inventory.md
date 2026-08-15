@@ -17,8 +17,8 @@ says so in the log and the job record.**
 | Audio extraction | `audio/ffmpeg`, `analysis/decode` | CPU | none applicable | n/a — audio demux/PCM decode, no video stream decoded |
 | Occlusion arithmetic | `video/blocking` (numpy/scipy) | CPU | none wired | n/a — milliseconds per scan; decode dominates |
 | DSP analysis (energy, silence, drums, fills, melody, phrases, solos, correlate) | `analysis/*` (numpy) | CPU | none wired | n/a — pure numpy, no torch involved |
-| Beat grid | `analysis/beats` (beat_this, torch) | **CPU by policy** — see below | exists upstream (CUDA torch) | `device.announce("beat_this")` at inference; `torch` note in the music/structure job results |
-| Applause curve | `analysis/applause` (PANNs, torch) | **CPU by policy** — same decision | exists upstream | `device.announce("PANNs")`; same `torch` note |
+| Beat grid | `analysis/beats` (beat_this, torch) | **CUDA** since #245 — the analysis extra sources torch from the cu130 index on Windows, and the model is handed `device.inference_device()` rather than left to its `device="cpu"` default | yes — already wired | `device.announce("beat_this")` at inference; `torch` note (`device`, `cuda_available`, build) in the music/structure job results; a `+cpu` build or a CUDA build that sees no card is a WARNING naming the fix |
+| Applause curve | `analysis/applause` (PANNs, torch) | **CUDA** since #245 — same wheels, and the device is named at construction because PANNs' own default falls back silently | yes — already wired | `device.announce("PANNs")`; same `torch` note and the same two WARNINGs |
 | Transcription | `analysis/whisper` (faster-whisper/CTranslate2) | **CUDA** (`whisper_device=auto`, runtime shipped by the analysis extra, #128) | yes — already wired | resolved device logged after model load; `auto`→CPU resolve is a WARNING |
 | Stem separation | `audio/separator` (external CLI, its own torch) | whatever the PATH install has — **found `2.13.0+cpu` on the live box, 2026-08-14** | yes — CUDA torch in the separator's env | `--env_info` probed before every fresh separation; build in the log + job record; `+cpu` build **refuses the job** (opt into the CPU run with `RESOLVE_MCP_SEPARATOR_ALLOW_CPU=1`, then a WARNING); each pass's own device read off its banner into `separator.device` (#188), CPU under a GPU build is a WARNING |
 | Rendering | `resolve/render`, `deliver` | Resolve's own GPU pipeline | Resolve's business | out of scope — Resolve manages its own devices |
@@ -74,31 +74,65 @@ concert footage is all 4:2:2 (FX6 XAVC Intra H.264 4:2:2, A7IV H.265
 losing case is long 1080p H.264, rare in a 4K pipeline — a box that works
 mostly on those should set `RESOLVE_MCP_FFMPEG_HWACCEL=off`.
 
-## The torch decision: beats and applause stay on the CPU (until #245)
+## The torch decision: the record of the flip to CUDA (#245)
 
-**Superseded in intent, 2026-08-15:** the director called the flip — #245
-moves both models to CUDA torch and re-measures the corpus against a stated
-tolerance. Until it lands, what follows is still the live state.
+**Flipped 2026-08-15** on the director's call (PR #244). What follows is the
+record: what the old policy was, what moved, the tolerance the corpus is
+judged against, and the outcome. ADR 0008 carries the decision itself.
 
-The analysis extra pins the PyPI torch wheel, which on Windows is the CPU
-build (`pyproject.toml`), and beat_this is pinned to the commit the corpus
-was measured with. This is a **policy, not an accident**: the corpus —
-every `[measured — N projects]` claim in `styles/` — was measured on the
-CPU build, and a GPU build that produced even slightly different beat
-times would change what the style profiles were learned from without
-anyone deciding that. Re-measuring the corpus is a human decision
-(director's call), not an agent's; until it is made, the CPU build is the
-reference implementation and both models announce
-"CPU: the corpus policy" at inference rather than staying silent about it.
-What flipping the policy would take: install CUDA torch, re-run the corpus
-pass (`docs/agents/style-layer.md`), and diff the beat grids — if they
-match to tolerance, the profiles survive; if not, they were learned from
-numbers that no longer exist.
+**What the policy was.** The analysis extra pinned the PyPI torch wheel, and
+on Windows that is the CPU build — 122 MB with no CUDA runtime, where the
+same version's Linux wheel depends on `nvidia-*-cu13` and is the CUDA
+build. So the corpus — every `[measured — N projects]` claim in `styles/` —
+was measured on the CPU, and the pin was kept deliberately: a GPU build that
+produced even slightly different beat times would change what the profiles
+were learned from without anyone deciding it. That was a policy, not an
+accident, and it was the one path in this inventory that read CPU where a
+GPU path existed.
 
-Cost of the policy today: beats + applause over a full concert are
-minutes-scale on this box's CPU, not the hours-scale the separator's bug
-was — the wheel decision is cheap where it sits and expensive only if
-copied to the separator, which is exactly what G10 was.
+**What moved.** Only the build. The version pins are untouched (torch 2.13,
+torchaudio 2.11, torchcodec 0.15) and beat_this stays on the commit the
+corpus was measured with — the point of the diff below is that the *only*
+variable is the device. `[tool.uv.sources]` in `pyproject.toml` maps the
+three torch packages to `https://download.pytorch.org/whl/cu130` for
+`sys_platform == 'win32'` only, leaving a Linux/CI resolve exactly as it
+was. Announcing the device was not enough on its own: beat_this defaults to
+`device="cpu"` whatever wheel is installed, and PANNs defaults to `"cuda"`
+and falls back silently, so both inference sites now hand the model
+`device.inference_device()` and the `torch` note on the job record answers
+for the run rather than for the install.
+
+**The tolerance, stated before the numbers.** Per corpus project, beat grid
+and applause curve are recomputed on the CUDA build and diffed against the
+stored CPU results:
+
+- **Beat grid — survives if the max beat-time delta is below one frame at
+  that timeline's fps** (41.7 ms at 24, 33.4 ms at 29.97). One frame is the
+  unit because every downstream claim is a cut offset in frames: a grid that
+  moves less than the smallest thing a cut can be placed on cannot have
+  changed a `[measured]` claim. Max *and* median are recorded per project —
+  a median inside tolerance with a max outside it is a local disagreement,
+  not a survival, and it names the region to look at.
+- **Applause curve — survives if the spans derived from it (`analysis/applause`,
+  what the profiles actually consume) neither appear nor disappear, and no
+  boundary moves by more than one frame.** The raw max `|Δp|` is recorded
+  alongside as evidence, but a probability that wobbles without moving a
+  boundary has changed nothing anyone reads.
+- **Above tolerance, the profile's `[measured]` claims are re-derived, not
+  kept** — per `docs/agents/style-layer.md`. Below it, the profile keeps its
+  claims and gains a note that they were confirmed on the CUDA build.
+
+**Outcome: pending.** The corpus diff runs on the director's box — the
+projects live nowhere else — and is recorded on #245 as it completes. Until
+it is recorded, the profiles' `[measured]` tags stand on the CPU numbers and
+this row is a flip of the *compute path*, not yet a re-confirmation of the
+corpus. The two are separable on purpose: a new job today should use the
+card whatever the diff says about claims made a month ago.
+
+Cost either way: beats + applause over a full concert were minutes-scale on
+this box's CPU, not the hours-scale the separator's bug was (#202, G10). The
+flip is worth having and was never urgent — which is exactly why it waited
+for a decision instead of drifting.
 
 ## The separator: GPU-capable, and currently mis-installed on the live box
 

@@ -177,8 +177,11 @@ you pass `refresh`.
   hand-installed wheels, no `PATH` set before launch — the server puts the venv's own copy
   within reach. A box without an NVIDIA card still transcribes; set
   `RESOLVE_MCP_WHISPER_DEVICE=cpu` and expect it to be slow. The extra also carries the
-  music stack (#37): `beat_this` (a git dependency — it has no PyPI release), torch (the
-  CPU wheel), torchcodec, soundfile and `panns_inference`.
+  music stack (#37): `beat_this` (a git dependency — it has no PyPI release), torch,
+  torchcodec, soundfile and `panns_inference`. On Windows torch, torchaudio and
+  torchcodec come off the CUDA 13.0 wheel index rather than PyPI, which ships a CPU-only
+  Windows wheel (#245); a box with no NVIDIA card still installs and imports them, and
+  the beat and applause jobs warn that they are running on the CPU.
 - **PANNs weights hand-placed in `~/panns_data/`** — `class_labels_indices.csv` and
   `Cnn14_DecisionLevelMax.pth` (327 MB), the two files `panns_inference` would fetch on
   first use via `os.system('wget …')`, which Windows does not have. The two fetches it

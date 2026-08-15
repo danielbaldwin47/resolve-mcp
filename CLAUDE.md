@@ -169,11 +169,10 @@ sweeps that inlined everything ended at 2× the usable context budget.
 
 **GPU-first.** Every compute path runs on the card wherever a GPU path
 exists; the CPU is a fallback the log and the job record name at WARNING.
-The per-path table — which paths have a GPU path, which are CPU by policy
-(beats and applause: the corpus was measured on the CPU torch build; the
-director has called the flip — #245 moves them to CUDA and re-measures),
-and how each reports a fallback —
-is `docs/reference/compute-device-inventory.md`. Read it before you launch
+No path is CPU by policy any more: #245 moved the last two (beats and
+applause) onto CUDA torch. The per-path table — which paths have a GPU
+path, which have none worth wiring, and how each reports a fallback — is
+`docs/reference/compute-device-inventory.md`. Read it before you launch
 a separation, transcription or beat-grid job, before you touch a compute
 path, and when you add one — a new path takes its own row in the same PR.
 

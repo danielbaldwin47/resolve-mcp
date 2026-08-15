@@ -154,8 +154,10 @@ reading the timeline, putting every shot on the music's clock, writing the file,
 the CUDA runtime the `analysis` extra ships, so CTranslate2 finds it on Windows;
 pure decisions, #128),
 `decode` (WAV → numpy, no third-party decoder), `device` (which device the
-torch models infer on, announced once per process and carried in job records —
-no silent CPU fallback, #202; the inventory and the stays-on-CPU corpus policy:
+torch models infer on, announced once per process, carried in job records, and
+handed to the models rather than left to their defaults — no silent CPU
+fallback, #202, and CUDA since #245: `inference_device()`, the inventory and
+the record of the flip in
 `docs/reference/compute-device-inventory.md`), `drums` (hits per stem), `energy`
 (loudness curves; `rms_curve` is the cheap level-only pass, no K-weighting and
 no onsets), `fills` (drum-fill candidates), `halves` (shared

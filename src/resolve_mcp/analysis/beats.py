@@ -104,7 +104,9 @@ def beat_this_detector(path: Path) -> BeatGrid:
     module = _loaded()
     device.announce("beat_this")
     log.info("Running beat_this over %s", path.name)
-    beats, downbeats = module.File2Beats()(str(path))
+    # `File2Beats` defaults to device="cpu" upstream, whatever wheel torch is — so the
+    # device is handed to it rather than left to the model (#245).
+    beats, downbeats = module.File2Beats(device=device.inference_device())(str(path))
     return BeatGrid(
         beats=tuple(float(one) for one in beats),
         downbeats=tuple(float(one) for one in downbeats),
