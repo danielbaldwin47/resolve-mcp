@@ -145,6 +145,27 @@ def liveness_of(owner: Owner, alive: lease.Alive = _running) -> Liveness:
     return lease.liveness(owner, ceiling=CEILING, alive=alive)
 
 
+def test_the_holder_reading_says_held_or_free_and_names_who(tmp_path: Path) -> None:
+    """The other half of the interface, asked on its own: who has this, if anyone.
+
+    ``claim`` is what a run uses, but the reading behind it is a question worth asking without
+    taking anything — and the three answers it gives are the three a caller acts on: nobody has
+    it, somebody is working under it, or the run that wrote it is gone and it can be taken.
+    """
+    free = tmp_path / "free" / ".claim.json"
+    taken = tmp_path / "taken" / ".claim.json"
+    _written_by(taken, 4242, claimed_at=time.time())
+
+    assert lease.holder(free, ceiling=CEILING, alive=_running) == lease.Held(False, None, None)
+
+    working = lease.holder(taken, ceiling=CEILING, alive=_running)
+    abandoned = lease.holder(taken, ceiling=CEILING, alive=_gone)
+
+    assert (working.held, working.pid) == (True, 4242)
+    assert (abandoned.held, abandoned.pid) == (False, 4242)
+    assert abandoned.judged == taken.read_bytes(), "the verdict named bytes it had not read"
+
+
 def test_a_claim_somebody_is_working_under_is_refused_and_names_them(tmp_path: Path) -> None:
     """Two runs writing one directory interleave into work that is neither run's."""
     path = tmp_path / "work" / ".claim.json"

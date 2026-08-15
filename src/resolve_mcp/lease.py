@@ -79,7 +79,7 @@ Waiting = Callable[[int | None], None]
 Read = Callable[[Path], bytes]
 """How a claim's bytes come off disk. Injected so a refused read is a test, not a monkeypatch."""
 
-UNREADABLE = b""
+_UNREADABLE = b""
 """What ``_bytes`` gives back for a claim that is there but could not be read.
 
 Not the same answer as ``None``, which is no claim at all: a claim nothing can read is still
@@ -301,9 +301,20 @@ def holder(
     return Held(held=False, pid=pid, judged=raw)
 
 
-def content() -> bytes:
+def _content() -> bytes:
     """The claim this process would write, as the bytes that go on disk."""
     return json.dumps({"pid": os.getpid(), "session": SESSION, "claimed_at": time.time()}).encode()
+
+
+def _ours(claim: dict[str, Any] | None) -> bool:
+    """Whether that claim is the one this process wrote — the question both writers ask.
+
+    A refresh is a write onto the claim and a release is a delete of it, so both have to be
+    sure it is still ours: a rewrite of somebody else's claim is the theft the file exists to
+    prevent, and a delete of one is that theft with an extra step. Asked in one place because
+    two spellings of "still ours" would be two chances to disagree about it.
+    """
+    return claim is not None and claim.get("session") == SESSION and claim.get("pid") == os.getpid()
 
 
 def _hold_locally(
@@ -408,7 +419,7 @@ def _create(path: Path) -> bool:
     covered by ``holder`` reading an unreadable claim as held rather than adoptable.
     """
     scratch = _scratch(path)
-    payload = content()
+    payload = _content()
     try:
         scratch.write_bytes(payload)
         try:
@@ -482,7 +493,7 @@ def _touch(path: Path, read: Read) -> None:
     Windows is a routine thing for it to do, and is why the read retries first.
     """
     raw = _bytes(path, read)
-    if raw == UNREADABLE:
+    if raw == _UNREADABLE:
         log.warning(
             "Could not read the claim at %s to refresh it; it is this run's until something "
             "legible says otherwise, so the work carries on",
@@ -490,11 +501,11 @@ def _touch(path: Path, read: Read) -> None:
         )
         return
     held = None if raw is None else _parse(path, raw)
-    if held is None or held.get("session") != SESSION or held.get("pid") != os.getpid():
+    if not _ours(held):
         raise _lost(path, held)
     scratch = _scratch(path)
     try:
-        scratch.write_bytes(content())
+        scratch.write_bytes(_content())
         os.replace(scratch, path)
     except OSError:
         log.warning("Could not refresh the claim at %s", path)
@@ -522,7 +533,7 @@ def _release(path: Path, read: Read) -> None:
     parsed = None if raw is None else _parse(path, raw)
     if parsed is None:
         return
-    if parsed.get("session") != SESSION or parsed.get("pid") != os.getpid():
+    if not _ours(parsed):
         log.info("Leaving the claim at %s alone: it is not the one this process wrote", path)
         return
     try:
@@ -566,7 +577,7 @@ def _scratch(path: Path) -> Path:
 
 
 def _bytes(path: Path, read: Read) -> bytes | None:
-    """The claim exactly as it is on disk, ``None`` for no claim, ``UNREADABLE`` for no answer.
+    """The claim exactly as it is on disk, ``None`` for no claim, ``_UNREADABLE`` for no answer.
 
     Retried the way the store retries a record read, and for the same reason: Windows refuses
     the read that lands while another handle holds the file, and a claim has two handles on it
@@ -582,7 +593,7 @@ def _bytes(path: Path, read: Read) -> bytes | None:
         return None
     except OSError:
         log.warning("Could not read the claim at %s, even on a retry", path)
-        return UNREADABLE
+        return _UNREADABLE
 
 
 def _parse(path: Path, raw: bytes) -> dict[str, Any] | None:

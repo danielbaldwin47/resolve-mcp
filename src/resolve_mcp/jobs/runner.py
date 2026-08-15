@@ -176,7 +176,7 @@ def execute(record: JobRecord, work: Work, config: Config) -> None:
     # The bar reaches disk at most once a second. It moves several times a second and a
     # separation moves it for half an hour, which is tens of thousands of writes to a file
     # ``get_job`` is polling at the same time — on Windows the two sides already have to retry
-    # around each other's handles (``store._sharing``), and one write a second says everything
+    # around each other's handles (``sharing.sharing``), and one write a second says everything
     # a poller can read anyway. Two things are never throttled: a step change, which is the one
     # line an agent reads to know what is happening and happens a dozen times in a job rather
     # than a thousand, and the ending, which ``store.finish`` writes itself — so whichever tick
