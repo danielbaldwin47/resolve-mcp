@@ -187,8 +187,8 @@ a reason to set the override on this box. Check before a live run:
 
     audio-separator --env_info 2>&1 | grep -E "PyTorch|ONNX"
 
-The separator's own torch decides its device — a `+cpu` build there runs
-every stem pass on the CPU whatever the server's config says. On the live
+The separator's own torch decides its device — the server's config cannot
+move a `+cpu` build onto the card, only refuse it. On the live
 box `audio-separator` resolves to the system Python 3.12
 (`%LOCALAPPDATA%\Programs\Python\Python312`), separate from the repo
 venv; its torch must be a `+cu` build. Restore one (driver is CUDA 13.x)

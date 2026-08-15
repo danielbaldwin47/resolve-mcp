@@ -104,7 +104,8 @@ copied to the separator, which is exactly what G10 was.
 passes (`htdemucs_ft`, the drum and wind models) run torch, so every
 separation on this box is currently CPU-bound — G10's class of bug, live.
 The server now probes `--env_info` before each fresh separation, logs the
-build, carries it in the job record, and warns on `+cpu`. The fix — CUDA
+build, carries it in the job record, and refuses a `+cpu` build (a
+WARNING only under the `RESOLVE_MCP_SEPARATOR_ALLOW_CPU=1` opt-in). The fix — CUDA
 torch installed into whatever environment owns the PATH
 `audio-separator`, or `RESOLVE_MCP_AUDIO_SEPARATOR` pointed at one that
 has it — is an install action on the box. Still `+cpu` on 2026-08-15 (a
@@ -123,6 +124,7 @@ reading is the one recorded, because a run that reached the card once and
 then could not is a CPU run. A CPU device under a GPU-capable build is the
 fallback G10 hid behind "it was slow": it is a WARNING in the log at the
 pass that announced it, and a `warning` on the record — except under a
-`+cpu` build, whose warning is the same news with the fix attached. A
+`+cpu` build, which only gets this far on the opt-in box, where the
+build's own warning already carries the same news with the fix. A
 build the probe could not read is not that case: its warning says whether
 this ran on the GPU is unknown, which a CPU reading has just answered.

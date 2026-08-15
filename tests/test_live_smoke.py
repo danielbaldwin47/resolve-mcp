@@ -1230,10 +1230,12 @@ def test_the_real_separator_produces_the_stems_the_passes_expect(tmp_path: Path)
     # The other thing no fake can answer: that the real banner still names its device in
     # words ``device_of`` reads (#188), and that the device is the card. A CPU reading here
     # is a broken install, not a slow box (CLAUDE.md, "Compute device"): the separator's own
-    # torch decides, and a ``+cpu`` build ran every pass on the CPU for a week under a
-    # WARNING nobody acted on (#202). Red is the only signal a session cannot wait out.
-    # ``reuse=False`` because the fixture tone hashes the same every run, and stems read
-    # off disk announce nothing.
+    # torch decides, and a ``+cpu`` build ran hours on the CPU under a WARNING nobody acted
+    # on (#202). That build now refuses in ``environment()`` before this line is reached —
+    # ``multi_pass`` raises SeparatorUnavailableError, red all the same; the assertion is
+    # for the other case, a ``+cu`` build whose passes still landed on the CPU. Red is the
+    # only signal a session cannot wait out. ``reuse=False`` because the fixture tone hashes
+    # the same every run, and stems read off disk announce nothing.
     report = output.result["separator"]
     assert report["device"] != separator.UNKNOWN_DEVICE
     assert report["device"] != separator.CPU_DEVICE, (
