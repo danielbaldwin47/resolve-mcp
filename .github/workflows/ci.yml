@@ -20,8 +20,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
+      # --locked: resolve exactly what uv.lock pins and fail if the lock is
+      # stale, rather than silently re-resolving (2026-08-15 audit, #251) —
+      # a green CI must mean the checked-in lock is what was tested.
       - name: Sync dependencies
-        run: uv sync
+        run: uv sync --locked
       - name: Unit tests (fake tier)
         run: uv run pytest -m 'not live'
       - name: Type check

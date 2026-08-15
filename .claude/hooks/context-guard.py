@@ -9,13 +9,16 @@ Blocks (exit 2, message to the model):
   2. `gh issue view` / `gh pr view` / `gh pr diff` that do not land in a file.
      A `--json … -q`/`--template` field filter passes unless it pulls the body
      or the comment thread; `gh pr diff --name-only|--stat` passes.
-  3. A whole-file dump of a guarded file (guarded_ext.py) by any reader —
+  3. `gh issue close` with no `--comment`/`-c` — a ticket's implementation
+     record lives on the ticket, and a silent close loses it. A `gh issue
+     comment <n>` on the same number in the same command counts as the record.
+  4. A whole-file dump of a guarded file (guarded_ext.py) by any reader —
      `cat`, `more`, `less`, `type`, `Get-Content`/`gc`, `sed -n` with no range
      or `1,$p`, `head`/`tail` with no count, `head -c` — that is neither piped
      to a filter nor redirected. Ranged reads (`sed -n 10,40p`, `head -50`,
      `Get-Content -TotalCount 50`) pass. Backslash and drive-letter paths count,
      and so do readers fed by `xargs`, `find -exec`, or a `Get-ChildItem` pipe.
-  4. A `for`/`foreach` loop over guarded files whose body dumps them.
+  5. A `for`/`foreach` loop over guarded files whose body dumps them.
 
 Heredoc / here-string bodies and quoted `--body`/`--message`/`--title`
 arguments are data, not commands, and are blanked before any rule looks (the
@@ -190,7 +193,30 @@ for m in re.finditer(GH_VIEW, blanked):
         "a --json field filter (-q .title, .state) is fine."
     )
 
-# ---------------------------------------------------------------- 3. whole-file dumps
+# ---------------------------------------------------------------- 3. silent closes
+# A ticket's implementation record belongs on the ticket: what landed, which
+# live ACs ran, what the close needs from the human (CLAUDE.md step 8). The
+# 2026-08-15 audit found #167-#178, #184, #164 and #139 bulk-closed with no
+# comment at all, and #219 closed with zero comments — its live record survives
+# only on PR #243, where nobody reading the ticket will find it. A `gh issue
+# comment <n>` on the same number in the same command is that record.
+GH_CLOSE = r"\bgh\s+issue\s+close\b(?P<args>[^;&|\n]*)"
+COMMENT_FLAG = r"(?<!\S)(?:--comment(?:=|\s+)|-c(?:=|\s+))\S"
+for m in re.finditer(GH_CLOSE, blanked):
+    args = m.group("args")
+    if re.search(COMMENT_FLAG, args):
+        continue
+    number = re.search(r"(?<!\S)#?(\d+)(?!\S)", args)
+    if number and re.search(r"\bgh\s+issue\s+comment\s+#?" + number.group(1) + r"\b", blanked):
+        continue  # the record was posted in the same command, then the ticket closed
+    block(
+        "Blocked (workflow): a ticket closed with no comment loses its implementation record "
+        "- what landed, the PR link, which live ACs ran, and the ## Needs from you section.\n"
+        "Close with the record: gh issue close <n> --comment \"...\" (a long record can go up "
+        "first as gh issue comment <n> -F - <<'EOF' ... EOF in the same command)."
+    )
+
+# ---------------------------------------------------------------- 4. whole-file dumps
 DUMP_MSG = (
     "Blocked (context discipline): a whole-file dump of {name} puts the whole file in context - "
     "the rules govern content entering context, not which tool fetched it.\n"
