@@ -108,9 +108,11 @@ build, carries it in the job record, and refuses a `+cpu` build (a
 WARNING only under the `RESOLVE_MCP_SEPARATOR_ALLOW_CPU=1` opt-in). The fix — CUDA
 torch installed into whatever environment owns the PATH
 `audio-separator`, or `RESOLVE_MCP_AUDIO_SEPARATOR` pointed at one that
-has it — is an install action on the box. Still `+cpu` on 2026-08-15 (a
-live run was on the CPU as this was written); the exact command is in
-CLAUDE.md, "Compute device". Since then a `+cpu` build refuses the job
+has it — is an install action on the box. Still `+cpu` on the morning of
+2026-08-15 (a live run was on the CPU as this was written); **fixed that
+day**: `torch 2.13.0+cu130` in the system Python 3.12, `--env_info` now
+reports `+cu130` and `CUDAExecutionProvider available`. The exact command
+is in CLAUDE.md, "Compute device". A `+cpu` build now refuses the job
 (`RESOLVE_MCP_SEPARATOR_ALLOW_CPU`, README) and the live separator test
 fails on a CPU device, so the state cannot go unnoticed again.
 
