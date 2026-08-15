@@ -477,6 +477,24 @@ def test_an_image_quality_scan_joins_over_each_shot(attach: Attach, tmp_path: Pa
     assert result["picture_quality"]["soft_shots"] == {"count": 1, "floor": 0.3, "cuts": [2]}
 
 
+def test_a_joined_reading_keeps_the_precision_the_scan_wrote(
+    attach: Attach, tmp_path: Path
+) -> None:
+    """The readings are not times, and rounding them to a time's precision loses a digit.
+
+    A builder ranking two takes reads the fourth decimal — on this footage the whole delivered
+    corpus sits inside a range a third of a point wide — so the column here and the sample in
+    the scan's own curve have to be the same number.
+    """
+    attach(studio(timeline=a_cut()))
+    rows = [_sample(round(index * 0.25, 3), sharpness=0.8125) for index in range(14)]
+    catalog = quality_file(tmp_path, rows, name="precise")
+
+    result = _measured(tmp_path, quality=str(catalog))
+
+    assert [one["sharpness"] for one in _rows(result)] == [0.8125, 0.8125, 0.8125]
+
+
 def test_a_shot_is_judged_on_its_worst_moment_not_its_first_frame(
     attach: Attach, tmp_path: Path
 ) -> None:

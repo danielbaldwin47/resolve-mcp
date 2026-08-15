@@ -1194,18 +1194,28 @@ def _scanned(row: Mapping[str, Any]) -> picture.Reading:
     The catalog is JSON on disk, and the aggregation lives in a module that knows nothing
     about files, so something has to carry a row across that line. This is the only place
     that knows both shapes.
+
+    Every column is read with a default rather than by subscript. A row that is missing one is
+    a hand-edited or older catalog, and the job's answer to that should be a reading with a
+    hole in it — not a ``KeyError`` from inside a worker, two seconds after a call that looked
+    like it had been accepted.
     """
     from ..video.picture import Reading  # noqa: PLC0415 - numpy loads with that module
 
     return Reading(
-        sharpness=float(row["sharpness"]),
-        exposure=float(row["exposure"]),
-        contrast=float(row.get("contrast") or 0.0),
-        clipped=float(row["clipped"]),
-        crushed=float(row.get("crushed") or 0.0),
+        sharpness=_number(row, "sharpness"),
+        exposure=_number(row, "exposure"),
+        contrast=_number(row, "contrast"),
+        clipped=_number(row, "clipped"),
+        crushed=_number(row, "crushed"),
         stability=None if row.get("stability") is None else float(row["stability"]),
         discontinuity=bool(row.get("discontinuity")),
     )
+
+
+def _number(row: Mapping[str, Any], field: str) -> float:
+    found = row.get(field)
+    return float(found) if isinstance(found, int | float) else 0.0
 
 
 def _delta_at(

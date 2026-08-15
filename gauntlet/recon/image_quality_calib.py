@@ -110,7 +110,8 @@ def defocused(frames: np.ndarray, sigma: float) -> np.ndarray:
     return np.clip(np.rint(blurred), 0, 255).astype(np.uint8)
 
 
-def blown(frames: np.ndarray, gain: float) -> np.ndarray:
+def gained(frames: np.ndarray, gain: float) -> np.ndarray:
+    """The same footage exposed for different light — above 1 burns it, below 1 closes it."""
     return np.clip(np.rint(frames.astype(np.float64) * gain), 0, 255).astype(np.uint8)
 
 
@@ -225,9 +226,9 @@ def main(argv: list[str] | None = None) -> int:
                 readings(defocused(frames, sigma))
             )
         for gain in BLOWN_GAINS:
-            bad.setdefault(f"blown_gain_{gain:g}", []).extend(readings(blown(frames, gain)))
+            bad.setdefault(f"blown_gain_{gain:g}", []).extend(readings(gained(frames, gain)))
         for gain in DARK_GAINS:
-            bad.setdefault(f"dark_gain_{gain:g}", []).extend(readings(blown(frames, gain)))
+            bad.setdefault(f"dark_gain_{gain:g}", []).extend(readings(gained(frames, gain)))
         for pixels in SHAKE_PIXELS:
             bad.setdefault(f"shake_{pixels}px", []).extend(readings(shaken(frames, pixels)))
 

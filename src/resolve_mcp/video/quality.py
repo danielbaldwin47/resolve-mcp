@@ -170,7 +170,7 @@ def scan_quality(
     raw = config.analysis_dir / f"{stem}-{os.getpid()}-{uuid4().hex[:8]}.gray"
     progress(0.1, f"decoding {duration:.0f}s of {source.name} at {rate:g} samples a second")
     try:
-        sampled = ffmpeg.sample(
+        decoded = ffmpeg.sample(
             source.path,
             raw,
             start_seconds=source.seek_seconds(first),
@@ -215,7 +215,7 @@ def scan_quality(
             "min_stability": floors.stability,
         },
         # Which device decoded the range, and why not the GPU when it was the CPU (#202).
-        "decode": sampled.decode,
+        "decode": decoded.decode,
         "grid": {"width": picture.GRID_WIDTH, "height": picture.GRID_HEIGHT},
         "range": {"in": dual_time(first, source.fps), "out": dual_time(last, source.fps)},
         "samples": samples,
