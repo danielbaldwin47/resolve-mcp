@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stop hook that puts a session's cost in its closing report (#247).
+"""Stop hook that puts a session's cost in its closing report (#248).
 
 Reads the session transcript and, when the model has just written a closing
 report (a message carrying a `result:` / `failed:` / `needs input:` line) that
