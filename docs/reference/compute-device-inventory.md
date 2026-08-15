@@ -20,7 +20,7 @@ says so in the log and the job record.**
 | Beat grid | `analysis/beats` (beat_this, torch) | **CPU by policy** — see below | exists upstream (CUDA torch) | `device.announce("beat_this")` at inference; `torch` note in the music/structure job results |
 | Applause curve | `analysis/applause` (PANNs, torch) | **CPU by policy** — same decision | exists upstream | `device.announce("PANNs")`; same `torch` note |
 | Transcription | `analysis/whisper` (faster-whisper/CTranslate2) | **CUDA** (`whisper_device=auto`, runtime shipped by the analysis extra, #128) | yes — already wired | resolved device logged after model load; `auto`→CPU resolve is a WARNING |
-| Stem separation | `audio/separator` (external CLI, its own torch) | whatever the PATH install has — **found `2.13.0+cpu` on the live box, 2026-08-14** | yes — CUDA torch in the separator's env | `--env_info` probed before every fresh separation; build in the log + job record; `+cpu` build is a WARNING; each pass's own device read off its banner into `separator.device` (#188), CPU under a GPU build is a WARNING |
+| Stem separation | `audio/separator` (external CLI, its own torch) | whatever the PATH install has — **found `2.13.0+cpu` on the live box, 2026-08-14** | yes — CUDA torch in the separator's env | `--env_info` probed before every fresh separation; build in the log + job record; `+cpu` build **refuses the job** (opt into the CPU run with `RESOLVE_MCP_SEPARATOR_ALLOW_CPU=1`, then a WARNING); each pass's own device read off its banner into `separator.device` (#188), CPU under a GPU build is a WARNING |
 | Rendering | `resolve/render`, `deliver` | Resolve's own GPU pipeline | Resolve's business | out of scope — Resolve manages its own devices |
 
 Deliberately out of scope: the gauntlet A/B pack's decodes
@@ -74,7 +74,11 @@ concert footage is all 4:2:2 (FX6 XAVC Intra H.264 4:2:2, A7IV H.265
 losing case is long 1080p H.264, rare in a 4K pipeline — a box that works
 mostly on those should set `RESOLVE_MCP_FFMPEG_HWACCEL=off`.
 
-## The torch decision: beats and applause stay on the CPU
+## The torch decision: beats and applause stay on the CPU (until #245)
+
+**Superseded in intent, 2026-08-15:** the director called the flip — #245
+moves both models to CUDA torch and re-measures the corpus against a stated
+tolerance. Until it lands, what follows is still the live state.
 
 The analysis extra pins the PyPI torch wheel, which on Windows is the CPU
 build (`pyproject.toml`), and beat_this is pinned to the commit the corpus
@@ -104,10 +108,17 @@ copied to the separator, which is exactly what G10 was.
 passes (`htdemucs_ft`, the drum and wind models) run torch, so every
 separation on this box is currently CPU-bound — G10's class of bug, live.
 The server now probes `--env_info` before each fresh separation, logs the
-build, carries it in the job record, and warns on `+cpu`. The fix — CUDA
+build, carries it in the job record, and refuses a `+cpu` build (a
+WARNING only under the `RESOLVE_MCP_SEPARATOR_ALLOW_CPU=1` opt-in). The fix — CUDA
 torch installed into whatever environment owns the PATH
 `audio-separator`, or `RESOLVE_MCP_AUDIO_SEPARATOR` pointed at one that
-has it — is an install action on the box, recorded on ticket #202.
+has it — is an install action on the box. Still `+cpu` on the morning of
+2026-08-15 (a live run was on the CPU as this was written); **fixed that
+day**: `torch 2.13.0+cu130` in the system Python 3.12, `--env_info` now
+reports `+cu130` and `CUDAExecutionProvider available`. The exact command
+is in CLAUDE.md, "Compute device". A `+cpu` build now refuses the job
+(`RESOLVE_MCP_SEPARATOR_ALLOW_CPU`, README) and the live separator test
+fails on a CPU device, so the state cannot go unnoticed again.
 
 The build says what the install *can* do; it does not say what a run
 *did*. Each pass announces its own device in its opening banner, and that
@@ -119,6 +130,7 @@ reading is the one recorded, because a run that reached the card once and
 then could not is a CPU run. A CPU device under a GPU-capable build is the
 fallback G10 hid behind "it was slow": it is a WARNING in the log at the
 pass that announced it, and a `warning` on the record — except under a
-`+cpu` build, whose warning is the same news with the fix attached. A
+`+cpu` build, which only gets this far on the opt-in box, where the
+build's own warning already carries the same news with the fix. A
 build the probe could not read is not that case: its warning says whether
 this ran on the GPU is unknown, which a CPU reading has just answered.

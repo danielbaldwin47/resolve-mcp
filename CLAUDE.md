@@ -165,6 +165,41 @@ Long multi-PR sweeps (merge trains, cross-PR audits) shard per-PR into
 subagents; the orchestrating session keeps receipts, not diffs — past
 sweeps that inlined everything ended at 2× the usable context budget.
 
+## Compute device
+
+**GPU-first.** Every compute path runs on the card wherever a GPU path
+exists; the CPU is a fallback the log and the job record name at WARNING.
+The per-path table — which paths have a GPU path, which are CPU by policy
+(beats and applause: the corpus was measured on the CPU torch build; the
+director has called the flip — #245 moves them to CUDA and re-measures),
+and how each reports a fallback —
+is `docs/reference/compute-device-inventory.md`. Read it before you launch
+a separation, transcription or beat-grid job, before you touch a compute
+path, and when you add one — a new path takes its own row in the same PR.
+
+A CPU reading where the table says a GPU path exists is a **broken install,
+not a slow box**: stop, fix it (or hand it to the human under `## Needs
+from you`), then run. Waiting it out is the G10 failure (#202) — the
+separator ran hours on the CPU under a WARNING nobody acted on. The
+server now refuses a `+cpu` separator outright
+(`RESOLVE_MCP_SEPARATOR_ALLOW_CPU`, README) and the live separator test
+is red on a CPU device; treat either as the install fix below, never as
+a reason to set the override on this box. Check before a live run:
+
+    audio-separator --env_info 2>&1 | grep -E "PyTorch|ONNX"
+
+The separator's own torch decides its device — the server's config cannot
+move a `+cpu` build onto the card, only refuse it. On the live
+box `audio-separator` resolves to the system Python 3.12
+(`%LOCALAPPDATA%\Programs\Python\Python312`), separate from the repo
+venv; its torch must be a `+cu` build. Restore one (driver is CUDA 13.x)
+with:
+
+    py -3.12 -m pip install "torch==2.13.0+cu130" "torchvision==0.28.0+cu130" --index-url https://download.pytorch.org/whl/cu130 --extra-index-url https://pypi.org/simple
+
+`pip index versions torch --index-url .../cu130` lists the versions when
+the pin moves. Live-tier separation tests are only a pass on a `+cu` build.
+
 ## Gotchas
 
 Facts rediscovered across sessions, promoted from session memory. Each one

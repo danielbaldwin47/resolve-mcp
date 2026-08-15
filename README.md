@@ -223,6 +223,7 @@ Zero-config by default; every path has an environment override.
 | `RESOLVE_MCP_CACHE` | `%LOCALAPPDATA%\resolve-mcp` | Cache root: snapshots, job records, cached results, acquired audio, grabbed frames, analysis catalogs, separated stems, model weights |
 | `RESOLVE_MCP_FFMPEG` | `ffmpeg` (found on PATH) | ffmpeg executable used for per-clip audio extraction, frame grabs and scene-cut detection |
 | `RESOLVE_MCP_AUDIO_SEPARATOR` | `audio-separator` (found on PATH) | python-audio-separator CLI used for stem separation |
+| `RESOLVE_MCP_SEPARATOR_ALLOW_CPU` | `0` | A separator whose torch is the CPU build (`+cpu`) refuses to run — a GPU-capable box with that install is misconfigured, and the error names the fix. `1` accepts the CPU run on a box with no CUDA device; it is then a warning on the job record |
 | `RESOLVE_MCP_STEM_MODEL` | `htdemucs_ft.yaml` | Pass one: the 4-stem model (vocals, drums, bass, other) |
 | `RESOLVE_MCP_DRUM_MODEL` | `MDX23C-DrumSep-aufr33-jarredou.ckpt` | Pass two: the drum decomposition model (kick, snare, toms, ride, crash) |
 | `RESOLVE_MCP_DEFAULT_RENDER_PRESET` | `H.265 Master` | Render preset `render_timeline` uses when the call names none. Must be a preset the project offers — an unknown name is refused, never swapped for another |

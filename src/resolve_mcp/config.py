@@ -24,6 +24,11 @@ DEFAULT_FFMPEG = "ffmpeg"
 # route reports the device it decoded on — a silent CPU decode is the G10 failure.
 DEFAULT_FFMPEG_HWACCEL = "auto"
 DEFAULT_AUDIO_SEPARATOR = "audio-separator"
+# The separator's own torch decides its device, and a CPU wheel turns a forty-minute
+# separation into a day's with "slow" as the only symptom (G10, #202). By default a +cpu
+# build refuses the job and names the fix; a box with no card opts into the slow path with
+# RESOLVE_MCP_SEPARATOR_ALLOW_CPU=1, and the choice is then on the record, not accidental.
+SEPARATOR_ALLOW_CPU_ENV = "RESOLVE_MCP_SEPARATOR_ALLOW_CPU"
 DEFAULT_STEM_MODEL = "htdemucs_ft.yaml"
 # The name audio-separator 0.44.5 lists for the six-stem MDX23C drum model; the
 # "MDX23C-DrumSep-6stem-FT.ckpt" spelling is not in its catalog and fails to load.
@@ -59,6 +64,7 @@ class Config:
     ffmpeg: str = DEFAULT_FFMPEG
     ffmpeg_hwaccel: str = DEFAULT_FFMPEG_HWACCEL
     audio_separator: str = DEFAULT_AUDIO_SEPARATOR
+    separator_allow_cpu: bool = False
     stem_model: str = DEFAULT_STEM_MODEL
     drum_model: str = DEFAULT_DRUM_MODEL
     wind_model: str = DEFAULT_WIND_MODEL
@@ -82,6 +88,7 @@ class Config:
             ffmpeg=env.get("RESOLVE_MCP_FFMPEG") or DEFAULT_FFMPEG,
             ffmpeg_hwaccel=env.get("RESOLVE_MCP_FFMPEG_HWACCEL") or DEFAULT_FFMPEG_HWACCEL,
             audio_separator=env.get("RESOLVE_MCP_AUDIO_SEPARATOR") or DEFAULT_AUDIO_SEPARATOR,
+            separator_allow_cpu=(env.get(SEPARATOR_ALLOW_CPU_ENV) or "").lower() in TRUTHY,
             stem_model=env.get("RESOLVE_MCP_STEM_MODEL") or DEFAULT_STEM_MODEL,
             drum_model=env.get("RESOLVE_MCP_DRUM_MODEL") or DEFAULT_DRUM_MODEL,
             wind_model=env.get("RESOLVE_MCP_WIND_MODEL") or DEFAULT_WIND_MODEL,
@@ -112,6 +119,7 @@ class Config:
             "RESOLVE_MCP_FFMPEG": self.ffmpeg,
             "RESOLVE_MCP_FFMPEG_HWACCEL": self.ffmpeg_hwaccel,
             "RESOLVE_MCP_AUDIO_SEPARATOR": self.audio_separator,
+            SEPARATOR_ALLOW_CPU_ENV: "1" if self.separator_allow_cpu else "0",
             "RESOLVE_MCP_STEM_MODEL": self.stem_model,
             "RESOLVE_MCP_DRUM_MODEL": self.drum_model,
             "RESOLVE_MCP_WIND_MODEL": self.wind_model,

@@ -17,6 +17,7 @@ import locale
 import shutil
 import sys
 from collections.abc import Sequence
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -903,10 +904,27 @@ def test_the_environment_report_reads_the_torch_build_off_env_info() -> None:
     assert fake.probes == [[get_config().audio_separator, "--env_info"]]
 
 
-def test_a_cpu_torch_build_is_a_warning_naming_the_fix() -> None:
+def test_a_cpu_torch_build_refuses_the_job_naming_the_fix() -> None:
     """G10's bug class: PATH picked a separator whose torch is the CPU wheel, and the only
-    symptom used to be that a forty-minute job took a day."""
-    report = separator.environment(runner=FakeSeparator(torch_build="2.13.0+cpu"))
+    symptom used to be that a forty-minute job took a day. A warning ran for a week unread;
+    the refusal is the signal a session cannot wait out (CLAUDE.md, Compute device)."""
+    with pytest.raises(SeparatorUnavailableError) as raised:
+        separator.environment(runner=FakeSeparator(torch_build="2.13.0+cpu"))
+
+    assert "CPU build" in raised.value.cause
+    assert "RESOLVE_MCP_AUDIO_SEPARATOR" in raised.value.cause
+    assert "RESOLVE_MCP_SEPARATOR_ALLOW_CPU" in raised.value.fix
+    assert raised.value.detail["torch"] == "2.13.0+cpu"
+
+
+def test_a_box_that_opted_into_the_cpu_run_gets_a_warning_instead() -> None:
+    """A box with no card says so once, in env; the build then rides the record as a warning."""
+    config = replace(get_config(), separator_allow_cpu=True)
+
+    report = separator.environment(
+        runner=FakeSeparator(torch_build="2.13.0+cpu"),
+        config=config,
+    )
 
     assert report["torch"] == "2.13.0+cpu"
     assert "CPU build" in report["warning"]
@@ -932,7 +950,9 @@ def test_a_parsed_build_is_believed_even_when_the_probe_exits_nonzero() -> None:
         on_line("2026-01-01 00:00:00,000 - INFO - separator - PyTorch Version: 2.13.0+cpu")
         return 1
 
-    report = separator.environment(runner=grumbling)
+    report = separator.environment(
+        runner=grumbling, config=replace(get_config(), separator_allow_cpu=True)
+    )
 
     assert report["torch"] == "2.13.0+cpu"
     assert "CPU build" in report["warning"]
@@ -945,11 +965,25 @@ def test_a_missing_separator_fails_the_probe_by_name() -> None:
 
 def test_a_fresh_separation_carries_the_torch_build_in_its_record(tmp_path: Path) -> None:
     fake = FakeSeparator(FOUR_STEMS, SIX_DRUM_STEMS, torch_build="2.13.0+cpu")
+    config = replace(get_config(), separator_allow_cpu=True)
 
-    output = multi_pass(_acquired(tmp_path), {"scope": "timeline"}, _ignored, runner=fake)
+    output = multi_pass(
+        _acquired(tmp_path), {"scope": "timeline"}, _ignored, runner=fake, config=config
+    )
 
     assert output.result["separator"]["torch"] == "2.13.0+cpu"
     assert "CPU build" in output.result["separator"]["warning"]
+
+
+def test_a_fresh_separation_on_a_cpu_build_refuses_before_any_pass_runs(
+    tmp_path: Path,
+) -> None:
+    fake = FakeSeparator(FOUR_STEMS, SIX_DRUM_STEMS, torch_build="2.13.0+cpu")
+
+    with pytest.raises(SeparatorUnavailableError):
+        multi_pass(_acquired(tmp_path), {"scope": "timeline"}, _ignored, runner=fake)
+
+    assert fake.calls == []
 
 
 def test_a_reused_separation_reports_no_environment_because_nothing_ran(
@@ -1028,8 +1062,11 @@ def test_a_cpu_build_keeps_its_own_warning_because_that_one_names_the_fix(
     fake = FakeSeparator(
         FOUR_STEMS, SIX_DRUM_STEMS, torch_build="2.13.0+cpu", banners=(CPU_BANNER,)
     )
+    config = replace(get_config(), separator_allow_cpu=True)
 
-    output = multi_pass(_acquired(tmp_path), {"scope": "timeline"}, _ignored, runner=fake)
+    output = multi_pass(
+        _acquired(tmp_path), {"scope": "timeline"}, _ignored, runner=fake, config=config
+    )
 
     report = output.result["separator"]
     assert report["device"] == "cpu"

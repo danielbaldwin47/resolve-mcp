@@ -1228,10 +1228,20 @@ def test_the_real_separator_produces_the_stems_the_passes_expect(tmp_path: Path)
     assert all(Path(one).stat().st_size > 0 for one in output.result["drums"].values())
     assert all(Path(one).stat().st_size > 0 for one in output.result["other"].values())
     # The other thing no fake can answer: that the real banner still names its device in
-    # words ``device_of`` reads (#188). Which device it is depends on the install and is the
-    # box's business — that it parsed at all is this tier's. ``reuse=False`` because the
-    # fixture tone hashes the same every run, and stems read off disk announce nothing.
-    assert output.result["separator"]["device"] != separator.UNKNOWN_DEVICE
+    # words ``device_of`` reads (#188), and that the device is the card. A CPU reading here
+    # is a broken install, not a slow box (CLAUDE.md, "Compute device"): the separator's own
+    # torch decides, and a ``+cpu`` build ran hours on the CPU under a WARNING nobody acted
+    # on (#202). That build now refuses in ``environment()`` before this line is reached —
+    # ``multi_pass`` raises SeparatorUnavailableError, red all the same; the assertion is
+    # for the other case, a ``+cu`` build whose passes still landed on the CPU. Red is the
+    # only signal a session cannot wait out. ``reuse=False`` because the fixture tone hashes
+    # the same every run, and stems read off disk announce nothing.
+    report = output.result["separator"]
+    assert report["device"] != separator.UNKNOWN_DEVICE
+    assert report["device"] != separator.CPU_DEVICE, (
+        f"separation ran on the CPU (torch {report.get('torch')!r}); the live box's "
+        "audio-separator needs a +cu torch build — see CLAUDE.md, Compute device"
+    )
 
 
 @pytest.mark.skipif(

@@ -185,6 +185,7 @@ def test_a_config_survives_the_trip_through_the_environment() -> None:
         ffmpeg="D:/tools/ffmpeg.exe",
         ffmpeg_hwaccel="off",
         audio_separator="D:/tools/audio-separator.exe",
+        separator_allow_cpu=True,
         stem_model="some-stem-model.ckpt",
         drum_model="some-drum-model.ckpt",
         wind_model="some-wind-model.ckpt",
