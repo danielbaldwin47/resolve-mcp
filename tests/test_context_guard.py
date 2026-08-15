@@ -1,20 +1,16 @@
-"""Fake-tier tests for the PreToolUse shell guard in ``.claude/hooks/``.
+"""Fake-tier tests for the PreToolUse shell guard in ``.claude/hooks/context-guard.py`` (#249).
 
-Like ``test_read_guard.py``: the hook is executable config, so the process
-boundary is the seam — each case drives the real script with the tool payload
-on stdin and reads the exit code (2 = blocked, message on stderr).
-
-Coverage follows #248: bare and piped noisy runs, ``gh`` views/diffs with and
-without a redirect, whole-file vs ranged reads for every reader the rule names,
-backslash and drive-letter paths, the ``--body`` false positives, heredoc
-forms, the PowerShell tool, and the shared guarded-extension list.
+Same seam as ``test_read_guard.py``: the hook is executable config, driven as a
+subprocess with the tool payload on stdin; exit 2 plus a stderr message is a
+block. Every rule, every documented bypass and both measured false positives
+have a case here — a rule without a test is the one that gets regex-tightened
+into silence.
 """
 
 from __future__ import annotations
 
-import importlib.util
+import ast
 import json
-import os
 import re
 import subprocess
 import sys
@@ -41,502 +37,454 @@ def run_hook(command: str, tool: str = "Bash") -> subprocess.CompletedProcess[st
         input=json.dumps(payload),
         capture_output=True,
         text=True,
-        env=hook_env(Path(os.environ.get("TEMP", "."))),
+        env=hook_env(HOOKS),
     )
 
 
 def blocked(command: str, tool: str = "Bash") -> str:
-    """Assert the command is blocked; return the block message."""
-    result = run_hook(command, tool)
-    assert result.returncode == 2, f"expected block for {command!r}: {result.stderr}"
-    assert result.stderr.startswith("Blocked (context discipline)")
-    return result.stderr
+    """The block message, or '' when the command passes."""
+    r = run_hook(command, tool)
+    assert r.returncode in (0, 2), r.stderr
+    return r.stderr if r.returncode == 2 else ""
 
 
-def passes(command: str, tool: str = "Bash") -> None:
-    result = run_hook(command, tool)
-    assert result.returncode == 0, f"expected pass for {command!r}: {result.stderr}"
+# ------------------------------------------------------------ 1. noisy runs
+
+BARE_NOISY = [
+    "uv run pytest -m 'not live'",
+    "pytest tests/test_x.py -q",
+    "uv run mypy",
+    "ruff check src",
+    "python -m pytest tests",
+    "CI=1 uv run pytest",
+    "uv run pytest tests 2>&1",  # stderr dup is not a landing
+    "uv run pytest tests 2> err.log",  # stderr only
+    "uv run pytest tests | grep -E 'passed|FAILED'",  # a filter still floods the log
+    "py -m pytest tests",
+    "python.exe -m pytest",
+    "uv.exe run pytest",
+    "pytest.exe tests",
+    "uv run --directory C:\\repo pytest",
+    "uvx ruff check src",
+    "$x = uv run pytest",
+    "uv run pytest 2>&1 | Select-String passed",  # a filter, not a pager: still bare
+]
 
 
-# --- noisy runs ---------------------------------------------------------------
+@pytest.mark.parametrize("cmd", BARE_NOISY)
+def test_bare_noisy_run_is_blocked_with_redirect_shape(cmd: str) -> None:
+    msg = blocked(cmd)
+    assert msg, cmd
+    assert re.search(r"uv run (?:pytest|mypy|ruff check) > \w+\.scratch\.log 2>&1", msg), msg
+
+
+PIPED_NOISY = [
+    "uv run pytest | tail -20",
+    "uv run pytest 2>&1 | head -50",
+    "pytest tests | cat",
+    "uv run mypy | tee mypy.log",
+    "uv run pytest | tail -5 > pytest.scratch.log",  # tail before the landing
+]
+
+
+@pytest.mark.parametrize("cmd", PIPED_NOISY)
+def test_noisy_piped_to_a_pager_is_blocked_with_the_tail_message(cmd: str) -> None:
+    msg = blocked(cmd)
+    assert "never pipe to tail/head" in msg, cmd
 
 
 @pytest.mark.parametrize(
-    "command",
+    "cmd",
     [
-        "uv run pytest -m 'not live'",
-        "uv run pytest tests/test_config.py -q",
-        "pytest",
-        "python -m pytest tests",
-        "python3 -m pytest -q",
-        "uv run mypy src tests",
-        "uv run ruff check src",
-        "CI=1 uv run pytest",
-        "uv run pytest -q 2>&1",
-        "cd src && uv run pytest",
-    ],
-)
-def test_bare_noisy_run_is_blocked(command: str) -> None:
-    msg = blocked(command)
-    assert "pytest.scratch.log" in msg
-    assert "> pytest.scratch.log 2>&1" in msg
-
-
-@pytest.mark.parametrize(
-    "command",
-    [
-        "uv run pytest -q | tail -20",
-        "uv run pytest -q 2>&1 | tail",
-        "uv run mypy src | head -30",
-        "uv run ruff check src | grep -c error",
         "uv run pytest 2>&1 | Select-Object -Last 20",
+        "uv run pytest | select -First 5",
+        "uv run mypy | Out-Host",
     ],
 )
-def test_piped_noisy_run_is_blocked(command: str) -> None:
-    blocked(command)
+def test_powershell_pagers_count_as_pagers(cmd: str) -> None:
+    assert "never pipe to tail/head" in blocked(cmd, "PowerShell"), cmd
+
+
+LANDED_NOISY = [
+    "uv run pytest -m 'not live' > pytest.scratch.log 2>&1",
+    "uv run mypy > mypy.scratch.log 2>&1",
+    "uv run ruff check > ruff.scratch.log 2>&1",
+    "uv run pytest tests/test_x.py 1> pytest.scratch.log 2>&1",
+    "uv run pytest tests &> pytest.scratch.log",
+    "uv run pytest > pytest.scratch.log 2>&1; uv run mypy > mypy.scratch.log 2>&1",
+    "uv run pytest tests/test_x.py >> pytest.scratch.log 2>&1",
+]
+
+
+@pytest.mark.parametrize("cmd", LANDED_NOISY)
+def test_noisy_run_landing_in_a_file_passes(cmd: str) -> None:
+    assert blocked(cmd) == "", cmd
 
 
 @pytest.mark.parametrize(
-    "command",
+    "cmd",
     [
-        "uv run pytest -m 'not live' > pytest.scratch.log 2>&1",
-        "uv run pytest tests/test_config.py -q > pytest.scratch.log 2>&1",
-        "uv run mypy src tests > mypy.scratch.log 2>&1",
-        "uv run ruff check src tests > ruff.scratch.log 2>&1",
-        "uv run pytest -q >> pytest.scratch.log 2>&1",
-        "uv run pytest -q &> pytest.scratch.log",
-        "uv run pytest -q 2>&1 | Out-File pytest.scratch.log",
-        "python -m pytest > pytest.scratch.log 2>&1",
+        "uv run pytest *> pytest.scratch.log",
+        "uv run pytest 2>&1 | Out-File pytest.scratch.log",
+        "uv run mypy | Set-Content mypy.scratch.log",
+        "uv run pytest | Out-Null",
     ],
 )
-def test_redirected_noisy_run_passes(command: str) -> None:
-    passes(command)
+def test_powershell_landings_pass(cmd: str) -> None:
+    assert blocked(cmd, "PowerShell") == "", cmd
 
 
 @pytest.mark.parametrize(
-    "command",
+    "cmd",
     [
-        "grep -E 'FAILED|passed|error' pytest.scratch.log",
-        "rm pytest.scratch.log ruff.scratch.log",
-        "git commit -m 'fix: pytest run was flaky'",
-        'git commit -m "run pytest | tail after this"',
-        "echo pytest",
-        "ls tests/test_pytest_things.py",
+        "uv run pytest --version",
+        "pytest --help",
+        "uv run pytest --collect-only -q tests/test_x.py > co.scratch.log",
+        "grep -E 'FAILED|passed' pytest.scratch.log",  # the log's name is not a run
+        "git commit -m 'run pytest before pushing'",  # prose in quotes
+        "echo pytest",  # not at command position
     ],
 )
-def test_prose_and_paths_mentioning_noisy_tools_pass(command: str) -> None:
-    passes(command)
+def test_noisy_lookalikes_pass(cmd: str) -> None:
+    assert blocked(cmd) == "", cmd
 
 
-# --- gh views and diffs -------------------------------------------------------
+def test_second_statement_without_landing_is_still_caught() -> None:
+    assert blocked("uv run pytest > pytest.scratch.log 2>&1 && uv run mypy")
+
+
+# ------------------------------------------------------------ 2. gh views
+
+GH_BLOCKED = [
+    "gh issue view 249",
+    "gh issue view 249 --comments",
+    "gh pr view 243",
+    "gh pr diff 243",
+    "gh issue view 249 --json body -q .body",  # the body, unredirected
+    "gh issue view 249 --json comments -q '.comments[].body'",
+    "gh pr view 5 --json body,title",  # no filter at all
+    "gh pr diff 243 | grep '^+'",  # a filter is not a landing
+    "gh issue view 249 --json title,body --template '{{.body}}'",
+    "gh issue view 249 --json bodyText -q .bodyText",
+]
+
+
+@pytest.mark.parametrize("cmd", GH_BLOCKED)
+def test_gh_view_without_landing_is_blocked(cmd: str) -> None:
+    msg = blocked(cmd)
+    assert msg, cmd
+    assert "issue.scratch.log" in msg or "comments.scratch.log" in msg, msg
+
+
+GH_PASSES = [
+    "gh issue view 249 --json body -q .body > issue.scratch.log",
+    "gh issue view 249 --comments > comments.scratch.log",
+    "gh pr diff 243 > pr.scratch.log",
+    "gh pr view 243 --json state -q .state",  # a field filter
+    "gh issue view 249 --json title,labels -q '.title'",
+    "gh pr diff 243 --name-only",
+    "gh pr diff 243 --stat",
+    "gh issue view 249 --json body,title -q .title",  # the filter picks a small field
+    "gh issue view 249 --json title,url --template '{{.title}}'",
+    "gh pr view 5 -t '{{.state}}' --json state",
+    "gh pr list --state merged --json headRefName",  # not a view
+    "gh issue comment 249 --body 'see gh issue view 5'",  # prose
+    "gh issue view 248 --web",  # opens the browser (#248 probe set)
+    "gh pr view 252 -w",
+]
+
+
+@pytest.mark.parametrize("cmd", GH_PASSES)
+def test_gh_view_landing_or_filtered_passes(cmd: str) -> None:
+    assert blocked(cmd) == "", cmd
+
+
+# ------------------------------------------------------------ 3. whole-file dumps
+
+WHOLE_FILE_DUMPS = [
+    "cat src/resolve_mcp/config.py",
+    "cat -n tests/conftest.py",
+    "cat notes.md",
+    "cat pytest.scratch.log",
+    "cat 'src/my file.py'",
+    "cat < src/config.py",
+    "ls; cat pyproject.toml",
+    "cat src/a.py 2>&1",
+    "cat src/a.py | cat -n",  # a re-emitter is not a filter
+    "more README.md",
+    "less src/config.py",
+    "type src\\config.py",
+    "sed -n p src/config.py",
+    "sed -n '1,$p' src/config.py",
+    "sed -n \"1,$p\" src/config.py",
+    "sed '' src/config.py",
+    "head src/config.py",
+    "tail src/config.py",
+    "tail -f pytest.scratch.log",
+    "head -c 4000 src/config.py",
+    "head --bytes=4000 src/config.py",
+    "Get-Content src/config.py",
+    "Get-Content -Path .claude/settings.json",
+    "gc src/config.py -Raw",
+    "Get-Content src/config.py | Out-String",
+    "cat src/config.py | nl",
+    "$c = Get-Content src/config.py; $c",
+    "cat src/config.py || true",  # `||` is not a pipe
+    "sed --quiet p src/config.py",
+    'sed -n "1,\\$p" src/config.py',
+    "tail -n +10 src/config.py",  # an offset with no end is not a range
+    # From the #248 probe set (merged alongside #249):
+    "cat src/X.PY",  # extension match is case-insensitive
+    r"cat SRC\CONFIG.JSON",
+    r"Get-Content SRC\X.PY",
+    "sed -n '1,$ p' src/x.py",
+    "sed -n '$!p' src/x.py",
+    "Get-Content src/x.py | Write-Output",  # pass-through, not a filter
+    "Get-Content src/x.py | Format-Table",
+    "gc src/x.py -tal 5",  # not a prefix of any bounding parameter
+    "gc src/x.py -t 5",  # a single letter is ambiguous, not a bound
+]
+
+
+@pytest.mark.parametrize("cmd", WHOLE_FILE_DUMPS)
+def test_whole_file_dump_of_guarded_file_is_blocked(cmd: str) -> None:
+    msg = blocked(cmd)
+    assert msg, cmd
+    assert "whole-file dump" in msg and "offset/limit" in msg, msg
+
+
+def test_powershell_tool_get_content_is_blocked() -> None:
+    assert "whole-file dump" in blocked("Get-Content x.py", "PowerShell")
+
+
+def test_powershell_tool_cat_alias_and_type_are_blocked() -> None:
+    assert blocked("cat x.py", "PowerShell")
+    assert blocked("type x.py", "PowerShell")
+
+
+RANGED_READS = [
+    "sed -n 10,40p src/config.py",
+    "sed -n '120,160p' src/config.py",
+    "sed -n 5p src/config.py",
+    "sed -n '/def main/,/^$/p' src/config.py",
+    "sed -i 's/a/b/' src/config.py",  # an edit, not a read
+    "head -50 src/config.py",
+    "head -n 50 src/config.py",
+    "head -n50 src/config.py",
+    "head --lines=50 src/config.py",
+    "tail -n 20 pytest.scratch.log",
+    "tail -20 pytest.scratch.log",
+    "Get-Content src/config.py -TotalCount 50",
+    "Get-Content -TotalCount 50 src/config.py",
+    "Get-Content src/config.py -Tail 20",
+    "gc src/config.py -Head 20",
+    "Get-Content src/config.py | Select-Object -First 30",
+    "Get-Content src/config.py | Select-String -Pattern def",
+    "(Get-Content src/config.py).Count",
+    "(Get-Content src/config.py)[10..40]",
+    "gc src/x.py -tot 5",  # PowerShell accepts any unambiguous parameter prefix
+    "Get-Content src/x.py -Total 5",
+]
+
+
+@pytest.mark.parametrize("cmd", RANGED_READS)
+def test_ranged_read_passes(cmd: str) -> None:
+    assert blocked(cmd) == "", cmd
+    assert blocked(cmd, "PowerShell") == "", cmd
+
+
+DUMP_ESCAPES = [
+    "cat src/config.py | grep -n def",
+    "cat src/config.py | wc -l",
+    "cat src/a.py src/b.py > combined.txt",
+    "cat notes.md >> all.md",
+    "cat > new.py <<'EOF'\nprint('hi')\nEOF",
+    "cat <<EOF > out.txt\ncat src/config.py\nEOF",  # a cat inside a heredoc body
+    "cat image.png",  # unguarded extension
+    "cat file_without_extension",
+    "wc -l src/config.py",
+    "grep -n def src/config.py",
+    "git diff origin/main -- src/config.py",
+    "python scripts/prune_merged.py > prune.scratch.log 2>&1",
+    "type python",  # bash `type` on a command name
+    "echo 'cat src/config.py'",
+    "head -20 pytest.scratch.log | grep FAILED",
+    "cat src/config.py.bak",  # a backup, not the file
+    "cat src/config.py.orig src/config.py.rej",
+    "cat src/config.py~",
+    "cat notes.md.gz | zcat | grep x",
+    "for f in a.py b.py; do cat $f > $f.bak; done",  # each cat lands
+    "for f in src/*.py; do cat $f; done > all.txt",  # the loop lands
+    "for f in src/*.py; do grep -c def $f; done # cat",
+    "for f in *.py; do wc -l $f; done",
+    "for f in src/*.py; do cat $f; done | grep -c import",  # the loop's output is filtered
+    "git diff src/a.py | cat",  # the no-pager idiom: nothing is dumped
+    "git log --oneline -- src/a.py | cat",
+    "grep -n def src/a.py | cat -n",
+    "head -50 src/a.py | cat -A",
+    "python -c \"print('%s' % 'a.py')\" && echo '{ cat }'",
+    "if [ -f src/a.py ]; then echo hi; fi",
+]
+
+
+@pytest.mark.parametrize("cmd", DUMP_ESCAPES)
+def test_dump_lookalikes_and_landings_pass(cmd: str) -> None:
+    assert blocked(cmd) == "", cmd
 
 
 @pytest.mark.parametrize(
-    "command",
+    "cmd",
     [
-        "gh issue view 248",
-        "gh issue view 248 --comments",
-        "gh issue view 248 --json body -q .body",
-        "gh pr view 252",
-        "gh pr view 252 --json state,title -q .state",
-        "gh pr diff 252",
-        "gh pr diff 252 --name-only",
-        "gh pr diff 252 | head -100",
-        "gh issue view 248 --json body,comments 2>&1",
+        "cat C:\\Users\\me\\repo\\src\\config.py",
+        "cat .\\src\\config.py",
+        "type C:\\repo\\pyproject.toml",
+        "Get-Content C:\\repo\\.claude\\settings.json",
+        "cat 'C:\\Program Files\\x\\config.py'",
+        "head C:/repo/src/config.py",
     ],
 )
-def test_unredirected_gh_view_or_diff_is_blocked(command: str) -> None:
-    msg = blocked(command)
-    assert "issue.scratch.log" in msg
-    assert "gh pr diff <n> > pr.scratch.log" in msg
+def test_backslash_and_drive_letter_paths_are_seen(cmd: str) -> None:
+    assert "whole-file dump" in blocked(cmd), cmd
 
 
 @pytest.mark.parametrize(
-    "command",
+    "cmd",
     [
-        "gh issue view 248 --json body -q .body > issue.scratch.log",
-        "gh issue view 248 --comments > comments.scratch.log 2>&1",
-        "gh pr view 252 --json body,comments > pr.scratch.log",
-        "gh pr diff 252 > pr.scratch.log",
-        "gh pr diff 252 > pr.scratch.log 2>&1",
-        "gh issue view 248 --json body | jq -r .body > issue.scratch.log",
-        "gh issue view 248 --web",
-        "gh pr checks 252",
-        "gh pr list --json number,title",
-        "gh issue list --label bug",
+        "for f in src/*.py; do cat $f; done",
+        "for f in src/*.py; do cat $f | cat -n; done",
+        "foreach ($f in ls *.py) { cat $f }",
+        "Get-ChildItem *.py | % { gc $_ }",
+        "Get-ChildItem -r *.py | ForEach-Object { Get-Content $_ }",
+        "for f in src/*.py; do echo ${f}; cat $f; done",
+        "for f in src/*.py; do if grep -q foo $f; then cat $f; fi; done",
+        "for f in src/*.py; do echo \"$f: $(cat $f)\"; done",
+        "for f in src/*.py; do cat $f || true; done",
+        "for f in src/*.py\ndo\n  cat $f\ndone",
+        "find src -name '*.py' | while read f; do cat $f; done",
     ],
 )
-def test_redirected_gh_view_or_other_gh_passes(command: str) -> None:
-    passes(command)
-
-
-# --- the --body false positives -----------------------------------------------
-
-
-def test_pr_create_body_mentioning_a_cat_loop_passes() -> None:
-    """Observed false positive: the body's prose read as a `for … *.py … cat` sweep."""
-    passes(
-        "gh pr create --title 'refactor: hooks' --body \"Before: for f in src/*.py; "
-        'do cat $f; done pulled 162KB into context. Now blocked."'
-    )
-
-
-def test_issue_comment_body_mentioning_a_tail_pipe_passes() -> None:
-    """Observed false positive: an apostrophe inside the double-quoted body
-    paired with a later one, unquoting `pytest … | tail` in between."""
-    passes(
-        'gh issue comment 248 --body "Don\'t run uv run pytest -q | tail -20; '
-        "it caps one run. That's the rule.\""
-    )
-
-
-def test_pr_create_body_from_heredoc_passes() -> None:
-    passes(
-        "gh pr create --title 'x' --body \"$(cat <<'EOF'\n"
-        "## Summary\n"
-        "for f in tests/*.py; do cat $f; done — was the pattern.\n"
-        "uv run pytest | tail is also gone. gh pr diff 1 too.\n"
-        "EOF\n)\""
-    )
-
-
-def test_git_commit_message_mentioning_pytest_and_cat_passes() -> None:
-    passes("git commit -m 'test: cat src/x.py and pytest | tail no more'")
-
-
-# --- whole-file readers -------------------------------------------------------
+def test_loop_over_source_files_is_blocked(cmd: str) -> None:
+    assert "cat loop" in blocked(cmd), cmd
 
 
 @pytest.mark.parametrize(
-    "command",
+    "cmd",
     [
-        "cat src/resolve_mcp/config.py",
-        "cat -n src/resolve_mcp/config.py",
-        "cat CLAUDE.md",
-        "cat pyproject.toml",
-        "cat pytest.scratch.log",
-        "cat .claude/settings.json",
-        "cat 'src/resolve_mcp/config.py'",
-        'cat "docs/notes.md"',
-        "cat src/a.py src/b.py",
-        "cat src/x.py 2>&1",
-        "cd src && cat x.py",
-        "ls; cat src/x.py",
-        "if true; then cat src/x.py; fi",
-        "cat src/X.PY",
-        "cat SRC\\CONFIG.JSON",
-        "cat src/x.py | cat",
-        "cat src/x.py | cat -n",
-        "cat src/x.py | nl",
-        "cat src/x.py | tee copy.py",
-        "cat src/x.py | less",
-        "cat src/x.py | more",
-        "cat src/x.py | grep -v '^$' | cat -n",
+        "ls src/*.py | xargs cat",
+        "find src -name '*.py' -exec cat {} +",
+        "find src -name '*.py' -exec cat {} \\;",
+        "Get-ChildItem *.py | Get-Content",
+        "gci -r *.py | gc",
     ],
 )
-def test_cat_of_guarded_file_is_blocked(command: str) -> None:
-    msg = blocked(command)
-    assert "Read tool" in msg
-    assert "offset/limit" in msg
+def test_reader_fed_by_pipe_xargs_or_exec_is_blocked(cmd: str) -> None:
+    assert "whole-file dump" in blocked(cmd), cmd
 
 
 @pytest.mark.parametrize(
-    "command",
+    "cmd",
     [
-        "cat src/x.py | grep -n def",
-        "cat src/x.py | head -20",
-        "cat src/x.py | jq . > out.json",
-        "cat src/x.py > /tmp/copy.py",
-        "cat src/x.py.bak",
-        "cat src/x.py.orig",
-        "cat src/x.py >> combined.py",
-        "cat > out.py <<'EOF'\nprint(1)\nEOF",
-        "cat <<'EOF' > out.py\nprint(1)\nEOF",
-        "cat <<EOF\nnot a file\nEOF",
-        "cat frame.png",
-        "cat Makefile",
-        "cat",
-        "echo cat src/x.py",
-        "git cat-file -p HEAD:src/x.py",
+        "ls src/*.py | xargs cat | grep def",
+        "find src -name '*.py' -exec cat {} + > all.txt",
+        "Get-ChildItem *.py | Get-Content | Select-String def",
+        "ls src/*.py | xargs wc -l",
     ],
 )
-def test_cat_piped_redirected_or_not_a_guarded_file_passes(command: str) -> None:
-    passes(command)
+def test_reader_fed_by_pipe_but_filtered_or_landing_passes(cmd: str) -> None:
+    assert blocked(cmd) == "", cmd
 
 
-def test_for_loop_cat_sweep_is_blocked() -> None:
-    msg = blocked("for f in src/resolve_mcp/*.py; do cat $f; done")
-    assert "cat loop" in msg
-    blocked("for f in src/*.py\ndo\n  cat $f\ndone")
+# ------------------------------------------------------------ false positives
+
+FALSE_POSITIVES = [
+    # Measured 2026-08-15: a PR body that talks about cat/tail is prose.
+    "gh pr create --title 'x' --body 'Review: run cat src/a.py | tail -5 first'",
+    "gh issue comment 249 --body \"never cat pytest.scratch.log | tail\"",
+    "gh pr create --body='cat foo.py'",
+    "git commit -m 'sed -n p src/config.py was the bug'",
+    "gh issue create --title 'cat src/a.py hangs' --body 'see head -c 10 x.py'",
+]
 
 
-@pytest.mark.parametrize(
-    "command",
-    [
-        "for f in src/*.py; do wc -l $f; done | cat",
-        "for f in src/*.py; do wc -l $f; done; git cat-file -p HEAD:x",
-        "for f in src/*.py; do grep -c def $f; done",
-    ],
-)
-def test_for_loop_without_cat_in_body_passes(command: str) -> None:
-    passes(command)
+@pytest.mark.parametrize("cmd", FALSE_POSITIVES)
+def test_body_and_message_arguments_are_never_inspected(cmd: str) -> None:
+    assert blocked(cmd) == "", cmd
 
 
-@pytest.mark.parametrize(
-    "command",
-    [
-        "sed -n p src/x.py",
-        "sed -n '1,$p' src/x.py",
-        'sed -n "1,$p" src/x.py',
-        "sed -n 1,\\$p src/x.py",
-        "sed p src/x.py",
-        "sed '' src/x.py",
-        "sed -e p src/x.py",
-        "sed -n p CLAUDE.md",
-        "sed -n '1,$ p' src/x.py",
-        "sed -n '$!p' src/x.py",
-    ],
-)
-def test_sed_whole_file_is_blocked(command: str) -> None:
-    blocked(command)
+HEREDOC_FORMS = [
+    "gh pr create --body-file - <<'EOF'\ncat src/a.py | tail -3\nuv run pytest\nEOF",
+    "gh issue comment 249 -F - <<EOF\ngh issue view 5\nEOF",
+    "cat <<-EOF\n\tcat src/a.py\n\tEOF",
+    "python - <<'PY'\nprint(open('src/a.py').read())\nPY",
+    "git commit -F - <<'MSG'\nfix: cat src/config.py no longer used\nMSG",
+]
 
 
-@pytest.mark.parametrize(
-    "command",
-    [
-        "sed -n 10,40p src/x.py",
-        "sed -n '10,40p' src/x.py",
-        "sed -n 130,175p pr252.scratch.log",
-        "sed -n '/^def /,/^$/p' src/x.py",
-        "sed -n 5p src/x.py",
-        "sed -i 's/old/new/' src/x.py",
-        "sed -i '' 's/old/new/' src/x.py",
-        "sed 's/a/b/' src/x.py > out.py",
-        "sed -n p src/x.py | grep def",
-        "sed -e 's/a/b/' -e 's/c/d/' src/x.py",
-    ],
-)
-def test_sed_ranged_or_editing_passes(command: str) -> None:
-    passes(command)
+@pytest.mark.parametrize("cmd", HEREDOC_FORMS)
+def test_heredoc_bodies_are_data(cmd: str) -> None:
+    assert blocked(cmd) == "", cmd
 
 
-@pytest.mark.parametrize(
-    "command",
-    [
-        "head src/x.py",
-        "tail src/x.py",
-        "head -c 4000 src/x.py",
-        "head --bytes=400 src/x.py",
-        "tail -f pytest.scratch.log",
-        "head CLAUDE.md",
-        "tail pytest.scratch.log",
-    ],
-)
-def test_head_tail_without_count_is_blocked(command: str) -> None:
-    blocked(command)
-
-
-@pytest.mark.parametrize(
-    "command",
-    [
-        "head -50 src/x.py",
-        "head -n 50 src/x.py",
-        "head -n50 src/x.py",
-        "head --lines=50 src/x.py",
-        "tail -20 pytest.scratch.log",
-        "tail -n 20 pytest.scratch.log",
-        "tail -n +5 src/x.py",
-        "grep -n def src/x.py | head -5",
-        "git log --oneline | head -20",
-        "head src/x.py | grep import",
-        "head src/x.py > first.txt",
-    ],
-)
-def test_head_tail_with_count_or_no_file_passes(command: str) -> None:
-    passes(command)
-
-
-@pytest.mark.parametrize(
-    "command",
-    [
-        "Get-Content src/x.py",
-        "Get-Content -Path src\\resolve_mcp\\config.py",
-        "Get-Content C:\\Users\\Daniel\\repos\\resolve-mcp\\src\\x.py",
-        "Get-Content .\\CLAUDE.md",
-        "Get-Content 'C:\\Users\\Daniel\\repos\\resolve-mcp\\pyproject.toml'",
-        "Get-Content src/x.py -Raw",
-        "gc src/x.py",
-        "type src\\x.py",
-        "type pytest.scratch.log",
-        "cat .\\src\\x.py",
-        "Get-Content $env:CLAUDE_JOB_DIR\\tmp\\out.log",
-        "Get-Content src/x.py | Out-String",
-        "Get-Content src/x.py | Write-Output",
-        "Get-Content src/x.py | Format-Table",
-        "Get-Content src/x.py | Out-Host",
-        "Get-Content SRC\\X.PY",
-    ],
-)
-def test_powershell_whole_file_readers_are_blocked(command: str) -> None:
-    blocked(command, tool="PowerShell")
-
-
-@pytest.mark.parametrize(
-    "command",
-    [
-        "Get-Content src/x.py -TotalCount 50",
-        "Get-Content -TotalCount 50 src\\x.py",
-        "Get-Content src/x.py -Tail 20",
-        "Get-Content src/x.py -Head 20",
-        "Get-Content src/x.py -First 20",
-        "Get-Content src/x.py -Last 20",
-        "gc src/x.py -tot 5",
-        "Get-Content src/x.py -Total 5",
-        "Get-Content src/x.py -TotalCount:5",
-        "Get-Content C:\\repo\\src\\x.py -TotalCount 50",
-        "Get-Content src/x.py | Select-String def",
-        "Get-Content src/x.py | Select-Object -Last 20",
-        "Get-Content src/x.py > copy.py",
-        "type python3",
-        "Get-Content frame.png -Encoding Byte",
-        "gc",
-    ],
-)
-def test_powershell_ranged_or_piped_readers_pass(command: str) -> None:
-    passes(command, tool="PowerShell")
-
-
-def test_same_rules_apply_under_both_shell_tools() -> None:
-    """A PowerShell command (`Get-Content x.py`) is blocked in the fake tier — #248 AC."""
-    blocked("Get-Content x.py", tool="PowerShell")
-    blocked("Get-Content x.py", tool="Bash")
-    blocked("cat x.py", tool="PowerShell")
-    blocked("uv run pytest -q", tool="PowerShell")
-    blocked("gh pr diff 252", tool="PowerShell")
-
-
-@pytest.mark.parametrize(
-    "command",
-    [
-        "cat C:\\Users\\Daniel\\repos\\resolve-mcp\\src\\x.py",
-        "cat .\\src\\x.py",
-        "cat src\\x.py",
-        "head C:/Users/Daniel/repos/resolve-mcp/src/x.py",
-        "sed -n p C:\\repo\\src\\x.py",
-    ],
-)
-def test_backslash_and_drive_letter_paths_are_recognised(command: str) -> None:
-    blocked(command)
-
-
-# --- heredoc and here-string forms --------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "command",
-    [
-        "python3 - <<'EOF'\nimport subprocess\nsubprocess.run(['pytest'])\nEOF",
-        "cat <<'EOF' > tests/new.py\nfor f in src/*.py:\n    cat = 1\nEOF",
-        "cat <<-EOF > x.md\n\tuv run pytest | tail\n\tEOF",
-        "git commit -m @'\nrun pytest | tail\ncat src/x.py\n'@",
-        'git commit -F - <<EOF\ncat src/x.py\ngh pr diff 3\nEOF',
-    ],
-)
-def test_heredoc_and_herestring_bodies_are_data(command: str) -> None:
-    passes(command)
+def test_powershell_here_string_body_is_data() -> None:
+    cmd = "gh pr create --body @'\ncat src/a.py | tail -3\nuv run pytest\n'@"
+    assert blocked(cmd, "PowerShell") == ""
 
 
 def test_command_after_a_heredoc_is_still_checked() -> None:
-    blocked("cat <<'EOF' > x.md\nhello\nEOF\ncat src/x.py")
+    cmd = "cat > x.txt <<'EOF'\nhello\nEOF\ncat src/config.py"
+    assert "whole-file dump" in blocked(cmd)
 
 
-# --- unrelated tools and payloads ---------------------------------------------
+# ------------------------------------------------------------ plumbing
 
 
 def test_other_tools_pass() -> None:
-    passes("cat src/x.py", tool="Read")
-    passes("uv run pytest", tool="Grep")
+    assert blocked("cat src/config.py", tool="Read") == ""
+    assert blocked("uv run pytest", tool="Edit") == ""
 
 
-def test_garbage_payload_passes() -> None:
-    result = subprocess.run(
+def test_malformed_stdin_passes() -> None:
+    r = subprocess.run(
         [sys.executable, str(HOOK)],
         input="not json",
         capture_output=True,
         text=True,
-        env=hook_env(Path(os.environ.get("TEMP", "."))),
+        env=hook_env(HOOKS),
     )
-    assert result.returncode == 0
+    assert r.returncode == 0
 
 
-def test_empty_command_passes() -> None:
-    passes("")
-
-
-# --- the shared guarded-extension list ----------------------------------------
-
-
-def _load_guard_ext() -> frozenset[str]:
-    spec = importlib.util.spec_from_file_location("guard_ext", HOOKS / "guard_ext.py")
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    ext: frozenset[str] = module.GUARDED_EXT
-    return ext
-
-
-def test_guarded_extension_list_is_defined_once_and_imported_by_both_hooks() -> None:
-    """The one list lives in guard_ext.py; neither hook keeps its own literal."""
-    ext = _load_guard_ext()
-    assert {".py", ".toml", ".json", ".log", ".md"} <= ext
-    for hook in ("context-guard.py", "read-guard.py"):
-        source = (HOOKS / hook).read_text(encoding="utf-8")
-        assert "from guard_ext import GUARDED_EXT" in source, hook
-        assert not re.search(r"^GUARDED_EXT\s*=", source, re.M), hook
-        assert not re.search(r"^SRC_EXT\s*=", source, re.M), hook
-
-
-@pytest.mark.parametrize("ext", sorted(_load_guard_ext()))
-def test_every_shared_extension_is_guarded_by_both_hooks(ext: str, tmp_path: Path) -> None:
-    """Identical lists in practice: each extension blocks a `cat` here and a big
-    whole-file Read in the Read guard (markdown included since #247; only
-    CLAUDE.md is exempt there, by name)."""
-    blocked(f"cat src/file{ext}")
-
-    big = tmp_path / f"file{ext}"
-    big.write_text("".join(f"line {i}\n" for i in range(500)), encoding="utf-8")
-    payload = {
-        "session_id": "s-ext",
-        "hook_event_name": "PreToolUse",
-        "tool_name": "Read",
-        "tool_input": {"file_path": str(big)},
-    }
-    result = subprocess.run(
-        [sys.executable, str(HOOKS / "read-guard.py")],
-        input=json.dumps(payload),
-        capture_output=True,
-        text=True,
-        env=hook_env(tmp_path, tmp_path),
-    )
-    assert result.returncode == 2, result.stderr
-
-
-def test_markdown_is_cat_guarded(tmp_path: Path) -> None:
-    blocked("cat CONTEXT.md")
-    passes("cat CONTEXT.md | grep -n seam")
-
-
-# --- settings.json wiring -----------------------------------------------------
-
-
-def test_settings_match_both_shell_tools_for_the_context_guard() -> None:
+def test_settings_match_both_shell_tools_for_the_guard() -> None:
     settings = json.loads(SETTINGS.read_text(encoding="utf-8"))
-    guards = [
-        entry
-        for entry in settings["hooks"]["PreToolUse"]
-        if any("context-guard.py" in h["command"] for h in entry["hooks"])
+    entries = [
+        e
+        for e in settings["hooks"]["PreToolUse"]
+        if any("context-guard.py" in h["command"] for h in e["hooks"])
     ]
-    assert len(guards) == 1
-    matcher = guards[0]["matcher"]
-    assert re.fullmatch(matcher, "Bash")
-    assert re.fullmatch(matcher, "PowerShell")
+    assert entries, "context-guard.py is not wired as a PreToolUse hook"
+    for tool in ("Bash", "PowerShell"):
+        assert any(re.fullmatch(e["matcher"], tool) for e in entries), tool
+
+
+def test_guarded_extension_list_is_defined_once_and_shared() -> None:
+    shared = HOOKS / "guarded_ext.py"
+    assert shared.exists()
+    for hook in ("context-guard.py", "read-guard.py"):
+        src = (HOOKS / hook).read_text(encoding="utf-8")
+        assert re.search(r"^from guarded_ext import ", src, re.M), hook
+        assert not re.search(r"^(?:GUARDED_EXT|SRC_EXT)\s*=", src, re.M), (
+            f"{hook} carries its own extension list"
+        )
+    # And the two hooks agree by construction: run each module's view of the list.
+    probe = (
+        "import sys; sys.path.insert(0, sys.argv[1]); "
+        "from guarded_ext import GUARDED_EXT, GUARDED_EXT_RE, SIZE_RULE_EXEMPT_NAMES; "
+        "print(sorted(GUARDED_EXT)); print(GUARDED_EXT_RE); print(sorted(SIZE_RULE_EXEMPT_NAMES))"
+    )
+    r = subprocess.run(
+        [sys.executable, "-c", probe, str(HOOKS)], capture_output=True, text=True, check=True
+    )
+    exts, alternation, exempt = r.stdout.splitlines()
+    assert ".md" in exts and ".toml" in exts and ".py" in exts
+    assert set(alternation.split("|")) == {e.lstrip(".") for e in ast.literal_eval(exts)}
+    assert exempt == "['claude.md']"  # #247: markdown counts; only CLAUDE.md is exempt

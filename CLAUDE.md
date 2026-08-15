@@ -108,7 +108,11 @@ produced no work; relaunch rather than assume.)
    `(#<n>)`, and the files are there. `merge-base --is-ancestor` exits 1
    for every squashed PR, so a failing check alone proves nothing. The risk
    is real either way: a PR merged into a just-consumed parent branch reads
-   MERGED while its commits never reach main.
+   MERGED while its commits never reach main. Then prune the residue:
+   `uv run python scripts/prune_merged.py` lists the merged remote
+   branches, local branches and worktrees it would drop; `--apply` drops
+   them (locked, dirty, open-PR and unmerged-commit items are never
+   touched).
 7. **If the PR was squashed, continue on a fresh branch** from
    `origin/main`, cherry-picking only the new commits — never force-push;
    the old branch would drag merged commits back in. After a merge-commit
@@ -167,15 +171,20 @@ sleep blocks were the largest wasted-turn class in the transcripts). Never
 `Monitor` (or one `gh pr checks <n>` after a wakeup), not a `--watch` or a
 sleep loop. Delegate exploration to a read-only subagent; Read only what
 you will edit, ranged (grep first) on big files; do not re-read a file
-after editing it. The hooks in `.claude/hooks/` enforce the cat/tail
-rules, whole-file re-reads, and whole-file reads of code, config and
-markdown files over 400 lines (CLAUDE.md exempt) — a block from them is
-the rule firing, not an obstacle to route around; the block message names
-the fix, and `sed -n` or `head` on the same file is the same cost, not a
-way through.
+after editing it. The hooks in `.claude/hooks/` enforce this on both shell
+tools and every reader: a `pytest|mypy|ruff` run or `gh … view|diff` that
+does not land in a file, and any whole-file dump of a guarded file (`cat`,
+`sed -n p`, uncounted `head`/`tail`, `Get-Content`, `type`, readers fed by
+`ls`/`find`/`xargs` or a loop) are blocked; ranged reads pass (#249). They
+also block whole-file re-reads and whole-file Reads of code, config and
+markdown files over 400 lines (CLAUDE.md exempt). A block from them is the
+rule firing, not an obstacle to route around; the block message names the
+fix, and `sed -n` or `head` on the same file is the same cost, not a way
+through.
 
 The same scratch-file rule covers `gh` — issue bodies, comment threads,
-and PR diffs were the biggest single results in past sessions.
+and PR diffs were the biggest single results in past sessions; a `--json`
+field filter that does not pull the body (`-q .title`) is fine.
 
 **Orient from `CONTEXT.md` first** — the map is one table, ~150 lines:
 which module owns X, which test covers it, at which seam. The narrative

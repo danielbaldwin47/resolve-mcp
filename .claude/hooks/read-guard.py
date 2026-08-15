@@ -8,9 +8,9 @@ PreToolUse on Read, blocking (exit 2) on either rule:
      buys nothing. Any offset/limit is the escape: wanting a different section
      of a big file is legitimate.
   2. Big first read: a whole-file Read of a guarded-extension repo file
-     (GUARDED_EXT, shared via guard_ext.py; markdown included, CLAUDE.md itself
-     exempt) over BIG_FILE_LINES — CLAUDE.md's "ranged (grep first) on big
-     files". Here the escape is `limit`, since a bare `offset` still pulls
+     (guarded_ext.py, shared with context-guard.py; markdown included, CLAUDE.md
+     itself exempt) over BIG_FILE_LINES — CLAUDE.md's "ranged (grep first) on
+     big files". Here the escape is `limit`, since a bare `offset` still pulls
      Read's 2000-line default. A deliberate `offset: 1, limit: <n>` passes,
      so this is a speed bump rather than a wall.
 
@@ -30,17 +30,15 @@ import tempfile
 
 BIG_FILE_LINES = 400
 
-# The guarded-extension list is shared with context-guard.py (guard_ext.py,
-# same directory) so the two hooks cannot drift. Markdown counts for the size
-# rule too (#247: CONTEXT.md was the single most expensive Read in the
+# The guarded-extension list is shared with context-guard.py (guarded_ext.py):
+# text formats where a whole-file pull is the thing being rationed. Markdown
+# counts here too (#247: CONTEXT.md was the single most expensive Read in the
 # transcripts, and it regrew because nothing stopped it) — but CLAUDE.md is
 # read whole at session start by design, so it is exempt by name. Anything
 # unlisted (images, PDFs, notebooks, extensionless files) passes — a line
 # count is meaningless there.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from guard_ext import GUARDED_EXT  # noqa: E402
-
-EXEMPT_NAMES = {"claude.md"}
+from guarded_ext import GUARDED_EXT, SIZE_RULE_EXEMPT_NAMES  # noqa: E402
 
 
 def in_project(path):
@@ -112,7 +110,7 @@ if event == "PreToolUse" and tool == "Read":
     if (
         "limit" not in tool_input
         and os.path.splitext(path)[1].lower() in GUARDED_EXT
-        and os.path.basename(path).lower() not in EXEMPT_NAMES
+        and os.path.basename(path).lower() not in SIZE_RULE_EXEMPT_NAMES
         and in_project(path)
     ):
         lines = line_count(path)
