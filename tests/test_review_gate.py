@@ -13,7 +13,8 @@ from collections.abc import Sequence
 
 import pytest
 
-from scripts.review_gate import CommandError, Runner, check, main, review_lines
+from scripts._run import CommandError, Runner
+from scripts.review_gate import check, main, review_lines
 
 OLD = "1" * 40
 MID = "2" * 40

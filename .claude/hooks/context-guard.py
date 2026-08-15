@@ -201,19 +201,26 @@ for m in re.finditer(GH_VIEW, blanked):
 # only on PR #243, where nobody reading the ticket will find it. A `gh issue
 # comment <n>` on the same number in the same command is that record.
 GH_CLOSE = r"\bgh\s+issue\s+close\b(?P<args>[^;&|\n]*)"
-COMMENT_FLAG = r"(?<!\S)(?:--comment(?:=|\s+)|-c(?:=|\s+))\S"
-for m in re.finditer(GH_CLOSE, blanked):
+# A flag with an *empty* value is no record: `--comment ""` closes silently.
+COMMENT_FLAG = r"(?<!\S)(?:--comment|-c)(?:=|\s+)(?:'[^']+'|\"[^\"]+\"|[^'\"\s]\S*)"
+# A record is prose and carries `;` and `|` of its own ("landed as PR #260; live
+# ACs run"), which would end the statement early: quoted runs collapse to one
+# placeholder character, keeping only whether they are empty.
+scan_close = re.sub(r"'([^']*)'", lambda q: "'X'" if q.group(1) else "''", blanked)
+scan_close = re.sub(r"\"([^\"]*)\"", lambda q: '"X"' if q.group(1) else '""', scan_close)
+for m in re.finditer(GH_CLOSE, scan_close):
     args = m.group("args")
     if re.search(COMMENT_FLAG, args):
         continue
     number = re.search(r"(?<!\S)#?(\d+)(?!\S)", args)
-    if number and re.search(r"\bgh\s+issue\s+comment\s+#?" + number.group(1) + r"\b", blanked):
+    if number and re.search(r"\bgh\s+issue\s+comment\s+#?" + number.group(1) + r"\b", scan_close):
         continue  # the record was posted in the same command, then the ticket closed
     block(
         "Blocked (workflow): a ticket closed with no comment loses its implementation record "
         "- what landed, the PR link, which live ACs ran, and the ## Needs from you section.\n"
         "Close with the record: gh issue close <n> --comment \"...\" (a long record can go up "
-        "first as gh issue comment <n> -F - <<'EOF' ... EOF in the same command)."
+        "first as gh issue comment <n> -F - <<'EOF' ... EOF in the same command). If the comment "
+        "already went up in an earlier call, name it here: --comment \"see the comment above\"."
     )
 
 # ---------------------------------------------------------------- 4. whole-file dumps

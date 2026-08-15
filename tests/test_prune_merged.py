@@ -12,8 +12,8 @@ from collections.abc import Sequence
 
 import pytest
 
+from scripts._run import CommandError
 from scripts.prune_merged import (
-    CommandError,
     Plan,
     apply_plan,
     build_plan,

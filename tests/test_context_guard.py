@@ -208,6 +208,8 @@ CLOSE_BLOCKED = [
     "gh issue close 251 -R danielbaldwin47/resolve-mcp",
     "gh issue comment 249 --body 'done' && gh issue close 251",  # a different ticket
     "for n in 167 168; do gh issue close $n; done",
+    'gh issue close 251 --comment ""',  # an empty record is no record
+    "gh issue close 251 -c ''",
 ]
 
 

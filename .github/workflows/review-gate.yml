@@ -35,4 +35,4 @@ jobs:
         env:
           BODY: ${{ github.event.pull_request.body }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: python3 scripts/review_gate.py
+        run: python3 -m scripts.review_gate
