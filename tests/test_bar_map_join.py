@@ -65,7 +65,14 @@ def test_a_cut_past_the_end_of_the_map_is_read_against_its_last_bar() -> None:
 
 
 def test_no_map_leaves_all_three_columns_null_together() -> None:
-    assert barmap.reading(None, [], 4.0) == dict.fromkeys(barmap.COLUMNS)
+    # Spelled out rather than taken from ``COLUMNS``: this is the record's contract, and an
+    # assertion built from the same constant the implementation builds from would survive a
+    # column being renamed on both sides at once.
+    assert barmap.reading(None, [], 4.0) == {
+        "map_bar": None,
+        "in_group": None,
+        "bar_offset": None,
+    }
 
 
 def test_the_place_in_the_group_is_the_maps_own() -> None:
@@ -99,9 +106,12 @@ def test_a_call_that_named_no_bar_map_reads_null_rather_than_empty() -> None:
     assert barmap.summary(rows, rows) == {"bar_groups": None, "bar_offsets": None}
 
 
-def test_the_reading_survives_a_grid_the_beat_gate_refused_wholesale() -> None:
-    # in_grid false on every row: the beat gate refuses beats the *grid* describes badly, and a
-    # bar map exists precisely for those grids (#180).
+def test_the_join_reads_no_gate_column_at_all() -> None:
+    # A bar map exists precisely for the grids the #112 beat gate refuses wholesale (#180), so
+    # this join must not consult that verdict — here, rows carrying ``in_grid`` false still
+    # produce both blocks in full. That the *report* leaves the blocks ungated end to end is a
+    # fact about ``correlate._summary``, and is pinned there by
+    # ``test_the_group_histogram_is_not_gated_on_the_grid``.
     rows = [
         _cut(in_grid=False, in_group=2, bar_offset=0.05),
         _cut(in_grid=False, in_group=4, bar_offset=-0.05),

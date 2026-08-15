@@ -120,16 +120,17 @@ Top level:
 with no pulse under them, #133; every boundary then walks forward off the applause
 to where the loudness curve says the band comes in, and a mix the threshold finds
 no clapping in at all is read at its own scale instead, #179),
-`bars` (the **bar map**: a rule layer over the grid for the material the beat
+`barmap` (a cut read against the **bar map** `bars` writes: nearest bar line with a
+signed offset — a cut just before a downbeat is a cut on the one — giving `map_bar`,
+`in_group` and `bar_offset` per cut and the `bar_groups`/`bar_offsets` blocks over
+them, ungated on the beat gate since the map exists for the grids that gate refuses
+whole; pure, read by `correlate`, #180/#215),
+`bars` (the **bar map** itself: a rule layer over the grid for the material the beat
 model will not commit a meter to — folds a too-fast grid to the tactus, then
 scores every meter and phase against a per-beat accent reading and takes the
 widest lead over the runner-up, refusing rather than guessing when the accents
 say nothing. The accent reading is injected per ADR 0002 and defaults to RMS off
-the mix; a named stem reads that instead, #180), `barmap` (a cut read against that
-map: nearest bar line with a signed offset — a cut just before a downbeat is a cut
-on the one — giving `map_bar`, `in_group` and `bar_offset` per cut and the
-`bar_groups`/`bar_offsets` blocks over them, ungated on the beat gate since the map
-exists for the grids that gate refuses whole; pure, read by `correlate`, #180/#215),
+the mix; a named stem reads that instead, #180),
 `beats` (grid + downbeats, model
 injected per ADR 0002; `trust` says which beats the grid describes well enough
 to count, #112; `spacing` says how wide a beat is at each beat), `correlate`

@@ -19,10 +19,17 @@ the report says out loud beside the numbers and the rules that drew them (``HEUR
 argue with a threshold. Trading two cameras for four minutes is a real edit some music asks
 for; the point is that the builder *decided* it.
 
-The interface is one function. ``read(rows, levels)`` takes the per-cut records the report is
-built from — ``t``, ``seconds`` and ``clip`` are the only columns touched — and the loudness
-curve, and returns the ``shot_rhythm`` block. No Resolve handle, no files, no job record: the
-arithmetic is testable from a list of dicts written by hand.
+The interface a caller uses is one function. ``read(rows, levels)`` takes the per-cut records
+the report is built from — ``t``, ``seconds`` and ``clip`` are the only columns touched — and
+the loudness curve, and returns the ``shot_rhythm`` block. No Resolve handle, no files, no job
+record: the arithmetic is testable from a list of dicts written by hand.
+
+One reader goes underneath it on purpose. ``gauntlet/recon/quiet_floor.py`` is the receipt
+behind #190's corpus row, and it reads a passage at a time against sections the report knows
+nothing about; it imports the private helpers rather than reimplementing them, so the receipt
+cannot go on describing arithmetic the server has changed. They stay private because that is
+what they are — a receipt is not a second caller to keep an interface stable for, and it lives
+in this repo where a rename reaches it.
 """
 
 from __future__ import annotations
