@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-from resolve_mcp.video import framing, supers
+from resolve_mcp.video import supers
 
 HEIGHT, WIDTH = supers.GRID_HEIGHT, supers.GRID_WIDTH
 
@@ -25,11 +25,10 @@ quietly repeated a framing would be a run the reading is right to refuse."""
 def picture(seed: int) -> NDArray[np.uint8]:
     """One camera's frame: a dim room with a lit subject somewhere in it.
 
-    Deliberately smooth, and deliberately *composed*. Smooth because a super is found by
-    standing out from its surroundings, so a frame of white noise would be a frame of
-    supers. Composed because the reading refuses any pair whose picture did not really
-    change, and two frames have to differ the way two angles differ — a moved subject —
-    rather than the way two exposures do.
+    Deliberately smooth, and deliberately *moved* between seeds. Smooth because a super is
+    found by standing out from its surroundings, so a frame of white noise would be a frame
+    of supers. Moved because a pair whose frames barely disagree is refused as too still,
+    and these have to be two cameras rather than two exposures of one.
     """
     rows = np.linspace(0.0, 1.0, HEIGHT)[:, None]
     cols = np.linspace(0.0, 1.0, WIDTH)[None, :]
@@ -60,16 +59,16 @@ def held_still(frame: NDArray[np.uint8], count: int) -> NDArray[np.uint8]:
 
 
 def test_the_fixtures_are_different_pictures_and_not_merely_different_frames() -> None:
-    """The premise every test below rests on. The reading refuses a pair whose composition
-    barely moved, so a fixture that quietly stopped moving it would turn these into tests
-    of the refusal — all still green, all measuring nothing."""
-    steps = [
-        framing.read_pair(picture(one)[::6, ::6], picture(one + gap)[::6, ::6]).delta
+    """The premise every test below rests on. A pair whose frames barely disagree is refused
+    as too still, so a fixture that quietly stopped moving the picture would turn these into
+    tests of that refusal — all still green, all measuring nothing."""
+    agreements = [
+        supers.read_pair(picture(one), picture(one + gap)).agreement
         for gap in (1, 2, 3)
         for one in range(12)
     ]
 
-    assert min(steps) > supers.STEP
+    assert max(agreements) <= supers.CHANGED
 
 
 def test_a_caption_carries_across_a_picture_change() -> None:
@@ -178,16 +177,32 @@ def jittered(frame: NDArray[np.uint8], seed: int) -> NDArray[np.uint8]:
     return shot
 
 
-def test_a_bright_still_thing_in_a_still_shot_is_not_a_super() -> None:
-    """The measurement's whole reason for the composition test. Here the "caption" is the
-    lit keyboard of a piano with a maker's name across it: bright, static, in the same
-    place in every reading, inside one shot that never changes. It persists perfectly, and
-    it is still not a graphic."""
-    frames = np.stack([caption(jittered(picture(0), seed)) for seed in range(8)])
+def test_a_small_bright_still_thing_is_not_a_super() -> None:
+    """The reading's whole reason for asking what a graphic looks like. Here the agreeing
+    pixels are the lit nameplate on a piano lid: bright, static, in the same place in every
+    reading, inside one shot that never changes. It persists perfectly. It is a word, not a
+    caption, and on the corpus every false reading is this size and every real one is four
+    times it."""
+    frames = np.stack([caption(jittered(picture(0), seed), strokes=4) for seed in range(8)])
 
     reading = supers.read_pair(frames[0], frames[3])
     assert reading.kind == supers.OVERLAY  # the pair alone is fooled...
-    assert supers.read_run(frames, lags=(3,)) == ()  # ...and the span is not
+    assert supers.read_run(frames, lags=(3,)) == ()  # ...and the run is not
+
+
+def test_a_tall_shapeless_agreement_is_not_a_super() -> None:
+    """The other half of the shape test. Two frames of a still shot can agree about a great
+    many pixels spread down the frame — half a dark curtain — and what they agree about is
+    the picture rather than a line of text drawn on it."""
+    patch = np.zeros((HEIGHT, WIDTH), dtype=np.uint8)
+    for row in range(40, 360, 20):
+        patch[row : row + 6, 300:340] = 235
+    frames = np.stack(
+        [np.maximum(jittered(picture(0), seed), patch) for seed in range(8)]
+    )
+
+    assert supers.read_pair(frames[0], frames[3]).found
+    assert supers.read_run(frames, lags=(3,)) == ()
 
 
 def test_pixels_that_agree_somewhere_new_every_time_are_not_a_super() -> None:
@@ -234,7 +249,7 @@ def test_a_short_super_needs_the_short_lag_to_be_seen_twice() -> None:
     shot has not moved enough to disagree with itself and the overlay reading refuses the
     pair as too still. These fixtures reframe on every frame, so they cannot pose it.
     """
-    card = caption(np.zeros((HEIGHT, WIDTH), dtype=np.uint8), top=180, left=200, strokes=14)
+    card = caption(np.zeros((HEIGHT, WIDTH), dtype=np.uint8), top=180, left=200, strokes=22)
     frames = np.concatenate(
         [
             held_still(card, 4),
@@ -320,15 +335,17 @@ def span(first: int, last: int, kind: str = supers.OVERLAY) -> supers.Span:
     )
 
 
-def test_the_step_is_only_read_between_frames_the_graphic_was_seen_on() -> None:
-    """How the piano keyboard passed on the corpus anchor. Its readings all sat inside one
-    unchanging shot, but the span reached a frame past the cut at the end of it, and a step
-    sampled at the span's outer edge found that cut and vouched for a graphic that never
-    survived it. Only frames the graphic was actually seen on may speak for it."""
-    still = [caption(jittered(picture(0), seed)) for seed in range(6)]
-    elsewhere = [picture(3), picture(4)]
+def test_a_caption_is_found_over_a_shot_that_never_changes() -> None:
+    """The recall this reading is built to keep. A lower third holds through one long take
+    for seconds at a time on every deliverable in the corpus, and nothing about the picture
+    under it changes while it does — an earlier reading that asked for a change there cost
+    seven of the corpus's ten supers."""
+    frames = np.stack([caption(jittered(picture(0), seed)) for seed in range(8)])
 
-    assert supers.read_run(np.stack(still + elsewhere), lags=(2,)) == ()
+    spans = supers.read_run(frames, lags=(3,))
+
+    assert len(spans) == 1
+    assert spans[0].kind == supers.OVERLAY
 
 
 def test_a_cut_inside_a_super_is_a_straddle() -> None:

@@ -21,11 +21,12 @@ to exclude the stage furniture excludes the supers too. Static is what this foot
 *is*.
 
 What separates a graphic from the picture is not that it holds still but that **it is
-not part of the picture at all** — so it survives the picture being replaced. Two frames
-a couple of seconds apart often show different shots; everything the camera saw is then
-different and everything the graphics layer drew is identical, to the grey level. That
-is the reading here, and it needs no cut list, which matters because the scene detector
-is blind to the dissolve-cut songs (#203) and those carry supers like any other.
+not part of the picture at all**. Two frames a couple of seconds apart disagree about
+everything the camera saw — the players move, the grain moves, and on a dark stage the
+pixels disagree from noise alone — while everything the graphics layer drew is identical
+to the grey level. That is the reading here, and it needs no cut list, which matters
+because the scene detector is blind to the dissolve-cut songs (#203) and those carry
+supers like any other.
 
 Two shapes, told apart by how much of the frame agreed:
 
@@ -39,24 +40,25 @@ Two shapes, told apart by how much of the frame agreed:
 * **overlay** — a compact high-contrast region agrees across two frames that disagree
   otherwise. Lower thirds and titles over footage.
 
-Everything else is ``unread`` — nothing is claimed. Most of it is, because the failure
-mode here is not a missed caption but an invented one. On a dark stage of locked-off
-cameras the frames of one *still* shot disagree pixel by pixel from noise alone, while its
-brightest static object agrees with itself perfectly, in the same place, in every reading
-— and on this stage that object is a piano keyboard with a maker's name written across it.
-So an overlay is believed only twice over: the same pixels have to carry in more than one
-reading (:func:`_persists`), and the picture has to genuinely change somewhere across the
-span they carried through (:func:`_outlived`). A card answers to neither, having stronger
-evidence of its own in ``HELD``.
+Everything else is ``unread`` — nothing is claimed.
+
+**What the agreeing pixels are not.** The room contains things that agree with themselves
+as reliably as lettering does: the lit nameplate on a piano lid, a lamp, half a dark
+curtain two frames of a still shot both hold. So agreement alone never reports a super.
+What is found has to be found *twice in the same pixels* (:class:`_Group`) and then has to
+look like a caption at all — big enough to read, and shaped like a line of text rather than
+like a piece of the picture (``MIN_SUPER``, ``MAX_HEIGHT``). Those two, measured against
+every super in the corpus and every false reading it produced, are where the precision
+comes from.
 
 Everything is measured on a 720x405 grey grid rather than the 128x72 one a cut's
 composition is read on. Text is the subject, and text is the first thing a small grid
 destroys.
 
-What this cannot do: it cannot see a super that never outlives a picture change — one
-held for less than the lag, or one held through a single long take. Both come back as
-nothing rather than as absence, which is a floor on recall taken deliberately: see
-``STEP``.
+What this cannot do: it cannot see a super held for less than the lag it is read across,
+and it cannot see one too small or too tall to look like a caption — a corner bug of a few
+hundred pixels reads as the furniture it cannot be told apart from. Both come back as
+nothing rather than as absence.
 """
 
 from __future__ import annotations
@@ -67,8 +69,6 @@ from typing import Any, NamedTuple
 import numpy as np
 from numpy.typing import NDArray
 from scipy.ndimage import binary_dilation, find_objects, label, uniform_filter
-
-from resolve_mcp.video import framing
 
 GRID_WIDTH = 720
 GRID_HEIGHT = 405
@@ -94,29 +94,34 @@ as a caption, and what would still find dark lettering on a bright card."""
 CHANGED = 0.65
 """At or below this share of pixels agreeing, the frames are worth reading further.
 
-A cheap pre-filter and nothing more. Measured on the corpus anchor, agreement within one
-locked-off shot three seconds apart runs 0.75-0.79 and across a shot change 0.28-0.60 — but
-a *moving* shot dips to 0.55 without the picture having changed at all, which is why
-whether the picture really changed is asked separately, and asked of the composition."""
+A cheap pre-filter and nothing more, and it must not be read as "the picture changed":
+measured on the corpus anchor, agreement across a shot change runs 0.28-0.60, but a moving
+shot dips to 0.55 with the same picture throughout. All this decides is whether two frames
+disagree enough for what they *do* agree on to be worth looking at."""
 
-STEP = 0.30
-"""How far the picture must step across an overlay's own span before the overlay is
-believed — see :func:`_outlived`.
+MIN_SUPER = 0.0025
+MAX_HEIGHT = 0.20
+"""What a graphic has to be before it is reported as a super: about 730 pixels of lettering
+here, in a band no more than a fifth of the frame tall. Together these are the whole
+precision of the overlay reading.
 
-This is the whole precision of the overlay reading. Pixel agreement says only that two
-frames differ, and on a dark stage they differ from noise alone; a locked-off camera then
-offers a bright static band with a maker's name across it — a piano keyboard — that agrees
-with itself in every reading, in the same place, forever. Composition is what tells a new
-picture from a still one, so the step is `video.framing`'s own reading of that, on frames
-that need not be anywhere near a cut.
+They say a caption is *big enough to read* and *shaped like a line of text*, and both halves
+are needed because the two things this measurement gets wrong are different sizes. Small and
+static: the lit nameplate on a piano lid, which agrees with itself in every reading, in the
+same place, forever. Large and shapeless: half a dark curtain that two frames of a still
+shot happen to agree about.
 
-Measured on the corpus anchor at a two-second lag: pairs inside one shot step 0.01-0.17 and
-pairs across a shot change step 0.47-0.68. This sits in the empty middle, nearer the still
-population because the two errors do not cost the same — a graphic invented under a
-critic's cut misleads worse than one missed.
+Measured across all five deliverables, over their ten known supers and three windows known
+to hold none. Every real super runs 819-3440 pixels and none is taller than 0.14 of the
+frame — a title card at 0.14, the personnel lower thirds at 0.07. Every false reading is
+either 118-212 pixels or 0.30-0.51 of the frame tall. Both thresholds sit in empty middles,
+and no real super and no false reading is on the wrong side of either.
 
-Cards are exempt, and have to be: a card's two frames are the same frame, so its step is
-zero by construction and its evidence is ``HELD`` instead."""
+An earlier reading asked instead whether the *picture* changed while the graphic was up, on
+the theory that a graphic is what survives the picture being replaced. It is true and it is
+useless: on this corpus the picture routinely does not change while a super is up — a lower
+third holds through one long take — and the test cost seven of the ten real supers to catch
+false readings that these two catch on shape alone."""
 
 HELD = 0.98
 """At or above this share, nothing changed at all — the screen is holding one picture.
@@ -345,11 +350,7 @@ def read_marked(
             if reading.found:
                 readings.append(_Seen(index, index + lag, reading.kind, mask))
     readings.sort(key=lambda one: (one.first, one.last))
-    return tuple(
-        Marked(group.span(), group.held)
-        for group in _spans(readings, bridge)
-        if group.span().kind == CARD or _outlived(frames, group)
-    )
+    return tuple(Marked(group.span(), group.held) for group in _spans(readings, bridge))
 
 
 def edges(window: NDArray[Any], mask: NDArray[np.bool_], anchor: int) -> Edges:
@@ -487,22 +488,6 @@ def review(spans: Sequence[Span], cuts: Sequence[int]) -> dict[str, Any]:
     }
 
 
-def _step(out: NDArray[np.float32], into: NDArray[np.float32]) -> float:
-    """How far the picture itself stepped between the two frames.
-
-    The reading a cut is judged by (:mod:`resolve_mcp.video.framing`), asked of two frames
-    that may be nowhere near a cut. Pixel agreement cannot answer this: on a dark stage two
-    frames of the *same* shot disagree pixel by pixel from noise alone, so a still picture
-    can look as changed as a new one. Composition cannot be faked that way.
-
-    Taken on a strided-down copy, because framing's own grid is a composition grid and this
-    one is a lettering grid — twelve times the pixels, for a question that does not want
-    them.
-    """
-    stride = max(1, out.shape[1] // framing.GRID_WIDTH)
-    return framing.read_pair(out[::stride, ::stride], into[::stride, ::stride]).delta
-
-
 def _lift(frame: NDArray[np.float32]) -> NDArray[np.float32]:
     """How far each pixel sits above its own surroundings."""
     lifted: NDArray[np.float32] = frame - uniform_filter(frame, size=SURROUND)
@@ -591,31 +576,6 @@ def _spans(readings: Sequence[_Seen], bridge: int) -> tuple[_Group, ...]:
     return tuple(group for group in groups if group.believable())
 
 
-def _outlived(frames: NDArray[Any], group: _Group) -> bool:
-    """Whether the picture actually changed while this overlay was up.
-
-    The guard that makes the overlay reading worth quoting, and it is asked of the group
-    rather than of each pair inside it. Asked pair by pair it costs most of the real supers
-    in the corpus: a lower third holds through one long take, every pair inside it sits in
-    the same shot, and the graphic that outlived a whole shot change at the far end is
-    thrown away for the sake of the frames in the middle. Asked once, across the whole
-    group, it keeps them and still refuses the case it exists for — a bright static thing
-    inside a single unchanging shot, which on this stage is a piano keyboard with a maker's
-    name written across it.
-
-    Only frames the graphic was actually *seen* on may be compared. Sampling the span's
-    outer edges instead lets the step come from a shot change the graphic did not survive —
-    which is how that same keyboard passed this test on the corpus anchor, its readings all
-    inside one shot and its span reaching a frame past the cut at the end of it.
-    """
-    seen = sorted(group.seen)
-    middle = seen[len(seen) // 2]
-    pairs = ((seen[0], seen[-1]), (seen[0], middle), (middle, seen[-1]))
-    return any(
-        one != other and _step(frames[one], frames[other]) >= STEP for one, other in pairs
-    )
-
-
 class _Seen(NamedTuple):
     """One reading: the two frames it was taken across, its verdict, and its pixels."""
 
@@ -657,8 +617,22 @@ class _Group:
         self.seen |= {seen.first, seen.last}
 
     def believable(self) -> bool:
-        """A graphic read once is a coincidence read once, and this gets quoted at editors."""
-        return len(self.kinds) >= 2
+        """Whether this is a caption rather than something the room happens to contain.
+
+        Three things, and the corpus put all three there. Read twice, because a graphic read
+        once is a coincidence read once and this gets quoted at editors. Big enough to be
+        lettering somebody meant to be read. And shaped like a line of text rather than like
+        a piece of the picture.
+        """
+        rows = np.nonzero(self.held.any(axis=1))[0]
+        if len(rows) == 0:
+            return False
+        tall = (rows.max() + 1 - rows.min()) / self.held.shape[0]
+        return (
+            len(self.kinds) >= 2
+            and bool(self.held.sum() >= MIN_SUPER * self.held.size)
+            and tall <= MAX_HEIGHT
+        )
 
     def span(self) -> Span:
         """The graphic as a span, boxed by the pixels that carried through every reading.
