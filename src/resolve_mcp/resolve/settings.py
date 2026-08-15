@@ -42,20 +42,21 @@ ON: Final = "1"
 """What ``useCustomSettings`` takes — the API's boolean, spelled as the string it wants."""
 
 
-def read_resolution(timeline: Timeline) -> dict[str, int] | None:
-    """What the timeline says it is, in pixels, or ``None`` if it will not say.
+def read_resolution(timeline: Timeline) -> Resolution | None:
+    """What the timeline says it is, or ``None`` if it will not say.
 
     Both sides or neither: half a frame size is not a reading, and a caller reporting one
-    would be stating a delivery that no timeline has.
+    would be stating a delivery that no timeline has. The same type the cut file states, so
+    the comparison below is a value comparison rather than two dicts agreeing by accident.
     """
     width = _setting_int(timeline, WIDTH)
     height = _setting_int(timeline, HEIGHT)
     if width is None or height is None:
         return None
-    return {"width": width, "height": height}
+    return Resolution(width=width, height=height)
 
 
-def apply_resolution(timeline: Timeline, resolution: Resolution, name: str) -> dict[str, int]:
+def apply_resolution(timeline: Timeline, resolution: Resolution, name: str) -> None:
     """Put ``timeline`` on the cut's stated frame size, and prove it took.
 
     Raises :class:`BuildFailedError` when the timeline reads back as anything other than
@@ -69,7 +70,7 @@ def apply_resolution(timeline: Timeline, resolution: Resolution, name: str) -> d
     _write(timeline, HEIGHT, str(resolution.height), name)
 
     landed = read_resolution(timeline)
-    if landed != resolution.as_dict():
+    if landed != resolution:
         raise BuildFailedError(
             cause=(
                 f"Resolve would not put {name!r} on {resolution.width}x{resolution.height}: "
@@ -81,11 +82,10 @@ def apply_resolution(timeline: Timeline, resolution: Resolution, name: str) -> d
             detail={
                 "timeline": name,
                 "requested": resolution.as_dict(),
-                "reported": landed,
+                "reported": landed.as_dict() if landed is not None else None,
             },
         )
     log.info("%s is on %dx%d (custom timeline settings)", name, resolution.width, resolution.height)
-    return landed
 
 
 def _write(timeline: Timeline, key: str, value: str, name: str) -> None:
@@ -123,5 +123,8 @@ def _setting_int(timeline: Timeline, key: str) -> int | None:
         return None
 
 
-def _described(landed: dict[str, int] | None) -> str:
-    return "nothing" if landed is None else f"{landed['width']}x{landed['height']}"
+def _described(landed: Resolution | None) -> str:
+    return "nothing" if landed is None else f"{landed.width}x{landed.height}"
+
+
+__all__ = ["CUSTOM_SETTINGS", "HEIGHT", "ON", "WIDTH", "apply_resolution", "read_resolution"]

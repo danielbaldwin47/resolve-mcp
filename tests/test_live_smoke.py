@@ -702,9 +702,11 @@ def test_a_real_build_delivers_the_resolution_the_cut_asked_for(tmp_path: Path) 
     """
     if get_status()["context"]["project"] is None:
         pytest.skip("No project open in Resolve")
-    project_size = run_python("result = [project.GetSetting('timelineResolutionWidth')]")
-    assert project_size["ok"] is True, project_size.get("error")
-    if str(project_size["result"][0]) == "1920":
+    probe = run_python("result = project.GetSetting('timelineResolutionWidth')")
+    assert probe["ok"] is True, probe.get("error")
+    # run_python renders its value with repr, so the setting comes back as source text.
+    project_width = str(ast.literal_eval(probe["result"]))
+    if project_width == "1920":
         pytest.skip("This project already creates timelines at 1920 wide")
 
     presets = list_render_presets()
@@ -733,8 +735,29 @@ def test_a_real_build_delivers_the_resolution_the_cut_asked_for(tmp_path: Path) 
     written = Path(record.result["path"])
     grabbed = video_ffmpeg.grab(written, tmp_path / "delivered.jpg", seconds=0.2, max_edge=8192)
     delivered = jpeg.describe(grabbed.path)
-    print(f"\n{written} delivered {delivered['width']}x{delivered['height']}")
+    print(
+        f"\npreset {preset!r} delivered {delivered['width']}x{delivered['height']} "
+        f"from a {project_width}-wide project: {written}"
+    )
     assert (delivered["width"], delivered["height"]) == (1920, 1080)
+
+    # The tail route ships the *import*, not the timeline the shots were appended to, and
+    # Resolve creates that one at the project's default like any other. A fake can only
+    # agree with itself about that, and the tail is the shape the corpus actually delivers —
+    # so the second build is checked here rather than assumed. No second render: what is
+    # under test is which timeline the setting landed on.
+    tailed_file = Path(
+        a_smoke_cut(tmp_path, source, (48, 24), resolution=(1920, 1080), name="tailed.cut.json")
+    )
+    tailed_doc = json.loads(tailed_file.read_text(encoding="utf-8"))
+    tailed_doc["tail"] = {"type": "dissolve_to_black", "duration_frames": 12}
+    tailed_file.write_text(json.dumps(tailed_doc), encoding="utf-8")
+
+    tailed = build_timeline(str(tailed_file))
+
+    assert tailed["ok"] is True, tailed.get("error")
+    assert tailed["tail"]["route"] == "otio_round_trip"
+    assert tailed["timeline"]["resolution"] == {"width": 1920, "height": 1080}
 
 
 def a_device_cut(tmp_path: Path, source: dict[str, Any]) -> str:

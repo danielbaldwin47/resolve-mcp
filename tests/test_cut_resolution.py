@@ -141,7 +141,25 @@ def test_the_settings_round_trip_as_the_strings_the_api_speaks() -> None:
     settings.apply_resolution(timeline, cut_resolution.Resolution(1920, 1080), "sunset-set v1")
 
     assert timeline.setting_writes == [(CUSTOM_SETTINGS, "1"), (WIDTH, "1920"), (HEIGHT, "1080")]
-    assert settings.read_resolution(timeline) == HD
+    assert settings.read_resolution(timeline) == cut_resolution.Resolution(1920, 1080)
+
+
+@pytest.mark.parametrize("answer", ["  1920  ", "1920"])
+def test_a_setting_padded_the_way_a_c_bridge_pads_it_still_reads(answer: str) -> None:
+    """The values cross a C bridge, and nothing promises they arrive trimmed."""
+    timeline = FakeTimeline("sunset-set v1", resolution=(answer, "1080"))
+
+    assert settings.read_resolution(timeline) == cut_resolution.Resolution(1920, 1080)
+
+
+@pytest.mark.parametrize("answer", ["", "1920x1080", "auto"])
+def test_a_setting_that_is_not_a_number_reads_as_nothing_rather_than_a_guess(
+    answer: str,
+) -> None:
+    """An unreadable size is "will not say" — the build then fails rather than assuming."""
+    timeline = FakeTimeline("sunset-set v1", resolution=(answer, "1080"))
+
+    assert settings.read_resolution(timeline) is None
 
 
 def test_a_timeline_that_will_not_take_the_size_fails_rather_than_reporting_it() -> None:
@@ -219,7 +237,8 @@ def test_a_round_tripped_cut_is_resized_after_the_import(
     assert result["ok"] is True, result.get("error")
     assert result["tail"]["route"] == "otio_round_trip"
     assert result["timeline"]["resolution"] == HD
-    assert settings.read_resolution(built(resolve, "sunset-set v1")) == HD
+    landed = settings.read_resolution(built(resolve, "sunset-set v1"))
+    assert landed == cut_resolution.Resolution(1920, 1080)
 
 
 def test_a_build_whose_size_will_not_land_fails_instead_of_delivering_4k(

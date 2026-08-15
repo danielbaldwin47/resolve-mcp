@@ -46,6 +46,13 @@ def render_timeline(
     back to another preset, because a wrong-shaped file under a right-sounding name is worse
     than a refusal you can act on.
 
+    The frame size comes from the timeline, not from here: build a cut with
+    `timeline.resolution` set and the render follows it (live-confirmed on 21.0.3 —
+    a 1080p timeline in a 4K project delivers 1920x1080). Nothing in this call states a
+    size, so a preset that was saved in the Deliver page with a resolution of its own is the
+    one thing that can still override the timeline — check inspect_timeline's `resolution`
+    against the file you get if a delivery ever comes back the wrong shape.
+
     start and end cut one deliverable out of a longer timeline — a song off a concert set.
     They are frames on the timeline's own clock, the numbers inspect_timeline and
     list_markers report (a timeline starting at 01:00:00:00 starts at frame 86400, not 0),

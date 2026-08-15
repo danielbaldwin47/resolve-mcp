@@ -60,3 +60,6 @@ def read(doc: dict[str, Any]) -> Resolution | None:
     if not isinstance(stated, dict):
         return None
     return Resolution(width=int(stated["width"]), height=int(stated["height"]))
+
+
+__all__ = ["KEYS", "MAX_SIDE", "MIN_SIDE", "Resolution", "read"]

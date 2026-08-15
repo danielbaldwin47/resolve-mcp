@@ -20,7 +20,11 @@ from .envelope import tool
 
 @tool
 def list_timelines(limit: int = timelines.DEFAULT_LIST_LIMIT) -> dict[str, Any]:
-    """List the project's timelines with version, duration, fps and track stack.
+    """List the project's timelines with version, duration, fps, resolution and track stack.
+
+    resolution is the frame size each timeline is actually on — which is not the project's
+    default whenever a cut file stated one, and is what a render of that timeline delivers.
+    null means the timeline would not say.
 
     version is the number parsed off a "<name> v<N>" name, and latest_versions names the
     newest one per base name — the cut to carry on from. The sync reference is the timeline
@@ -46,6 +50,10 @@ def inspect_timeline(
     names, lock and enable state) or clips (every shot in the range). start and end take
     frames (96) or seconds with an explicit snap ({"seconds": 2.52, "snap": "floor"}), and
     default to the whole timeline; a shot is in range when it overlaps it.
+
+    The timeline block carries fps and resolution together: how fast the frames run and what
+    they are. The frame size is what a render of this timeline delivers, so read it before
+    delivering anything a cut file stated a resolution for.
 
     Each shot carries its record position, its source position, and sync_offset — the
     difference between the two, so that timeline_frame = source_frame + sync_offset. On the

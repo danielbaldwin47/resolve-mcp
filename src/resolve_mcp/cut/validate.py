@@ -207,6 +207,29 @@ def _timeline_errors(doc: dict[str, Any]) -> Iterator[Finding]:
     yield from _resolution_shape_errors(timeline)
 
 
+def _unknown_key_errors(
+    where: str,
+    block: dict[str, Any],
+    defined: Sequence[str],
+) -> Iterator[Finding]:
+    """E1 for a key the schema does not define, on the blocks that refuse rather than ignore.
+
+    Both blocks this serves are optional and silent when a field is missing, which is what
+    makes a typo in one dangerous: ``audio_fade`` for ``audio_fade_frames`` builds a dissolve
+    over a hot mix, ``w`` for ``width`` builds at the project's own size — and both report
+    success. One reading of "that key is not in the schema", so the next device that needs it
+    does not write a third.
+    """
+    unknown = sorted(key for key in block if key not in defined)
+    if unknown:
+        yield _finding(
+            "E1",
+            None,
+            f"'{where}' carries {_listed(unknown)}, which the schema does not define; "
+            f"it takes {_listed(list(defined))}.",
+        )
+
+
 def _resolution_shape_errors(timeline: dict[str, Any]) -> Iterator[Finding]:
     """E1 for ``timeline.resolution``: a block that does not read builds at the wrong size.
 
@@ -226,14 +249,7 @@ def _resolution_shape_errors(timeline: dict[str, Any]) -> Iterator[Finding]:
         )
         return
 
-    unknown = sorted(key for key in stated if key not in cut_resolution.KEYS)
-    if unknown:
-        yield _finding(
-            "E1",
-            None,
-            f"'timeline.resolution' carries {_listed(unknown)}, which the schema does not "
-            f"define; it takes {_listed(list(cut_resolution.KEYS))}.",
-        )
+    yield from _unknown_key_errors("timeline.resolution", stated, cut_resolution.KEYS)
     for side in cut_resolution.KEYS:
         value = stated.get(side)
         if not _is_int(value):
@@ -296,14 +312,7 @@ def _tail_shape_errors(doc: dict[str, Any]) -> Iterator[Finding]:
         yield _finding("E1", None, "'tail' must be an object with a 'type'.")
         return
 
-    unknown = sorted(key for key in tail if key not in tail_device.KEYS)
-    if unknown:
-        yield _finding(
-            "E1",
-            None,
-            f"'tail' carries {_listed(unknown)}, which the schema does not define; "
-            f"it takes {_listed(list(tail_device.KEYS))}.",
-        )
+    yield from _unknown_key_errors("tail", tail, tail_device.KEYS)
 
     kind = tail.get("type")
     if kind not in tail_device.TYPES:
