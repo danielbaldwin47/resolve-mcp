@@ -179,7 +179,28 @@ def scan_occlusion(
             config=config,
         )
         progress(0.6, "scoring the samples for near-field blocking")
-        frames = blocking.read_grid(raw.read_bytes())
+        grey = raw.read_bytes()
+        try:
+            frames = blocking.read_grid(grey)
+        except ValueError as short:
+            # The arithmetic only knows the buffer is the wrong size. This is the job that
+            # asked ffmpeg for those bytes, so this is where a short read becomes a cause and
+            # a fix the agent can act on.
+            frame_bytes = blocking.GRID_WIDTH * blocking.GRID_HEIGHT
+            remainder = len(grey) % frame_bytes
+            raise OcclusionScanError(
+                cause=(
+                    f"The sampled grey is {len(grey)} bytes — {remainder} past a whole number "
+                    f"of {blocking.GRID_WIDTH}x{blocking.GRID_HEIGHT} frames, so the decode "
+                    "did not finish."
+                ),
+                fix=(
+                    "Run the scan again. Half a frame is what a decode killed mid-write leaves "
+                    "behind; scoring the frames that survived would report on a shorter range "
+                    "than the one asked about, and report it as clear."
+                ),
+                detail={"bytes": len(grey), "frame_bytes": frame_bytes, "remainder": remainder},
+            ) from short
         scan = blocking.measure(frames)
     finally:
         # The grey file is scratch: the catalog is the artifact, and a cache hit must not

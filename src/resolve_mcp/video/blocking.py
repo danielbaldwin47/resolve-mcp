@@ -86,8 +86,6 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy import ndimage
 
-from ..errors import OcclusionScanError
-
 GRID_WIDTH = 128
 GRID_HEIGHT = 72
 """The grid every sample is measured on, 16:9. Small enough that a scan of a whole song is
@@ -185,7 +183,7 @@ class Scan(NamedTuple):
 
 
 def read_grid(data: bytes, width: int = GRID_WIDTH, height: int = GRID_HEIGHT) -> NDArray[np.uint8]:
-    """Raw 8-bit grey bytes as ``(samples, height, width)``, or a refusal.
+    """Raw 8-bit grey bytes as ``(samples, height, width)``, or ``ValueError``.
 
     A trailing partial frame fails the read rather than being dropped. ffmpeg killed mid-write
     leaves one, and so does a second scan writing over this one's scratch file; either way the
@@ -193,21 +191,17 @@ def read_grid(data: bytes, width: int = GRID_WIDTH, height: int = GRID_HEIGHT) -
     would answer for footage nobody decoded. The answer that gets invented is the dangerous
     direction — a truncated tail reads as a clear stretch, so the cut goes where the blocker
     was.
+
+    The refusal is about the buffer, so it is a ``ValueError`` about the buffer: this module is
+    grey bytes in and scores out, and knows nothing of the job that produced the bytes. Whoever
+    ran the decode catches it and says what to do about it — for the scan, ``occlusion``.
     """
     frame_bytes = width * height
     remainder = len(data) % frame_bytes
     if remainder:
-        raise OcclusionScanError(
-            cause=(
-                f"The sampled grey is {len(data)} bytes — {remainder} past a whole number of "
-                f"{width}x{height} frames, so the decode did not finish."
-            ),
-            fix=(
-                "Run the scan again. Half a frame is what a decode killed mid-write leaves "
-                "behind; scoring the frames that survived would report on a shorter range "
-                "than the one asked about, and report it as clear."
-            ),
-            detail={"bytes": len(data), "frame_bytes": frame_bytes, "remainder": remainder},
+        raise ValueError(
+            f"{len(data)} bytes of grey is {remainder} past a whole number of "
+            f"{width}x{height} frames"
         )
     return np.asarray(np.frombuffer(data, dtype=np.uint8).reshape(-1, height, width))
 
