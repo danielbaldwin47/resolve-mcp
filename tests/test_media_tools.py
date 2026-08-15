@@ -547,7 +547,13 @@ def test_list_spills_the_full_listing_to_disk_past_the_cap(attach: Attach, tmp_p
     assert len(result["clips"]) == 2
     spilled = Path(result["spilled_to"])
     assert spilled.exists()
-    assert len(json.loads(spilled.read_text(encoding="utf-8"))["clips"]) == 5
+    written = json.loads(spilled.read_text(encoding="utf-8"))
+    assert len(written["clips"]) == 5
+    # The spilled file is the same reply carrying all of it — the media copy used to be
+    # hand-built and dropped the two keys every other spilled file has (#224).
+    assert written["truncated"] is False
+    assert written["spilled_to"] is None
+    assert written["count"] == 5
 
 
 # --- inspect ---------------------------------------------------------------------------

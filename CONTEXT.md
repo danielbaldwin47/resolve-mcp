@@ -24,7 +24,9 @@ timelines. The server measures; Claude decides.
 - **envelope** — the shared tool-result shape every MCP tool returns
   (`tools/envelope.py`).
 - **spill** — oversized results written to disk for the agent to grep
-  instead of truncating.
+  instead of truncating. Every listing that can outgrow a reply is capped by
+  `spill.capped`, so `truncated` and `spilled_to` mean one thing everywhere and
+  a spilled file is the same reply carrying all of it (#224).
 - **bin path** — a media pool folder, slash-separated from the root. To a
   tool addressing one clip by name: omitted is the whole pool, a name is
   that bin and everything nested inside it, `""` is the root folder alone
@@ -112,7 +114,7 @@ Top level:
 | `logging_config.py` | stderr-only logging (stdout belongs to MCP transport) |
 | `naming.py` | names for written files and `<base> v<N>` timelines |
 | `server.py` | FastMCP app + tool registration; no logic |
-| `spill.py` | oversized results → disk |
+| `spill.py` | oversized results → disk; `capped` is the one definition of a truncated reply |
 | `timing.py` | frames authoritative; seconds/timecode/fps derived |
 
 `analysis/` — compute jobs that read audio and write findings to disk:
@@ -159,15 +161,22 @@ goes through, so every one of them opens `kind`/`audio`/`duration_seconds`
 `correlate`'s join over cut rows is the documented exception), and where the
 naming rule lives: a header-stats builder is `gist`, a record builder is
 `rows` — plus `collected`/`stem_named` — where a
-separation's stems are and which one was asked for, shared by every detector
-that reads one: `phrases` off the line, `bars` off the pulse),
+separation's melodic stems are, third pass included, and which one was asked
+for; one convention for every detector that reads one: `phrases` off the line,
+`bars` off the pulse, `structure` off all of them (#220). `fills` still finds
+the drum pass its own way),
 `melody` (notes off one melodic stem —
 monophonic pitch + gating, model injected per ADR 0002; the reading `phrases`
 is a rule layer over, as `drums` is to `fills`), `music` (beats + energy + gist
 job; `beats_of`/`energy_of` are the shared entries other jobs read a grid or a
 loudness curve through, one measurement per piece of audio), `phrases` (phrase boundaries: where the soloist stops, which is the
 cut-placement unit #46 named, #143),
-`records` (sliceable record files), `rhythm` (how varied the cutting is, one entry
+`records` (sliceable record files — `write` and, beside it, the one strong reader
+`rows(path, field)` every caller shares: four refusals over a file that is not one of
+these, plus the numeric-`t` filter and the time-order sort that make the rest a
+timeline. `allow_empty=` drops the empty-file refusal and is for the caller reading
+back a file it just wrote — nothing found is a wrong path only when an agent named
+the file, #222), `rhythm` (how varied the cutting is, one entry
 `read(rows, levels)` over per-cut rows and a level curve: `shot_rhythm` bins the
 shot lengths, measures the longest strict A/B alternation run and the longest
 monotonic duration `ramp`, and says `reads_metronomic` with the heuristic that drew
@@ -185,9 +194,9 @@ and timbre reads `wind`, #157), `stats` (the readings taken over a column of
 records — signed offsets with early and late counted apart, a histogram, and
 whether a column was measured at all — shared by `correlate` and the joins it
 composes so the rules have one copy, #215), `structure` (tunes + solo changes job; both
-halves read the shared beats half and the tune half the shared energy half; its
-stem loader is what reaches the third pass), `subject` (what a shot is framed
-on crossed with who is out front: the angle sidecar's subject read as
+halves read the shared beats half and the tune half the shared energy half;
+its stem loader is error shaping over `halves.collected`, #220), `subject`
+(what a shot is framed on crossed with who is out front: the angle sidecar's subject read as
 player/ensemble/other, joined to the solo windows in seconds so a shot that
 outlives its solo is split where the front changed — pure, no I/O, read by
 `correlate`, #181), `transcribe`
@@ -225,7 +234,13 @@ not run*, where Resolve named no media bounds for E5 or E7 to check a range
 against, #186; E11 is the exception it cannot answer, raised in
 `resolve/build` where a live locked track can be observed), `tail` (the optional
 **tail** device: one reading of `{type, duration_frames, audio_fade_frames}` for
-both the rules and the build). A `segments` entry is a shot or a **gap**
+both the rules and the build), `otio` (**the tail's document surgery** — pure,
+no Resolve import: `inject` cuts the dissolve and the audio fade into an
+exported OTIO document and reports what did *not* get one, `transitions` reads
+them back, and the span/rate arithmetic under both counts every track in the
+*timeline's* rate rather than each clip's own; `resolve/tail` is the only
+caller, #221 — not `tests/otio.py`, which hand-builds documents for the live
+tier). A `segments` entry is a shot or a **gap**
 (`{"id", "gap": <frames>}`, literal black); `is_gap`/`entry_duration`/
 `overlay_track` are the `layout` accessors every walker of that array shares.
 
@@ -270,10 +285,14 @@ Resolve reports no camera metadata for — #94; not an **angle sidecar**),
 (session/project wrappers), `settings` (the timeline settings the server
 *writes*, through the string-typed `GetSetting`/`SetSetting` pair: resolution,
 which needs `useCustomSettings` first and is judged by the read-back, never by
-the return value — #187), `tail` (materialising a cut's tail: the OTIO
-document edit + the export/import round trip `build` takes when a tail has
-a transition to cut in — a hard out that fades nothing builds directly —
-because the scripting API cannot cut a transition at all), `takes`
+the return value — #187), `tail` (**the tail's round trip**: the export/import
+`build` takes when a tail has a transition to cut in — a hard out that fades
+nothing builds directly — because the scripting API cannot cut a transition at
+all; the document edit itself is `cut/otio`. Takes one `Staging` — the project,
+pool, timeline and name the shots are on until the import lands — and returns a
+`Landed`: the imported cut plus `release`/`refuse`, so the staging timeline
+outlives the import until the caller has read the shots back on it, #221),
+`takes`
 (take selectors + in-place swap), `timeline` (timeline read wrappers),
 `titles` (titles file against a project + dry run).
 
@@ -400,7 +419,9 @@ same reason: gaps and overlay tracks are one device each across `cut/layout`,
 interesting failures are the disagreements between them. `test_cut_tail.py` is the third: the
 tail is one device across `cut/tail`, `cut/validate`, `resolve/tail` and
 `resolve/build`, and a dissolve that did not land looks exactly like a cut that
-never asked for one. `test_hardware_decode.py` (#202) is the fourth: NVDEC is
+never asked for one. (`test_cut_otio.py` is its pure half, split out with the
+module in #221: documents in, documents out, plain dicts and no fakes.)
+`test_hardware_decode.py` (#202) is the fourth: NVDEC is
 one decision across `ffmpeg` (the probe), `video/ffmpeg` (flags, fallback,
 report) and the three video routes that carry the report, and the failure worth
 testing is a decode that ran one way and reported another. `test_cut_resolution.py`

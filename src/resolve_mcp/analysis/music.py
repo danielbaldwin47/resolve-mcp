@@ -18,7 +18,6 @@ master mix — no stems, no Resolve. Three consequences worth stating:
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -28,7 +27,7 @@ from ..errors import InvalidRequestError
 from ..jobs import cache
 from ..jobs.runner import JobOutput, Progress, start_job
 from . import beats as beats_module
-from . import device, halves
+from . import device, halves, records
 
 if TYPE_CHECKING:  # pragma: no cover - the worker imports these when it runs
     from .energy import Measurement
@@ -144,14 +143,13 @@ def numbered_beats(
     """The beat records themselves, from ``beats_of`` — computed or read back from disk.
 
     The document is the interchange format, so a caller that wants the grid rather than a
-    path reads it the way an agent would. Reading it here rather than at the caller keeps
-    the file's layout the business of the module that writes it. Drum-fill detection (#39)
-    reports against this grid and must not pay for the beat model a second time on audio
-    music analysis already ran over.
+    path reads it through ``records``, the module that wrote it — the file's layout, and
+    what a file that is not one of these gets refused for, stay in one place (#222).
+    Drum-fill detection (#39) reports against this grid and must not pay for the beat model
+    a second time on audio music analysis already ran over.
     """
     document = beats_of(source, described, identity, detector, refresh, config)
-    written = json.loads(Path(document["path"]).read_text(encoding="utf-8"))
-    return list(written[BEATS])
+    return list(records.rows(Path(document["path"]), BEATS, allow_empty=True))
 
 
 def energy_of(
@@ -190,12 +188,11 @@ def numbered_energy(
     """The energy records themselves, from ``energy_of`` — computed or read back from disk.
 
     The document is the interchange format, the same bargain ``numbered_beats`` makes: a
-    caller that wants the curve rather than a path reads it the way an agent would, and the
+    caller that wants the curve rather than a path reads it through ``records``, so the
     file's layout stays the business of the module that writes it.
     """
     document = energy_of(source, described, identity, shape, refresh, config)
-    written = json.loads(Path(document["path"]).read_text(encoding="utf-8"))
-    return list(written[ENERGY])
+    return list(records.rows(Path(document["path"]), ENERGY, allow_empty=True))
 
 
 def analyze(

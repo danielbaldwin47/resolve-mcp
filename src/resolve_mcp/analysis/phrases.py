@@ -51,7 +51,7 @@ from pathlib import Path
 from typing import Any, NamedTuple
 
 from ..audio import wav
-from ..audio.stems import FOUR_STEMS
+from ..audio.stems import FOUR_STEMS, WIND
 from ..config import Config, get_config
 from ..jobs import cache
 from ..jobs.runner import JobOutput, Progress, start_job
@@ -68,8 +68,13 @@ PLACES = 3
 
 DEFAULT_STEM = solos.RESIDUAL
 """``other`` — the stem the horns and the piano land in, which is where a solo is."""
-MELODY_STEMS = (solos.RESIDUAL, "vocals")
-"""The stems a line is plausibly in. Naming another is allowed and logged, not refused."""
+MELODY_STEMS = (solos.RESIDUAL, "vocals", WIND)
+"""The stems a line is plausibly in. Naming another is allowed and logged, not refused.
+
+``wind`` joined when #220 made the third pass reachable from here: it is the horns and reeds
+taken *out* of the residual, so it is the most single-line thing on disk and warning about it
+would have been exactly backwards. Its other half stays off the list — ``comp`` is piano plus
+guitar plus vibes, which is the busy reading the warning exists for."""
 
 REST_BEATS = 0.5
 """A gap this wide is the player breathing rather than tonguing the next note."""

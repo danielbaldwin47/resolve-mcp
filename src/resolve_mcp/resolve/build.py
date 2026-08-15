@@ -233,16 +233,19 @@ def build_timeline(
         # staging one would be alternates for a cut that is about to be deleted. ``_verify``
         # goes with it: the timeline checked above is the staging one, and the cut that
         # ships is the one the import made out of it.
-        built, applied = tail_route.materialise(
-            connection,
-            project,
-            pool,
-            built,
-            writing,
-            name,
-            tail,
-            verify=lambda landed: _verify(reader, landed, shots, name, origin),
+        landed = tail_route.materialise(
+            connection, tail_route.Staging(project, pool, built, writing), name, tail
         )
+        # The import is checked here, by the same read-back the staging cut got, and the
+        # staging timeline is released only once it passes. Until ``release`` is called the
+        # fallback is still standing, which is what makes a refusal survivable: the shots
+        # stay somewhere a human can find them.
+        try:
+            _verify(reader, landed.timeline, shots, name, origin)
+        except BuildFailedError as exc:
+            raise landed.refuse(f"the round trip moved the shots: {exc.cause}") from exc
+        landed.release()
+        built, applied = landed.timeline, landed.applied
         if stated is not None:
             # The import is a different timeline and Resolve creates it at the project's
             # default like any other, so the staging timeline's setting does not travel with

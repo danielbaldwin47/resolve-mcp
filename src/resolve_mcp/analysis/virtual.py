@@ -30,13 +30,13 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, Final
 
-from ..config import Config, get_config
+from ..config import Config
 from ..cut.document import read_cut_file
 from ..cut.layout import is_gap, overlay_positions, positions, total_frames
 from ..document import LoadedDocument
 from ..errors import InvalidRequestError
 from ..findings import Finding, ordered
-from ..spill import spill
+from ..spill import capped
 from ..timing import IN_POINT, OUT_POINT, SECONDS_PRECISION, dual_time, frames_from_seconds
 from . import records
 from .transcript import DEFAULT_LOW_CONFIDENCE
@@ -166,26 +166,25 @@ def _result(
         "jump_cuts": sum(1 for seam in seams if seam["jump_cut"]),
         "uncovered": sum(1 for seam in seams if seam["jump_cut"] and seam["covered_by"] is None),
     }
-    result: dict[str, Any] = {
-        "cut_file": str(loaded.path),
-        "content_hash": loaded.content_hash,
-        "timeline": {"name": _name(doc), "fps": fps},
-        "total": dual_time(total, fps),
-        "text": " ".join(read["text"] for read in read_back if read["text"]),
-        "segments": read_back,
-        "words": rows[:INLINE_WORDS],
-        "truncated": len(rows) > INLINE_WORDS,
-        "spilled_to": None,
-        "seams": seams,
-        "counts": counts,
-        "warnings": [finding.as_dict() for finding in findings],
-    }
-    if result["truncated"]:
-        full = {**result, "words": rows, "truncated": False, "spilled_to": None}
-        result["spilled_to"] = spill(
-            f"{_name(doc)} virtual transcript", full, config or get_config(), fallback="cut"
-        )
-    return result
+    return capped(
+        {
+            "cut_file": str(loaded.path),
+            "content_hash": loaded.content_hash,
+            "timeline": {"name": _name(doc), "fps": fps},
+            "total": dual_time(total, fps),
+            "text": " ".join(read["text"] for read in read_back if read["text"]),
+            "segments": read_back,
+            "seams": seams,
+            "counts": counts,
+            "warnings": [finding.as_dict() for finding in findings],
+        },
+        key="words",
+        whole=rows,
+        limit=INLINE_WORDS,
+        label=f"{_name(doc)} virtual transcript",
+        fallback="cut",
+        config=config,
+    )
 
 
 def _read(

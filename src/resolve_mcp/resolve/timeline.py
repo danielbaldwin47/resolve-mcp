@@ -32,14 +32,14 @@ import re
 from collections.abc import Iterator
 from typing import Any, Final, NamedTuple
 
-from ..config import Config, get_config
+from ..config import Config
 from ..errors import (
     InvalidRequestError,
     NoTimelineOpenError,
     TimelineNotFoundError,
 )
 from ..logging_config import get_logger
-from ..spill import spill
+from ..spill import capped, untruncated
 from ..timing import dual_time, to_frames
 from .connection import ResolveConnection
 from .session import current_project, frame_rate
@@ -412,20 +412,19 @@ def list_timelines(
     held = timelines_of(project)
     timelines = [summarise(reader, timeline, project, current) for timeline in held]
 
-    cap = max(int(limit), 0)
-    truncated = len(timelines) > cap
-    result: dict[str, Any] = {
-        "count": len(timelines),
-        "current": current,
-        "timelines": timelines[:cap] if truncated else timelines,
-        "latest_versions": _latest_versions(timelines),
-        "truncated": truncated,
-        "spilled_to": None,
-    }
-    if truncated:
-        full = {**result, "timelines": timelines, "truncated": False, "spilled_to": None}
-        result["spilled_to"] = spill("timelines", full, config or get_config(), fallback="timeline")
-    return result
+    return capped(
+        {
+            "count": len(timelines),
+            "current": current,
+            "latest_versions": _latest_versions(timelines),
+        },
+        key="timelines",
+        whole=timelines,
+        limit=limit,
+        label="timelines",
+        fallback="timeline",
+        config=config,
+    )
 
 
 def _latest_versions(timelines: list[dict[str, Any]]) -> dict[str, str]:
@@ -508,21 +507,21 @@ def inspect_timeline(
         "tracks": None if detail == "summary" else [_without_items(track) for track in tracks],
         "item_count": item_count,
         "currency": currency,
-        "truncated": False,
-        "spilled_to": None,
     }
     if not with_items:
-        return result
+        return untruncated(result)
 
-    cap = max(int(limit), 0)
-    result["tracks"] = _capped(tracks, cap)
-    if item_count > cap:
-        result["truncated"] = True
-        full = {**result, "tracks": tracks, "truncated": False, "spilled_to": None}
-        result["spilled_to"] = spill(
-            heading["name"], full, config or get_config(), fallback="timeline"
-        )
-    return result
+    return capped(
+        result,
+        key="tracks",
+        whole=tracks,
+        limit=limit,
+        counted=item_count,
+        share=_shared,
+        label=heading["name"],
+        fallback="timeline",
+        config=config,
+    )
 
 
 UNKNOWN_OFF_CURRENT: Final = ("enabled", "locked", "takes")
@@ -659,7 +658,7 @@ def _without_items(track: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in track.items() if key != "items"}
 
 
-def _capped(tracks: list[dict[str, Any]], cap: int) -> list[dict[str, Any]]:
+def _shared(tracks: list[dict[str, Any]], cap: int) -> list[dict[str, Any]]:
     """Share ``cap`` shots across the stack, a round at a time.
 
     Filling track by track would spend the whole budget on a busy V1 and hand back a
