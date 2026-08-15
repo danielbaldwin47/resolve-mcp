@@ -1,0 +1,110 @@
+{
+  "kind": "occlusion_fixture_grids",
+  "note": "The FX6 (intra-frame MXF) scans and the A7IV ending reproduce their original catalogs exactly. The A7IV opening and mid differ on isolated samples (0.14 and 0.007 at worst): long-GOP input seek does not have to land on the same decoded frame twice. Same footage, same windows, same verdicts \u2014 the opening blocking peaks 0.572 here against the ledger's 0.604.",
+  "scans": [
+    {
+      "name": "opening-fx6",
+      "clip": "A015C001_2606170J.MXF",
+      "range": [
+        54383,
+        56541
+      ],
+      "samples": 90,
+      "baseline": 0.0489,
+      "checked_against_catalog": true,
+      "catalog_samples": 90,
+      "worst_score_delta": 0.0,
+      "matches_catalog": true,
+      "rewritten": false,
+      "fixture": "tests/data/occlusion/opening-fx6.npz",
+      "fixture_bytes": 542698
+    },
+    {
+      "name": "opening-a7iv",
+      "clip": "20260617_D_A7IV_0006.MP4",
+      "range": [
+        85653,
+        87811
+      ],
+      "samples": 90,
+      "baseline": 0.0,
+      "checked_against_catalog": true,
+      "catalog_samples": 90,
+      "worst_score_delta": 0.14,
+      "matches_catalog": false,
+      "rewritten": false,
+      "fixture": "tests/data/occlusion/opening-a7iv.npz",
+      "fixture_bytes": 535677
+    },
+    {
+      "name": "mid-fx6",
+      "clip": "A015C001_2606170J.MXF",
+      "range": [
+        58379,
+        60537
+      ],
+      "samples": 90,
+      "baseline": 0.0469,
+      "checked_against_catalog": true,
+      "catalog_samples": 90,
+      "worst_score_delta": 0.0,
+      "matches_catalog": true,
+      "rewritten": false,
+      "fixture": "tests/data/occlusion/mid-fx6.npz",
+      "fixture_bytes": 531058
+    },
+    {
+      "name": "mid-a7iv",
+      "clip": "20260617_D_A7IV_0006.MP4",
+      "range": [
+        89649,
+        91807
+      ],
+      "samples": 90,
+      "baseline": 0.0,
+      "checked_against_catalog": true,
+      "catalog_samples": 90,
+      "worst_score_delta": 0.007,
+      "matches_catalog": true,
+      "rewritten": false,
+      "fixture": "tests/data/occlusion/mid-a7iv.npz",
+      "fixture_bytes": 543751
+    },
+    {
+      "name": "ending-fx6",
+      "clip": "A015C001_2606170J.MXF",
+      "range": [
+        64157,
+        66315
+      ],
+      "samples": 90,
+      "baseline": 0.0888,
+      "checked_against_catalog": true,
+      "catalog_samples": 90,
+      "worst_score_delta": 0.0,
+      "matches_catalog": true,
+      "rewritten": false,
+      "fixture": "tests/data/occlusion/ending-fx6.npz",
+      "fixture_bytes": 570227
+    },
+    {
+      "name": "ending-a7iv",
+      "clip": "20260617_D_A7IV_0006.MP4",
+      "range": [
+        95427,
+        97585
+      ],
+      "samples": 90,
+      "baseline": 0.0,
+      "checked_against_catalog": true,
+      "catalog_samples": 90,
+      "worst_score_delta": 0.0,
+      "matches_catalog": true,
+      "rewritten": false,
+      "fixture": "tests/data/occlusion/ending-a7iv.npz",
+      "fixture_bytes": 551645
+    }
+  ],
+  "errors": [],
+  "total_fixture_bytes": 3275056
+}

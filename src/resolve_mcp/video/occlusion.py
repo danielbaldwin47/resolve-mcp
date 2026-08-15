@@ -15,6 +15,13 @@ The answer the agent actually wants is the *windows* — the stretches to keep a
 so those come back inline. The per-sample curve goes to disk beside them, because a builder
 that has to justify skipping a favourite shot needs the number, and a reviewer that disagrees
 needs to see where the score sat rather than being told a verdict.
+
+Every window carries a **kind**: ``obstruction`` for the ones to keep a cut out of, ``scene``
+for the near-field mass the shot was framed to include. The score alone could not tell them
+apart — it flagged six windows on the round it was tuned against and two were real — so the
+classing is a second reading, ``blocking``'s ``novel`` and ``hidden``. Nothing is filtered out
+on the way: a scene window that vanished would be indistinguishable from a stretch that was
+never flagged, and the builder that disagrees with a class is the reason the curve is on disk.
 """
 
 from __future__ import annotations
@@ -68,6 +75,30 @@ that bobs out of frame for a beat has not made the shot usable."""
 
 INLINE_WINDOWS = 8
 """How many windows the gist carries, worst first. The file on disk has the rest."""
+
+DISCRIMINATOR = {
+    "classes": {
+        "obstruction": (
+            "something in the near field is covering a player the shot is framed on — the "
+            "stretch to keep a cut out of"
+        ),
+        "scene": (
+            "near-field mass the shot was framed to include: furniture, a parked audience "
+            "head, the shot's own foreground subject, or the same furniture moved by a "
+            "mid-take reframe. Flagged by the score, and not a reason to drop the shot"
+        ),
+    },
+    "bounds": (
+        "an obstruction window spans the samples that scored, not the body's own in and out: "
+        "the detector loses a body once it stops moving, so a crossing can outlast its window "
+        "by a second or more at either end"
+    ),
+}
+"""What the classes mean and what they cannot say, carried on every result.
+
+The limit is stated rather than implied because it is the one that costs an edit: a builder
+reading a 0.96 s window as 'the body is there for 0.96 s' cuts into the second after it. The
+gauntlet's one adjudicated crossing ran 3.7 s and scored across 0.96 of them (#189)."""
 
 
 def analyze_occlusion(
@@ -181,10 +212,11 @@ def scan_occlusion(
     target.write_text(json.dumps(catalog, indent=2), encoding="utf-8")
 
     log.info(
-        "Scored %d occlusion sample(s) of %s, %d unusable window(s), to %s",
+        "Scored %d occlusion sample(s) of %s, %d window(s), %d an obstruction, to %s",
         len(samples),
         source.name,
         len(windows),
+        sum(1 for one in windows if one["kind"] == blocking.OBSTRUCTION),
         target,
     )
     return JobOutput(_gist(catalog, target, samples, windows), (target,))
@@ -197,10 +229,19 @@ def _gist(
     windows: list[dict[str, Any]],
 ) -> dict[str, Any]:
     """What comes back inline: the windows to avoid, and how bad the range is overall."""
+    from . import blocking  # noqa: PLC0415 - numpy and scipy load here, not at server startup
+
     scores = [float(one["score"]) for one in samples]
     blocked = [one for one in samples if float(one["score"]) >= float(catalog["threshold"])]
     worst = max(samples, key=lambda one: float(one["score"])) if samples else None
-    ranked = sorted(windows, key=lambda one: float(one["peak_score"]), reverse=True)
+    obstructions = [one for one in windows if one["kind"] == blocking.OBSTRUCTION]
+    # Obstructions before scene, worst first inside each: the inline budget is small and a
+    # veto the builder has to honour must never be crowded out by furniture it can ignore.
+    ranked = sorted(
+        windows,
+        key=lambda one: (one["kind"] == blocking.OBSTRUCTION, float(one["peak_score"])),
+        reverse=True,
+    )
     return {
         "path": str(target),
         "clip": catalog["clip"],
@@ -213,6 +254,9 @@ def _gist(
         "blocked_samples": len(blocked),
         "blocked_fraction": _rounded(len(blocked) / len(samples)) if samples else 0.0,
         "windows": len(windows),
+        "obstructions": len(obstructions),
+        "unusable_seconds": _rounded(sum(float(one["duration_seconds"]) for one in obstructions)),
+        "discriminator": DISCRIMINATOR,
         "worst_windows": ranked[:INLINE_WINDOWS],
         "worst_sample": worst,
         "score": {
@@ -236,6 +280,10 @@ def _samples(scan: Scan, first: int, rate: float, source: Source) -> list[dict[s
             "coverage": reading.coverage,
             "largest": reading.largest,
             "blobs": reading.blobs,
+            # What separates a body from the shot's own furniture. The score does not: a real
+            # blocking has read below a drummer's arm in the same 90 seconds (#189).
+            "novel": reading.novel,
+            "hidden": reading.hidden,
         }
         for index, reading in enumerate(scan.readings)
     ]
@@ -258,12 +306,21 @@ def _windows(
     filter can emit a boundary frame dated at the range's own end: it is a real reading and it
     stays in the curve, but the window it would make starts where the range stops. A
     zero-length or backwards window in the catalog is a stretch no cut can be kept out of.
+
+    Every window is published, classed rather than filtered: a builder that disagrees with the
+    discriminator needs to see the stretch it decided was scene, and a window that vanished
+    would look exactly like a stretch that was never flagged.
     """
+    from . import blocking  # noqa: PLC0415 - numpy and scipy load here, not at server startup
+
     found = runs([float(one["score"]) >= threshold for one in samples], GAP_SAMPLES)
     step = sample_step(rate, source)
     windows: list[dict[str, Any]] = []
     for begin, stop in found:
-        scores = [float(samples[one]["score"]) for one in range(begin, stop)]
+        run = samples[begin:stop]
+        scores = [float(one["score"]) for one in run]
+        novel = max(float(one["novel"]) for one in run)
+        hidden = max(float(one["hidden"]) for one in run)
         start_frame = max(first, min(last, sample_frame(begin, first, rate, source)))
         end_frame = min(last, sample_frame(stop - 1, first, rate, source) + step)
         if end_frame <= start_frame:
@@ -277,6 +334,12 @@ def _windows(
                 "samples": stop - begin,
                 "peak_score": _rounded(max(scores)),
                 "mean_score": _rounded(statistics.fmean(scores)),
+                # The window is classed on its worst sample, the way it is scored on it: one
+                # second of a body crossing is what makes the stretch unusable, and the
+                # seconds either side of it are the ones a cut would land on.
+                "kind": blocking.verdict(novel, hidden),
+                "peak_novel": _rounded(novel),
+                "peak_hidden": _rounded(hidden),
             }
         )
     return windows

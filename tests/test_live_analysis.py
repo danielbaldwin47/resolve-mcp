@@ -12,12 +12,15 @@ is to be run on the machine that has it, and to say so on the ticket when it has
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
 
 from resolve_mcp.analysis import applause, bars, beats
-from resolve_mcp.audio import wav
+from resolve_mcp.audio import separator, stems, wav
+from resolve_mcp.config import Config
+from resolve_mcp.jobs import cache
 
 from .fakes import write_clicks, write_hits, write_sections
 
@@ -147,6 +150,98 @@ def test_the_five_tunes_of_a_board_mix_are_found_where_the_human_cut_them() -> N
     assert len(starts) == len(BOARD_TUNE_STARTS)
     for want in BOARD_TUNE_STARTS:
         assert min(abs(one - want) for one in starts) <= BOARD_TOLERANCE_SECONDS
+
+
+ACQUIRED_SET = "Zinc-Set-2-Reaper-v4.wav-8833f33949fe.wav"
+"""The board mix as the acquisition left it in the cache — what the stems on disk were cut from.
+
+Named rather than re-acquired: the export needs Resolve and the project open, and what this
+test is about is the directory the separation already filled, which is keyed on this file's
+bytes. Reaching it any other way would separate a second copy under a second key.
+"""
+
+
+@pytest.mark.live
+def test_a_wind_split_on_the_zinc_stems_runs_that_pass_and_no_other(
+    machine_cache: Config,
+) -> None:
+    """#192's live acceptance: the third pass over a two-pass directory is one pass.
+
+    The fake tier proves the decision — which passes a directory owes — with the separator
+    substituted. What it cannot say is that the real ``17_HP-Wind_Inst-UVR`` reads the
+    ``other`` stem the first pass wrote and labels its halves the way ``WIND_STEMS`` spells
+    them, which is the half of this only a real model on a real set can answer.
+
+    A directory that owes nothing **skips** rather than passes. Measured as found, this would
+    go green on zero passes the moment the split was complete — an acceptance criterion that
+    has stopped being one. Clearing the wind output first would keep the assertion honest, but
+    it makes every run destroy stems it then has to spend half an hour rebuilding, and a run
+    killed in between leaves the director short of what it deleted (which is how this test lost
+    the Zinc split's orphan half once). A skip costs nobody anything and lies about nothing.
+
+    Skips where the Zinc set is not on this machine — record the run on the ticket when it is.
+    """
+    config = machine_cache
+    acquired = config.audio_dir / ACQUIRED_SET
+    if not acquired.exists():
+        pytest.skip(f"the acquired Zinc set is not in this cache at {acquired}")
+    audio = {"path": str(acquired), "content_sha256": cache.content_hash(acquired)}
+    params = {**stems.separation_params(config), "split_wind": True}
+    _owing_the_wind_pass(stems.stem_directory(audio, params, config))
+    counting = _CountingSeparator()
+
+    output = stems.multi_pass(
+        audio, params, _no_progress, split_wind=True, runner=counting, config=config
+    )
+
+    assert len(counting.calls) == 1
+    assert counting.calls[0][3] == config.wind_model
+    assert counting.calls[0][1] == output.result["stems"][stems.OTHER_SOURCE]
+    assert output.result["reused"] is False
+    assert set(output.result[stems.OTHER_PASS]) == set(stems.WIND_KEYS.values())
+    assert all(Path(one).exists() for one in output.result[stems.OTHER_PASS].values())
+    assert len(output.result["stems"]) == len(stems.FOUR_STEMS)
+    assert len(output.result["drums"]) >= len(stems.DRUM_STEMS)
+
+
+def _owing_the_wind_pass(directory: Path) -> None:
+    """Run only where this directory owes exactly the third pass and nothing else.
+
+    Both halves are skips rather than assertions because both mean the same thing — the state
+    this measures is not here — and neither is news about the code. With no first two passes
+    on disk this would separate a 74-minute set from scratch and then assert it had not, which
+    is half an hour spent learning nothing; with the split already done it would assert over a
+    run that did nothing at all.
+    """
+    if separator.missing_from(directory / stems.MIX_PASS, stems.FOUR_STEMS):
+        pytest.skip(f"the Zinc set has no first pass at {directory} to add a pass to")
+    if separator.missing_from(directory / stems.DRUM_PASS, stems.DRUM_STEMS):
+        pytest.skip(f"the Zinc set has no drum pass at {directory} to reuse")
+    if not separator.missing_from(directory / stems.OTHER_PASS, stems.WIND_STEMS):
+        pytest.skip(
+            f"the wind split at {directory} is already complete, so this run would owe nothing "
+            "— delete that pass's directory to measure the split again"
+        )
+
+
+class _CountingSeparator:
+    """The real separator call with a note of every pass it was asked for.
+
+    ``environment`` goes through the same seam, so its probe is kept off the count — what is
+    being measured is separations, and a run that reused everything still asks what it runs on.
+    """
+
+    def __init__(self) -> None:
+        self.calls: list[list[str]] = []
+
+    def __call__(self, argv: Sequence[str], on_line: separator.Lines) -> int:
+        if "--env_info" not in argv:
+            self.calls.append(list(argv))
+        return separator.run(argv, on_line)
+
+
+def _no_progress(fraction: float, step: str) -> None:
+    """A live pass reports for minutes and there is nobody here to read it."""
 
 
 def _loudness_of(path: Path) -> applause.Loudness:

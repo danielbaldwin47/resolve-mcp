@@ -96,10 +96,22 @@ def analyze_occlusion(
     of frame, scored above what this shot covers when nothing is in the way, and scored higher
     when it wipes in mid-shot.
 
-    Inline you get the worst windows — in, out, duration, peak and mean score — plus how many
-    samples were blocked and the run's baseline. path is the JSON with the whole per-sample
-    curve; read it when you need to justify or dispute a window. A score near the threshold is
-    a partial block, so grab_frames the peak and look before you write the angle off.
+    Every window comes back with a kind. obstruction means something is covering a player the
+    shot is framed on — that is the veto, and obstructions is how many there are. scene means
+    near-field mass the shot was framed to include: a piano lid, a head parked in a corner, the
+    drummer at the edge of his own four-shot, or that furniture moved by a mid-take reframe. The
+    score cannot tell those apart — a real blocking has scored below a drummer's arm — so read
+    the kind, not the score, and read peak_novel and peak_hidden when you want to argue with it.
+
+    An obstruction window spans the samples that scored, not the body's own in and out: the
+    detector loses a body once it stops moving, so a crossing can outlast its window by a second
+    or more at either end. Leave margin, or grab_frames the edges.
+
+    Inline you get the worst windows — obstructions first — in, out, duration, peak and mean
+    score, plus how many samples were blocked and the run's baseline. path is the JSON with the
+    whole per-sample curve; read it when you need to justify or dispute a window. A score near
+    the threshold is a partial block, so grab_frames the peak and look before you write the
+    angle off.
     """
     connection = get_connection()
     return occlusion.analyze_occlusion(

@@ -1,0 +1,87 @@
+{
+  "kind": "occlusion_classes_live",
+  "piece": "Taurus MID (mix 3735.16-3825.16 s, Zinc SYNC 175955-178113)",
+  "adjudication": "gauntlet/recon/occlusion_mid.json",
+  "angles": {
+    "A7IV": {
+      "clip": "20260617_D_A7IV_0006.MP4",
+      "source_range": [
+        89649,
+        91807
+      ],
+      "expected": {
+        "63.98-64.94": "obstruction",
+        "77.99-78.95": "scene",
+        "86.96-87.92": "scene"
+      },
+      "state": "completed",
+      "elapsed_s": 55.1,
+      "error": null,
+      "result_summary": {
+        "windows": 3,
+        "obstructions": 1,
+        "unusable_seconds": 0.959,
+        "baseline": 0.0,
+        "decode": {
+          "device": "cpu",
+          "reason": "ffmpeg fell back internally: the hardware decoder lacks this codec profile"
+        }
+      },
+      "windows": {
+        "63.98-64.94": {
+          "kind": "obstruction",
+          "peak_score": 0.416,
+          "peak_novel": 0.066,
+          "peak_hidden": 0.049
+        },
+        "77.99-78.95": {
+          "kind": "scene",
+          "peak_score": 0.472,
+          "peak_novel": 0.014,
+          "peak_hidden": 0.004
+        },
+        "86.96-87.92": {
+          "kind": "scene",
+          "peak_score": 0.469,
+          "peak_novel": 0.013,
+          "peak_hidden": 0.001
+        }
+      },
+      "agrees": true
+    },
+    "FX6": {
+      "clip": "A015C001_2606170J.MXF",
+      "source_range": [
+        58379,
+        60537
+      ],
+      "expected": {
+        "0.00-41.96": "scene"
+      },
+      "state": "completed",
+      "elapsed_s": 22.2,
+      "error": null,
+      "result_summary": {
+        "windows": 1,
+        "obstructions": 0,
+        "unusable_seconds": 0,
+        "baseline": 0.0469,
+        "decode": {
+          "device": "cpu",
+          "reason": "ffmpeg fell back internally: the hardware decoder lacks this codec profile"
+        }
+      },
+      "windows": {
+        "0.00-41.96": {
+          "kind": "scene",
+          "peak_score": 0.693,
+          "peak_novel": 0.011,
+          "peak_hidden": 0.003
+        }
+      },
+      "agrees": true
+    }
+  },
+  "errors": [],
+  "agrees": true
+}
