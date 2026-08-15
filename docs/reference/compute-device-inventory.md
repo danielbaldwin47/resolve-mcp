@@ -74,7 +74,11 @@ concert footage is all 4:2:2 (FX6 XAVC Intra H.264 4:2:2, A7IV H.265
 losing case is long 1080p H.264, rare in a 4K pipeline — a box that works
 mostly on those should set `RESOLVE_MCP_FFMPEG_HWACCEL=off`.
 
-## The torch decision: beats and applause stay on the CPU
+## The torch decision: beats and applause stay on the CPU (until #245)
+
+**Superseded in intent, 2026-08-15:** the director called the flip — #245
+moves both models to CUDA torch and re-measures the corpus against a stated
+tolerance. Until it lands, what follows is still the live state.
 
 The analysis extra pins the PyPI torch wheel, which on Windows is the CPU
 build (`pyproject.toml`), and beat_this is pinned to the commit the corpus
