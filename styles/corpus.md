@@ -57,26 +57,62 @@ a full-timeline export or the director rather than getting measured against a
 guess. Its 19 shots are the smallest sample in the corpus; publishing them
 against the wrong zero would cost more than leaving them out.
 
-## Every measurement below was made on the CPU torch build
+## Every measurement below was confirmed on the CUDA torch build
 
-**Open, 2026-08-15 (#245).** The beat grid and the applause curve now infer on
+**Settled 2026-08-15 (#245).** The beat grid and the applause curve now infer on
 CUDA — the analysis extra sources torch from the cu130 wheel index on Windows,
 where it used to get PyPI's CPU build. Every `[measured — …]` row in this file
-predates that flip and was computed on the CPU one.
+was computed on the CPU build, so each one was re-computed on the CUDA build and
+diffed before being left standing. **Every claim in this file survives, and one
+number moved** — Zinc's refused-beat count, which is not a claim about anything
+(see below).
 
-The re-computation is **pending**: per corpus project, beat grid and applause
-curve are recomputed on the CUDA build and diffed against the stored CPU
-results. A beat grid survives if its max delta is under one frame at the
-timeline's fps; an applause curve survives if no span appears, disappears or
-moves a boundary by more than a frame. Rows that survive get a line saying they
-were confirmed on the CUDA build; rows that do not are re-derived, and the
-profile claims resting on them are re-tagged per
-`docs/agents/style-layer.md`. The tolerance and the reasoning are recorded in
+The diff ran off the cached artifacts rather than off Resolve: the stored
+`*-beats.json` carry per-beat times and the stored `*.correlate.json` carry every
+cut's timeline position, so the cut list is byte-identical to the one the
+published numbers came from and the grid underneath it is the only thing that
+changed. All nine stored grids were recomputed from the same master audio the
+originals were measured from — not the staged copies, which hash differently.
+
+**The beat grid.** Five of the nine files come back bit-identical or inside
+20 ms; the other four disagree at exactly one beat each. Across the ~45,300
+beats in those four, the total disagreement is three insertions, three deletions
+and three 20 ms nudges — **median delta 0.000 s on every file**, and no beat
+anywhere moved by as much as a frame. The insertions and deletions sit where beat_this was already
+marginal, and `Unisphere` and its independently-rendered copy `scullers-mix-pcm24`
+produce the *same* insertion and the *same* deletion, which is how we know this is
+the model's own edge behaviour and not GPU nondeterminism.
+
+**The applause curve.** All nine stored `tunes` variants reproduce on CUDA: span
+counts identical (21, 15, 6, 1, 0) and total span seconds identical **to the
+millisecond** (146.407, 56.158, 22.395, 3.839). No span appeared, disappeared, or
+moved a boundary at all. Because the curve itself is never persisted, the raw
+delta the tolerance asked for was measured by running PANNs on both devices over
+the same audio: across 1,578,763 frames, **max |Δp| = 5.8 × 10⁻⁴**, median below
+5 × 10⁻⁸, and **not one frame** differs by more than 10⁻³. The CPU arm reproduces
+the stored peak probabilities exactly at four decimals (0.2977, 0.4397, 0.6528),
+which is what licenses reading the CPU-to-CUDA gap as the real signal.
+
+**What that did to the published numbers: nothing.** Every grid-dependent number
+in this file was re-derived against the CUDA grid, over the stored cut lists, and
+compared against the same derivation over the stored CPU grid — same code both
+sides, so the device is the only variable. On all six measured timelines the
+`beat_offsets`, `bars`, `gated` and `grid_meter` readings are **identical**. The
+only key that moves anywhere is `grid_refused`, the internal tally of beats the
+#112 gate threw out: Zinc 11,130 → 11,131 on bar position and 3,176 → 3,177 on
+tempo, Concert Full Cut 267 → 266 on bar position, Monkfish 1,486 → 1,483 on
+tempo. Those counters say how many beats were refused, not anything about a cut,
+and all three grids they belong to were already refused whole or gated at the
+same rate.
+
+The anchor is the case that looked dangerous and was not. Zinc gained a beat at
+4046.52 s, one downbeat flag moved (381.06 → 381.16) and two more beats gained
+downbeat status — and its grid reports `meter: 1`
+and is refused whole, so it contributes nothing to any beat claim and could not
+have moved one. Its bar histogram was never evidence, as this file already says.
+
+The tolerance and the reasoning are recorded in
 `docs/reference/compute-device-inventory.md`, "The torch decision".
-
-Until that diff is recorded on #245, read every tag below as measured on the
-CPU build — the numbers are what they always were, but nothing has yet
-confirmed the GPU produces them.
 
 ## Excluded, and why
 
@@ -364,7 +400,8 @@ this pass, as designed — the gate never touches them.
 **Half the corpus never described a bar position in the first place.** The
 offline prediction held exactly: three of the six grids report `meter: 1` and
 are refused whole. Every beat in all three is refused on bar position — 11,130
-on the anchor, 2,348 on Sunshine, 1,261 on Mercies — and their bar histograms
+on the anchor (11,131 on the CUDA build, #245: one more beat, refused like the
+rest), 2,348 on Sunshine, 1,261 on Mercies — and their bar histograms
 were therefore never evidence, whatever the entries above appeared to say. The
 anchor is the expensive case: 366 shots, the strongest exemplar in the corpus,
 and it contributes nothing to any beat claim. It still contributes its 360
