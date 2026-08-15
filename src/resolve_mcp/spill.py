@@ -5,11 +5,12 @@ is far past that. Rather than truncate silently, a listing over its cap comes ba
 *and* says where the whole thing landed — the locked hybrid inline/disk return shape.
 
 ``capped`` is the one place that shape is decided. Every listing that can outgrow a reply
-goes through it, so ``truncated`` and ``spilled_to`` mean the same thing in every reply and
-the file on disk is the same reply carrying all of it. The hand-written copies drifted
-before this existed: the media listing's spilled file was missing the truncation keys every
-other spilled file carried, and the job listing capped with a vocabulary of its own and
-never spilled at all (#224).
+goes through it, so across the listings ``truncated`` and ``spilled_to`` mean one thing and
+the file on disk is the same reply carrying all of it. (A ``truncated`` outside the listings
+is a different word: ``resolve/scripting`` clips a long *string* under the same name.) The
+hand-written copies drifted before this existed: the media listing's spilled file was
+missing the truncation keys every other spilled file carried, and the job listing capped
+with a vocabulary of its own and never spilled at all (#224).
 """
 
 from __future__ import annotations
@@ -47,11 +48,12 @@ def capped(
     """
     cap = max(int(limit), 0)
     against = len(whole) if counted is None else counted
+    all_of_it = untruncated({**reply, key: whole})
     if against <= cap:
-        return untruncated({**reply, key: whole})
+        return all_of_it
 
     shown = (share or _head)(whole, cap)
-    spilled = spill(label, untruncated({**reply, key: whole}), config or get_config(), fallback)
+    spilled = spill(label, all_of_it, config or get_config(), fallback)
     return {**reply, key: shown, "truncated": True, "spilled_to": spilled}
 
 

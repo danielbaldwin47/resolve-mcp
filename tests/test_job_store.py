@@ -122,7 +122,7 @@ def test_jobs_come_back_newest_first_and_filter_by_state() -> None:
 
 
 def test_a_state_that_is_not_one_is_refused_by_the_listing_itself() -> None:
-    """What the states are is the store's fact, so the refusal is the store's too (#224)."""
+    """What the states are is the job layer's fact, so the refusal is the listing's (#224)."""
     with pytest.raises(InvalidRequestError) as raised:
         store.load_all(state="finished")
 

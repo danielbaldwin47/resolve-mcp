@@ -1,7 +1,7 @@
 """One definition of a truncated reply — the cap, the two flags, and the file on disk.
 
 Every listing that can outgrow a reply goes through ``capped``. These tests are about the
-helper itself rather than any one listing: the five call sites each assert their own
+helper itself rather than any one listing: every call site asserts its own
 vocabulary, but what a truncated reply *means* is decided here and nowhere else (#224).
 """
 

@@ -441,8 +441,8 @@ def load_all(state: str | None = None, config: Config | None = None) -> list[Job
     """Every job this cache directory knows about, newest first.
 
     A state that is not one is refused here rather than at the tool: what the states are is
-    this module's fact, and a caller asking for a filter no record can ever match wants to
-    hear so (#224).
+    the job layer's own fact (``lifecycle.STATES``), and a caller asking for a filter no
+    record can ever match wants to hear so (#224).
     """
     if state is not None and state not in STATES:
         raise InvalidRequestError(
