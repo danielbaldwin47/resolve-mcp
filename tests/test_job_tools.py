@@ -52,7 +52,9 @@ def test_listing_shows_the_newest_job_first(attach: Attach) -> None:
     reply = list_jobs()
 
     assert [one["job_id"] for one in reply["jobs"]] == [second["job_id"], first["job_id"]]
-    assert reply["total"] == 2
+    assert reply["count"] == 2
+    assert reply["truncated"] is False
+    assert reply["spilled_to"] is None
 
 
 def test_listing_filters_by_state_and_rejects_a_state_that_is_not_one(attach: Attach) -> None:
@@ -69,17 +71,25 @@ def test_listing_filters_by_state_and_rejects_a_state_that_is_not_one(attach: At
     assert "running" in refused["error"]["fix"]
 
 
-def test_the_listing_caps_at_the_limit_but_still_says_how_many_there_are(
+def test_the_listing_caps_at_the_limit_and_spills_the_rest_like_every_other_listing(
     attach: Attach,
 ) -> None:
+    """count is how many there are, not how many came back — the vocabulary #224 unified."""
     attach(None)
     for _ in range(3):
         wait_for(start_job("extract_audio", {}, _produces({}))["job_id"])
 
     reply = list_jobs(limit=2)
 
-    assert reply["count"] == 2
-    assert reply["total"] == 3
+    assert len(reply["jobs"]) == 2
+    assert reply["count"] == 3
+    assert reply["truncated"] is True
+    spilled = Path(reply["spilled_to"])
+    assert spilled.exists()
+    written = json.loads(spilled.read_text(encoding="utf-8"))
+    assert len(written["jobs"]) == 3
+    assert written["truncated"] is False
+    assert written["spilled_to"] is None
 
 
 def test_a_job_the_previous_server_left_running_comes_back_interrupted(attach: Attach) -> None:

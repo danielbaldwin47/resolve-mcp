@@ -15,7 +15,7 @@ import pytest
 
 from resolve_mcp import lease
 from resolve_mcp.config import get_config
-from resolve_mcp.errors import JobNotFoundError
+from resolve_mcp.errors import InvalidRequestError, JobNotFoundError
 from resolve_mcp.jobs import store
 
 SAVES = 300
@@ -92,6 +92,19 @@ def test_jobs_come_back_newest_first_and_filter_by_state() -> None:
     assert [one.job_id for one in listed] == [second.job_id, first.job_id]
     assert [one.job_id for one in store.load_all(state="completed")] == [first.job_id]
     assert [one.job_id for one in store.load_all(state="running")] == [second.job_id]
+
+
+def test_a_state_that_is_not_one_is_refused_by_the_listing_itself() -> None:
+    """What the states are is the job layer's fact, so the refusal is the listing's (#224)."""
+    with pytest.raises(InvalidRequestError) as raised:
+        store.load_all(state="finished")
+
+    assert raised.value.cause == "'finished' is not a job state."
+    assert "running" in raised.value.fix
+    assert raised.value.detail == {
+        "requested": "finished",
+        "states": ["running", "completed", "failed"],
+    }
 
 
 def test_two_jobs_started_in_the_same_clock_tick_still_list_in_order() -> None:

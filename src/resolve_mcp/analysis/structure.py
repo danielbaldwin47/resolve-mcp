@@ -34,7 +34,6 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from ..audio import separator
 from ..audio import stems as stems_module
 from ..config import Config, get_config
 from ..errors import AnalysisDependencyError, InvalidRequestError
@@ -51,6 +50,16 @@ log = get_logger("analysis")
 KIND = "analyze_structure"
 TUNES = "tunes"
 SOLOS = "solos"
+
+_NO_STEMS_FIX = (
+    "Pass the directory a separate_stems job returned — the one holding the "
+    f"{stems_module.MIX_PASS} pass — and check the job completed."
+)
+"""What a solo job says when the stems are not where it was told to look.
+
+One sentence for both refusals — a directory that is not there and a directory with nothing
+in it — because the thing to do about either is the same, and because the shared discovery
+raises the first one on this module's behalf."""
 
 APPLAUSE_SHAPE = (
     "threshold",
@@ -229,11 +238,11 @@ def _sane_numbers(
 def _stems(stems: str | Path | None, solos: bool) -> dict[str, Path]:
     """The separated stems to read, from the directory a ``separate_stems`` job returned.
 
-    That job writes each pass into its own directory, so the path it hands back holds the
-    four stems one level down; both that path and the pass directory itself are accepted,
-    because an agent reading the job record has one and an agent looking at the disk has
-    the other. The opt-in third pass sits beside the first, and comes along when it is
-    there — see ``_wind``.
+    Where they are is ``halves.collected``'s answer and only its answer (#220); what is left
+    here is what a solo job says when they are not there, which is the same relationship the
+    bar and phrase jobs have to ``halves.stem_named``. Every pass that function finds — the
+    four melodic stems, and the opt-in third pass beside them — arrives here without this
+    module reaching for any of them.
     """
     if not solos:
         return {}
@@ -247,47 +256,14 @@ def _stems(stems: str | Path | None, solos: bool) -> dict[str, Path]:
             detail={SOLOS: solos, "stems": None},
         )
     directory = Path(stems)
-    inner = directory / stems_module.MIX_PASS
-    found = separator.collect(inner if inner.is_dir() else directory)
+    found = halves.collected(directory, fix=_NO_STEMS_FIX)
     if not found:
         raise InvalidRequestError(
             cause=f"There are no separated stems in {directory}.",
-            fix=(
-                "Pass the directory a separate_stems job returned — the one holding the "
-                f"{stems_module.MIX_PASS} pass — and check the job completed."
-            ),
+            fix=_NO_STEMS_FIX,
             detail={"requested": str(directory)},
         )
-    found.update(_wind(directory))
     return found
-
-
-def _wind(directory: Path) -> dict[str, Path]:
-    """The third pass's two halves under their envelope names — nothing, if it never ran.
-
-    That pass writes a sibling of the mix pass (#153), so it is reached from whichever of
-    the two accepted directories was given: the job's own directory holds it directly, and
-    the mix pass directory holds it one level up. Anywhere else there is no pass layout to
-    read, and a directory of loose stems gets nothing.
-
-    Both halves or neither, and only the two names the envelope knows. One half alone is a
-    partial pass, and it would join a voice set that still holds ``other`` — the residual
-    measured twice over, which is the one way this change reads worse than no change.
-    """
-    if (directory / stems_module.MIX_PASS).is_dir():
-        outer = directory / stems_module.OTHER_PASS
-    elif directory.name == stems_module.MIX_PASS:
-        outer = directory.parent / stems_module.OTHER_PASS
-    else:
-        return {}
-    if not outer.is_dir():
-        return {}
-    halved = {
-        stems_module.WIND_KEYS[name]: path
-        for name, path in separator.collect(outer).items()
-        if name in stems_module.WIND_KEYS
-    }
-    return halved if len(halved) == len(stems_module.WIND_KEYS) else {}
 
 
 def _stem_identity(found: Mapping[str, Path], config: Config) -> dict[str, Any]:

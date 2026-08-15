@@ -40,12 +40,12 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from ..config import Config, get_config
-from ..errors import JobInterruptedError, JobNotFoundError
+from ..errors import InvalidRequestError, JobInterruptedError, JobNotFoundError
 from ..lease import SESSION
 from ..logging_config import get_logger
 from ..naming import slug
 from ..sharing import sharing
-from .lifecycle import COMPLETED, FAILED, RUNNING, Outcome, verdict
+from .lifecycle import COMPLETED, FAILED, RUNNING, STATES, Outcome, verdict
 
 log = get_logger("jobs")
 
@@ -434,7 +434,18 @@ def load(job_id: str, config: Config | None = None) -> JobRecord:
 
 
 def load_all(state: str | None = None, config: Config | None = None) -> list[JobRecord]:
-    """Every job this cache directory knows about, newest first."""
+    """Every job this cache directory knows about, newest first.
+
+    A state that is not one is refused here rather than at the tool: what the states are is
+    the job layer's own fact (``lifecycle.STATES``), and a caller asking for a filter no
+    record can ever match wants to hear so (#224).
+    """
+    if state is not None and state not in STATES:
+        raise InvalidRequestError(
+            cause=f"{state!r} is not a job state.",
+            fix=f"Use one of {', '.join(STATES)}, or leave state out for all of them.",
+            detail={"requested": state, "states": list(STATES)},
+        )
     config = config or get_config()
     records = [_read(path) for path in sorted(config.job_dir.glob("*.json"))]
     found = [_recovered(one, config, sweep=False) for one in records if one is not None]
