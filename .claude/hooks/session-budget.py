@@ -9,7 +9,8 @@ already carries the line, the second stop after a block (`stop_hook_active`),
 an unreadable transcript — passes silently.
 
   turns  distinct assistant messages (one API call each; the transcript writes
-         one row per content block, so rows over-count)
+         one row per content block, so rows over-count). Resumed sessions share
+         a transcript, so the count accumulates across resumes.
   peak   max context on any assistant call: input + cache-creation + cache-read
          tokens, in k. Sidechain (subagent) rows are excluded — they are the
          subagent's context, not the session's.
@@ -17,6 +18,12 @@ an unreadable transcript — passes silently.
 Measured motivation (2026-08 workflow audit): only 49% of sessions peaked at
 or under 120k; peaks track turn count and nothing recorded either where the
 human reads the outcome.
+
+The closing markers are the background-job report convention (`result:` /
+`failed:` / `needs input:` at line start). A message that merely quotes them
+gets one spurious block; `stop_hook_active` bounds that to one extra turn.
+The block asks for the `result:` line to be repeated with the budget line
+because the job list reads the final message as the report.
 """
 import json
 import re
@@ -28,7 +35,7 @@ CLOSING_MARKER = re.compile(r"^(?:result|failed|needs input):", re.MULTILINE)
 
 def read_transcript(path):
     """Yield the parsed rows of a JSONL transcript, skipping malformed lines."""
-    with open(path, encoding="utf-8") as fh:
+    with open(path, encoding="utf-8", errors="replace") as fh:
         for line in fh:
             try:
                 yield json.loads(line)
@@ -39,6 +46,7 @@ def read_transcript(path):
 def measure(rows):
     """Return (turns, peak_tokens, last_assistant_text) for the main session."""
     ids = set()
+    idless = 0
     peak = 0
     last_id = None
     last_text = []
@@ -50,8 +58,11 @@ def measure(rows):
         message = row.get("message")
         if not isinstance(message, dict) or not message:
             continue
-        # A message with no id is a broken row; still an assistant turn.
-        msg_id = message.get("id") or id(row)
+        # A message with no id is a broken row; count it as its own turn.
+        msg_id = message.get("id")
+        if not msg_id:
+            idless += 1
+            msg_id = ("idless", idless)
         ids.add(msg_id)
         usage = message.get("usage") or {}
         if isinstance(usage, dict):
@@ -99,7 +110,7 @@ def main():
         return
     line = f"turns={turns} peak={round(peak / 1000)}k"
     reason = (
-        "Session budget (CLAUDE.md): your closing report is missing its cost "
+        "Session budget (session-budget hook): your closing report is missing its cost "
         f"line. Reply with exactly two lines and stop: your report's `result:` "
         "/ `failed:` / `needs input:` line repeated verbatim, then "
         f"`{line}`."

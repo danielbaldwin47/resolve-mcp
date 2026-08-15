@@ -16,16 +16,21 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 HOOK = Path(__file__).resolve().parents[1] / ".claude" / "hooks" / "session-budget.py"
 
 BUDGET_LINE = re.compile(r"turns=(\d+) peak=(\d+)k")
 
 
-def run_hook(payload: dict[str, object]) -> subprocess.CompletedProcess[str]:
-    """Invoke the hook exactly as the harness does: JSON on stdin, JSON out."""
+def run_hook_raw(stdin: str) -> subprocess.CompletedProcess[str]:
+    """Invoke the hook exactly as the harness does: stdin in, JSON out.
+
+    ``SYSTEMROOT`` is what a bare Python needs to start on Windows.
+    """
     return subprocess.run(
         [sys.executable, str(HOOK)],
-        input=json.dumps(payload),
+        input=stdin,
         capture_output=True,
         text=True,
         env={
@@ -33,6 +38,10 @@ def run_hook(payload: dict[str, object]) -> subprocess.CompletedProcess[str]:
             "PATH": "",
         },
     )
+
+
+def run_hook(payload: dict[str, object]) -> subprocess.CompletedProcess[str]:
+    return run_hook_raw(json.dumps(payload))
 
 
 def stop_event(transcript: Path, **extra: object) -> dict[str, object]:
@@ -156,12 +165,12 @@ def test_allows_a_stop_that_is_not_a_closing_report(tmp_path: Path) -> None:
     assert result.stdout.strip() == ""
 
 
-def test_needs_input_and_failed_count_as_closing_reports(tmp_path: Path) -> None:
-    for marker in ("needs input: auth token", "failed: wrong repo"):
-        rows = fixture_rows()[:-1] + [assistant_row("m3", text(marker), 90_000)]
-        transcript = write_transcript(tmp_path / "t.jsonl", rows)
-        out = json.loads(run_hook(stop_event(transcript)).stdout)
-        assert out["decision"] == "block", marker
+@pytest.mark.parametrize("marker", ["needs input: auth token", "failed: wrong repo"])
+def test_needs_input_and_failed_count_as_closing_reports(tmp_path: Path, marker: str) -> None:
+    rows = fixture_rows()[:-1] + [assistant_row("m3", text(marker), 90_000)]
+    transcript = write_transcript(tmp_path / "t.jsonl", rows)
+    out = json.loads(run_hook(stop_event(transcript)).stdout)
+    assert out["decision"] == "block"
 
 
 def test_tolerates_missing_or_malformed_transcript(tmp_path: Path) -> None:
@@ -183,11 +192,5 @@ def test_ignores_other_events_and_bad_stdin(tmp_path: Path) -> None:
     result = run_hook(stop_event(transcript, hook_event_name="SubagentStop"))
     assert result.returncode == 0 and result.stdout.strip() == ""
 
-    garbage = subprocess.run(
-        [sys.executable, str(HOOK)],
-        input="{not json",
-        capture_output=True,
-        text=True,
-        env={"SYSTEMROOT": os.environ.get("SYSTEMROOT", "C:\\Windows"), "PATH": ""},
-    )
+    garbage = run_hook_raw("{not json")
     assert garbage.returncode == 0 and garbage.stdout.strip() == ""
