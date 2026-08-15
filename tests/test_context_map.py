@@ -59,7 +59,7 @@ def src_names() -> set[str]:
 
 
 @pytest.fixture(scope="module")
-def test_names() -> set[str]:
+def tracked_tests() -> set[str]:
     return {n for n in map(map_name, tracked("tests")) if n}
 
 
@@ -69,9 +69,9 @@ def table_rows(context_text: str) -> list[list[str]]:
 
 
 def test_map_covers_every_module_and_test_file(
-    context_text: str, src_names: set[str], test_names: set[str]
+    context_text: str, src_names: set[str], tracked_tests: set[str]
 ) -> None:
-    missing = sorted(n for n in src_names | test_names if f"`{n}`" not in context_text)
+    missing = sorted(n for n in src_names | tracked_tests if f"`{n}`" not in context_text)
     assert not missing, f"CONTEXT.md is missing: {missing}"
 
 
@@ -89,10 +89,10 @@ def test_table_is_exactly_the_tracked_modules_once_each(
 
 
 def test_map_names_no_test_file_that_does_not_exist(
-    context_text: str, test_names: set[str]
+    context_text: str, tracked_tests: set[str]
 ) -> None:
     named = set(re.findall(r"`((?:test_\w+|fakes/\w+))`", context_text))
-    stale = sorted(n for n in named if n not in test_names)
+    stale = sorted(n for n in named if n not in tracked_tests)
     assert not stale, f"CONTEXT.md names test files that are not tracked: {stale}"
 
 
@@ -114,10 +114,10 @@ def test_map_links_every_area_doc(context_text: str) -> None:
 
 
 def test_every_map_row_names_a_test_and_a_seam(
-    context_text: str, test_names: set[str]
+    context_text: str, tracked_tests: set[str]
 ) -> None:
     for cells in table_rows(context_text):
         assert len(cells) == 4, cells
         assert re.fullmatch(r"`test_\w+`", cells[2]), cells
-        assert cells[2].strip("`") in test_names, cells
+        assert cells[2].strip("`") in tracked_tests, cells
         assert cells[3] in {"fake", "pure", "live", "sub"}, cells
