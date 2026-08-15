@@ -21,6 +21,7 @@ import pytest
 
 from resolve_mcp.analysis import beats as beats_module
 from resolve_mcp.analysis import correlate, energy, records
+from resolve_mcp.analysis import rhythm as rhythm_module
 from resolve_mcp.analysis.beats import BeatGrid
 from resolve_mcp.errors import InvalidRequestError
 from resolve_mcp.jobs.runner import wait_for
@@ -2147,9 +2148,9 @@ def test_the_rhythm_reading_carries_the_rule_it_applied(attach: Attach, tmp_path
 
     rhythm = _rhythm(_measured(tmp_path))
 
-    assert rhythm["heuristic"] == correlate.HEURISTIC
+    assert rhythm["heuristic"] == rhythm_module.HEURISTIC
     assert "warning" in rhythm["heuristic"]
-    assert str(correlate.ALTERNATION_FLOOR) in rhythm["heuristic"]
+    assert str(rhythm_module.ALTERNATION_FLOOR) in rhythm["heuristic"]
     assert set(rhythm) == {
         "shots",
         "lengths",
@@ -2340,7 +2341,7 @@ def test_a_cut_that_changes_gear_is_not_one_speed_though_its_lengths_barely_vary
     rhythm, gears = _rhythm(result), _gears(result)
 
     assert gears["rate_ratio"] == 1.5  # thirty cuts a minute against twenty
-    assert rhythm["uniformity"]["cv"] < correlate.GEAR_CV_FLOOR
+    assert rhythm["uniformity"]["cv"] < rhythm_module.GEAR_CV_FLOOR
     assert gears["one_speed"] is False
 
 
@@ -2361,7 +2362,7 @@ def test_a_cut_whose_lengths_vary_is_not_one_speed_though_its_rate_holds(
     rhythm, gears = _rhythm(result), _gears(result)
 
     assert gears["rate_ratio"] == 1.0
-    assert rhythm["uniformity"]["cv"] > correlate.GEAR_CV_FLOOR
+    assert rhythm["uniformity"]["cv"] > rhythm_module.GEAR_CV_FLOOR
     assert gears["one_speed"] is False
 
 
@@ -2387,10 +2388,10 @@ def test_the_gearing_reading_carries_the_rule_it_applied(attach: Attach, tmp_pat
 
     gears = _gears(_measured(tmp_path))
 
-    assert gears["heuristic"] == correlate.GEAR_HEURISTIC
+    assert gears["heuristic"] == rhythm_module.GEAR_HEURISTIC
     assert "warning" in gears["heuristic"]
-    assert str(correlate.RATE_RATIO_FLOOR) in gears["heuristic"]
-    assert str(correlate.GEAR_CV_FLOOR) in gears["heuristic"]
+    assert str(rhythm_module.RATE_RATIO_FLOOR) in gears["heuristic"]
+    assert str(rhythm_module.GEAR_CV_FLOOR) in gears["heuristic"]
     assert set(gears) == {
         "window_seconds",
         "terciles",
@@ -2668,12 +2669,12 @@ def test_the_quiet_floor_reading_carries_the_rule_it_applied(
 
     floor = _floor(_measured(tmp_path, loudness=_levels(_steps(*BLOCKS))))
 
-    assert floor["heuristic"] == correlate.FLOOR_HEURISTIC
+    assert floor["heuristic"] == rhythm_module.FLOOR_HEURISTIC
     assert "warning" in floor["heuristic"]
-    assert str(correlate.FLOOR_CV_FLOOR) in floor["heuristic"]
-    assert str(correlate.ORPHAN_FRACTION) in floor["heuristic"]
-    assert str(correlate.QUIET_FLOOR_SECONDS) in floor["heuristic"]
-    assert floor["smoothing_windows"] == correlate.QUIET_SMOOTHING_WINDOWS
+    assert str(rhythm_module.FLOOR_CV_FLOOR) in floor["heuristic"]
+    assert str(rhythm_module.ORPHAN_FRACTION) in floor["heuristic"]
+    assert str(rhythm_module.QUIET_FLOOR_SECONDS) in floor["heuristic"]
+    assert floor["smoothing_windows"] == rhythm_module.QUIET_SMOOTHING_WINDOWS
     assert set(floor) == {"smoothing_windows", "runs", "reads_locked", "heuristic"}
     assert set(floor["runs"][0]) == {
         "from",

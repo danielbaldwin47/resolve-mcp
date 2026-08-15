@@ -15,6 +15,13 @@ Markdown document Claude writes, never server code (#21). The same goes for the 
 angle sidecar is the agent's own document and no server path touches it (#45), so the labels
 arrive here as a mapping the caller already lifted out of it.
 
+*Composed, not computed here.* The readings a caller quotes are owned by modules of their own
+and this file joins them onto the shots: `subject.py` for what a shot is framed on (#181),
+`rhythm.py` for the `shot_rhythm` block and everything under it — `gears`, `quiet_floor`,
+`reads_metronomic` (#215) — and `barmap.py` for a cut's place in the form (#180). What is left
+here is the join: reading the timeline, putting every shot on the music's clock, and writing
+the file.
+
 *Measurement, not analysis.* The beat grid, the tunes and the solo changes are files another
 job already wrote; this joins them to the shots. The one thing it computes is the transient
 list, because onsets are the fourth-wall risk (#21: transients, not the beat grid) and no
@@ -33,8 +40,7 @@ from __future__ import annotations
 
 import json
 import statistics
-from bisect import bisect_left, bisect_right
-from collections import Counter
+from bisect import bisect_left
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -63,10 +69,11 @@ from ..resolve.timeline import (
     start_frame,
     track_enabled,
 )
-from ..timing import SECONDS_PRECISION, dual_time, to_frames
+from ..timing import dual_time, to_frames
 from ..video import supers
-from . import decode, energy, records, subject
+from . import barmap, decode, energy, records, rhythm, subject
 from .beats import GridTrust, nearest, spacing, trust
+from .stats import histogram, measured, offsets, rounded
 
 if TYPE_CHECKING:  # pragma: no cover - numpy and scipy load with this module, in the worker
     from ..video import picture
@@ -96,143 +103,6 @@ measurement, and refusing it would be trading one wrong answer for another.
 
 BLACK = "black"
 """Where the stretches nothing covers are counted — a known absence, not a missing label."""
-
-RHYTHM_BINS: tuple[tuple[str, float], ...] = (
-    ("<2", 2.0),
-    ("2-4", 4.0),
-    ("4-8", 8.0),
-    ("8-15", 15.0),
-    ("15-30", 30.0),
-    (">30", float("inf")),
-)
-"""The corpus shot-length bins, as label and upper edge, in seconds.
-
-Half-open on the upper edge: a shot of exactly 4 s counts in ``4-8``, and the last bin takes
-everything from 30 s up. The labels are the ones the corpus and the style profiles already
-speak, so a histogram from this report drops straight into a comparison against them; the
-edges are that vocabulary's, not a threshold this file tuned.
-"""
-
-ALTERNATION_MIN = 2
-"""How many cuts an A/B run needs before it is alternation rather than a cut.
-
-Two shots that differ are just a cut — the pattern only exists once the cut *returns*, so a
-run is counted from three shots (A B A) up. Without this floor every two-shot timeline reads
-as perfectly alternating, which is arithmetic rather than a fact about the edit.
-"""
-
-RAMP_MIN = 4
-"""How many cuts of one direction make a ramp rather than a coincidence.
-
-Three shots that happen to shorten are two cuts, and two cuts in a row go one way in any cut
-list long enough — the shape only exists once it keeps going. Counted from five shots (four
-cuts) up, which is where a run stops being what randomness hands you.
-"""
-
-ALTERNATION_FLOOR = 0.8
-ONE_BIN_FLOOR = 0.6
-CV_FLOOR = 0.35
-RAMP_FLOOR = 0.6
-"""The four numbers ``reads_metronomic`` is drawn at — see ``HEURISTIC``."""
-
-HEURISTIC = (
-    "reads_metronomic is true when the longest strict A/B alternation run covers more than "
-    f"{ALTERNATION_FLOOR} of the cuts and the lengths are mechanical with it: either one bin "
-    f"holds more than {ONE_BIN_FLOOR} of the shots, or the coefficient of variation of shot "
-    f"lengths is under {CV_FLOOR}, or the longest run of shots that only shorten or only "
-    f"lengthen covers more than {RAMP_FLOOR} of the cuts. It is a warning to look at, not a "
-    "verdict: a passage that genuinely wants a two-camera ping-pong scores the same as a cut "
-    "nobody varied, and only the director can tell them apart."
-)
-"""The heuristic in words, carried in the report so nobody has to read this file to check it."""
-
-GEAR_WINDOW_SECONDS = 1.0
-"""How coarse the loudness curve the gearing is read against is, in seconds per window.
-
-A second is a bar at slow rock tempo and half of one at anything faster: coarse enough that
-a snare hit does not move a window into the loud third, fine enough that the quiet verse and
-the last chorus land in different ones. Nothing here is a loudness measurement anybody
-publishes — the only question asked of it is which windows are louder than which.
-"""
-
-QUIET, MID, LOUD = "quiet", "mid", "loud"
-"""The three gears, named where the report names them."""
-
-SUB_TWO_SECONDS = RHYTHM_BINS[0][1]
-"""What counts as a short shot: the corpus's own ``<2`` edge, not a second threshold."""
-
-RATE_RATIO_FLOOR = 1.3
-GEAR_CV_FLOOR = 0.65
-"""The two numbers ``one_speed`` is drawn at — see ``GEAR_HEURISTIC``."""
-
-GEAR_HEURISTIC = (
-    "one_speed is true when the loud third of the music is cut less than "
-    f"{RATE_RATIO_FLOOR}x as fast as the quiet third (rate_ratio) and the coefficient of "
-    f"variation of shot lengths is under {GEAR_CV_FLOOR}. Terciles are thirds of the span by "
-    "level, not by time: the 1 s RMS windows inside the cut are ranked and split three ways, "
-    "and each shot is counted in the window its first frame lands in — a shot the curve does "
-    "not reach is counted in outside_shots and in no tercile. It is a warning to look "
-    "at, not a verdict — a ballad cut at one speed throughout is a real edit, and a passage "
-    "whose loudness never moves has no gears to change. What it catches is the build that cut "
-    "the guitar solo at the pace it cut the intro."
-)
-"""The gearing heuristic in words, carried in the report beside the numbers it was drawn from."""
-
-QUIET_SMOOTHING_WINDOWS = 15
-"""How many gear windows the level curve is smoothed over before quiet passages are found.
-
-The terciles above label one window at a time, and at that resolution a live room's level
-crosses the quiet edge and back inside a single bar — a snare hit, a shout, a chord. Labels
-that flicker are exactly what a *rate* wants, since the rate is over the music each label
-holds however scattered it is, but a passage is not scattered: it is a stretch you sit in.
-A centred moving median over fifteen windows is the coarsest reading that still separates
-this corpus's sections, which run from thirty seconds to a minute and a half.
-"""
-
-QUIET_FLOOR_SECONDS = 20.0
-"""How long a quiet stretch must run before its shot lengths are read as a passage.
-
-Shorter than this is a pocket, and a pocket holds two or three shots — too few for a spread
-to mean anything, and short enough that holding through it is a gesture rather than a stall.
-"""
-
-ORPHAN_FRACTION = 0.5
-"""How much shorter than the passage's median a shot must be to count as an orphan.
-
-Half is the line because it puts a flash on the other side of the passage's own scale rather
-than of a fixed threshold: in a floor of ten-second holds a four-second shot is a shorter
-shot, and a two-second one is a different device.
-"""
-
-FLOOR_CV_FLOOR = 0.65
-"""The number ``reads_locked`` is drawn at — see ``FLOOR_HEURISTIC``.
-
-The same value ``GEAR_CV_FLOOR`` holds, and written out rather than aliased to it: it is the
-same question asked of a smaller span — are these lengths varied enough to read as cutting —
-but it is not the same knob, and retuning what a whole cut is judged at should not silently
-retune what a passage inside one is. Measured on the one full song in the corpus, the
-director's own quiet passage runs a spread of 0.78 across 157 s and ours 0.56; the floor sits
-between them, on a gap of one song, which is all it is worth.
-"""
-
-FLOOR_HEURISTIC = (
-    "quiet_floor reads the passages a build holds the slow gear through: the 1 s levels are "
-    f"smoothed over {QUIET_SMOOTHING_WINDOWS} windows, the quiet third of the smoothed curve "
-    f"is taken, and its contiguous stretches of at least {QUIET_FLOOR_SECONDS} s are the "
-    "passages. reads_locked is true for a passage whose spread survives neither its orphans "
-    f"nor the floor: cv_less_orphans under {FLOOR_CV_FLOOR}. An orphan is a shot under "
-    f"{ORPHAN_FRACTION}x the passage median with both neighbours inside the passage at or "
-    "above it — a lone flash, as against a burst, which is short shots side by side and stays "
-    "in the spread. The reading exists because cv alone is carried by whatever is most "
-    "extreme: five long holds and one flash score a spread the holds do not have. A passage "
-    "no shot starts inside is held through by one, which reads locked on its own — "
-    "held_through_seconds is that shot's length, and there is no cut in the passage to take a "
-    "spread over. No passage "
-    "long enough to read is an empty runs list, which is not the same as passing. It is a "
-    "warning to look at, not a verdict — a passage held on a picture that develops is a real "
-    "edit, and this measures lengths, not what is inside the frame."
-)
-"""The floor heuristic in words, carried in the report beside the numbers it was drawn from."""
 
 READING = 11
 """What this measurement *is*; bumped whenever a rerun over unchanged inputs would differ.
@@ -1042,7 +912,7 @@ def measured_levels(path: Path) -> tuple[tuple[float, float], ...]:
     """
     return tuple(
         (float(point.seconds), float(point.rms_dbfs))
-        for point in energy.rms_curve(decode.read(path), GEAR_WINDOW_SECONDS)
+        for point in energy.rms_curve(decode.read(path), rhythm.GEAR_WINDOW_SECONDS)
     )
 
 
@@ -1078,7 +948,7 @@ def measure(
     times = [float(row["t"]) for row in music.beats]
     tune_times = [float(row["t"]) for row in (music.tunes or ())]
     solo_times = [float(row["t"]) for row in (music.solos or ())]
-    bar_times = [float(row["t"]) for row in (music.bars or ())]
+    bar_times = barmap.times(music.bars)
     roles = music.roles or {}
     subjects = music.subjects or {}
     voices = subject.voices(music.solos)
@@ -1102,12 +972,6 @@ def measure(
             and trusted[found]
             and _out_of_reach(seconds, times[found], widths[found])
         )
-        # The bar line is read the way the beat is — nearest, with a signed offset — and for
-        # the same reason: a cut twenty milliseconds *before* a downbeat is a cut on the one,
-        # and a rule that assigned it to the bar it technically falls inside would file the
-        # commonest placement in this material under the wrong bar every time.
-        line = None if not bar_times else nearest(bar_times, seconds)
-        bar_line = None if line is None else (music.bars or ())[line]
         rows.append(
             {
                 "cut": index,
@@ -1128,14 +992,14 @@ def measure(
                     black=shot.clip is None,
                 ),
                 "opening": _opens(index, shot, shots),
-                "t": _rounded(seconds),
+                "t": rounded(seconds),
                 # Dual time for the two timeline positions, because an outlier the agent
                 # flags is one the director then has to find in Resolve, and a bare frame
                 # number is the one form nobody can scrub to.
                 "in": dual_time(shot.record_in, clock.fps),
                 "out": dual_time(shot.record_out, clock.fps),
-                "seconds": _rounded(shot.duration / clock.fps),
-                "beat_offset": None if beat is None else _rounded(seconds - float(beat["t"])),
+                "seconds": rounded(shot.duration / clock.fps),
+                "beat_offset": None if beat is None else rounded(seconds - float(beat["t"])),
                 "beat": None if beat is None else beat.get("beat"),
                 "bar": None if beat is None else beat.get("bar"),
                 "in_bar": None if beat is None else beat.get("in_bar"),
@@ -1146,12 +1010,9 @@ def measure(
                 "in_grid": found is not None and trusted[found] and not stranded,
                 "stranded": stranded,
                 # From the bar map, when one was named: which bar of the form this cut is on,
-                # where that bar sits in the four-bar group, and how far off the line it is.
-                "map_bar": None if bar_line is None else bar_line.get("bar"),
-                "in_group": None if bar_line is None else bar_line.get("in_group"),
-                "bar_offset": (
-                    None if bar_line is None else _rounded(seconds - float(bar_line["t"]))
-                ),
+                # where that bar sits in the four-bar group, and how far off the line it is
+                # (``barmap``, #180).
+                **barmap.reading(music.bars, bar_times, seconds),
                 "transient_offset": _offset(transients, seconds),
                 "tune": _tune_at(music.tunes, tune_times, seconds),
                 "front": _front_at(music.solos, solo_times, seconds),
@@ -1344,7 +1205,7 @@ def _offset(times: Sequence[float] | None, seconds: float) -> float | None:
     if times is None:
         return None
     found = nearest(times, seconds)
-    return None if found is None else _rounded(seconds - times[found])
+    return None if found is None else rounded(seconds - times[found])
 
 
 def _tune_at(
@@ -1409,7 +1270,9 @@ def _summary(
 
     ``shot_rhythm`` is the one reading here that is about the cut rather than about the music
     — the metronome check a build cannot perform on itself by looking at its offsets, and the
-    gearing check that joins the two.
+    gearing check that joins the two. It is ``rhythm.read``'s, as ``bar_groups`` and
+    ``bar_offsets`` are ``barmap.summary``'s and ``on_soloist`` is ``subject.summary``'s: this
+    function decides which readings the report carries, not what any of them says.
     """
     cut_to_music = [row for row in rows if not row["opening"]]
     # The gate is applied here and nowhere else (#112). Transients need no grid, so they are
@@ -1418,7 +1281,7 @@ def _summary(
     in_grid = [row for row in cut_to_music if row["in_grid"]]
     stranded = sum(1 for row in cut_to_music if row["stranded"])
     transient_offsets = (
-        None if transients is None else _offsets([row["transient_offset"] for row in cut_to_music])
+        None if transients is None else offsets([row["transient_offset"] for row in cut_to_music])
     )
     return {
         "timeline_fps": clock.fps,
@@ -1440,27 +1303,15 @@ def _summary(
         "stranded": stranded,
         "grid_meter": trusted.meter,
         "grid_refused": trusted.reasons,
-        "beat_offsets": _offsets([row["beat_offset"] for row in in_grid]),
+        "beat_offsets": offsets([row["beat_offset"] for row in in_grid]),
         "transient_offsets": transient_offsets,
-        "bars": _histogram(row["in_bar"] for row in in_grid),
-        # The bar map's own histogram, and deliberately not gated on ``in_grid``: the beat
-        # gate refuses beats the *grid* describes badly, and a bar map exists precisely for
-        # the grids that get refused wholesale. Gating this on the grid's verdict would empty
-        # the one reading that still had something to say (#180).
-        "bar_groups": (
-            _histogram(row["in_group"] for row in cut_to_music)
-            if _measured("in_group", rows)
-            else None
-        ),
-        "bar_offsets": (
-            _offsets([row["bar_offset"] for row in cut_to_music])
-            if _measured("bar_offset", rows)
-            else None
-        ),
-        "tunes": _spread("tune", cut_to_music) if _measured("tune", rows) else None,
-        "solos": _spread("front", cut_to_music) if _measured("front", rows) else None,
+        "bars": histogram(row["in_bar"] for row in in_grid),
+        # ``bar_groups`` and ``bar_offsets``, from the join that owns them (``barmap``).
+        **barmap.summary(rows, cut_to_music),
+        "tunes": _spread("tune", cut_to_music) if measured("tune", rows) else None,
+        "solos": _spread("front", cut_to_music) if measured("front", rows) else None,
         "shot_seconds": _lengths([row["seconds"] for row in rows]),
-        "shot_rhythm": _rhythm(rows, levels),
+        "shot_rhythm": rhythm.read(rows, levels),
         # Keyed on whether a catalog was *named*, not on whether anything joined: a catalog
         # that lines up with nothing is the failure this block is here to make loud, and
         # answering None would report it as a call that never asked.
@@ -1470,8 +1321,8 @@ def _summary(
         # joins nothing, and a null here would report that as a call that never asked.
         "picture_quality": None if takes is None else _quality(rows, takes, floors),
         "clips": _usage(rows, "clip"),
-        "roles": _usage(rows, "role") if _measured("role", rows) else None,
-        "subjects": _usage(rows, "subject") if _measured("subject", rows) else None,
+        "roles": _usage(rows, "role") if measured("role", rows) else None,
+        "subjects": _usage(rows, "subject") if measured("subject", rows) else None,
         # Taken over every shot, openings included: the question is where the screen time
         # went, and a shot that starts the film is screen time like any other (#181).
         "on_soloist": subject.summary(rows),
@@ -1636,509 +1487,37 @@ def _outside(rows: Sequence[dict[str, Any]], grid: Sequence[float]) -> int:
     return sum(1 for row in rows if not grid[0] <= float(row["t"]) <= grid[-1])
 
 
-def _measured(field: str, rows: Sequence[dict[str, Any]]) -> bool:
-    """Whether a column was measured at all — an input nobody named reads as nothing, not zero."""
-    return any(row[field] is not None for row in rows)
-
-
-def _offsets(found: Sequence[float | None]) -> dict[str, Any] | None:
-    """How far off the cuts are, and which way — early and late counted apart."""
-    measured = [value for value in found if value is not None]
-    if not measured:
-        return None
-    sizes = [abs(value) for value in measured]
-    return {
-        "measured": len(measured),
-        "mean_abs": _rounded(statistics.fmean(sizes)),
-        "median_abs": _rounded(statistics.median(sizes)),
-        "max_abs": _rounded(max(sizes)),
-        "early": sum(1 for value in measured if value < 0),
-        "late": sum(1 for value in measured if value > 0),
-        "on": sum(1 for value in measured if value == 0),
-    }
 
 
 def _lengths(seconds: Sequence[float]) -> dict[str, Any]:
     if not seconds:
         return {"mean": None, "median": None, "min": None, "max": None}
     return {
-        "mean": _rounded(statistics.fmean(seconds)),
-        "median": _rounded(statistics.median(seconds)),
-        "min": _rounded(min(seconds)),
-        "max": _rounded(max(seconds)),
+        "mean": rounded(statistics.fmean(seconds)),
+        "median": rounded(statistics.median(seconds)),
+        "min": rounded(min(seconds)),
+        "max": rounded(max(seconds)),
     }
 
 
-def _rhythm(
-    rows: Sequence[dict[str, Any]],
-    levels: Sequence[tuple[float, float]] | None = None,
-) -> dict[str, Any]:
-    """How varied the cutting is, in the three shapes a metronomic cut shows up in.
-
-    A build reviews itself with this report, and the failure it cannot see from the inside is
-    the one every critic names first: two cameras traded back and forth on a fixed length. It
-    is invisible in the offsets — every cut can sit dead on its beat and still read as a
-    metronome — so it needs its own reading: how the shot lengths spread, how strictly the
-    angles alternate, how much of the cut sits in a single length bin, and how far it ramps.
-
-    The ramp is the same mechanism wearing a disguise. A two-camera trade whose lengths walk
-    steadily from ten seconds down to three varies every one of them, so the bin and the
-    spread both call it varied — and a panel called it a mechanical metronome anyway, because
-    a ladder is as countable a pattern as a fixed length (P3·R3: strict two-framing, 9.9 s to
-    2.9 s without a step back up). The run of one-way lengths is what catches it.
-
-    ``gears`` asks the other half of the same question. A cut can vary its lengths and still
-    run at one speed through the whole concert — the intro cut as fast as the solo — and no
-    reading over the shot list alone can see it, because the thing missing is the music's own
-    dynamics. So the level curve is split into thirds by loudness and the cutting rate is
-    reported per third: a build that changes gear shows it here, and one that does not is
-    told so before a critic says it.
-
-    Nothing here is a gate. ``reads_metronomic`` and ``one_speed`` are sentences the report
-    says out loud along with the numbers and the rules that drew them (``HEURISTIC``,
-    ``GEAR_HEURISTIC``), so a builder can disagree with them on the evidence rather than argue
-    with a threshold. Trading two cameras for four minutes is a real edit some music asks for;
-    the point is that the builder *decided* it.
-    """
-    lengths = [float(row["seconds"]) for row in rows]
-    # The angle on screen is what alternation is about, so black counts as one source rather
-    # than as a hole: cutting camera, black, camera, black is a pattern, not an absence.
-    sources = [BLACK if row["clip"] is None else str(row["clip"]) for row in rows]
-    histogram = _bins(lengths)
-    alternation = _alternation(sources)
-    uniformity = _uniformity(lengths, histogram)
-    ramp = _ramp(lengths)
-    return {
-        "shots": len(rows),
-        "lengths": {
-            "histogram": histogram,
-            # max/min over the shots as written; ``shot_seconds`` holds the two numbers it is
-            # taken from. None when the shortest shot rounds to zero and the ratio would not
-            # divide.
-            "spread_ratio": _ratio(lengths),
-            "mean": _rounded(statistics.fmean(lengths)) if lengths else None,
-            "median": _rounded(statistics.median(lengths)) if lengths else None,
-        },
-        "alternation": alternation,
-        "uniformity": uniformity,
-        "ramp": ramp,
-        "reads_metronomic": _metronomic(alternation, uniformity, ramp),
-        "gears": _gears(rows, levels, uniformity),
-        "heuristic": HEURISTIC,
-    }
-
-
-def _bins(lengths: Sequence[float]) -> dict[str, int]:
-    """The corpus histogram, every bin present — a zero is a reading, not a missing key."""
-    counted = dict.fromkeys((label for label, _ in RHYTHM_BINS), 0)
-    for length in lengths:
-        for label, edge in RHYTHM_BINS:
-            if length < edge:
-                counted[label] += 1
-                break
-    return counted
-
-
-def _ratio(lengths: Sequence[float]) -> float | None:
-    if not lengths or min(lengths) <= 0:
-        return None
-    return _rounded(max(lengths) / min(lengths))
-
-
-def _alternation(sources: Sequence[str]) -> dict[str, Any]:
-    """The longest strict A/B run in the sequence of angles, counted in cuts.
-
-    Strict means each shot returns to the one before last and differs from the one before it:
-    A B A B. A third angle ends the run, and so does the same angle twice — both are variety,
-    which is the thing being looked for. The run is measured in cuts rather than shots so its
-    fraction is of the same denominator the report counts cuts in.
-    """
-    cuts = max(len(sources) - 1, 0)
-    longest = 0
-    run = 0
-    for index in range(1, len(sources)):
-        if sources[index] == sources[index - 1]:
-            run = 0
-            continue
-        returns = index >= 2 and sources[index] == sources[index - 2]
-        run = run + 1 if returns and run else 1
-        longest = max(longest, run)
-    counted = longest if longest >= ALTERNATION_MIN else 0
-    return {
-        "cuts": cuts,
-        "longest_run": counted,
-        "fraction": _rounded(counted / cuts) if cuts else 0.0,
-    }
-
 
-def _uniformity(lengths: Sequence[float], histogram: Mapping[str, int]) -> dict[str, Any]:
-    """How much of the cut is one length: the fullest bin's share, and the spread around it.
-
-    Two readings because they miss different cuts. The bin catches shots clustered at one
-    length even when the numbers wobble inside it; the coefficient of variation catches a cut
-    whose lengths drift slowly across a boundary and so land in two bins while never varying.
-    """
-    if not lengths:
-        return {"bin": None, "one_bin": None, "cv": None}
-    fullest = max(RHYTHM_BINS, key=lambda one: histogram[one[0]])[0]
-    return {
-        "bin": fullest,
-        "one_bin": _rounded(histogram[fullest] / len(lengths)),
-        "cv": _cv(lengths),
-    }
-
-
-def _ramp(lengths: Sequence[float]) -> dict[str, Any]:
-    """The longest run of shots that only shorten, or only lengthen, counted in cuts.
-
-    A tightening ladder is a pattern the bin count and the spread are both blind to: every
-    length differs, so no bin holds the cut and the coefficient of variation reads as variety,
-    while what the audience sees is one rule applied over and over. Direction rather than
-    slope, because the shape is the *monotony*, not the rate — a ladder that steps 10, 8, 7,
-    3 is as mechanical as one that halves each time, and a single step back up ends both.
-
-    Equal neighbours end a run rather than continue one: a stretch of identical lengths is
-    already what ``uniformity`` reads, and letting it feed this one would count the same cut
-    twice. Measured in cuts, like ``_alternation``, so the two fractions share a denominator.
-    """
-    cuts = max(len(lengths) - 1, 0)
-    longest = 0
-    rising = falling = 0
-    for index in range(1, len(lengths)):
-        rising = rising + 1 if lengths[index] > lengths[index - 1] else 0
-        falling = falling + 1 if lengths[index] < lengths[index - 1] else 0
-        longest = max(longest, rising, falling)
-    counted = longest if longest >= RAMP_MIN else 0
-    return {
-        "cuts": cuts,
-        "longest_run": counted,
-        "fraction": _rounded(counted / cuts) if cuts else 0.0,
-    }
-
-
-def _metronomic(
-    alternation: Mapping[str, Any], uniformity: Mapping[str, Any], ramp: Mapping[str, Any]
-) -> bool:
-    """``HEURISTIC``, applied. A reading it cannot take is not a reading against the cut."""
-    one_bin = uniformity["one_bin"]
-    cv = uniformity["cv"]
-    uniform = (one_bin is not None and one_bin > ONE_BIN_FLOOR) or (
-        cv is not None and cv < CV_FLOOR
-    )
-    ramped = float(ramp["fraction"]) > RAMP_FLOOR
-    return float(alternation["fraction"]) > ALTERNATION_FLOOR and (uniform or ramped)
-
-
-def _gears(
-    rows: Sequence[dict[str, Any]],
-    levels: Sequence[tuple[float, float]] | None,
-    uniformity: Mapping[str, Any],
-) -> dict[str, Any] | None:
-    """How the cutting rate changes with the music's loudness — the one-speed read.
-
-    ``None`` when there is no level curve to read, or none of it covers the cut: not looking
-    and finding no gearing are different answers, and only one of them is about the edit.
-
-    The span the terciles are taken over is the cut's own, not the mix's. A four-minute song
-    inside a two-hour concert is quiet *in that concert* from end to end, and thirds taken
-    over the whole mix would drop every shot in it into one gear and report nothing.
-
-    Where the cut runs past the curve — a tail after the analysed mix ends, a cold open ahead
-    of its start — those shots are counted in ``outside_shots`` and left out of the terciles
-    and out of the sub-2 s numbers with them. Every rate here divides by the seconds of music
-    its tercile holds, so a shot placed where no window exists is a numerator with no
-    denominator, and the one it borrows is the wrong one.
-    """
-    if not rows or not levels:
-        return None
-    span_start = min(float(row["t"]) for row in rows)
-    span_end = max(float(row["t"]) + float(row["seconds"]) for row in rows)
-    windows = [
-        (start, level)
-        for start, level in levels
-        if start < span_end and start + GEAR_WINDOW_SECONDS > span_start
-    ]
-    if not windows:
-        return None
-
-    placed = _terciles(windows)
-    starts = [start for start, _ in windows]
-    held: dict[str, list[dict[str, Any]]] = {QUIET: [], MID: [], LOUD: []}
-    outside = 0
-    for row in rows:
-        window = _window_at(starts, float(row["t"]))
-        if window is None:
-            outside += 1
-            continue
-        held[placed[window]].append(row)
-
-    terciles = {
-        gear: _gear(
-            held[gear],
-            [level for index, (_, level) in enumerate(windows) if placed[index] == gear],
-        )
-        for gear in (QUIET, MID, LOUD)
-    }
-    ratio = _rate_ratio(terciles[LOUD]["cuts_per_minute"], terciles[QUIET]["cuts_per_minute"])
-    # The short shots are the ones a fast passage is made of, so where they sit is the
-    # gearing read in its bluntest form: a build that saves them for the loud third has
-    # changed gear even if the averages move less than the ratio floor.
-    counted = [row for gear in (QUIET, MID, LOUD) for row in held[gear]]
-    short = sum(1 for row in counted if float(row["seconds"]) < SUB_TWO_SECONDS)
-    in_loud = sum(1 for row in held[LOUD] if float(row["seconds"]) < SUB_TWO_SECONDS)
-    return {
-        "window_seconds": GEAR_WINDOW_SECONDS,
-        "terciles": terciles,
-        "outside_shots": outside,
-        "rate_ratio": ratio,
-        "sub2s_count": short,
-        "sub2s_in_loud": in_loud,
-        "sub2s_loud_fraction": _rounded(in_loud / short) if short else None,
-        "one_speed": _one_speed(ratio, uniformity["cv"]),
-        "quiet_floor": _quiet_floor(rows, windows),
-        "heuristic": GEAR_HEURISTIC,
-    }
-
-
-def _quiet_floor(
-    rows: Sequence[dict[str, Any]], windows: Sequence[tuple[float, float]]
-) -> dict[str, Any]:
-    """Whether the passages held in the slow gear breathe, or only hold.
-
-    The gear ratios say a quiet section was cut slower; they say nothing about what happens
-    inside it. A build can hit the quiet rate exactly and still park: five holds of much the
-    same length in a row is the rate the table asked for and a passage nobody is watching by
-    the end of. This is the reading of the inside — how much the lengths move, and how much of
-    that movement one shot is holding up.
-
-    The passages are found on a smoothed curve rather than on the tercile labels above,
-    because those labels are per window and a live room crosses the quiet edge and back inside
-    a bar. Smoothing is what makes a *passage* out of a curve; the rates keep the unsmoothed
-    labels, since a rate does not care whether the music it holds was contiguous.
-    """
-    runs = _quiet_runs(windows)
-    passages = [_passage(rows, start, end) for start, end in runs]
-    return {
-        "smoothing_windows": QUIET_SMOOTHING_WINDOWS,
-        "runs": passages,
-        "reads_locked": any(passage["reads_locked"] for passage in passages),
-        "heuristic": FLOOR_HEURISTIC,
-    }
-
-
-def _quiet_runs(windows: Sequence[tuple[float, float]]) -> list[tuple[float, float]]:
-    """The stretches of music long enough, and quiet enough, to be a passage.
-
-    Quiet is the bottom third of the *smoothed* curve — the same split ``_terciles`` takes,
-    run over a curve the outliers have been taken out of rather than the raw one, which is the
-    whole difference between a passage and a window. Runs shorter than ``QUIET_FLOOR_SECONDS``
-    are dropped rather than measured: they hold two or three shots, and a spread over three
-    shots is a number the report cannot mean anything by.
-    """
-    if not windows:
-        return []
-    levels = _smoothed([level for _, level in windows])
-    smoothed = [(start, level) for (start, _), level in zip(windows, levels, strict=True)]
-    quiet = [label == QUIET for label in _terciles(smoothed)]
-
-    runs: list[tuple[float, float]] = []
-    opened: int | None = None
-    for index, is_quiet in enumerate([*quiet, False]):
-        if is_quiet and opened is None:
-            opened = index
-        elif not is_quiet and opened is not None:
-            runs.append((windows[opened][0], windows[index - 1][0] + GEAR_WINDOW_SECONDS))
-            opened = None
-    return [(start, end) for start, end in runs if end - start >= QUIET_FLOOR_SECONDS]
-
-
-def _smoothed(levels: Sequence[float]) -> list[float]:
-    """A centred moving median over ``QUIET_SMOOTHING_WINDOWS`` windows.
-
-    Median rather than mean, because the thing being smoothed out is exactly the outlier — one
-    crash in a quiet passage pulls a mean over the edge and leaves the median where the music
-    is. At the ends the window shrinks rather than padding: a curve that starts quiet should
-    read quiet from its first window, not ease in from a value nobody measured.
-    """
-    half = QUIET_SMOOTHING_WINDOWS // 2
-    return [
-        statistics.median(levels[max(0, index - half) : min(len(levels), index + half + 1)])
-        for index in range(len(levels))
-    ]
-
-
-def _passage(
-    rows: Sequence[dict[str, Any]], start: float, end: float
-) -> dict[str, Any]:
-    """One quiet passage: how it was cut, and whether the spread is real or carried.
-
-    ``cv_less_orphans`` is the reading the flag is drawn on. A coefficient of variation is
-    dominated by whatever is furthest from the mean, so one 2.5 s flash among five holds of
-    ten to twenty seconds reports a spread that no part of the passage a viewer sits through
-    actually has. Dropping the orphans and asking again is the difference between a floor that
-    breathes and a floor with a hole punched in it.
-
-    A passage with no shot starting inside it is not an absent reading, it is the stillest one
-    there is: a single hold runs the whole way through and there is no cut in it to measure.
-    That is reported as ``held_through_seconds`` and reads locked on its own, because a
-    spread taken over the no lengths inside would otherwise let the most parked passage
-    possible past the flag.
-    """
-    lengths = [
-        float(row["seconds"]) for row in rows if start <= float(row["t"]) < end
-    ]
-    held_through = _held_through(rows, start, end) if not lengths else None
-    orphans = _orphans(lengths)
-    kept = [length for index, length in enumerate(lengths) if index not in orphans]
-    cv = _cv(lengths)
-    less = _cv(kept)
-    seconds = end - start
-    return {
-        "from": _rounded(start),
-        "to": _rounded(end),
-        "seconds": _rounded(seconds),
-        "shots": len(lengths),
-        "cuts_per_minute": _rounded(len(lengths) / (seconds / 60.0)) if seconds > 0 else None,
-        "median_seconds": _rounded(statistics.median(lengths)) if lengths else None,
-        "cv": cv,
-        "orphans": len(orphans),
-        "orphan_seconds": [_rounded(lengths[index]) for index in orphans],
-        "cv_less_orphans": less,
-        "held_through_seconds": held_through,
-        "reads_locked": held_through is not None or (less is not None and less < FLOOR_CV_FLOOR),
-    }
-
-
-def _held_through(
-    rows: Sequence[dict[str, Any]], start: float, end: float
-) -> float | None:
-    """The length of the shot that runs the whole passage without a cut in it, if there is one.
-
-    Not every passage with nothing starting inside it is held through: a cut that ends before
-    the passage does — or one the level curve outruns — has no film there at all, and a
-    stretch with no picture in it is not an edit anybody made. The shot has to cover the
-    passage end to end for the reading to be about a decision.
-    """
-    for row in rows:
-        opens = float(row["t"])
-        if opens <= start and opens + float(row["seconds"]) >= end:
-            return _rounded(float(row["seconds"]))
-    return None
-
-
-def _orphans(lengths: Sequence[float]) -> set[int]:
-    """Which shots are lone flashes: short against the passage, with nothing short beside them.
-
-    Neighbours are taken inside the passage only, so its first and last shot are judged against
-    the one neighbour they have — a passage that opens on a flash is still opening on one.
-
-    Two short shots side by side are not orphans, either of them. That is a burst, which is a
-    gesture a quiet passage is allowed to make and which the spread should keep, and the whole
-    point of the distinction is that a burst is something a viewer reads as cutting while a
-    single flash between long holds reads as a mistake or a stinger.
-    """
-    if len(lengths) < 2:
-        return set()
-    median = statistics.median(lengths)
-    found: set[int] = set()
-    for index, length in enumerate(lengths):
-        if length >= ORPHAN_FRACTION * median:
-            continue
-        beside = [lengths[near] for near in (index - 1, index + 1) if 0 <= near < len(lengths)]
-        if all(other >= median for other in beside):
-            found.add(index)
-    return found
-
-
-def _cv(lengths: Sequence[float]) -> float | None:
-    """Coefficient of variation, or ``None`` where there is nothing to take it over.
-
-    One shot is a spread of zero rather than no reading: a passage crossed by a single hold is
-    the most locked a passage can be, and answering ``None`` there would let the stillest case
-    of all fall through the flag. Nothing at all — a long shot that started before the passage
-    and covers it whole — is the reading that cannot be taken, because no length inside it is a
-    decision made about it.
-    """
-    if not lengths:
-        return None
-    mean = statistics.fmean(lengths)
-    return _rounded(statistics.pstdev(lengths) / mean) if mean > 0 else None
-
-
-def _terciles(windows: Sequence[tuple[float, float]]) -> list[str]:
-    """Which third of the loudness each window sits in, by rank rather than by level range.
-
-    Ranking, because the levels themselves are not a scale anything can be split evenly on:
-    a mix mastered hot spends most of its windows inside four decibels, and thirds of *that*
-    range would put the whole concert in one gear. Thirds of the windows always split the
-    span three ways, so the rate in each is a rate over comparable amounts of music.
-
-    Ties break by time, which matters only on a curve flat enough that the split is arbitrary
-    — and there the ratio it produces lands near one, which is exactly what a passage whose
-    loudness never moves should read as.
-    """
-    order = sorted(range(len(windows)), key=lambda index: (windows[index][1], windows[index][0]))
-    lower, upper = len(order) // 3, (2 * len(order)) // 3
-    placed = [MID] * len(windows)
-    for rank, index in enumerate(order):
-        placed[index] = QUIET if rank < lower else LOUD if rank >= upper else MID
-    return placed
-
-
-def _window_at(starts: Sequence[float], seconds: float) -> int | None:
-    """The window a shot's first frame lands in, or ``None`` when the curve does not reach it.
-
-    A shot is counted whole in the gear it was cut *into*: that is the decision the editor
-    made at that frame. Splitting a long shot across two gears would credit the loud third
-    with screen time nobody cut there.
-
-    Past the ends the answer is nothing rather than the nearest window. The rates are cuts
-    over the *music* each tercile holds, and a curve that stops before the cut does — or
-    starts after it, on a cold open — holds no music where those shots sit; clamping them
-    into the first or last window would add cuts to a numerator whose denominator never grew,
-    and a cut running a minute past the analysed mix would read as a gear change nobody made.
-    """
-    index = bisect_right(starts, seconds) - 1
-    if index < 0 or seconds >= starts[-1] + GEAR_WINDOW_SECONDS:
-        return None
-    return index
-
-
-def _gear(shots: Sequence[dict[str, Any]], levels: Sequence[float]) -> dict[str, Any]:
-    """One tercile: how much music it holds, how many shots were cut in it, and how fast.
-
-    ``seconds`` is counted in whole windows rather than in the shots' own lengths, because
-    the denominator has to be the music: a gear where one long shot runs over a minute of
-    loud music has a real cutting rate, and dividing by that shot's length would report the
-    rate of the shot instead.
-    """
-    lengths = [float(shot["seconds"]) for shot in shots]
-    seconds = len(levels) * GEAR_WINDOW_SECONDS
-    return {
-        "seconds": _rounded(seconds),
-        "shots": len(shots),
-        "cuts_per_minute": _rounded(len(shots) / (seconds / 60.0)) if seconds > 0 else None,
-        "median_seconds": _rounded(statistics.median(lengths)) if lengths else None,
-        "level_dbfs": _rounded(statistics.median(levels)) if levels else None,
-    }
-
-
-def _rate_ratio(loud: Any, quiet: Any) -> float | None:
-    """How much faster the loud third is cut than the quiet one.
-
-    ``None`` when nothing was cut in the quiet third: a ratio against zero is a number the
-    report cannot mean anything by, and inventing one there would read as a verdict.
-    """
-    if not isinstance(loud, int | float) or not isinstance(quiet, int | float) or not quiet:
-        return None
-    return _rounded(float(loud) / float(quiet))
-
-
-def _one_speed(ratio: float | None, cv: Any) -> bool:
-    """``GEAR_HEURISTIC``, applied. A reading it cannot take is not a reading against the cut."""
-    if ratio is None or not isinstance(cv, int | float):
-        return False
-    return ratio < RATE_RATIO_FLOOR and float(cv) < GEAR_CV_FLOOR
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 def _usage(rows: Sequence[dict[str, Any]], field: str) -> dict[str, dict[str, Any]]:
@@ -2162,8 +1541,8 @@ def _usage(rows: Sequence[dict[str, Any]], field: str) -> dict[str, dict[str, An
         entry["cuts"] += 1
         entry["seconds"] += float(row["seconds"])
     for entry in usage.values():
-        entry["share"] = _rounded(entry["seconds"] / total)
-        entry["seconds"] = _rounded(entry["seconds"])
+        entry["share"] = rounded(entry["seconds"] / total)
+        entry["seconds"] = rounded(entry["seconds"])
     return usage
 
 
@@ -2173,17 +1552,5 @@ def _spread(field: str, rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
     return {
         "covered": len(set(placed)),
         "outside": len(rows) - len(placed),
-        "cuts": _histogram(iter(placed)),
+        "cuts": histogram(iter(placed)),
     }
-
-
-def _histogram(values: Any) -> dict[str, int]:
-    """Counts keyed by value as a string — JSON has no integer keys to speak of."""
-    counted = Counter(value for value in values if value is not None)
-    return {str(key): count for key, count in sorted(counted.items(), key=lambda one: str(one[0]))}
-
-
-def _rounded(seconds: float) -> float:
-    return round(seconds, SECONDS_PRECISION)
-
-

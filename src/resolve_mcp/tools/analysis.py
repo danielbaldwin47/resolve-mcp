@@ -297,6 +297,16 @@ def correlate_timeline(
     joined against the solo map, or asserted by a camera the sidecar says follows the front —
     and soloist_seconds_by_follow_camera is how much of the share is the second kind.
 
+    The inline reading also carries shot_rhythm, which is the one block about the cut rather
+    than about the music: how the shot lengths spread, how strictly the angles alternate, how
+    much of the cut sits in one length bin and how far it ramps, plus reads_metronomic. Inside
+    it, gears splits the music into thirds by loudness and reports the cutting rate in each
+    (rate_ratio, one_speed), and quiet_floor reads the passages held in the slow gear — whether
+    the lengths inside one breathe or only hold (reads_locked). Every one of those flags is a
+    sentence, not a gate, and each block carries the heuristic it was drawn at in words.
+    analysis/rhythm.py owns the shape and the thresholds; analysis/barmap.py owns the bar-map
+    columns and the bar_groups and bar_offsets blocks taken over them.
+
     Nothing here judges the edit. Two frames late is reported as two frames late; what
     counts as musical belongs in your style profile, not in this server.
     """

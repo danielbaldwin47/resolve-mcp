@@ -14,11 +14,12 @@ orphans:
   cv_less      pstdev/mean over the passage with the orphans dropped
   carried_by   cv - cv_less, how much of the raw spread one or two shots were holding up
 
-Every one of those readings is taken by importing `analysis.correlate`'s own functions rather
-than by reimplementing them here. That is deliberate: this file is the receipt behind the
+Every one of those readings is taken by importing the server's own functions rather
+than by reimplementing them here (`analysis.rhythm`, which the reading moved to in #215;
+`analysis.correlate` before that). That is deliberate: this file is the receipt behind the
 corpus row and the style bullet, and a second copy of the arithmetic would let the receipt go
 on describing a tool the server no longer has. The `server_check` block at the end is the same
-point made end to end - correlate's `gears.quiet_floor`, run over the deliverable's own level
+point made end to end - the report's `gears.quiet_floor`, run over the deliverable's own level
 curve and our cut file, so "the rule fires on the cut the ticket complains about" is a
 recorded result rather than an inference.
 
@@ -43,7 +44,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from resolve_mcp.analysis import correlate, decode, energy
+from resolve_mcp.analysis import decode, energy, rhythm
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = Path(__file__).with_name("quiet_floor.json")
@@ -110,7 +111,7 @@ def level_curve(path: Path) -> list[tuple[float, float]]:
         )
         if proc.returncode != 0:
             raise SystemExit(proc.stderr[-2000:])
-        curve = energy.rms_curve(decode.read(wav), correlate.GEAR_WINDOW_SECONDS)
+        curve = energy.rms_curve(decode.read(wav), rhythm.GEAR_WINDOW_SECONDS)
     return [(level.seconds, level.rms_dbfs) for level in curve]
 
 
@@ -133,7 +134,7 @@ def shots_from_cut_file(path: Path) -> tuple[list[tuple[float, float]], float]:
 
 
 def rows_of(spans: list[tuple[float, float]]) -> list[dict[str, Any]]:
-    """Shot spans as the rows correlate's own readers take."""
+    """Shot spans as the rows the server's own readers take."""
     return [{"t": round(a, 3), "seconds": round(b - a, 3)} for a, b in spans]
 
 
@@ -146,10 +147,10 @@ def measure(label: str, spans: list[tuple[float, float]], total: float) -> dict[
         lengths = [round(b - a, 3) for a, b in inside]
         if not lengths:
             continue
-        orphans = correlate._orphans(lengths)
+        orphans = rhythm._orphans(lengths)
         kept = [x for i, x in enumerate(lengths) if i not in orphans]
-        cv = correlate._cv(lengths)
-        cv_less = correlate._cv(kept)
+        cv = rhythm._cv(lengths)
+        cv_less = rhythm._cv(kept)
         rows.append(
             {
                 "section": name,
@@ -173,9 +174,9 @@ def measure(label: str, spans: list[tuple[float, float]], total: float) -> dict[
         )
     quiet = [row for row in rows if row["section"] in QUIET]
     quiet_lengths = [x for row in quiet for x in row["lengths"]]
-    quiet_orphans = correlate._orphans(quiet_lengths)
+    quiet_orphans = rhythm._orphans(quiet_lengths)
     quiet_kept = [x for i, x in enumerate(quiet_lengths) if i not in quiet_orphans]
-    # A section holding one shot has no within-section spread to average in. correlate._cv
+    # A section holding one shot has no within-section spread to average in. rhythm._cv
     # answers 0.0 there on purpose - for a *passage*, one hold running through is exactly the
     # locked reading - but a mean over sections is a different question, and folding that 0.0
     # in would report a stillness the section never had. His `ending` is one 21 s shot.
@@ -189,18 +190,18 @@ def measure(label: str, spans: list[tuple[float, float]], total: float) -> dict[
         "label": label,
         "duration_sec": total,
         "shots": len(spans),
-        "shot_cv": correlate._cv(lengths_all),
+        "shot_cv": rhythm._cv(lengths_all),
         "sections": rows,
         "quiet_band": {
             "sections": list(QUIET),
             "shots": len(quiet_lengths),
             "median_seconds": round(statistics.median(quiet_lengths), 2),
-            "pooled_cv": correlate._cv(quiet_lengths),
+            "pooled_cv": rhythm._cv(quiet_lengths),
             "mean_of_section_cvs": round(
                 statistics.fmean([r["cv"] for r in quiet if r["cv"] is not None]), 3
             ),
             "orphans": len(quiet_orphans),
-            "pooled_cv_less_orphans": correlate._cv(quiet_kept),
+            "pooled_cv_less_orphans": rhythm._cv(quiet_kept),
             "lengths": quiet_lengths,
         },
         "mean_within_section_cv": round(statistics.fmean(section_cvs), 3),
@@ -212,9 +213,9 @@ def measure(label: str, spans: list[tuple[float, float]], total: float) -> dict[
 def over_runs(
     spans: list[tuple[float, float]], runs: list[tuple[float, float]]
 ) -> list[dict[str, Any]]:
-    """correlate's own passage reading, over the runs correlate's own run-finder derived."""
+    """rhythm's own passage reading, over the runs its own run-finder derived."""
     rows = rows_of(spans)
-    return [correlate._passage(rows, lo, hi) for lo, hi in runs]
+    return [rhythm._passage(rows, lo, hi) for lo, hi in runs]
 
 
 def main() -> None:
@@ -227,13 +228,13 @@ def main() -> None:
     ours = measure("ours (P4R2)", ours_spans, ours_total)
 
     curve = level_curve(DELIVERABLE)
-    runs = correlate._quiet_runs(curve)
+    runs = rhythm._quiet_runs(curve)
     derived = {
-        "smoothing_windows": correlate.QUIET_SMOOTHING_WINDOWS,
-        "window_seconds": correlate.GEAR_WINDOW_SECONDS,
-        "min_run_seconds": correlate.QUIET_FLOOR_SECONDS,
-        "orphan_fraction": correlate.ORPHAN_FRACTION,
-        "cv_floor": correlate.FLOOR_CV_FLOOR,
+        "smoothing_windows": rhythm.QUIET_SMOOTHING_WINDOWS,
+        "window_seconds": rhythm.GEAR_WINDOW_SECONDS,
+        "min_run_seconds": rhythm.QUIET_FLOOR_SECONDS,
+        "orphan_fraction": rhythm.ORPHAN_FRACTION,
+        "cv_floor": rhythm.FLOOR_CV_FLOOR,
         "curve_windows": len(curve),
         "runs": [{"d_from": round(a, 2), "d_to": round(b, 2), "seconds": round(b - a, 2)}
                  for a, b in runs],
@@ -241,9 +242,9 @@ def main() -> None:
         "ours": over_runs(ours_spans, runs),
     }
 
-    # The whole block as correlate would report it on our cut: the ticket's own cut, the
+    # The whole block as the report would carry it on our cut: the ticket's own cut, the
     # server's own code, so the claim that the rule fires on it is recorded rather than argued.
-    server_check = correlate._quiet_floor(rows_of(ours_spans), curve)
+    server_check = rhythm._quiet_floor(rows_of(ours_spans), curve)
 
     report = {
         "kind": "quiet_floor",
@@ -256,14 +257,14 @@ def main() -> None:
             "the whole deliverable, shots between consecutive detected cuts; ours: the cut file's "
             "own segment lengths at 23.976 fps. Sections are full_gears.py's, a shot belongs to "
             "the section its head sits in. Every spread, orphan and passage reading is taken by "
-            "analysis.correlate's own functions, not by a copy of them living here."
+            "analysis.rhythm's own functions, not by a copy of them living here."
         ),
         "threshold": THRESHOLD,
         "human": human,
         "ours": ours,
         "derived_quiet_runs": derived,
         "server_check": {
-            "what": "analysis.correlate gears.quiet_floor over our P4R2 cut file",
+            "what": "analysis.rhythm gears.quiet_floor over our P4R2 cut file",
             "reads_locked": server_check["reads_locked"],
             "runs": server_check["runs"],
         },
@@ -297,8 +298,8 @@ def main() -> None:
 
     print(
         f"\n=== derived quiet runs "
-        f"(smoothed {correlate.QUIET_SMOOTHING_WINDOWS} x "
-        f"{correlate.GEAR_WINDOW_SECONDS} s) ==="
+        f"(smoothed {rhythm.QUIET_SMOOTHING_WINDOWS} x "
+        f"{rhythm.GEAR_WINDOW_SECONDS} s) ==="
     )
     for run in derived["runs"]:
         print(f"  d {run['d_from']:7.2f} -> {run['d_to']:7.2f}  ({run['seconds']:.1f} s)")
