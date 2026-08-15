@@ -22,6 +22,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.test_read_guard import hook_env
+
 HOOKS = Path(__file__).resolve().parents[1] / ".claude" / "hooks"
 HOOK = HOOKS / "context-guard.py"
 SETTINGS = Path(__file__).resolve().parents[1] / ".claude" / "settings.json"
@@ -39,7 +41,7 @@ def run_hook(command: str, tool: str = "Bash") -> subprocess.CompletedProcess[st
         input=json.dumps(payload),
         capture_output=True,
         text=True,
-        env={"SYSTEMROOT": os.environ.get("SYSTEMROOT", "C:\\Windows"), "PATH": ""},
+        env=hook_env(Path(os.environ.get("TEMP", "."))),
     )
 
 
@@ -157,6 +159,8 @@ def test_unredirected_gh_view_or_diff_is_blocked(command: str) -> None:
         "gh pr view 252 --json body,comments > pr.scratch.log",
         "gh pr diff 252 > pr.scratch.log",
         "gh pr diff 252 > pr.scratch.log 2>&1",
+        "gh issue view 248 --json body | jq -r .body > issue.scratch.log",
+        "gh issue view 248 --web",
         "gh pr checks 252",
         "gh pr list --json number,title",
         "gh issue list --label bug",
@@ -219,6 +223,15 @@ def test_git_commit_message_mentioning_pytest_and_cat_passes() -> None:
         "cd src && cat x.py",
         "ls; cat src/x.py",
         "if true; then cat src/x.py; fi",
+        "cat src/X.PY",
+        "cat SRC\\CONFIG.JSON",
+        "cat src/x.py | cat",
+        "cat src/x.py | cat -n",
+        "cat src/x.py | nl",
+        "cat src/x.py | tee copy.py",
+        "cat src/x.py | less",
+        "cat src/x.py | more",
+        "cat src/x.py | grep -v '^$' | cat -n",
     ],
 )
 def test_cat_of_guarded_file_is_blocked(command: str) -> None:
@@ -232,7 +245,10 @@ def test_cat_of_guarded_file_is_blocked(command: str) -> None:
     [
         "cat src/x.py | grep -n def",
         "cat src/x.py | head -20",
+        "cat src/x.py | jq . > out.json",
         "cat src/x.py > /tmp/copy.py",
+        "cat src/x.py.bak",
+        "cat src/x.py.orig",
         "cat src/x.py >> combined.py",
         "cat > out.py <<'EOF'\nprint(1)\nEOF",
         "cat <<'EOF' > out.py\nprint(1)\nEOF",
@@ -251,6 +267,19 @@ def test_cat_piped_redirected_or_not_a_guarded_file_passes(command: str) -> None
 def test_for_loop_cat_sweep_is_blocked() -> None:
     msg = blocked("for f in src/resolve_mcp/*.py; do cat $f; done")
     assert "cat loop" in msg
+    blocked("for f in src/*.py\ndo\n  cat $f\ndone")
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "for f in src/*.py; do wc -l $f; done | cat",
+        "for f in src/*.py; do wc -l $f; done; git cat-file -p HEAD:x",
+        "for f in src/*.py; do grep -c def $f; done",
+    ],
+)
+def test_for_loop_without_cat_in_body_passes(command: str) -> None:
+    passes(command)
 
 
 @pytest.mark.parametrize(
@@ -264,6 +293,8 @@ def test_for_loop_cat_sweep_is_blocked() -> None:
         "sed '' src/x.py",
         "sed -e p src/x.py",
         "sed -n p CLAUDE.md",
+        "sed -n '1,$ p' src/x.py",
+        "sed -n '$!p' src/x.py",
     ],
 )
 def test_sed_whole_file_is_blocked(command: str) -> None:
@@ -339,6 +370,11 @@ def test_head_tail_with_count_or_no_file_passes(command: str) -> None:
         "type pytest.scratch.log",
         "cat .\\src\\x.py",
         "Get-Content $env:CLAUDE_JOB_DIR\\tmp\\out.log",
+        "Get-Content src/x.py | Out-String",
+        "Get-Content src/x.py | Write-Output",
+        "Get-Content src/x.py | Format-Table",
+        "Get-Content src/x.py | Out-Host",
+        "Get-Content SRC\\X.PY",
     ],
 )
 def test_powershell_whole_file_readers_are_blocked(command: str) -> None:
@@ -354,6 +390,9 @@ def test_powershell_whole_file_readers_are_blocked(command: str) -> None:
         "Get-Content src/x.py -Head 20",
         "Get-Content src/x.py -First 20",
         "Get-Content src/x.py -Last 20",
+        "gc src/x.py -tot 5",
+        "Get-Content src/x.py -Total 5",
+        "Get-Content src/x.py -TotalCount:5",
         "Get-Content C:\\repo\\src\\x.py -TotalCount 50",
         "Get-Content src/x.py | Select-String def",
         "Get-Content src/x.py | Select-Object -Last 20",
@@ -425,7 +464,7 @@ def test_garbage_payload_passes() -> None:
         input="not json",
         capture_output=True,
         text=True,
-        env={"SYSTEMROOT": os.environ.get("SYSTEMROOT", "C:\\Windows"), "PATH": ""},
+        env=hook_env(Path(os.environ.get("TEMP", "."))),
     )
     assert result.returncode == 0
 
@@ -477,14 +516,7 @@ def test_every_shared_extension_is_guarded_by_both_hooks(ext: str, tmp_path: Pat
         input=json.dumps(payload),
         capture_output=True,
         text=True,
-        env={
-            "SYSTEMROOT": os.environ.get("SYSTEMROOT", "C:\\Windows"),
-            "PATH": "",
-            "TMPDIR": str(tmp_path),
-            "TEMP": str(tmp_path),
-            "TMP": str(tmp_path),
-            "CLAUDE_PROJECT_DIR": str(tmp_path),
-        },
+        env=hook_env(tmp_path, tmp_path),
     )
     assert result.returncode == 2, result.stderr
 

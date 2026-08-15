@@ -12,8 +12,9 @@ Blocks (exit 2, message to the model):
      reader fetches them: `cat`, `sed -n p` / `1,$p`, `head`/`tail` with no
      count, `head -c`, `Get-Content` without `-TotalCount`/`-Tail`, `type`,
      and a `for … cat` sweep. Ranged reads (`sed -n 10,40p`, `head -50`,
-     `Get-Content -TotalCount 50`) pass, as does anything piped onward or
-     redirected. Backslash and drive-letter paths count as paths.
+     `Get-Content -TotalCount 50`) pass, as does anything redirected or
+     piped onward into a real filter (not `| cat`, `| less`, `| Out-String`
+     and friends). Backslash and drive-letter paths count as paths.
 
 `gh … --body …` (and `--title`, `-m`) arguments are prose and are never
 inspected. Heredoc bodies and here-strings are data, not commands.
@@ -59,10 +60,29 @@ NOISY = (
 
 # A path token: POSIX or Windows (`C:\x\y.py`, `.\src\f.py`, `~/f.py`,
 # `$env:TMP\f.py`, `${VAR}/f.py`). Quotes were stripped before matching.
-PATH_TOKEN = r"[\w$./*:\\~{}+@%,=-]+"
+PATH_TOKEN = r"[\w$./*:\\~{}+@%,=!-]+"
 # One of the guarded extensions, as a regex on a (quote-stripped) arg string.
-GUARDED_EXT_RE = (
-    r"\.(?:" + "|".join(sorted(e[1:] for e in GUARDED_EXT)) + r")(?![\w])"
+GUARDED_EXT_RE = re.compile(
+    r"\.(?:" + "|".join(sorted(e[1:] for e in GUARDED_EXT)) + r")(?![\w.])", re.I
+)
+# Pipe stages that pass a file through unchanged (or paged): a reader piped
+# into one of these is still a whole-file dump.
+PASSTHROUGH = re.compile(
+    r"^\s*(?:cat|nl|tee|less|more|Out-String|Out-Host|Out-Default|Write-Output|Format-\w+)\b"
+)
+# PowerShell accepts any unambiguous parameter prefix: -Tot, -Total, -Ta …
+_PS_COUNT_PARAMS = ("TotalCount", "Tail", "Head", "First", "Last")
+PS_COUNT_FLAG = re.compile(
+    r"-(?:"
+    + "|".join(
+        sorted(
+            {w[:i] for w in _PS_COUNT_PARAMS for i in range(2, len(w) + 1)},
+            key=len,
+            reverse=True,
+        )
+    )
+    + r")(?::|$)",
+    re.I,
 )
 
 # Heredoc bodies are data, not commands; `<<-` terminators may be indented
@@ -123,11 +143,11 @@ CAT_LOOP_MSG = (
 
 
 def prepare(cmd):
-    """Return (scan, scan_cat): the command with data blanked for scanning.
+    """Return (scan, scan_readers): the command with data blanked for scanning.
 
     *scan* has heredocs, here-strings, prose args and quoted strings blanked —
     for the noisy/gh rules, where a commit message merely mentioning pytest is
-    prose. *scan_cat* keeps quoted content but drops the quote characters —
+    prose. *scan_readers* keeps quoted content but drops the quote characters —
     `cat "notes.md"` is still a cat, and command-position anchoring is what
     protects the reader rules from prose.
     """
@@ -135,8 +155,8 @@ def prepare(cmd):
     blanked = re.sub(HERESTRING, "''", blanked)
     blanked = re.sub(PROSE_ARG, r"\1 ''", blanked)
     scan = re.sub(QUOTED, lambda m: "''" if m.group(0)[0] == "'" else '""', blanked)
-    scan_cat = re.sub(QUOTED, lambda m: m.group(0)[1:-1], blanked)
-    return scan, scan_cat
+    scan_readers = re.sub(QUOTED, lambda m: m.group(0)[1:-1], blanked)
+    return scan, scan_readers
 
 
 # A command segment ends at `;`, newline, `&&`, `||`, or a bare `&` — but not
@@ -153,25 +173,29 @@ def segment(text, start):
 def lands_in_file(seg):
     """True when the segment's output reaches a file, not the context.
 
-    A file redirect in the first pipe stage (a digit before `>` is an fd
-    redirect, `2>`, not a landing), or a PowerShell file cmdlet downstream.
+    A file redirect in any pipe stage (`… | jq .body > x` lands; a digit
+    before `>` is an fd redirect, `2>`, not a landing), or a PowerShell file
+    cmdlet downstream.
     """
-    first = seg.split("|", 1)[0]
-    if re.search(r"(?<!\d)>\s*\S", first):
+    if re.search(r"(?<!\d)>\s*\S", seg):
         return True
     return re.search(r"\|\s*(?:Out-File|Set-Content|Add-Content)\b", seg) is not None
 
 
 def piped_or_redirected(seg):
-    """True when a reader's output is piped onward or lands in a file."""
-    return "|" in seg or lands_in_file(seg)
+    """True when a reader's output is piped onward (into something that is
+    not a pass-through filter) or lands in a file."""
+    if lands_in_file(seg):
+        return True
+    stages = seg.split("|")[1:]
+    return bool(stages) and not any(PASSTHROUGH.match(st) for st in stages)
 
 
 def check(tool_name, cmd):
     """The block message for *cmd*, or None when it passes."""
     if tool_name not in SHELL_TOOLS:
         return None
-    scan, scan_cat = prepare(cmd or "")
+    scan, scan_readers = prepare(cmd or "")
 
     # 1. Noisy runs land in a file.
     for m in re.finditer(NOISY, scan):
@@ -180,20 +204,28 @@ def check(tool_name, cmd):
 
     # 2. gh views/diffs land in a file.
     for m in re.finditer(r"\bgh\s+(?:issue\s+view|pr\s+view|pr\s+diff)\b", scan):
-        if not lands_in_file(segment(scan, m.start())):
+        seg = segment(scan, m.start())
+        if not lands_in_file(seg) and "--web" not in seg:
             return GH_MSG
 
-    # 3a. for-loop cat sweep: `for f in src/*.py; do cat $f; done`
-    if re.search(r"\bfor\b[^;]*" + GUARDED_EXT_RE + r".*\bcat\b", scan_cat):
+    # 3a. for-loop cat sweep: `for f in src/*.py; do cat $f; done` — the cat
+    # must sit inside the loop body.
+    if re.search(
+        r"\bfor\b[^;\n]*"
+        + GUARDED_EXT_RE.pattern
+        + r"[\s\S]*?\bdo\b[\s\S]*?\bcat\b[\s\S]*?\bdone\b",
+        scan_readers,
+        re.I,
+    ):
         return CAT_LOOP_MSG
 
     # 3b. Whole-file readers.
-    for m in READER.finditer(scan_cat):
+    for m in READER.finditer(scan_readers):
         name = m.group("cmd")
         args = m.group("args")
-        if not re.search(GUARDED_EXT_RE, args):
+        if not GUARDED_EXT_RE.search(args):
             continue
-        if piped_or_redirected(segment(scan_cat, m.start("cmd"))):
+        if piped_or_redirected(segment(scan_readers, m.start("cmd"))):
             continue
         if whole_file(name, args):
             return WHOLE_FILE_MSG
@@ -209,9 +241,7 @@ def whole_file(name, args):
             return True
         # Get-Content and type (its alias) — bounded by -TotalCount / -Tail
         # (aliases -Head/-First/-Last).
-        return not any(
-            re.match(r"-(?:TotalCount|Tail|Head|First|Last)\b", t, re.I) for t in tokens
-        )
+        return not any(PS_COUNT_FLAG.match(t) for t in tokens)
     if name in ("head", "tail"):
         if any(re.match(r"-c\b|--bytes\b", t) for t in tokens):
             return True
@@ -226,7 +256,10 @@ def whole_file(name, args):
         else:
             rest = [t for t in tokens if not t.startswith("-")]
             script = rest[0] if len(rest) > 1 else ""
-        return script.replace("\\", "") in ("", "p", "1,$p")
+            # `1,$ p` splits the address from the command.
+            if script == "1,$" and len(rest) > 2 and rest[1] == "p":
+                script = "1,$p"
+        return script.replace("\\", "") in ("", "p", "1,$p", "$!p")
     return False
 
 
