@@ -320,8 +320,13 @@ def panns_tagger(path: Path) -> Curve:
     job dies on the GPU rather than returning a boundary list.
     """
     module = _loaded()
-    device.announce("PANNs")
-    detector = module.SoundEventDetection(checkpoint_path=None)
+    note = device.announce("PANNs")
+    # PANNs defaults to "cuda" and falls back to the CPU without saying so, which reads
+    # exactly like a run that reached the card. Naming the device — off the note just
+    # announced — makes the record answerable for where the curve was computed (#245).
+    detector = module.SoundEventDetection(
+        checkpoint_path=None, device=device.inference_device(note)
+    )
     wanted = _wanted(module)
     log.info("Tagging %s for applause with PANNs", path.name)
 

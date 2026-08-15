@@ -33,8 +33,9 @@ analysis = [
     # beat_this has no PyPI release; pinned to the commit the corpus was measured with.
     "beat-this @ git+https://github.com/CPJKU/beat_this@b95c8ab0c58c2d9fcfd40508ae8dffbc05ac4f5c",
     # torchcodec minors pair with torch minors (0.15 <-> 2.13); move them together or decode
-    # dies at import. On Windows the PyPI torch wheel is the CPU build, which is what the
-    # corpus was measured on; CUDA torch is #128's business, not this extra's.
+    # dies at import. The pins are the ones the corpus was measured with and did not move in
+    # #245 — only the *build* did, via [tool.uv.sources] below: on Windows PyPI ships the CPU
+    # wheel, so these three come off the cu130 index instead.
     "torch>=2.13,<2.14",
     "torchcodec>=0.15,<0.16",
     # beat_this pulls torchaudio unpinned, and it pairs with torch minors the same way
@@ -84,6 +85,29 @@ dev = [
 # numba 0.66.0 is the latest stable as of 2026-08; when 0.67 ships stable it likely lifts the
 # ceiling and this block can go.
 constraint-dependencies = ["numpy<2.5"]
+
+# The CUDA wheels for the beat grid and the applause curve (#245). PyPI's torch is one
+# wheel per platform and only the **Windows** one is CPU-only (122 MB, no CUDA runtime);
+# the Linux wheel already depends on `nvidia-*-cu13` and is the CUDA build. So the index
+# is mapped for `win32` alone: the live box gets `+cu130`, and a Linux/CI resolve is left
+# exactly as it was — no Windows-only wheels dragged into a universal lock, and no card
+# needed to resolve or import (ADR 0002 injects the models; the fake tier never loads
+# torch).
+#
+# cu130 is the index, not a floor: the live box's driver is CUDA 13.3, and it is the
+# highest index carrying all three pinned minors as cp312 win_amd64 — torch 2.13.0,
+# torchaudio 2.11.0 (its last release; torchaudio stopped there), torchcodec 0.15.0.
+# When a pin moves, check the same index for all three before moving any of them:
+# `pip index versions torch --index-url https://download.pytorch.org/whl/cu130`.
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu130", marker = "sys_platform == 'win32'" }]
+torchaudio = [{ index = "pytorch-cu130", marker = "sys_platform == 'win32'" }]
+torchcodec = [{ index = "pytorch-cu130", marker = "sys_platform == 'win32'" }]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

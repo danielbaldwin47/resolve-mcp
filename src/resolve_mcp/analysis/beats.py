@@ -102,9 +102,12 @@ def detect(path: Path, detector: Detector | None = None) -> BeatGrid:
 def beat_this_detector(path: Path) -> BeatGrid:
     """The real thing: beat_this over the whole file, beats and downbeats in seconds."""
     module = _loaded()
-    device.announce("beat_this")
+    note = device.announce("beat_this")
     log.info("Running beat_this over %s", path.name)
-    beats, downbeats = module.File2Beats()(str(path))
+    # `File2Beats` defaults to device="cpu" upstream, whatever wheel torch is — so the
+    # device is handed to it rather than left to the model (#245). Off the announced note,
+    # so the line just logged is a claim about this run and not a second reading of torch.
+    beats, downbeats = module.File2Beats(device=device.inference_device(note))(str(path))
     return BeatGrid(
         beats=tuple(float(one) for one in beats),
         downbeats=tuple(float(one) for one in downbeats),
