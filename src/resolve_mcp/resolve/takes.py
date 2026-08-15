@@ -37,7 +37,7 @@ from ..errors import (
     ResolveMcpError,
     TimelineOperationError,
 )
-from ..findings import Finding
+from ..findings import Finding, refuse
 from ..logging_config import get_logger
 from ..timing import dual_time
 from . import timeline as timeline_read
@@ -219,16 +219,13 @@ def _checked_cut(cut_file: str) -> LoadedDocument:
     findings: list[Finding] = (
         [loaded.parse_error] if loaded.parse_error is not None else validate_structure(loaded.doc)
     )
-    errors = [finding for finding in findings if finding.severity == "error"]
-    if errors:
-        raise CutInvalidError(
-            cause=f"The cut file has {len(errors)} error(s), so no take was swapped.",
-            detail={
-                "cut_file": str(loaded.path),
-                "content_hash": loaded.content_hash,
-                "errors": [finding.as_dict() for finding in errors],
-            },
-        )
+    refuse(
+        findings,
+        error=CutInvalidError,
+        what="cut file",
+        consequence="no take was swapped",
+        detail={"cut_file": str(loaded.path), "content_hash": loaded.content_hash},
+    )
     return loaded
 
 

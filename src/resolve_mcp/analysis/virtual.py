@@ -35,7 +35,7 @@ from ..cut.document import read_cut_file
 from ..cut.layout import is_gap, overlay_positions, positions, total_frames
 from ..document import LoadedDocument
 from ..errors import InvalidRequestError
-from ..findings import Finding, ordered
+from ..findings import Finding, ordered, report
 from ..spill import capped
 from ..timing import IN_POINT, OUT_POINT, SECONDS_PRECISION, dual_time, frames_from_seconds
 from . import records
@@ -176,7 +176,7 @@ def _result(
             "segments": read_back,
             "seams": seams,
             "counts": counts,
-            "warnings": [finding.as_dict() for finding in findings],
+            **report(findings),
         },
         key="words",
         whole=rows,

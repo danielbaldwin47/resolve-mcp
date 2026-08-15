@@ -26,7 +26,12 @@ from resolve_mcp.ffmpeg import Completed, Runner
 from resolve_mcp.jobs.runner import wait_for
 from resolve_mcp.resolve.connection import get_connection
 from resolve_mcp.tools import video as video_tools
-from resolve_mcp.video.scenes import DEFAULT_THRESHOLD, INLINE_CUTS, detect_scene_cuts
+from resolve_mcp.video.scenes import (
+    DEFAULT_THRESHOLD,
+    INLINE_CUTS,
+    KIND,
+    detect_scene_cuts,
+)
 
 from .conftest import Attach
 from .fakes import (
@@ -305,6 +310,20 @@ def test_the_tool_shapes_a_refusal_rather_than_raising(attach: Attach, fixture_v
     assert "context" in envelope
 
 
+def test_the_tool_hands_the_job_back_in_the_one_envelope_shape(
+    attach: Attach, fixture_video: Path
+) -> None:
+    """The same shape the analysis and render starters reply with (#219) — record under job."""
+    attach(_studio_holding(fixture_video))
+
+    envelope = video_tools.detect_scene_cuts("broll_pan.mp4")
+
+    assert envelope["ok"] is True, envelope.get("error")
+    assert envelope["job"]["kind"] == KIND
+    assert envelope["job"]["job_id"].startswith(KIND)
+    assert "job_id" not in envelope
+
+
 # --- against real ffmpeg -----------------------------------------------------------------------
 
 
@@ -315,7 +334,7 @@ def test_real_ffmpeg_finds_the_one_cut_in_a_two_shot_clip(attach: Attach, tmp_pa
     attach(_studio_holding(source, {"FPS": "10", "Start": "0", "End": "19", "Frames": "20"}))
 
     envelope = video_tools.detect_scene_cuts("broll_pan.mp4")
-    record = wait_for(envelope["job_id"])
+    record = wait_for(envelope["job"]["job_id"])
 
     assert envelope["ok"] is True, envelope.get("error")
     assert record.state == "completed", record.error

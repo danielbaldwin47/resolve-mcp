@@ -26,7 +26,7 @@ def get_job(job_id: str) -> dict[str, Any]:
     cause/fix shape as any other failure; cached is true when the result came back without
     the work being redone.
     """
-    return {"job": store.load(job_id).payload()}
+    return store.load(job_id).payload()
 
 
 @tool

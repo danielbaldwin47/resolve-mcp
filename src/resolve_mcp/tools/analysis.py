@@ -51,16 +51,14 @@ def analyze_music(
     default, which is the EBU short-term window. beats=false or energy=false runs one half.
     Reruns on unchanged audio come back from cache immediately; refresh=true redoes the work.
     """
-    return {
-        "job": music.analyze_music(
-            audio,
-            beats=beats,
-            energy=energy,
-            window_seconds=window_seconds,
-            hop_seconds=hop_seconds,
-            refresh=refresh,
-        )
-    }
+    return music.analyze_music(
+        audio,
+        beats=beats,
+        energy=energy,
+        window_seconds=window_seconds,
+        hop_seconds=hop_seconds,
+        refresh=refresh,
+    )
 
 
 @tool
@@ -136,22 +134,20 @@ def analyze_structure(
     before it is called where it was measured instead. Reruns on unchanged audio come back
     from cache immediately.
     """
-    return {
-        "job": structure.analyze_structure(
-            audio,
-            tunes=tunes,
-            solos=solos,
-            stems=stems,
-            threshold=threshold,
-            scale=scale,
-            tune_seconds=tune_seconds,
-            settle_seconds=settle_seconds,
-            density_per_second=density_per_second,
-            solo_seconds=solo_seconds,
-            snap_seconds=snap_seconds,
-            refresh=refresh,
-        )
-    }
+    return structure.analyze_structure(
+        audio,
+        tunes=tunes,
+        solos=solos,
+        stems=stems,
+        threshold=threshold,
+        scale=scale,
+        tune_seconds=tune_seconds,
+        settle_seconds=settle_seconds,
+        density_per_second=density_per_second,
+        solo_seconds=solo_seconds,
+        snap_seconds=snap_seconds,
+        refresh=refresh,
+    )
 
 
 @tool
@@ -185,20 +181,18 @@ def transcribe_audio(
     audio the cache would otherwise answer for.
     """
     connection = get_connection()
-    return {
-        "job": transcribe.transcribe_audio(
-            connection,
-            clip=clip,
-            bin=bin,
-            timeline=timeline,
-            model=model,
-            language=language,
-            low_confidence=low_confidence,
-            silence_threshold_db=silence_threshold_db,
-            min_silence_seconds=min_silence_seconds,
-            refresh=refresh,
-        )
-    }
+    return transcribe.transcribe_audio(
+        connection,
+        clip=clip,
+        bin=bin,
+        timeline=timeline,
+        model=model,
+        language=language,
+        low_confidence=low_confidence,
+        silence_threshold_db=silence_threshold_db,
+        min_silence_seconds=min_silence_seconds,
+        refresh=refresh,
+    )
 
 
 @tool
@@ -311,24 +305,22 @@ def correlate_timeline(
     counts as musical belongs in your style profile, not in this server.
     """
     connection = get_connection()
-    return {
-        "job": correlate.correlate_timeline(
-            connection,
-            beats=beats,
-            timeline=timeline,
-            audio=audio,
-            tunes=tunes,
-            solos=solos,
-            deltas=deltas,
-            supers=supers,
-            quality=quality,
-            bars=bars,
-            angles=angles,
-            track=track,
-            audio_at=audio_at,
-            refresh=refresh,
-        )
-    }
+    return correlate.correlate_timeline(
+        connection,
+        beats=beats,
+        timeline=timeline,
+        audio=audio,
+        tunes=tunes,
+        solos=solos,
+        deltas=deltas,
+        supers=supers,
+        quality=quality,
+        bars=bars,
+        angles=angles,
+        track=track,
+        audio_at=audio_at,
+        refresh=refresh,
+    )
 
 
 @tool
@@ -357,14 +349,12 @@ def detect_drum_fills(
     counted and left out — that is a drum solo, a different question. minimum_confidence is
     the floor on what gets written; refresh redoes work the cache would answer for.
     """
-    return {
-        "job": fills.detect_drum_fills(
-            stems,
-            audio,
-            minimum_confidence=minimum_confidence,
-            refresh=refresh,
-        )
-    }
+    return fills.detect_drum_fills(
+        stems,
+        audio,
+        minimum_confidence=minimum_confidence,
+        refresh=refresh,
+    )
 
 
 @tool
@@ -397,15 +387,13 @@ def detect_phrases(
     twice. minimum_confidence is the floor on what gets written; refresh redoes work the cache
     would answer for.
     """
-    return {
-        "job": phrases.detect_phrases(
-            stems,
-            audio,
-            stem=stem,
-            minimum_confidence=minimum_confidence,
-            refresh=refresh,
-        )
-    }
+    return phrases.detect_phrases(
+        stems,
+        audio,
+        stem=stem,
+        minimum_confidence=minimum_confidence,
+        refresh=refresh,
+    )
 
 
 @tool
@@ -457,17 +445,15 @@ def detect_bars(
     brushes, a quiet room — because the bass walks quarters and is the strongest witness to
     the beat there is. refresh redoes work the cache would answer for.
     """
-    return {
-        "job": bars_module.detect_bars(
-            audio,
-            stems=stems,
-            stem=stem,
-            start_seconds=start_seconds,
-            end_seconds=end_seconds,
-            minimum_confidence=minimum_confidence,
-            refresh=refresh,
-        )
-    }
+    return bars_module.detect_bars(
+        audio,
+        stems=stems,
+        stem=stem,
+        start_seconds=start_seconds,
+        end_seconds=end_seconds,
+        minimum_confidence=minimum_confidence,
+        refresh=refresh,
+    )
 
 
 TOOLS: tuple[Any, ...] = (

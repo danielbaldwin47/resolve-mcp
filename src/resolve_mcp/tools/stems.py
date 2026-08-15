@@ -26,7 +26,7 @@ def separate_stems(
 ) -> dict[str, Any]:
     """Split audio into stems on the GPU, in two passes or three, as a background job.
 
-    Returns a job_id immediately — poll it with get_job. Pass one splits the mix into
+    Returns a job immediately — poll it with get_job. Pass one splits the mix into
     vocals, drums, bass and other; pass two decomposes the drum stem into kick, snare and
     toms, which is what fill detection reads. The result is paths on disk, not audio.
 
@@ -53,18 +53,16 @@ def separate_stems(
     job waits for the first and returns the stems it wrote rather than failing or separating
     the same audio twice, so it reports "waiting" for as long as the first one takes.
     """
-    return {
-        "job": stems.separate_stems(
-            get_connection(),
-            scope=scope,
-            timeline=timeline,
-            clip=clip,
-            bin=bin,
-            refresh=refresh,
-            split_wind=split_wind,
-            detach=detach,
-        )
-    }
+    return stems.separate_stems(
+        get_connection(),
+        scope=scope,
+        timeline=timeline,
+        clip=clip,
+        bin=bin,
+        refresh=refresh,
+        split_wind=split_wind,
+        detach=detach,
+    )
 
 
 TOOLS: tuple[Any, ...] = (separate_stems,)

@@ -58,7 +58,7 @@ from ..cut.layout import (
     placements,
 )
 from ..errors import BuildFailedError, CutInvalidError, TimelineNotFoundError
-from ..findings import Finding
+from ..findings import Finding, refuse, report
 from ..logging_config import get_logger
 from ..naming import latest_version, next_version_name, version_name
 from . import cut, markers, mix, settings, takes
@@ -173,16 +173,16 @@ def build_timeline(
 ) -> dict[str, Any]:
     """Build ``cut_file`` as a fresh ``<name> v<N>`` timeline and report what landed."""
     checked = cut.preflight(connection, cut_file, min_segment_frames)
-    if checked.errors:
-        raise CutInvalidError(
-            cause=f"The cut file has {len(checked.errors)} error(s), so nothing was built.",
-            detail={
-                "cut_file": str(checked.loaded.path),
-                "content_hash": checked.loaded.content_hash,
-                "errors": [finding.as_dict() for finding in checked.errors],
-                "warnings": [finding.as_dict() for finding in checked.warnings],
-            },
-        )
+    refuse(
+        checked.findings,
+        error=CutInvalidError,
+        what="cut file",
+        consequence="nothing was built",
+        detail={
+            "cut_file": str(checked.loaded.path),
+            "content_hash": checked.loaded.content_hash,
+        },
+    )
     # E1 is an error, so a pre-flight with no errors has a document that parsed and matched
     # the schema — every read of it below is a field the rules have already been over.
     doc: dict[str, Any] = checked.loaded.doc
@@ -298,7 +298,7 @@ def build_timeline(
         # reads back whether the device it asked for is the device that arrived.
         "tail": applied,
         "markers": carried,
-        "warnings": [finding.as_dict() for finding in checked.warnings],
+        **report(checked.findings),
     }
 
 
@@ -687,7 +687,7 @@ def _refuse_locked_tracks(timeline: Timeline, shots: list[Shot], name: str) -> N
     raise BuildFailedError(
         cause=f"{len(locked)} target track(s) of {name!r} are locked, so nothing was appended.",
         fix="Unlock the track in the timeline header and build again.",
-        detail={"timeline": name, "errors": [finding.as_dict() for finding in locked]},
+        detail={"timeline": name, **report(locked)},
     )
 
 

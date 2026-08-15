@@ -22,7 +22,9 @@ timelines. The server measures; Claude decides.
 - **job** — background compute (analysis, stems, scenes) with one JSON
   record on disk; disk is the only source of truth.
 - **envelope** — the shared tool-result shape every MCP tool returns
-  (`tools/envelope.py`).
+  (`tools/envelope.py`). A tool that hands back a job record replies
+  `{"job": record}`; the decorator recognises the record and wraps it, so no
+  starter builds that key itself (#219).
 - **spill** — oversized results written to disk for the agent to grep
   instead of truncating. Every listing that can outgrow a reply is capped by
   `spill.capped`, so `truncated` and `spilled_to` mean one thing everywhere and
@@ -106,10 +108,10 @@ Top level:
 | --- | --- |
 | `config.py` | zero-config defaults, `RESOLVE_MCP_*` env overrides |
 | `deliver.py` | render preset + timeline span as a background job |
-| `document.py` | read agent-authored JSON off disk, hash exactly the bytes read |
+| `document.py` | read agent-authored JSON off disk, hash exactly the bytes read; `Preflight` — the shared *loaded document + findings* shape both contracts subclass (#219) |
 | `errors.py` | structured cause/fix errors; tracebacks never reach the agent |
 | `ffmpeg.py` | the one place the server shells out to ffmpeg (argv lists) |
-| `findings.py` | shared finding shape `{rule, id, message, fix_hint}` |
+| `findings.py` | shared finding shape `{rule, id, message, fix_hint}`; `report` is the one `{errors, warnings}` reply and `refuse` the one raise-if-errors preamble (#219) |
 | `interpreter.py` | guard on which interpreters may attach to fusionscript (ADR 0001) |
 | `lease.py` | is the owner of this claim still alive — `SESSION`, `liveness`, `claim`/`holder` (#217) |
 | `logging_config.py` | stderr-only logging (stdout belongs to MCP transport) |
@@ -306,7 +308,8 @@ outlives the import until the caller has read the shots back on it, #221),
 `get_titles_schema`), `validate` (9 errors + 2 warnings).
 
 `tools/` — MCP tool layer, thin, grouped by workflow: `analysis`, `cut`,
-`envelope` (**shared envelope + `@tool` decorator + handle-death retry**),
+`envelope` (**shared envelope + `@tool` decorator + handle-death retry + the
+job-record wrap**),
 `escape_hatch` (`run_python`), `jobs`, `media`, `project`, `render`,
 `stems`, `timeline`, `titles`, `video`. Registration: each module exposes
 `TOOLS: tuple`; `server.build_server()` iterates every module's `TOOLS`
@@ -355,6 +358,13 @@ covers `resolve/media` (what the six operations do with what the adapter hands
 them). Both drive the fake seam through `tools/media`, and both build their
 pools from `tests/mediapool.py` (`a_file`, `a_clip`, `a_shallow_copy_pool`) so
 the pair cannot drift on what a clip or a shadowed copy looks like.
+
+`test_findings.py` covers `findings` and the pre-flight shape in `document`:
+the severity split, the packaged `{errors, warnings}` reply, the refusal
+sentence, and that the cut and titles contracts subclass the one shape.
+`test_envelope.py` covers the job-record wrap in `tools/envelope` — including
+the reconnect path, which is a second return statement and so a second place
+the shape can drift (#219).
 
 `test_lease.py` covers `lease` — the liveness truth table in memory, then the
 claim protocol with both the liveness answer and the read injected, so a dead

@@ -269,7 +269,8 @@ def test_nothing_here_blocks_a_cut(tmp_path: Path) -> None:
 
     assert set(rules(reading)) >= {"W3", "W4", "W7"}
     assert all(rule.startswith("W") for rule in rules(reading))
-    assert "errors" not in reading
+    # The packaged report always carries both keys (#219); an empty one is the statement.
+    assert reading["errors"] == []
 
 
 def test_a_long_reading_goes_to_disk(tmp_path: Path) -> None:

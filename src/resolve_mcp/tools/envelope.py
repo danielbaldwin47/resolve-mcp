@@ -1,11 +1,12 @@
 """The shape every tool result has.
 
-Two guarantees live here, so no individual tool has to remember them:
+Three guarantees live here, so no individual tool has to remember them:
 
 * every result echoes the current project/timeline context, so a project switch is
   visible the moment it happens;
 * every failure is ``ok: false`` with a structured ``cause``/``fix`` — never an exception
-  across the tool boundary, never a traceback in the payload.
+  across the tool boundary, never a traceback in the payload;
+* a tool that hands back a job record replies ``{"job": record}``, whichever tool it is.
 """
 
 from __future__ import annotations
@@ -23,9 +24,27 @@ log = get_logger("tools")
 
 Envelope = dict[str, Any]
 
+JOB_RECORD_KEYS = frozenset({"job_id", "kind", "state"})
+"""What identifies a returned payload as a job record rather than a result of its own.
+
+The three fields every record has from the moment it is created — and which no other tool
+payload carries together — so recognising them costs nothing and cannot be forgotten the
+way the ``{"job": ...}`` wrap was at the video tools (#219).
+"""
+
 
 def current_context() -> dict[str, Any]:
     return context(get_connection())
+
+
+def shaped(payload: dict[str, Any]) -> dict[str, Any]:
+    """A job record becomes ``{"job": record}``; every other payload passes through.
+
+    One envelope for "I started a job", built here rather than at each starter: the agent
+    polls what ``get_job`` returns, so a starter that spliced the record into the envelope
+    top level made the same concept read two ways depending on which tool it came from.
+    """
+    return {"job": payload} if payload.keys() >= JOB_RECORD_KEYS else payload
 
 
 def tool[**P](fn: Callable[P, dict[str, Any]]) -> Callable[P, Envelope]:
@@ -44,7 +63,7 @@ def tool[**P](fn: Callable[P, dict[str, Any]]) -> Callable[P, Envelope]:
                 return retried
             log.exception("%s raised unexpectedly", fn.__name__)
             return failure(InternalError(cause=f"{type(exc).__name__}: {exc}"))
-        return {"ok": True, **payload, "context": current_context()}
+        return {"ok": True, **shaped(payload), "context": current_context()}
 
     return wrapper
 
@@ -80,7 +99,7 @@ def _retry_if_the_handle_died[**P](
                 f"({type(original).__name__}: {original}).",
             )
         )
-    return {"ok": True, **payload, "context": current_context()}
+    return {"ok": True, **shaped(payload), "context": current_context()}
 
 
 def failure(error: ResolveMcpError) -> Envelope:

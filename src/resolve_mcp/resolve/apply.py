@@ -37,6 +37,7 @@ from dataclasses import dataclass
 from typing import Any, Final, NamedTuple
 
 from ..errors import TitlesApplyFailedError, TitlesInvalidError
+from ..findings import refuse, report
 from ..logging_config import get_logger
 from ..timing import dual_time
 from ..titles.assets import Asset
@@ -105,17 +106,16 @@ class OwnedTrack:
 def apply_titles(connection: ResolveConnection, titles_file: str) -> dict[str, Any]:
     """Clear the Titles track and re-place every event in ``titles_file`` onto it."""
     checked = titles_read.preflight(connection, titles_file)
-    if checked.errors:
-        raise TitlesInvalidError(
-            cause=f"The titles file has {len(checked.errors)} error(s), so nothing was "
-            f"applied and the Titles track was not touched.",
-            detail={
-                "titles_file": str(checked.loaded.path),
-                "content_hash": checked.loaded.content_hash,
-                "errors": [finding.as_dict() for finding in checked.errors],
-                "warnings": [finding.as_dict() for finding in checked.warnings],
-            },
-        )
+    refuse(
+        checked.findings,
+        error=TitlesInvalidError,
+        what="titles file",
+        consequence="nothing was applied and the Titles track was not touched",
+        detail={
+            "titles_file": str(checked.loaded.path),
+            "content_hash": checked.loaded.content_hash,
+        },
+    )
     # No error means the document parsed, matched the schema and resolved against the
     # project — every reading below is one the rules have already been over.
     project, timeline = checked.project, checked.timeline
@@ -150,7 +150,7 @@ def apply_titles(connection: ResolveConnection, titles_file: str) -> dict[str, A
         "track": track.as_dict(),
         "cleared": cleared,
         "placed": [_placed(one, checked.fps, checked.assets.get(one.event.id)) for one in titled],
-        "warnings": [finding.as_dict() for finding in checked.warnings],
+        **report(checked.findings),
     }
 
 

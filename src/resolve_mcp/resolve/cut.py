@@ -14,8 +14,10 @@ here is a file that will not abort a build on validation.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, NamedTuple
 
+from .. import document
 from ..cut.document import read_cut_file
 from ..cut.layout import gaps, shots, total_frames
 from ..cut.schema import ANNOTATED_EXAMPLE, SCHEMA_DOC, SCHEMA_VERSION
@@ -27,8 +29,7 @@ from ..cut.validate import (
     validate_project,
     validate_structure,
 )
-from ..document import LoadedDocument
-from ..findings import Finding, severity_of
+from ..findings import report, severity_of
 from ..logging_config import get_logger
 from ..timing import dual_time
 from . import pool as mediapool
@@ -72,20 +73,15 @@ class Source(NamedTuple):
     located: mediapool.LocatedClip
 
 
-class Preflight(NamedTuple):
-    """One pass of the rules, and the pool reading they were judged against."""
+@dataclass(frozen=True)
+class Preflight(document.Preflight):
+    """One pass of the rules, and the pool reading they were judged against.
 
-    loaded: LoadedDocument
-    findings: list[Finding]
+    ``sources`` has no default: a pre-flight that read no clips read none *because* the
+    rules stopped it, and that is a decision the caller states rather than one it omits.
+    """
+
     sources: list[Source]
-
-    @property
-    def errors(self) -> list[Finding]:
-        return [finding for finding in self.findings if finding.severity == "error"]
-
-    @property
-    def warnings(self) -> list[Finding]:
-        return [finding for finding in self.findings if finding.severity == "warning"]
 
     @property
     def facts(self) -> list[ClipFacts]:
@@ -189,8 +185,7 @@ def _report(checked: Preflight) -> dict[str, Any]:
         "cut_file": str(checked.loaded.path),
         "content_hash": checked.loaded.content_hash,
         "valid": not checked.errors,
-        "errors": [finding.as_dict() for finding in checked.errors],
-        "warnings": [finding.as_dict() for finding in checked.warnings],
+        **report(checked.findings),
         "cut": _summary(_readable_doc(checked)),
     }
 

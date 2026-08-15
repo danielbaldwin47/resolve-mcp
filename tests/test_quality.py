@@ -414,7 +414,7 @@ def test_real_ffmpeg_samples_a_clip_that_goes_out_of_focus(attach: Attach, tmp_p
     attach(_studio_holding(source, {"FPS": "10", "Start": "0", "End": "59", "Frames": "60"}))
 
     envelope = video_tools.analyze_quality(source.name)
-    record = wait_for(envelope["job_id"])
+    record = wait_for(envelope["job"]["job_id"])
 
     assert envelope["ok"] is True, envelope.get("error")
     assert record.state == "completed", record.error

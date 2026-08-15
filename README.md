@@ -110,7 +110,8 @@ exposes, since a media-pool template has no comp to ask. The edit changes the *t
 and not `titles.json`, so the next `apply_titles` puts the old wording back: fix the file
 too whenever the change is one worth keeping.
 
-Heavy work runs as a background job: the starter returns a `job_id` immediately, `get_job`
+Heavy work runs as a background job: every starter replies `{"job": record}` immediately —
+one shape whichever starter it was — `get_job`
 polls it, and results are cached under the cache root against the media and the parameters,
 so an unchanged rerun is instant. Job records live on disk, which is what lets `list_jobs`
 recover after a restart — a job that was still running when the server went down comes back
