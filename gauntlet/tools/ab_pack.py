@@ -2149,8 +2149,10 @@ def build_label(
 
     # Through framing's writer rather than json.dumps: the reader on the other side is
     # framing's too, so the shape of a row stops being a convention this file agreed with
-    # correlate_timeline by hand. Everything above rides as the header, and the cut records
-    # land one to a line -- the layout analysis/records exists for.
+    # correlate_timeline by hand. The cut records land one to a line, which is the layout
+    # analysis/records exists for; everything else rides as the header, and a header value
+    # is one line however long it is -- so the shots array and the audio curves are no
+    # longer indented the way json.dumps left them. Grep the cuts, jq the rest.
     framing.write_catalog(label_dir / "cuts.json", cut_rows, header=cuts_doc)
     # The supers again as a catalog of their own, so correlate_timeline can join them onto a
     # timeline's cuts the way it joins the cut deltas: same records shape, one row per super.

@@ -444,9 +444,13 @@ CATALOG_KIND = "cut_deltas"
 CATALOG_FIELD = "cuts"
 """The record field a catalog carries: one record per boundary, in time order."""
 
-CATALOG_TIME = "t"
-"""The column a record file is a timeline by — ``analysis.records``' own, named here
-because a row's other columns are the writer's and this one is not."""
+CATALOG_COLUMNS = ("t", "delta")
+"""The two columns a catalog row owns: when the cut is, and what the picture did.
+
+Everything else on a row is its writer's. These two are written last and read first, so a
+writer whose own record already carries a ``t`` or a ``delta`` has that one replaced rather
+than silently deciding what this file means — the pack's own ``t`` is the same number, and
+its own ``delta`` would be the shape this interface exists to stop drifting."""
 
 
 class Cut(NamedTuple):
@@ -480,13 +484,15 @@ def write_catalog(
     so the shape on disk is this module's to change and nobody else's to guess. ``header``
     is whatever the writer wants above the records — a pack's own stats, the label it
     built — and ``kind`` and ``count`` are written over it, being this file's own claim
-    about itself rather than the writer's.
+    about itself rather than the writer's. ``CATALOG_COLUMNS`` are written over a row's
+    ``extra`` for the same reason.
     """
+    time, delta = CATALOG_COLUMNS
     rows = [
         {
             **dict(one.extra),
-            CATALOG_TIME: one.t,
-            "delta": None if one.reading is None else one.reading.as_record(),
+            time: one.t,
+            delta: None if one.reading is None else one.reading.as_record(),
         }
         for one in cuts
     ]
@@ -511,12 +517,13 @@ def read_catalog(path: Path) -> tuple[Cut, ...]:
 
 
 def _cut(path: Path, row: Mapping[str, Any]) -> Cut:
-    held = row.get("delta")
+    time, delta = CATALOG_COLUMNS
+    held = row.get(delta)
     if held is not None and not isinstance(held, Mapping):
         raise InvalidRequestError(
             cause=(
                 f"{path.name} spreads a cut's reading across its row: the delta at "
-                f"t={row['t']} is a bare {type(held).__name__} rather than the record this "
+                f"t={row[time]} is a bare {type(held).__name__} rather than the record this "
                 "measurement writes."
             ),
             fix=(
@@ -525,13 +532,13 @@ def _cut(path: Path, row: Mapping[str, Any]) -> Cut:
                 "from before that interface, and rereading it would answer with terms "
                 "nobody measured."
             ),
-            detail={"file": str(path), "t": row["t"]},
+            detail={"file": str(path), "t": row[time]},
         )
     return Cut(
-        t=float(row[CATALOG_TIME]),
+        t=float(row[time]),
         reading=None if held is None else _reading(held),
         extra=MappingProxyType(
-            {key: value for key, value in row.items() if key not in (CATALOG_TIME, "delta")}
+            {key: value for key, value in row.items() if key not in CATALOG_COLUMNS}
         ),
     )
 

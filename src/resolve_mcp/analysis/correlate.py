@@ -259,10 +259,10 @@ def correlate_timeline(
     clip on the timeline carries it and so none can be read.
 
     ``deltas`` is a cut-delta catalog — the per-cut visual step measured off a rendered
-    picture (``gauntlet/tools/ab_pack.py`` writes one as ``cuts.json``). Its ``t`` has to be
-    in the same clock as this timeline's cuts, which is what a full-length render gives; a
-    catalog measured off a span joins nothing, and the summary says how many rows joined
-    rather than leaving a silent hole.
+    picture, written and read through ``video.framing`` (``gauntlet/tools/ab_pack.py`` writes
+    one as ``cuts.json``). Its ``t`` has to be in the same clock as this timeline's cuts,
+    which is what a full-length render gives; a catalog measured off a span joins nothing,
+    and the summary's ``cuts`` and ``cuts_unread`` say so rather than leaving a silent hole.
 
     ``supers`` is the other catalog off that render: when each burned-in graphic — lower
     third, title card, bug — is on screen. Every cut is measured against them and carries

@@ -29,7 +29,9 @@ a scan of a render onto the cut's own shots, #182), `framing`
 flag: layout, content and size terms over two grey frames, numpy only — and
 the catalog between the two sides of that measurement, `write_catalog` /
 `read_catalog` over `Cut` records, so the pack writes and `analysis/correlate`
-reads one shape rather than two agreeing by convention, #225),
+reads one shape rather than two agreeing by convention, #225 — the one place a
+`video` module reaches into `analysis`, for `records`' file layout and nothing
+else, which is a leaf on `errors` and so carries no cycle back),
 `supers` (the **super**: which burned-in graphics are up when, and which cuts land
 inside one. Pure numpy + scipy over frames somebody else decoded — the pack does
 both decodes, a coarse scan for where and a native-fps walk for the exact in and

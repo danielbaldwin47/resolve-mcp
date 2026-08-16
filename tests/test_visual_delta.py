@@ -320,6 +320,25 @@ def test_a_catalog_row_carries_the_columns_its_writer_added(tmp_path: Path) -> N
     assert doc["label"] == "human"
 
 
+def test_the_two_columns_a_row_owns_are_written_over_its_writer_s(tmp_path: Path) -> None:
+    """A writer that already keeps its own ``t`` or ``delta`` does not get to mean by them.
+
+    Silently letting either through would put a number this module never measured under the
+    name every reader of a catalog trusts.
+    """
+    reading = framing.read_pair(stage(), stage(center=0.8))
+    path = framing.write_catalog(
+        tmp_path / "cuts.json",
+        [framing.Cut(t=1.0, reading=reading, extra={"t": 9.0, "delta": 0.99})],
+    )
+
+    back = framing.read_catalog(path)
+
+    assert back[0].t == 1.0
+    assert back[0].reading == reading
+    assert back[0].extra == {}
+
+
 def test_a_row_that_spreads_the_reading_across_itself_is_refused(tmp_path: Path) -> None:
     """One shape, said out loud.
 
