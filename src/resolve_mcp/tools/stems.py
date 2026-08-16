@@ -10,12 +10,13 @@ from __future__ import annotations
 from typing import Any
 
 from ..audio import acquire, stems
-from ..resolve.connection import get_connection
+from ..resolve.connection import ResolveConnection
 from .envelope import tool
 
 
 @tool
 def separate_stems(
+    connection: ResolveConnection,
     scope: str = acquire.TIMELINE_SCOPE,
     timeline: str | None = None,
     clip: str | None = None,
@@ -54,7 +55,7 @@ def separate_stems(
     the same audio twice, so it reports "waiting" for as long as the first one takes.
     """
     return stems.separate_stems(
-        get_connection(),
+        connection,
         scope=scope,
         timeline=timeline,
         clip=clip,

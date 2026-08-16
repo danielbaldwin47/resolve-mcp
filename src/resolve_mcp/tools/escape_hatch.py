@@ -5,12 +5,12 @@ from __future__ import annotations
 from typing import Any
 
 from ..resolve import scripting
-from ..resolve.connection import get_connection
+from ..resolve.connection import ResolveConnection
 from .envelope import tool
 
 
 @tool
-def run_python(code: str) -> dict[str, Any]:
+def run_python(connection: ResolveConnection, code: str) -> dict[str, Any]:
     """Run DaVinci Resolve scripting-API Python in the server process.
 
     Prefer the real tools: they wrap known API footguns, echo context, and return
@@ -21,7 +21,7 @@ def run_python(code: str) -> dict[str, Any]:
     The returned value is the trailing expression, or a `result` variable if you set one;
     stdout is captured and returned alongside it. Long values are truncated.
     """
-    return scripting.run_python(get_connection(), code)
+    return scripting.run_python(connection, code)
 
 
 TOOLS: tuple[Any, ...] = (run_python,)

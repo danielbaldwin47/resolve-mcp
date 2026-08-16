@@ -10,12 +10,13 @@ from __future__ import annotations
 from typing import Any
 
 from ..resolve import media
-from ..resolve.connection import get_connection
+from ..resolve.connection import ResolveConnection
 from .envelope import tool
 
 
 @tool
 def import_media(
+    connection: ResolveConnection,
     paths: list[str] | None = None,
     bin: str | None = None,  # noqa: A002 - the agent-facing word for a media pool folder
     sequences: list[dict[str, Any]] | None = None,
@@ -42,12 +43,12 @@ def import_media(
     Returns a summary per imported clip, plus not_imported for anything Resolve refused —
     usually a path that is not readable from the machine Resolve runs on.
     """
-    connection = get_connection()
     return media.import_media(connection, paths=paths, bin_path=bin, sequences=sequences)
 
 
 @tool
 def list_media(
+    connection: ResolveConnection,
     bin: str | None = None,  # noqa: A002
     name_contains: str | None = None,
     offline_only: bool = False,
@@ -64,7 +65,6 @@ def list_media(
     written to disk and spilled_to holds the path, so a large pool never blows the token
     budget: read or grep that file for the rest.
     """
-    connection = get_connection()
     return media.list_media(
         connection,
         bin_path=bin,
@@ -77,6 +77,7 @@ def list_media(
 
 @tool
 def inspect_clip(
+    connection: ResolveConnection,
     clip: str,
     bin: str | None = None,  # noqa: A002
     recursive: bool = True,
@@ -94,12 +95,13 @@ def inspect_clip(
     recursive=false stops the search descending, so only the clips the named bin holds
     itself are looked at — the way to reach a copy that a subfolder also holds a copy of.
     """
-    connection = get_connection()
     return media.inspect_clip(connection, clip, bin_path=bin, recursive=recursive)
 
 
 @tool
-def set_clip_metadata(items: list[dict[str, Any]]) -> dict[str, Any]:
+def set_clip_metadata(
+    connection: ResolveConnection, items: list[dict[str, Any]]
+) -> dict[str, Any]:
     """Apply a batch of metadata writes: [{"clip": name, "bin": optional, "fields": {...}}].
 
     An item may add "recursive": false to keep its bin lookup out of that bin's subfolders.
@@ -108,12 +110,13 @@ def set_clip_metadata(items: list[dict[str, Any]]) -> dict[str, Any]:
     metadata. The route taken comes back per field in applied. One item failing never sinks
     the batch — every item gets its own result.
     """
-    connection = get_connection()
     return media.set_clip_metadata(connection, items)
 
 
 @tool
-def organize_media(operations: list[dict[str, Any]]) -> dict[str, Any]:
+def organize_media(
+    connection: ResolveConnection, operations: list[dict[str, Any]]
+) -> dict[str, Any]:
     """Run a batch of bin operations, each reported separately.
 
     Two operations:
@@ -123,12 +126,12 @@ def organize_media(operations: list[dict[str, Any]]) -> dict[str, Any]:
         "from_bin": optional, "recursive": optional} — moves clips, creating the target
         bin if needed. recursive: false keeps the from_bin lookup out of its subfolders.
     """
-    connection = get_connection()
     return media.organize_media(connection, operations)
 
 
 @tool
 def relink_media(
+    connection: ResolveConnection,
     clips: list[str],
     path: str,
     bin: str | None = None,  # noqa: A002
@@ -144,7 +147,6 @@ def relink_media(
     passed in.
     recursive=false keeps the bin lookup out of that bin's subfolders.
     """
-    connection = get_connection()
     return media.relink_media(connection, clips, path, bin_path=bin, recursive=recursive)
 
 

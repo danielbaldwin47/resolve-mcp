@@ -11,12 +11,12 @@ from typing import Any
 
 from ..jobs import store
 from ..spill import capped
-from .envelope import tool
+from .envelope import tool_without_connection
 
 DEFAULT_JOB_LIMIT = 50
 
 
-@tool
+@tool_without_connection
 def get_job(job_id: str) -> dict[str, Any]:
     """Poll one job: running with progress, completed with its result, or failed with a fix.
 
@@ -29,7 +29,7 @@ def get_job(job_id: str) -> dict[str, Any]:
     return store.load(job_id).payload()
 
 
-@tool
+@tool_without_connection
 def list_jobs(state: str | None = None, limit: int = DEFAULT_JOB_LIMIT) -> dict[str, Any]:
     """List jobs newest first — how a restarted session picks up what it started.
 

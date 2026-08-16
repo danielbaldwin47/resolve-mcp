@@ -10,11 +10,11 @@ from __future__ import annotations
 from typing import Any
 
 from ..resolve import apply, title_edit, titles
-from ..resolve.connection import get_connection
-from .envelope import tool
+from ..resolve.connection import ResolveConnection
+from .envelope import tool, tool_without_connection
 
 
-@tool
+@tool_without_connection
 def get_titles_schema() -> dict[str, Any]:
     """Return the titles-file schema v1, its annotated example, and the validation rules.
 
@@ -28,7 +28,7 @@ def get_titles_schema() -> dict[str, Any]:
 
 
 @tool
-def validate_titles(titles_file: str) -> dict[str, Any]:
+def validate_titles(connection: ResolveConnection, titles_file: str) -> dict[str, Any]:
     """Dry-run a titles file and return every error and warning it has, with fix hints.
 
     Worth running after every edit: apply_titles runs the identical checks first, and
@@ -37,11 +37,11 @@ def validate_titles(titles_file: str) -> dict[str, Any]:
     rule, the event or song it is about, what is wrong and how to fix it — all of them at
     once, not the first.
     """
-    return titles.validate_titles(get_connection(), titles_file)
+    return titles.validate_titles(connection, titles_file)
 
 
 @tool
-def apply_titles(titles_file: str) -> dict[str, Any]:
+def apply_titles(connection: ResolveConnection, titles_file: str) -> dict[str, Any]:
     """Place every event in a titles file onto the timeline's own Titles track.
 
     Declarative and re-runnable: the topmost video track named `Titles` belongs to this
@@ -63,11 +63,11 @@ def apply_titles(titles_file: str) -> dict[str, Any]:
     is current. The report says per title whether its fade read back — a fade that did
     not is the one thing here worth checking by eye in the GUI.
     """
-    return apply.apply_titles(get_connection(), titles_file)
+    return apply.apply_titles(connection, titles_file)
 
 
 @tool
-def list_titles(timeline: str | None = None) -> dict[str, Any]:
+def list_titles(connection: ResolveConnection, timeline: str | None = None) -> dict[str, Any]:
     """Read back every title standing on a timeline's Titles track, and what it exposes.
 
     The counterpart to apply_titles: that one writes the track from a file, this one reads
@@ -87,11 +87,12 @@ def list_titles(timeline: str | None = None) -> dict[str, Any]:
     is listed too, with `unreadable` saying why — a stray clip on the Titles track is
     worth knowing about, since the next apply_titles will delete it.
     """
-    return title_edit.list_titles(get_connection(), timeline)
+    return title_edit.list_titles(connection, timeline)
 
 
 @tool
 def edit_title(
+    connection: ResolveConnection,
     title: str | None = None,
     text: str | None = None,
     params: dict[str, Any] | None = None,
@@ -118,7 +119,7 @@ def edit_title(
     wording back. Fix the file too when the change is one you want to keep.
     """
     return title_edit.edit_title(
-        get_connection(),
+        connection,
         title,
         text=text,
         params=params,

@@ -12,11 +12,11 @@ from typing import Any
 from ..analysis import virtual
 from ..analysis.transcript import DEFAULT_LOW_CONFIDENCE
 from ..resolve import build, cut, takes
-from ..resolve.connection import get_connection
-from .envelope import tool
+from ..resolve.connection import ResolveConnection
+from .envelope import tool, tool_without_connection
 
 
-@tool
+@tool_without_connection
 def get_cut_schema() -> dict[str, Any]:
     """Return the cut-file schema v1, its annotated example, and the validation rules.
 
@@ -29,6 +29,7 @@ def get_cut_schema() -> dict[str, Any]:
 
 @tool
 def validate_cut(
+    connection: ResolveConnection,
     cut_file: str,
     min_segment_frames: int = cut.MIN_SEGMENT_FRAMES,
 ) -> dict[str, Any]:
@@ -39,11 +40,10 @@ def validate_cut(
     segment or overlay id, what is wrong and how to fix it — all of them at once, not the
     first. `min_segment_frames` tunes the W1 flash-frame warning only; it never blocks.
     """
-    connection = get_connection()
     return cut.validate_cut(connection, cut_file, min_segment_frames)
 
 
-@tool
+@tool_without_connection
 def virtual_transcript(
     cut_file: str,
     transcripts: dict[str, str] | None = None,
@@ -84,6 +84,7 @@ def virtual_transcript(
 
 @tool
 def build_timeline(
+    connection: ResolveConnection,
     cut_file: str,
     min_segment_frames: int = cut.MIN_SEGMENT_FRAMES,
     carry_markers: bool = True,
@@ -129,12 +130,12 @@ def build_timeline(
     record it if you note the version anywhere. A failure names what did not land; a
     partially built version, if one was made, is scrap and can be deleted.
     """
-    connection = get_connection()
     return build.build_timeline(connection, cut_file, min_segment_frames, carry_markers)
 
 
 @tool
 def swap_take(
+    connection: ResolveConnection,
     cut_file: str,
     segment: str,
     take: int,
@@ -157,7 +158,6 @@ def swap_take(
     a fix rather than swapped on a guess. That is a shape check, not proof of provenance —
     if it matters which version you are on, compare `content_hash` against the build report.
     """
-    connection = get_connection()
     return takes.swap_take(connection, cut_file, segment, take, timeline)
 
 
