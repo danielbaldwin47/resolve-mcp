@@ -73,7 +73,7 @@ from typing import Any, NamedTuple
 import numpy as np
 
 from resolve_mcp.analysis import subject as subject_module
-from resolve_mcp.analysis.correlate import RHYTHM_BINS
+from resolve_mcp.analysis.rhythm import RHYTHM_BINS
 from resolve_mcp.ffmpeg import hwaccels
 from resolve_mcp.video import framing, picture, supers
 from resolve_mcp.video.quality import (
@@ -2066,6 +2066,31 @@ def build_label(
     if subject_track is not None:
         attach_subjects(shot_docs, subject_track["shots"])
 
+    # One record per boundary, carried by the interface that measured it: the reading goes
+    # down through framing's own writer, and correlate_timeline reads it back as a Delta
+    # rather than off a shape agreed by nobody. Everything this pack knows about the same
+    # cut rides along on the row -- a catalog is this file, not a second one beside it.
+    cut_rows = [
+        framing.Cut(
+            t=cut,
+            reading=deltas[i],
+            extra={
+                "index": i + 1,
+                "transition": transitions[i],
+                # Whether a graphic was on screen either side of this cut, and which kind
+                # (#183). Not on its own a fault: a lower third held across cut after cut
+                # is how the human deliverables are titled, while a cut inside a card is
+                # the thing none of them does. A super arriving with the shot, or clearing
+                # the frame before it, is neither -- the review told those apart already.
+                "straddles_super": int(round(cut * fps)) in straddled,
+                "super_kind": straddled.get(int(round(cut * fps))),
+                "strip_sheet": row_of.get(i + 1, {}).get("sheet"),
+                "strip_row": row_of.get(i + 1, {}).get("row"),
+            },
+        )
+        for i, cut in enumerate(cuts)
+    ]
+
     cuts_doc: dict[str, Any] = {
         "label": label,
         "clip_duration_sec": round(duration, 3),
@@ -2094,24 +2119,6 @@ def build_label(
             "unusable_shots": unusable_shots,
         },
         "cut_times_sec": cuts,
-        "cuts": [
-            {
-                "index": i + 1,
-                "t": cut,
-                "transition": transitions[i],
-                "delta": deltas[i].as_record() if deltas[i] is not None else None,
-                # Whether a graphic was on screen either side of this cut, and which kind
-                # (#183). Not on its own a fault: a lower third held across cut after cut
-                # is how the human deliverables are titled, while a cut inside a card is
-                # the thing none of them does. A super arriving with the shot, or clearing
-                # the frame before it, is neither -- the review told those apart already.
-                "straddles_super": int(round(cut * fps)) in straddled,
-                "super_kind": straddled.get(int(round(cut * fps))),
-                "strip_sheet": row_of.get(i + 1, {}).get("sheet"),
-                "strip_row": row_of.get(i + 1, {}).get("row"),
-            }
-            for i, cut in enumerate(cuts)
-        ],
         "shots": shot_docs,
         "ending": ending,
         "slow_transitions": slow_events,
@@ -2140,7 +2147,13 @@ def build_label(
             "windows": len(levels),
         }
 
-    (label_dir / "cuts.json").write_text(json.dumps(cuts_doc, indent=2), encoding="utf-8")
+    # Through framing's writer rather than json.dumps: the reader on the other side is
+    # framing's too, so the shape of a row stops being a convention this file agreed with
+    # correlate_timeline by hand. The cut records land one to a line, which is the layout
+    # analysis/records exists for; everything else rides as the header, and a header value
+    # is one line however long it is -- so the shots array and the audio curves are no
+    # longer indented the way json.dumps left them. Grep the cuts, jq the rest.
+    framing.write_catalog(label_dir / "cuts.json", cut_rows, header=cuts_doc)
     # The supers again as a catalog of their own, so correlate_timeline can join them onto a
     # timeline's cuts the way it joins the cut deltas: same records shape, one row per super.
     (label_dir / "supers.json").write_text(
