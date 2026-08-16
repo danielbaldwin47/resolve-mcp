@@ -38,6 +38,13 @@ detail, and a 128x72 grid is enough shape to correlate and cheap enough that a w
 song's cuts cost milliseconds. Frames arrive as raw grey from the same ffmpeg route
 the occlusion scan uses.
 
+The measurement travels: what reads the boundaries is a render pass, and what joins them
+onto a timeline is ``analysis.correlate``, two processes and often two machines apart. So
+this module owns the file between them as well — ``write_catalog`` and ``read_catalog``
+over ``Cut`` records, the reading down through ``Delta.as_record`` and back up as a
+``Delta``. A catalog is the writer's own file, not a second one beside it: a row carries
+whatever else its writer knew about that cut, untouched.
+
 What this cannot do: it does not know who is on screen. Two different cameras
 pointed at the same soloist from twenty degrees apart score as a step here if the
 backgrounds differ enough, and the true 30-degree rule would call that a jump. The
@@ -47,11 +54,16 @@ so the human's own deliverables sit clear of it (see ``JUMP_DELTA``).
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from pathlib import Path
+from types import MappingProxyType
 from typing import Any, NamedTuple
 
 import numpy as np
 from numpy.typing import NDArray
+
+from ..analysis import records
+from ..errors import InvalidRequestError
 
 GRID_WIDTH = 128
 GRID_HEIGHT = 72
@@ -238,11 +250,28 @@ def summarize(readings: Sequence[Delta], unread: int = 0) -> dict[str, Any]:
     be read at all, and it belongs in the same block as the counts it qualifies — a
     consumer that pastes it on afterwards writes half of this shape somewhere else.
     """
-    values = np.asarray([one.delta for one in readings], dtype=np.float64)
+    return summarize_steps(
+        [one.delta for one in readings],
+        jump_cuts=sum(1 for one in readings if one.jump_cut),
+        unread=unread,
+    )
+
+
+def summarize_steps(steps: Sequence[float], jump_cuts: int, unread: int = 0) -> dict[str, Any]:
+    """The same summary from the two columns a written row keeps, for a reader that has
+    the catalog's numbers rather than its readings.
+
+    ``analysis.correlate`` joins a catalog onto a timeline and keeps a step and a flag per
+    cut; the four terms behind them belong to the boundary, not to the cut it landed on.
+    Handing back a shape built here, rather than one written again over there, is what
+    stops a pack's block and a correlate report's block from being two vocabularies for
+    one measurement.
+    """
+    values = np.asarray(list(steps), dtype=np.float64)
     return {
-        "cuts": len(readings),
+        "cuts": len(values),
         "cuts_unread": unread,
-        "jump_cuts": sum(1 for one in readings if one.jump_cut),
+        "jump_cuts": jump_cuts,
         "delta": {
             "min": round(float(values.min()), 4),
             "p10": round(float(np.quantile(values, 0.10)), 4),
@@ -250,7 +279,7 @@ def summarize(readings: Sequence[Delta], unread: int = 0) -> dict[str, Any]:
             "mean": round(float(values.mean()), 4),
             "max": round(float(values.max()), 4),
         }
-        if readings
+        if len(values)
         else None,
         "threshold": JUMP_DELTA,
     }
@@ -403,3 +432,136 @@ def _reason(layout: float, structure: float, scale: float) -> str:
     if same_size:
         return "same size"
     return "step below threshold"
+
+
+# --------------------------------------------------------------------------
+# the catalog
+
+
+CATALOG_KIND = "cut_deltas"
+"""What a file this module writes says it is, in its header."""
+
+CATALOG_FIELD = "cuts"
+"""The record field a catalog carries: one record per boundary, in time order."""
+
+CATALOG_TIME = "t"
+"""The column a record file is a timeline by — ``analysis.records``' own, named here
+because a row's other columns are the writer's and this one is not."""
+
+
+class Cut(NamedTuple):
+    """One boundary in a catalog: where it sits, and what the picture did across it.
+
+    ``reading`` is ``None`` where the boundary could not be read — a window without room
+    for both stacks, a ramp whose ends nobody located. Written as a null row rather than
+    left out: the catalog is the run's own list of cuts, and a dropped row reports a
+    shorter edit instead of an unread boundary.
+
+    ``extra`` is whatever else its writer knew about this cut — the pack's transition
+    typing, its filmstrip reference. This module carries those through and never reads
+    them, so a writer's own file can *be* the catalog. A catalog that could hold only
+    these two columns would send every writer back to a second file beside it, which is
+    the file convention this interface exists to replace.
+    """
+
+    t: float
+    reading: Delta | None
+    extra: Mapping[str, Any] = MappingProxyType({})
+
+
+def write_catalog(
+    path: Path,
+    cuts: Sequence[Cut],
+    header: Mapping[str, Any] | None = None,
+) -> Path:
+    """Write ``cuts`` as a catalog at ``path``, one record per line. Returns the path.
+
+    The reading goes down through ``as_record`` and comes back up through ``read_catalog``,
+    so the shape on disk is this module's to change and nobody else's to guess. ``header``
+    is whatever the writer wants above the records — a pack's own stats, the label it
+    built — and ``kind`` and ``count`` are written over it, being this file's own claim
+    about itself rather than the writer's.
+    """
+    rows = [
+        {
+            **dict(one.extra),
+            CATALOG_TIME: one.t,
+            "delta": None if one.reading is None else one.reading.as_record(),
+        }
+        for one in cuts
+    ]
+    return records.write(
+        path,
+        {**dict(header or {}), "kind": CATALOG_KIND, "count": len(rows)},
+        CATALOG_FIELD,
+        rows,
+    )
+
+
+def read_catalog(path: Path) -> tuple[Cut, ...]:
+    """A catalog back as typed readings, in time order.
+
+    The strong reader beside the writer, for the same reason ``analysis.records`` keeps
+    its own: what a catalog *is* belongs to this module, so every consumer gets the same
+    answer to a file that is not one — and gets a ``Delta`` rather than a dict whose shape
+    it has to sniff. ``records.rows`` refuses the four ways the path can be wrong; the
+    refusal below is the fifth, and the only one this module alone can name.
+    """
+    return tuple(_cut(path, row) for row in records.rows(path, CATALOG_FIELD))
+
+
+def _cut(path: Path, row: Mapping[str, Any]) -> Cut:
+    held = row.get("delta")
+    if held is not None and not isinstance(held, Mapping):
+        raise InvalidRequestError(
+            cause=(
+                f"{path.name} spreads a cut's reading across its row: the delta at "
+                f"t={row['t']} is a bare {type(held).__name__} rather than the record this "
+                "measurement writes."
+            ),
+            fix=(
+                "Write the catalog through resolve_mcp.video.framing.write_catalog, which "
+                'puts the whole reading under "delta" — a bare number there is a catalog '
+                "from before that interface, and rereading it would answer with terms "
+                "nobody measured."
+            ),
+            detail={"file": str(path), "t": row["t"]},
+        )
+    return Cut(
+        t=float(row[CATALOG_TIME]),
+        reading=None if held is None else _reading(held),
+        extra=MappingProxyType(
+            {key: value for key, value in row.items() if key not in (CATALOG_TIME, "delta")}
+        ),
+    )
+
+
+def _reading(record: Mapping[str, Any]) -> Delta:
+    """One catalog record read back as the reading that wrote it.
+
+    Every term is taken with a default rather than by subscript. A record missing one is
+    an older or hand-edited catalog, and the answer to that is a reading with a hole in it
+    — not a ``KeyError`` out of a worker, two seconds after a call that looked accepted.
+    """
+    return Delta(
+        delta=_term(record, "delta"),
+        content=_term(record, "content"),
+        layout=_term(record, "layout"),
+        structure=_term(record, "structure"),
+        scale=_term(record, "scale"),
+        shift_x=_shift(record, "shift_x"),
+        shift_y=_shift(record, "shift_y"),
+        jump_cut=bool(record.get("jump_cut")),
+        reason=str(record.get("reason") or ""),
+    )
+
+
+def _term(record: Mapping[str, Any], field: str) -> float:
+    found = record.get(field)
+    return float(found) if isinstance(found, int | float) and not isinstance(found, bool) else 0.0
+
+
+def _shift(record: Mapping[str, Any], field: str) -> int | None:
+    """A lag in grid pixels, or ``None`` — which is the ordinary answer at a real cut."""
+    found = record.get(field)
+    return int(found) if isinstance(found, int | float) and not isinstance(found, bool) else None

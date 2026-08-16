@@ -8,10 +8,16 @@ numbers stay inside their stated ranges.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+from typing import Any
+
 import numpy as np
 import pytest
 from numpy.typing import NDArray
 
+from resolve_mcp.analysis import records
+from resolve_mcp.errors import InvalidRequestError
 from resolve_mcp.video import framing
 
 
@@ -257,3 +263,99 @@ def test_a_reading_serialises_to_plain_json_types() -> None:
         "reason",
     }
     assert all(one is None or isinstance(one, float | int | bool | str) for one in record.values())
+
+
+def a_catalog(tmp_path: Path, *rows: dict[str, Any], name: str = "hand.json") -> Path:
+    """A catalog written past the interface, the way a hand-edited file arrives."""
+    return records.write(
+        tmp_path / name, {"kind": framing.CATALOG_KIND, "count": len(rows)}, "cuts", list(rows)
+    )
+
+
+def test_a_catalog_round_trips_through_write_and_read(tmp_path: Path) -> None:
+    """The record is the seam: what the writer measured is what the reader gets back."""
+    reading = framing.read_pair(stage(), stage(center=0.8))
+    path = framing.write_catalog(
+        tmp_path / "cuts.json",
+        [framing.Cut(t=1.033, reading=reading), framing.Cut(t=2.483, reading=None)],
+    )
+
+    back = framing.read_catalog(path)
+
+    assert [one.t for one in back] == [1.033, 2.483]
+    assert back[0].reading == reading
+    assert back[1].reading is None
+
+
+def test_a_catalog_is_read_back_in_time_order(tmp_path: Path) -> None:
+    """A catalog is a timeline, so the reader sorts it rather than trusting the writer."""
+    reading = framing.read_pair(stage(), stage(center=0.8))
+    path = framing.write_catalog(
+        tmp_path / "cuts.json",
+        [framing.Cut(t=4.0, reading=reading), framing.Cut(t=1.0, reading=reading)],
+    )
+
+    assert [one.t for one in framing.read_catalog(path)] == [1.0, 4.0]
+
+
+def test_a_catalog_row_carries_the_columns_its_writer_added(tmp_path: Path) -> None:
+    """The pack writes a transition typing and a filmstrip reference on the same row.
+
+    Those belong to the writer, not to this measurement, and the interface has to carry
+    them through untouched or the pack cannot use it for its own file.
+    """
+    reading = framing.read_pair(stage(), stage(center=0.8))
+    path = framing.write_catalog(
+        tmp_path / "cuts.json",
+        [framing.Cut(t=1.0, reading=reading, extra={"index": 1, "transition": {"type": "hard"}})],
+        header={"label": "human"},
+    )
+
+    back = framing.read_catalog(path)
+    doc = json.loads(path.read_text(encoding="utf-8"))
+
+    assert back[0].extra == {"index": 1, "transition": {"type": "hard"}}
+    assert doc["kind"] == framing.CATALOG_KIND
+    assert doc["count"] == 1
+    assert doc["label"] == "human"
+
+
+def test_a_row_that_spreads_the_reading_across_itself_is_refused(tmp_path: Path) -> None:
+    """One shape, said out loud.
+
+    A bare number under ``delta`` is the flat catalog a hand-rolled writer used to leave,
+    and reading it as an unread boundary would report a measured cut as a hole nobody
+    notices. The refusal names the writer that fixes it.
+    """
+    path = a_catalog(tmp_path, {"t": 1.0, "delta": 0.62, "jump_cut": False})
+
+    with pytest.raises(InvalidRequestError, match="bare float") as refused:
+        framing.read_catalog(path)
+
+    assert "write_catalog" in refused.value.fix
+
+
+def test_a_reading_missing_a_term_reads_as_a_hole_rather_than_a_crash(tmp_path: Path) -> None:
+    """An older or hand-edited record answers with what it holds, from the tool call.
+
+    A ``KeyError`` out of a worker two seconds later is the one answer nobody can act on.
+    """
+    path = a_catalog(tmp_path, {"t": 1.0, "delta": {"delta": 0.08, "jump_cut": True}})
+
+    reading = framing.read_catalog(path)[0].reading
+
+    assert reading is not None
+    assert (reading.delta, reading.jump_cut) == (0.08, True)
+    assert (reading.layout, reading.shift_x, reading.reason) == (0.0, None, "")
+
+
+def test_an_unread_boundary_is_written_as_one(tmp_path: Path) -> None:
+    """A boundary the reader refused is a null on disk, not an absent row.
+
+    The count of cuts is the pack's own; dropping the row would report a shorter edit.
+    """
+    path = framing.write_catalog(tmp_path / "cuts.json", [framing.Cut(t=1.0, reading=None)])
+
+    doc = json.loads(path.read_text(encoding="utf-8"))
+
+    assert doc["cuts"] == [{"t": 1.0, "delta": None}]

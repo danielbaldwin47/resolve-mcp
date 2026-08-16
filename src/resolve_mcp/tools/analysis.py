@@ -242,8 +242,9 @@ def correlate_timeline(
     the 30-degree-rule check. Nothing on a timeline can answer that: it takes frames either
     side of every boundary, so the render comes first and this joins its numbers on by time.
     gauntlet/tools/ab_pack.py writes such a catalog as cuts.json. Render the whole timeline,
-    not a span, or the times will not line up — the visual_delta block in the result says how
-    many cuts joined and how many did not.
+    not a span, or the times will not line up — the visual_delta block in the result is the
+    measurement's own summary shape, so cuts and cuts_unread there say how many joined and
+    how many did not, beside the distribution and the threshold the flag was taken at.
 
     supers is the other catalog off that render: when each burned-in graphic — lower third,
     title card, bug — is on screen, which again nothing on a timeline can answer. Every cut is

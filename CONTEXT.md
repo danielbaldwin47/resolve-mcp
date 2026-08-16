@@ -122,7 +122,7 @@ audio or synthetic frames; `live`: a running Resolve Studio (`pytest -m live`);
 | `video/blocking` | how blocked one frame is + the discriminator; numpy, no I/O | `test_occlusion` | pure |
 | `video/ffmpeg` | the commands video routes run; NVDEC flags, fallback, report | `test_hardware_decode` | pure |
 | `video/frames` | frame grabs — the one compute route that is not a job | `test_frame_grabs` | fake |
-| `video/framing` | how far the picture steps across a cut; the 30-degree flag | `test_visual_delta` | pure |
+| `video/framing` | how far the picture steps across a cut; the 30-degree flag; the cut-delta catalog both sides read | `test_visual_delta` | pure |
 | `video/jpeg` | read back dimensions | `test_frame_grabs` | fake |
 | `video/occlusion` | blocking as a cached job over a sampled range | `test_occlusion` | fake |
 | `video/picture` | sharpness, exposure, clipping, stability of one frame | `test_quality` | pure |

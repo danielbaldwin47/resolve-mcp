@@ -69,7 +69,7 @@ from ..resolve.timeline import (
     track_enabled,
 )
 from ..timing import dual_time, to_frames
-from ..video import supers
+from ..video import framing, supers
 from . import barmap, decode, energy, records, rhythm, subject
 from .beats import GridTrust, nearest, spacing, trust
 from .stats import histogram, measured, offsets, rounded
@@ -103,7 +103,7 @@ measurement, and refusing it would be trading one wrong answer for another.
 BLACK = "black"
 """Where the stretches nothing covers are counted — a known absence, not a missing label."""
 
-READING = 11
+READING = 12
 """What this measurement *is*; bumped whenever a rerun over unchanged inputs would differ.
 
 The cache is keyed on what was measured, not on the code that measured it, so a call whose
@@ -122,7 +122,11 @@ that never asked it, and a cached reading-8 file would hand back a report with n
 columns at all. 10 rather than 9 for the same reason one step further on: every record now
 carries the four image-quality columns and a ``quality_samples`` count (#182), and 11
 rather than 10 because every record now carries ``straddles_super`` and ``super_kind`` on
-the same terms (#183).
+the same terms (#183). 12 rather than 11 for a block rather than a column: ``visual_delta``
+is now the measurement's own summary shape (``video.framing``), where ``joined`` and
+``unjoined`` are ``cuts`` and ``cuts_unread``, the distribution carries a p10, and the
+threshold the flag was taken at sits beside the counts — a cached reading-11 file would
+hand back the block this one replaced, under the same name (#225).
 """
 
 DELTA_MATCH_SEC = 0.25
@@ -289,7 +293,7 @@ def correlate_timeline(
     roles = _roles(angles)
     subjects = _subjects(angles)
     music = _music(beats, audio, tunes, solos, bars, roles, subjects)
-    pictures = _optional_rows(deltas, "cut delta catalog", "cuts")
+    pictures = _delta_catalog(deltas)
     graphics = _optional_rows(
         supers,
         "supers catalog",
@@ -359,7 +363,7 @@ def correlate(
     onsets: Onsets | None = None,
     loudness: Levels | None = None,
     config: Config | None = None,
-    pictures: Sequence[Mapping[str, Any]] | None = None,
+    pictures: Sequence[framing.Cut] | None = None,
     graphics: Sequence[Mapping[str, Any]] | None = None,
     takes: Sequence[Mapping[str, Any]] | None = None,
     floors: Mapping[str, float] | None = None,
@@ -757,6 +761,21 @@ def _music(
     )
 
 
+def _delta_catalog(file: str | None) -> tuple[framing.Cut, ...] | None:
+    """The cut-delta catalog, read through the same module that writes one.
+
+    ``video.framing`` owns both halves of that file — the reading goes down as a record and
+    comes back as a ``Delta`` — so nothing downstream of here meets a dict whose shape it
+    has to guess. The path check stays on this side, where every other named input is
+    checked, so a path that is not there refuses in one shape for all of them.
+    """
+    if file is None:
+        return None
+    return framing.read_catalog(
+        _path(file, "cut delta catalog", "gauntlet/tools/ab_pack.py writes one as cuts.json")
+    )
+
+
 def _optional_rows(
     file: str | None,
     what: str,
@@ -901,7 +920,7 @@ def measure(
     music: Music,
     transients: Sequence[float] | None,
     grid: GridTrust | None = None,
-    pictures: Sequence[Mapping[str, Any]] | None = None,
+    pictures: Sequence[framing.Cut] | None = None,
     graphics: Sequence[Mapping[str, Any]] | None = None,
     takes: Sequence[Mapping[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
@@ -922,7 +941,7 @@ def measure(
     spans = subject.windows(music.solos)
     trusted = (grid if grid is not None else trust(music.beats)).trusted
     widths = spacing(times)
-    picture_times = [float(row["t"]) for row in (pictures or ())]
+    picture_times = [one.t for one in (pictures or ())]
     take_times = [float(row["t"]) for row in (takes or ())]
 
     rows: list[dict[str, Any]] = []
@@ -1119,23 +1138,25 @@ def _number(row: Mapping[str, Any], field: str) -> float:
 
 
 def _delta_at(
-    pictures: Sequence[Mapping[str, Any]] | None,
+    pictures: Sequence[framing.Cut] | None,
     times: Sequence[float],
     seconds: float,
 ) -> dict[str, Any]:
-    """The catalog row that lands on this cut, as ``delta`` and ``jump_cut`` columns."""
+    """The catalog cut that lands on this one, as ``delta`` and ``jump_cut`` columns.
+
+    The reading arrives typed from ``framing.read_catalog``, so there is one shape to read
+    here and no row to sniff. A cut the catalog holds but could not read lands the same way
+    as a cut it does not hold: null columns, counted as unread by the summary.
+    """
     if not pictures:
         return {"delta": None, "jump_cut": None}
     found = nearest(times, seconds)
     if found is None or abs(times[found] - seconds) > DELTA_MATCH_SEC:
         return {"delta": None, "jump_cut": None}
-    row = pictures[found]
-    # Two shapes reach here: the pack's ``cuts.json``, where the reading is nested under
-    # ``delta``, and a flat catalog that spreads the same fields across the row.
-    reading = row.get("delta")
-    if isinstance(reading, Mapping):
-        return {"delta": reading.get("delta"), "jump_cut": reading.get("jump_cut")}
-    return {"delta": reading, "jump_cut": row.get("jump_cut")}
+    reading = pictures[found].reading
+    if reading is None:
+        return {"delta": None, "jump_cut": None}
+    return {"delta": reading.delta, "jump_cut": reading.jump_cut}
 
 
 def _out_of_reach(seconds: float, beat: float, width: float | None) -> bool:
@@ -1224,7 +1245,7 @@ def _summary(
     grid: Sequence[float],
     trusted: GridTrust,
     levels: Sequence[tuple[float, float]] | None = None,
-    pictures: Sequence[Mapping[str, Any]] | None = None,
+    pictures: Sequence[framing.Cut] | None = None,
     graphics: Sequence[Mapping[str, Any]] | None = None,
     takes: Sequence[Mapping[str, Any]] | None = None,
     floors: Mapping[str, float] | None = None,
@@ -1297,24 +1318,32 @@ def _summary(
 
 
 def _deltas(
-    rows: Sequence[dict[str, Any]], pictures: Sequence[Mapping[str, Any]]
+    rows: Sequence[dict[str, Any]], pictures: Sequence[framing.Cut]
 ) -> dict[str, Any]:
     """How far the picture steps across this cut's boundaries, over the whole timeline.
 
-    ``unjoined`` is the number the reading lives or dies by. A catalog measured off a
-    different span, or off a render whose cuts the detector missed, still produces a
-    ``visual_delta`` block — one drawn from a handful of rows that happened to land. Said
-    out loud, that is a mismatch to fix; left out, it is a distribution nobody doubts.
+    The distribution itself is ``framing``'s own summary of the same measurement, taken
+    from there rather than written again: a pack's ``visual_delta`` block and a correlate
+    report's have to be one shape, or a critic reading both is reading two vocabularies for
+    one number. What this adds is what only the join knows — how big the catalog was, which
+    cuts were flagged, and how near a row had to sit to count.
+
+    ``cuts_unread`` is the number the reading lives or dies by, and here it is the cuts that
+    joined nothing. A catalog measured off a different span, or off a render whose cuts the
+    detector missed, still produces a block — one drawn from a handful of rows that happened
+    to land. Said out loud, that is a mismatch to fix; left out, it is a distribution nobody
+    doubts.
     """
-    found = [float(row["delta"]) for row in rows if row["delta"] is not None]
+    joined = [row for row in rows if row["delta"] is not None]
     flagged = [row for row in rows if row["jump_cut"]]
     return {
+        **framing.summarize_steps(
+            [float(row["delta"]) for row in joined],
+            jump_cuts=len(flagged),
+            unread=len(rows) - len(joined),
+        ),
         "catalog_rows": len(pictures),
-        "joined": len(found),
-        "unjoined": len(rows) - len(found),
-        "jump_cuts": len(flagged),
         "flagged_cuts": [row["cut"] for row in flagged[:INLINE_CUTS]],
-        "delta": _lengths([round(one, 4) for one in found]) if found else None,
         "match_tolerance_sec": DELTA_MATCH_SEC,
     }
 
