@@ -166,3 +166,22 @@ The live record for #265 is on the ticket, per the repo's rule.
   `run_script_unsafe`, which is an unsandboxed `exec` in Blackmagic's process.
 - Both servers can attach at once, so the two are not mutually exclusive on
   one box.
+
+## 8. Addendum: a second probe pass
+
+A duplicate agent probed the same server independently and found four
+facts the sections above lack. All measured on the same box and build.
+
+| Fact | Flag |
+| --- | --- |
+| **The `run_script` blocklist leaks statically linked builtins.** `import winreg` and `import msvcrt` both succeed inside `run_script`; neither the blocked-imports set nor the `open` audit hook sees them, so the "sandboxed" tool has registry read *and write*. Also allowed and unlisted: `site`, `atexit`, `inspect`, bare `urllib`, `codecs`, `io`, `base64`, `csv`, `struct`, `string`, `textwrap`, `datetime`, `dataclasses`, `itertools`, `functools`, `types`, `copy`. | measured |
+| **No C-extension module loads in the sandbox.** Every module that needs the file-based import path dies with the `_os` NameError — `hashlib`, `decimal`, `unicodedata`, `_socket`, `xml.etree.ElementTree`, `http.client` — a third failure mode beside the blocklist's `PermissionError` and the transitive `import not allowed: os`/`sys` that takes down `random`, `statistics`, `platform`, `typing`, `logging`, `tempfile`, `threading`. Section 4 lists the NameError as a one-off for `urllib.request`; it is general. | measured |
+| **A timeout discards buffered output.** `print("before sleep")` then `time.sleep(15)` at `timeout=10` returned only `{"error": "Script timed out after 10s…"}`, no `output` key: the child is killed and its stdout dropped. The partial-output preservation in "Limits, capture and shaping" holds for exceptions, not timeouts. | measured |
+| **1144 is only the rendezvous.** The scripting README (`Network and Headless Access`): "the return connection is dynamically allocated in the 49152..65535 range." netstat agrees — the server's `ResolvePython.exe` holds an ESTABLISHED connection to `127.0.0.1:49152`, listened on by `Resolve.exe`; 1144 shows only as short-lived `TIME_WAIT`. A firewall or port story built on 1144 alone is incomplete. | measured + README |
+
+One caveat on section 6. The second pass could not reproduce a python.org
+3.12 attach from the repo venv inside its own shell sandbox (no output, no
+CPU for four minutes before it was killed) — inconclusive, not a
+contradiction: the live-tier run in section 6 *is* that attach, made by the
+repo's own loader under the registered 3.12, with the native server
+connected throughout.
