@@ -335,9 +335,14 @@ def test_a_dirty_candidate_is_skipped_and_counted() -> None:
     assert asked == {f"{WT}/issue-1", f"{WT}/issue-2", f"{WT}/worktree-agent-abc"}
 
 
-def test_all_candidates_dirty_prints_nothing() -> None:
+def test_all_candidates_dirty_names_them_instead_of_staying_silent() -> None:
+    """Nothing for ``--apply`` to remove, but three checkouts a human still has to clean
+    or delete - so the line names them rather than going quiet."""
     dirty = {f"{WT}/issue-1", f"{WT}/issue-2", f"{WT}/worktree-agent-abc"}
-    assert lines(residue_repo(dirty=dirty)) == []
+    assert lines(residue_repo(dirty=dirty)) == [
+        "RESIDUE: 0 removable, 3 dirty (clean or remove by hand): "
+        f"{WT}/issue-1, {WT}/issue-2, {WT}/worktree-agent-abc"
+    ]
 
 
 def test_residue_skips_locked_worktrees_and_ones_outside_the_worktree_dir() -> None:

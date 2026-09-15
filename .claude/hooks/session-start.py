@@ -7,6 +7,7 @@ each only when true, in this order:
 
     STALE: branch <b> is merged into origin/main (<n> commits behind). <remedy>
     RESIDUE: <k> worktrees on merged branches, <j> worktree-agent-* with no commits[, <d> dirty skipped]. uv run python scripts/prune_merged.py --apply
+    RESIDUE: 0 removable, <d> dirty (clean or remove by hand): <paths>
     HOOKS: .claude/hooks differs from origin/main - this checkout enforces old rules.
 
 plus a trailing ``FETCH:`` line when the fetch fell back. Silent when everything is fresh.
@@ -18,7 +19,9 @@ the worktree and prune it from the main checkout.
 
 RESIDUE counts what ``prune_merged.py --apply`` would remove: the session's own worktree
 (the payload ``cwd``) is never residue, and a candidate with uncommitted or untracked
-files is skipped and counted as dirty, the same gate the sweep applies. The two ``gh pr
+files is skipped and counted as dirty, the same gate the sweep applies. When every
+candidate is dirty the sweep would remove nothing, and the second form names those paths:
+a human has to clean or delete them, so silence would only let them pile up. The two ``gh pr
 list`` calls (~35 s each on this box) run only when some branch could be merged by squash;
 on ``main`` with no worktrees, ancestry alone decides and the start is not delayed.
 
@@ -140,9 +143,14 @@ def stale_line(run, branch, local_on_main, facts, cwd, root):
 
 def residue_line(run, worktrees, local_on_main, facts, cwd):
     """What ``prune_merged.py --apply`` would remove, counted the way it decides: never
-    the worktree this session runs in, and a dirty candidate skipped (and counted)."""
+    the worktree this session runs in, and a dirty candidate skipped (and counted).
+
+    When every candidate is dirty the sweep would remove nothing, so the line names the
+    paths instead: they are residue a human has to clean or delete, and staying silent
+    about them is how they accumulate."""
     root = worktrees[0].path.rstrip("/")
-    merged = empty = skipped = 0
+    merged = empty = 0
+    soiled = []
     for wt in worktrees[1:]:
         if same_path(wt.path, cwd):
             continue
@@ -150,14 +158,19 @@ def residue_line(run, worktrees, local_on_main, facts, cwd):
         if not ok:
             continue
         if dirty(run, wt):
-            skipped += 1
+            soiled.append(wt.path)
         elif why == NO_COMMITS:
             empty += 1
         else:
             merged += 1
     if not (merged or empty):
-        return None
-    dirty_note = f", {skipped} dirty skipped" if skipped else ""
+        if not soiled:
+            return None
+        return (
+            f"RESIDUE: 0 removable, {len(soiled)} dirty (clean or remove by hand): "
+            + ", ".join(sorted(soiled))
+        )
+    dirty_note = f", {len(soiled)} dirty skipped" if soiled else ""
     return (
         f"RESIDUE: {merged} worktrees on merged branches, {empty} worktree-agent-* with no "
         f"commits{dirty_note}. uv run python scripts/prune_merged.py --apply"

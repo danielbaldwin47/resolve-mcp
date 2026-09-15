@@ -105,15 +105,15 @@ section you need) in the log; never commit a log. The `gh` logs carry the
 ticket number: two sessions in one checkout sharing one unnumbered log built
 the wrong ticket; a `--json` field filter that skips the body (`-q .title`)
 is fine unlanded. A `| tail` is no landing — a tail caps one run and runs
-repeat — where a pipe of filters only (grep, rg, wc, Select-String, findstr,
-Measure-Object; `| grep -c FAILED`) bounds the run and passes. Waiting on CI
-is one `Monitor`, not `--watch`, a sleep loop or `tail -f`. Delegate
-exploration to a read-only subagent; Read only what you will edit, ranged
-(grep first) on big files; do not re-read a file after editing it. Hooks in
-`.claude/hooks/` (`context-guard.py` on both shell tools, `read-guard.py` on
-every reader; pass/block tables in `tests/test_context_guard.py` and
+repeat — where a pipe whose every stage filters (`| grep -c FAILED`,
+`| wc -l`) bounds the run and passes. Waiting on CI is one `Monitor`, not
+`--watch`, a sleep loop or `tail -f`. Delegate exploration to a read-only
+subagent; Read only what you will edit, ranged (grep first) on big files; do
+not re-read a file after editing it. Hooks in `.claude/hooks/`
+(`context-guard.py` on both shell tools, `read-guard.py` on every reader;
+pass/block tables in `tests/test_context_guard.py` and
 `tests/test_read_guard.py`) block unlanded noisy runs, whole-file dumps and
-re-reads; the block message names the fix.
+re-reads; the block message names the fix and the filters it accepts.
 
 **Orient from `CONTEXT.md` first** — one table, ~150 lines: module → test →
 seam. Area narrative lives in `docs/context/<area>.md`: Grep it, or Read it
