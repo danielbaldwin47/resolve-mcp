@@ -170,6 +170,49 @@ def test_review_lines_returns_the_lines_it_found_normalised() -> None:
     assert review_lines(body) == [f"Review: clean @{SHA}"]
 
 
+# ---------------------------------------------------------- auto-close phrases
+
+CLOSING = [
+    f"Closes #12\n\nReview: clean @{SHA}",
+    f"closes #12\n\nReview: clean @{SHA}",
+    f"Fixes #3\n\nReview: clean @{SHA}",
+    f"Review: clean @{SHA}\n\nResolves #7",  # after the line, still the body
+    f"- **Closed #12** by this PR\n\nReview: clean @{SHA}",
+    f"This fixes #3.\n\nReview: clean @{SHA}",
+]
+
+
+@pytest.mark.parametrize("body", CLOSING)
+def test_an_auto_close_phrase_is_red_with_the_refs_message(body: str) -> None:
+    msg = verdict(body)
+    assert "use Refs #n; the ticket closes with a comment" in msg, body
+    assert "auto-closes" in msg, msg
+
+
+def test_the_closing_message_names_the_offending_phrase() -> None:
+    msg = verdict(f"Closes #12\n\nReview: clean @{SHA}")
+    assert "'Closes #12'" in msg, msg
+
+
+REFERENCING = [
+    f"Refs #12\n\nReview: clean @{SHA}",
+    f"Refs #12, #13\n\nReview: clean @{SHA}",
+    f"Ticket: #12 (see #13)\n\nReview: clean @{SHA}",
+    f"Fixes the loader; closes the handle on exit.\n\nReview: clean @{SHA}",  # no '#n'
+    f"Refs #12\n\n```\nCloses #12\n```\n\nReview: clean @{SHA}",  # fenced example
+    f"~~~\nFixes #3\n~~~\nRefs #3\n\nReview: clean @{SHA}",
+]
+
+
+@pytest.mark.parametrize("body", REFERENCING)
+def test_refs_and_fenced_examples_pass(body: str) -> None:
+    assert verdict(body) == "", body
+
+
+def test_the_closing_check_runs_before_the_review_line() -> None:
+    assert "use Refs #n" in verdict("Closes #12")  # no Review: line at all, still names this
+
+
 # ------------------------------------------------------------------- the entry
 
 def test_main_prints_the_line_and_exits_zero(capsys: pytest.CaptureFixture[str]) -> None:

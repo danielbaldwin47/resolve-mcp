@@ -24,6 +24,8 @@ from tests.test_read_guard import hook_env
 HOOKS = Path(__file__).resolve().parents[1] / ".claude" / "hooks"
 HOOK = HOOKS / "context-guard.py"
 SETTINGS = Path(__file__).resolve().parents[1] / ".claude" / "settings.json"
+# A gh scratch log with no ticket number in its name (#277).
+UNSCOPED_LOG = re.compile(r"\b(?:issue|pr|comments)\.scratch\.log\b")
 
 
 def run_hook(
@@ -201,13 +203,16 @@ GH_BLOCKED = [
 def test_gh_view_without_landing_is_blocked(cmd: str) -> None:
     msg = blocked(cmd)
     assert msg, cmd
-    assert "issue.scratch.log" in msg or "comments.scratch.log" in msg, msg
+    # #277: the named log carries the ticket number, so two sessions sharing one
+    # checkout read their own body (an unnumbered log built the wrong ticket).
+    assert "issue-<n>.scratch.log" in msg or "comments-<n>.scratch.log" in msg, msg
+    assert not UNSCOPED_LOG.search(msg), msg
 
 
 GH_PASSES = [
-    "gh issue view 249 --json body -q .body > issue.scratch.log",
-    "gh issue view 249 --comments > comments.scratch.log",
-    "gh pr diff 243 > pr.scratch.log",
+    "gh issue view 249 --json body -q .body > issue-249.scratch.log",
+    "gh issue view 249 --comments > comments-249.scratch.log",
+    "gh pr diff 243 > pr-243.scratch.log",
     "gh pr view 243 --json state -q .state",  # a field filter
     "gh issue view 249 --json title,labels -q '.title'",
     "gh pr diff 243 --name-only",
@@ -598,7 +603,7 @@ def test_other_tools_pass() -> None:
     "cmd",
     [
         "uv run pytest > pytest.scratch.log 2>&1",  # exercises statement() via the noisy rule
-        "gh issue view 274 --json body -q .body > issue.scratch.log",
+        "gh issue view 274 --json body -q .body > issue-274.scratch.log",
         "sed -n 10,40p src/config.py",
     ],
 )
@@ -620,6 +625,23 @@ def test_malformed_stdin_passes() -> None:
         env=hook_env(HOOKS),
     )
     assert r.returncode == 0
+
+
+REPO = HOOKS.parents[1]
+
+
+@pytest.mark.parametrize(
+    "doc",
+    ["CLAUDE.md", "docs/agents/issue-tracker.md", ".claude/hooks/context-guard.py"],
+)
+def test_every_gh_scratch_example_carries_the_ticket_number(doc: str) -> None:
+    """#277: an unnumbered gh log is one name per checkout, and two sessions in
+    one checkout read each other's ticket through it; the examples the agent
+    copies are `issue-<n>.scratch.log` / `pr-<n>.scratch.log` /
+    `comments-<n>.scratch.log`."""
+    text = (REPO / doc).read_text(encoding="utf-8")
+    assert not UNSCOPED_LOG.search(text), f"{doc} still shows an unscoped gh scratch log"
+    assert "issue-<n>.scratch.log" in text or "issue-<number>.scratch.log" in text, doc
 
 
 def test_settings_match_both_shell_tools_for_the_guard() -> None:

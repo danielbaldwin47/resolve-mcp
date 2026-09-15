@@ -18,6 +18,12 @@ column 0 **inside a fenced example** passed (fenced blocks are now stripped
 before the search), and ``**Review: clean**`` / ``- Review: clean`` blocked
 (leading list, quote and bold markup is now tolerated).
 
+The body is also refused when it carries one of GitHub's auto-close phrases
+(``Closes #n``, ``Fixes #n``, ``Resolves #n``) outside a fence (#277): the merge
+would close the ticket with no outcome comment, walking past the
+``gh issue close`` guard. The PR says ``Refs #n``; the ticket closes with a
+comment (CLAUDE.md step 8).
+
 Everything the check learns about the repository comes through one ``Runner``
 (a callable from argv to stdout), so the fake tier drives every verdict on
 fixtures of the ``git`` output (``tests/test_review_gate.py``).
@@ -44,6 +50,8 @@ REVIEW = re.compile(r"^Review:")
 CLEAN = re.compile(r"^Review:\s+clean\s+@(?P<sha>[0-9a-fA-F]{7,40})\b.*$")  # a summary may follow
 CLEAN_NO_SHA = re.compile(r"^Review:\s+clean\b")
 HELD = re.compile(r"^Review:\s+findings\s+held\b", re.I)
+# GitHub's auto-close keywords ahead of an issue number, any case.
+CLOSING = re.compile(r"(?i)\b(close[sd]?|fix(e[sd])?|resolve[sd]?)\s+#\d+")
 
 
 def normalise(line: str) -> str:
@@ -56,20 +64,36 @@ def normalise(line: str) -> str:
     return text.strip()
 
 
-def review_lines(body: str) -> list[str]:
-    """Every normalised ``Review:`` line outside a fenced code block, in order."""
+def prose_lines(body: str) -> list[str]:
+    """The body's lines outside fenced code blocks, in order, fence lines dropped."""
     found = []
     fenced = False
     for raw in body.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
         if FENCE.match(raw):
             fenced = not fenced
             continue
-        if fenced:
-            continue
-        line = normalise(raw)
-        if REVIEW.match(line):
-            found.append(line)
+        if not fenced:
+            found.append(raw)
     return found
+
+
+def review_lines(body: str) -> list[str]:
+    """Every normalised ``Review:`` line outside a fenced code block, in order."""
+    lines = (normalise(raw) for raw in prose_lines(body))
+    return [line for line in lines if REVIEW.match(line)]
+
+
+def closing_failure(body: str) -> str | None:
+    """Why the body would auto-close its ticket on merge, or None when it would not."""
+    for raw in prose_lines(body):
+        match = CLOSING.search(raw)
+        if match:
+            return (
+                f"PR body says '{match.group(0)}', which auto-closes the ticket on merge with "
+                "no outcome comment — use Refs #n; the ticket closes with a comment "
+                "(gh issue close <n> --comment)."
+            )
+    return None
 
 
 def sha_failure(sha: str, head: str, run: Runner) -> str | None:
@@ -100,7 +124,11 @@ def sha_failure(sha: str, head: str, run: Runner) -> str | None:
 
 def check(body: str, head: str, run: Runner) -> str | None:
     """The gate's verdict on a PR body: a failure message, or None to pass."""
-    lines = review_lines(body or "")
+    body = body or ""
+    closing = closing_failure(body)
+    if closing:
+        return closing
+    lines = review_lines(body)
     if not lines:
         return (
             "PR body has no 'Review:' line — run /code-review (two-axis), then append "
