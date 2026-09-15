@@ -212,14 +212,39 @@ def test_other_guarded_extensions_block_when_big(tmp_path: Path, name: str) -> N
 
 
 def test_edited_file_rule_still_blocks_whole_file_reread(tmp_path: Path) -> None:
-    """The pre-existing read-after-edit behaviour is unchanged."""
-    small = write_lines(tmp_path / "src" / "config.py", 20)
+    """The read-after-edit rule, on a file big enough to be worth a block."""
+    big = write_lines(tmp_path / "src" / "config.py", 400)
     session = "session-reread"
 
-    record = run_hook(edit_event(small, session), tmp_path)
+    record = run_hook(edit_event(big, session), tmp_path)
     assert record.returncode == 0
 
+    result = run_hook(read_event(big, session=session), tmp_path)
+
+    assert result.returncode == 2
+    assert "already edited" in result.stderr
+
+
+@pytest.mark.parametrize("lines", [1, 40, 99])
+def test_reread_of_a_small_edited_file_passes(tmp_path: Path, lines: int) -> None:
+    """#274: under 100 lines the block costs more than the re-read it prevents."""
+    small = write_lines(tmp_path / "src" / "config.py", lines)
+    session = f"session-small-{lines}"
+
+    run_hook(edit_event(small, session), tmp_path)
     result = run_hook(read_event(small, session=session), tmp_path)
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_reread_of_an_edited_file_that_vanished_still_blocks(tmp_path: Path) -> None:
+    """An uncountable file is not a small file: the rule stands."""
+    gone = write_lines(tmp_path / "src" / "gone.py", 20)
+    session = "session-gone"
+
+    run_hook(edit_event(gone, session), tmp_path)
+    gone.unlink()
+    result = run_hook(read_event(gone, session=session), tmp_path)
 
     assert result.returncode == 2
     assert "already edited" in result.stderr

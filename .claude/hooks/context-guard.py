@@ -3,9 +3,11 @@
 tools (Bash and PowerShell — settings.json matches both).
 
 Blocks (exit 2, message to the model):
-  1. Noisy runs (NOISY_TOOLS below) that do not land in a file: bare, piped to
-     tail/head/cat/Select-Object, or piped anywhere else — the scratch-log+grep
-     rule. `--version`, `--help` and `--collect-only` are not runs.
+  1. Noisy runs (NOISY_TOOLS below) that neither land in a file nor pipe to a
+     filter: bare, or piped to tail/head/cat/Select-Object — the scratch-log+grep
+     rule. A filtering pipe (`| grep -c FAILED`, `| wc -l`) passes the way a
+     dump piped to grep does. `--version`, `--help` and `--collect-only` are
+     not runs.
   2. `gh issue view` / `gh pr view` / `gh pr diff` that do not land in a file.
      A `--json … -q`/`--template` field filter passes unless it pulls the body
      or the comment thread; `gh pr diff --name-only|--stat` passes.
@@ -14,11 +16,20 @@ Blocks (exit 2, message to the model):
      comment <n>` on the same number in the same command counts as the record.
   4. A whole-file dump of a guarded file (guarded_ext.py) by any reader —
      `cat`, `more`, `less`, `type`, `Get-Content`/`gc`, `sed -n` with no range
-     or `1,$p`, `head`/`tail` with no count, `head -c` — that is neither piped
-     to a filter nor redirected. Ranged reads (`sed -n 10,40p`, `head -50`,
-     `Get-Content -TotalCount 50`) pass. Backslash and drive-letter paths count,
-     and so do readers fed by `xargs`, `find -exec`, or a `Get-ChildItem` pipe.
+     or `1,$p`, `head`/`tail` with no count, bare `head -c` — that is neither
+     piped to a filter nor redirected. Ranged reads (`sed -n 10,40p`,
+     `head -50`, `head -c 400`, `sed -n '$!p'`, `Get-Content -TotalCount 50`)
+     pass. Backslash and drive-letter paths count, and so do readers fed by
+     `xargs`, `find -exec`, or a `Get-ChildItem` pipe. A dumped
+     `*.scratch.log` gets its own message: the Grep tool plus the log's
+     absolute path, because the blocked agent's next move was a Read of
+     `/tmp/<name>`, which is not a directory on this box.
   5. A `for`/`foreach` loop over guarded files whose body dumps them.
+  6. `tail -f`/`-F` on any file: a follow streams forever, so the call never
+     returns and the session stalls — Monitor owns that wait. The one escape is
+     `run_in_background`, where not returning is the point. This is the only
+     rule not scoped to the guarded extensions: a stall does not care what the
+     file is called.
 
 Heredoc / here-string bodies and quoted `--body`/`--message`/`--title`
 arguments are data, not commands, and are blanked before any rule looks (the
@@ -60,6 +71,9 @@ if data.get("tool_name") not in SHELL_TOOLS:
     sys.exit(0)
 
 cmd = data.get("tool_input", {}).get("command", "") or ""
+# A backgrounded call is detached: a follow that never returns is the point there,
+# not a stall, so rule 6 steps aside for it.
+background = bool(data.get("tool_input", {}).get("run_in_background"))
 
 
 def block(message: str) -> None:
@@ -105,7 +119,7 @@ STATEMENT_SEP = r"&&|\|\||[;\n]"
 def statement(text: str, start: int) -> str:
     """The rest of the statement from *start*: up to `;`, `&&`, or a newline —
     pipes stay in, so a pipeline's later stages (its sink) are visible."""
-    return re.split(STATEMENT_SEP, text[start:], 1)[0]
+    return re.split(STATEMENT_SEP, text[start:], maxsplit=1)[0]
 
 
 def lands_in_file(seg: str) -> bool:
@@ -152,7 +166,9 @@ for m in re.finditer(NOISY, scan):
             "Then Grep the log for the decisive line (FAILED|passed|error).\n"
             "On failure, Grep the log for the failing case by name; never cat the log."
         )
-    if lands_in_file(seg):
+    # A filtering pipe (`| grep -c FAILED`, `| wc -l`) already bounds the run the
+    # way the log-plus-Grep loop does; only the bare run floods context.
+    if lands_in_file(seg) or piped_to_filter(seg):
         continue
     block(
         f"Blocked (context discipline): a bare {tool} run puts its whole output in context.\n"
@@ -232,6 +248,27 @@ DUMP_MSG = (
 )
 
 
+# A dumped scratch log is the one case where the generic message measurably
+# misfires: the 2026-09-15 retro counted 13 blocks followed by a Read of
+# `/tmp/<name>` — a path that does not exist on Windows and, when it resolves at
+# all, resolves into another agent's worktree. So the message names the tool,
+# the pattern and the log's absolute path instead of describing the rule.
+SCRATCH_MSG = (
+    "Blocked (context discipline): a whole-file dump of {name} puts the whole log in context.\n"
+    "Read it back with the Grep tool:\n"
+    "  pattern FAILED|passed|error, path {path}\n"
+    "/tmp is not a directory on this box; scratch logs live in the cwd that wrote them."
+)
+
+
+def scratch_path(name: str) -> str:
+    """*name* as an absolute path, resolved against this process's cwd — the same
+    cwd the blocked command would have written the log into. Deliberately not
+    CLAUDE_PROJECT_DIR, which names the main checkout while a worktree session
+    writes its logs beside itself."""
+    return name if os.path.isabs(name) else os.path.abspath(name)
+
+
 def guarded_names(args: str) -> list:
     # Case-insensitive: Windows paths spell `SRC\\CONFIG.JSON` and `X.PY` too.
     return [a for a in re.findall(ARG, args) if re.search(GUARDED, a, re.I)]
@@ -240,7 +277,12 @@ def guarded_names(args: str) -> list:
 def dump_block(names: list, seg: str) -> None:
     """Block when *names* is non-empty and the statement neither pipes to a
     filter nor lands in a file."""
-    if names and not lands_in_file(seg) and not piped_to_filter(seg):
+    if not names or lands_in_file(seg) or piped_to_filter(seg):
+        return
+    scratch = next((n for n in names if n.lower().endswith(".scratch.log")), "")
+    if scratch:
+        block(SCRATCH_MSG.format(name=scratch, path=scratch_path(scratch)))
+    else:
         block(DUMP_MSG.format(name=names[0]))
 
 
@@ -313,9 +355,11 @@ for stmt in re.split(STATEMENT_SEP, scan_cat):
                 names = guarded_names(fed)
         dump_block(names, seg)
 
-# sed: only an unbounded script (`p`, `1,$p`, `1,$ p`, `$!p`, or empty) is a dump; any range,
-# address or substitution is a targeted read or an edit. Quotes intact here so
-# the script token is one group; a `\$` is a `$`.
+# sed: only an unbounded script (`p`, `1,$p`, `1,$ p`, or empty) is a dump; any range,
+# address or substitution is a targeted read or an edit — `$!p` (every line but the
+# last) is an address, so it left the dump set with the other false positives the
+# 2026-09-15 audit found. Quotes intact here so the script token is one group; a
+# `\$` is a `$`.
 SED = (
     CMD_POS
     + r"sed\b(?P<flags>(?:\s+--?[a-zA-Z-]+)*)\s+"
@@ -324,21 +368,51 @@ SED = (
 )
 for m in re.finditer(SED, blanked):
     script = next(s for s in (m.group("sq"), m.group("dq"), m.group("bare")) if s is not None)
-    if re.sub(r"[\\\s]", "", script) in ("", "p", "1,$p", "$!p"):
+    if re.sub(r"[\\\s]", "", script) in ("", "p", "1,$p"):
         dump_block(guarded_names(m.group("args")), statement(blanked, m.end("args")))
 
-# head / tail: a count bounds the read; `-c` (bytes) is a dump by another name.
+# head / tail: a count bounds the read, in lines (`-50`, `-n 50`) or in bytes
+# (`-c 400`); a countless `-c` is a dump by another name. No rule here reads the
+# number — `head -n 999999` has always passed — so `--bytes` stays a dump by
+# spelling alone: the long form is what a scripted whole-file pull reaches for,
+# and the short `-c <n>` is the interactive peek #274 unblocked.
 HEADTAIL = (
     CMD_POS
-    + r"(?:head|tail)\b(?P<flags>(?:\s+(?:-n\s*\d+|-\d+|--lines(?:=|\s+)\d+|-c\s*\d*|"
+    + r"(?P<cmd>head|tail)\b(?P<flags>(?:\s+(?:-n\s*\d+|-\d+|--lines(?:=|\s+)\d+|-c\s*\d*|"
     + r"--bytes(?:=|\s+)\S+|-[a-zA-Z]+))*)"
     + r"(?P<args>(?:\s+(?:<\s*)?" + ARG + r")+)"
 )
+# `-f`/`-F`/`--follow`, alone or bundled (`-qf`, `-fn 20`): the flag that never
+# returns. No other short flag of head/tail carries an f, so any letter bundle
+# holding one is a follow.
+FOLLOW = r"(?<![\w-])-(?:[a-zA-Z]*[fF][a-zA-Z]*|-follow\b)"
 for m in re.finditer(HEADTAIL, scan_cat):
     flags = m.group("flags")
-    bounded = re.search(r"-n\s*\d|-\d|--lines", flags)
-    bytes_dump = re.search(r"-c\b|--bytes", flags)
+    names = guarded_names(m.group("args"))
+    # `--follow` is no alternative in the flags group, so it lands among the args:
+    # every dash-led token counts as a flag for this one check, never a file name.
+    words = m.group("args").split()
+    dashed = flags + " " + " ".join(a for a in words if a.startswith("-"))
+    # A count that the flags group left behind (`-n 20`, `-c +10`) is no file name.
+    targets = [a for a in words if not a.startswith("-") and not re.fullmatch(r"\+?\d+", a)]
+    # A follow streams into whatever it is piped or redirected into, so it is
+    # judged before the dump rules and takes no landing or filter escape — and
+    # it is judged on any file, guarded extension or not, because what stalls
+    # the session is the flag, not the file.
+    follows = m.group("cmd").lower() == "tail" and re.search(FOLLOW, dashed)
+    if follows and targets and background:
+        continue  # a detached follow is a stream nobody waits on, not a dump
+    if follows and targets:
+        block(
+            f"Blocked: tail -f on {targets[0]} streams forever; the call never returns and the "
+            "session stalls.\n"
+            "Use Monitor on the file to wait for a condition, or read what is there now with the "
+            "Grep tool.\n"
+            "A follow you mean to leave running belongs in a run_in_background call."
+        )
+    bounded = re.search(r"-n\s*\d|-\d|--lines|-c\s*\d", flags)
+    bytes_dump = re.search(r"-c(?!\s*\d)|--bytes", flags)
     if bytes_dump or not bounded:
-        dump_block(guarded_names(m.group("args")), statement(scan_cat, m.end("args")))
+        dump_block(names, statement(scan_cat, m.end("args")))
 
 sys.exit(0)
