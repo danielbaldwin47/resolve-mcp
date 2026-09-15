@@ -148,11 +148,11 @@ filesystem, network and subprocess access in the server's own process.
 | Fact | Flag |
 | --- | --- |
 | Both attach the same way (`fusionscript.dll` → `fuscript.exe`:1144), and Resolve's script server accepts many clients: five `ResolvePython.exe` clients plus `Resolve.exe` itself were attached simultaneously. | measured |
-| **Live tier run with the native server connected**: `uv sync` in the worktree, then `uv run pytest -m live`. | measured — see result below |
-| During that run, a `run_script` call through the native server answered normally and observed the live tier's own project switch. Two independent attaches, in-flight at the same time, both working. | measured |
+| **Live tier ran to completion with the native server connected**: `uv sync` in the worktree, then `uv run pytest -m live` — `1 failed, 34 passed, 10 skipped, 2653 deselected in 205.67s`. The tests **ran**; they did not skip out on an unreachable Resolve. | measured |
+| During that run, a `run_script` call through the native server answered normally and observed the live tier's own project switch (`mcp-tests-zinc`, page `deliver`). Two independent attaches, in flight at the same time, both working. | measured |
+| The one failure was `tests/test_live_smoke.py::test_the_shipped_default_preset_is_a_built_in_on_this_machine` — a render job that ended `Failed` (`render_queue_failed`, `Failed to render background job.`), not an attach or connection error. Whether the native server's presence contributed is **not established**: a control run needs the native server disconnected, which this session could not do (it is this session's own MCP server). | measured (the failure), open (the cause) |
 
-Live tier result: see the ticket comment on #265 (the run is recorded there,
-per the repo's rule that the live record lives on the ticket).
+The live record for #265 is on the ticket, per the repo's rule.
 
 ## 7. What this means for design (no new facts)
 
