@@ -44,6 +44,11 @@ squashed from exactly that tip — a PR merged into another branch does not coun
 branch a locked worktree holds, an open-PR branch, or a tip with commits
 `origin/main` lacks. Every `gh`/`git` call goes through one injectable
 `Runner`, which is the seam `tests/test_prune_merged.py` drives on fixtures.
+The merged / no-commits decision itself is `_merged.py`, shared with
+`.claude/hooks/session-start.py`: the SessionStart hook that fetches origin
+(10 s budget, else reports from the last fetch) and prints `STALE:` when the
+session's branch is merged, `RESIDUE:` when worktrees are, `HOOKS:` when
+`.claude/hooks` differs from `origin/main` - one seam, `tests/test_session_start.py`.
 
 ## Docs
 

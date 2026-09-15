@@ -12,14 +12,9 @@ from collections.abc import Sequence
 
 import pytest
 
+from scripts._merged import parse_worktrees
 from scripts._run import CommandError
-from scripts.prune_merged import (
-    Plan,
-    apply_plan,
-    build_plan,
-    main,
-    parse_worktrees,
-)
+from scripts.prune_merged import Plan, apply_plan, build_plan, main
 
 ROOT = "C:/Users/x/repos/resolve-mcp"
 WT = f"{ROOT}/.claude/worktrees"
@@ -31,6 +26,7 @@ UNMERGED = "d" * 40
 OPEN_TIP = "e" * 40
 FRESH = "f" * 40  # a branch that is on main by ancestry (merge-commit PR, or no commits yet)
 STACKED = "1" * 40  # head of a PR squash-merged into another branch, never into main
+AGENT_TIP = "2" * 40  # where a worktree-agent-* branch was cut from issue-6; nothing since
 
 MERGED_PRS = json.dumps(
     [
@@ -83,6 +79,10 @@ worktree {WT}/issue-8
 HEAD {STACKED}
 branch refs/heads/issue-8
 
+worktree {WT}/worktree-agent-empty
+HEAD {AGENT_TIP}
+branch refs/heads/worktree-agent-empty
+
 worktree {WT}/detached
 HEAD {FRESH}
 detached
@@ -103,6 +103,7 @@ LOCAL_REFS = "\n".join(
         f"issue-6 {UNMERGED}",
         f"issue-7 {FRESH}",
         f"issue-8 {STACKED}",
+        f"worktree-agent-empty {AGENT_TIP}",
         f"elsewhere {FRESH}",
         f"orphan-on-main {FRESH}",  # no worktree, no PR, but nothing main lacks
         f"orphan-ahead {UNMERGED}",
@@ -158,6 +159,8 @@ class FakeRunner:
                 return LOCAL_ON_MAIN
             case ["git", "branch", "-r", "--merged", "origin/main", *_]:
                 return REMOTE_ON_MAIN
+            case ["git", "branch", "--contains", sha, "--format=%(refname:short)"]:
+                return "issue-6\nworktree-agent-empty\n" if sha == AGENT_TIP else ""
             case ["git", "-C", path, "status", "--porcelain"]:
                 return "?? scratch.txt\n" if path in self.dirty else ""
             case ["git", "fetch", *_] | ["git", "worktree", "prune"]:
@@ -196,8 +199,13 @@ def test_parse_worktrees_normalises_backslashes() -> None:
 
 def test_plan_removes_only_merged_and_unheld() -> None:
     plan = build_plan(FakeRunner())
-    assert plan.worktrees == [f"{WT}/issue-1", f"{WT}/issue-2", f"{WT}/issue-7"]
-    assert plan.local_branches == ["issue-1", "issue-2", "issue-7", "orphan-on-main"]
+    assert plan.worktrees == [
+        f"{WT}/issue-1", f"{WT}/issue-2", f"{WT}/issue-7", f"{WT}/worktree-agent-empty"
+    ]
+    assert plan.reasons[f"worktree {WT}/worktree-agent-empty"] == "worktree-agent-* with no commits"
+    assert plan.local_branches == [
+        "issue-1", "issue-2", "issue-7", "orphan-on-main", "worktree-agent-empty"
+    ]
     assert plan.remote_branches == ["issue-1", "issue-2"]
     assert plan.reasons[f"worktree {WT}/issue-1"] == "PR merged (squash) at this tip"
     assert plan.reasons["remote origin/issue-2"] == "tip is on origin/main"
@@ -275,7 +283,7 @@ def test_dry_run_issues_no_mutations(capsys: pytest.CaptureFixture[str]) -> None
     assert main(["--no-fetch"], run=run) == 0
     assert run.mutations() == []
     out = capsys.readouterr().out
-    assert "3 worktree(s), 4 local branch(es), 2 remote branch(es) to remove" in out
+    assert "4 worktree(s), 5 local branch(es), 2 remote branch(es) to remove" in out
     assert "dry run" in out
     assert not any(c[:2] == ["git", "fetch"] for c in run.calls)
 
@@ -288,10 +296,12 @@ def test_apply_removes_worktrees_then_locals_then_remotes() -> None:
         ["git", "worktree", "remove", f"{WT}/issue-1"],
         ["git", "worktree", "remove", f"{WT}/issue-2"],
         ["git", "worktree", "remove", f"{WT}/issue-7"],
+        ["git", "worktree", "remove", f"{WT}/worktree-agent-empty"],
         ["git", "branch", "-D", "issue-1"],
         ["git", "branch", "-D", "issue-2"],
         ["git", "branch", "-D", "issue-7"],
         ["git", "branch", "-D", "orphan-on-main"],
+        ["git", "branch", "-D", "worktree-agent-empty"],
         ["git", "push", "origin", "--delete", "issue-1", "issue-2"],
     ]
 
@@ -299,7 +309,7 @@ def test_apply_removes_worktrees_then_locals_then_remotes() -> None:
 def test_apply_reports_a_refusal_and_keeps_going(capsys: pytest.CaptureFixture[str]) -> None:
     run = FakeRunner(failing={f"{WT}/issue-2", "issue-7"})
     assert main(["--apply", "--no-fetch"], run=run) == 1
-    assert len(run.mutations()) == 8  # every removal was still attempted
+    assert len(run.mutations()) == 10  # every removal was still attempted
     err = capsys.readouterr().err
     assert f"FAILED  git worktree remove {WT}/issue-2 failed (1): refused" in err
     assert "FAILED  git branch -D issue-7 failed (1): refused" in err
