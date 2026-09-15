@@ -179,6 +179,16 @@ facts the sections above lack. All measured on the same box and build.
 | **A timeout discards buffered output.** `print("before sleep")` then `time.sleep(15)` at `timeout=10` returned only `{"error": "Script timed out after 10s…"}`, no `output` key: the child is killed and its stdout dropped. The partial-output preservation in "Limits, capture and shaping" holds for exceptions, not timeouts. | measured |
 | **1144 is only the rendezvous.** The scripting README (`Network and Headless Access`): "the return connection is dynamically allocated in the 49152..65535 range." netstat agrees — the server's `ResolvePython.exe` holds an ESTABLISHED connection to `127.0.0.1:49152`, listened on by `Resolve.exe`; 1144 shows only as short-lived `TIME_WAIT`. A firewall or port story built on 1144 alone is incomplete. | measured + README |
 
+**Handle death is a hang, and the cause can live outside both servers.**
+After Resolve was restarted mid-session, its scripting server `fuscript.exe`
+survived as an orphan (parent pid dead) still holding port 1144. Every new
+attach handshook with it and hung: the native `get_resolve_status` never
+returned, `ResolveMCP.exe --test` timed out at 40 s, and the MCP client's
+reconnect timed out at 30 s. Killing the orphan un-wedged the handshake, but
+the live Resolve had never bound 1144, so a full Resolve relaunch was needed.
+The native server has no probe, no deadline and no reconnect in front of the
+attach; this repo's connection layer has all three. Measured 2026-09-15.
+
 One caveat on section 6. The second pass could not reproduce a python.org
 3.12 attach from the repo venv inside its own shell sandbox (no output, no
 CPU for four minutes before it was killed) — inconclusive, not a
