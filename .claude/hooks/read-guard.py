@@ -3,10 +3,12 @@
 
 PostToolUse on Edit/Write/MultiEdit: record the edited path, keyed by session.
 PreToolUse on Read, blocking (exit 2) on either rule:
-  1. Re-read: a whole-file Read of a path this session already edited — the
-     content is in context and Edit/Write fail loudly on a miss, so the re-read
-     buys nothing. Any offset/limit is the escape: wanting a different section
-     of a big file is legitimate.
+  1. Re-read: a whole-file Read of a path this session already edited and at
+     least SMALL_FILE_LINES long — the content is in context and Edit/Write fail
+     loudly on a miss, so the re-read buys nothing. Any offset/limit is the
+     escape: wanting a different section of a big file is legitimate, and a file
+     under SMALL_FILE_LINES is too cheap to be worth a block (#274: the turn the
+     block costs is dearer than the lines it saves).
   2. Big first read: a whole-file Read of a guarded-extension repo file
      (guarded_ext.py, shared with context-guard.py; markdown included, CLAUDE.md
      itself exempt) over BIG_FILE_LINES — CLAUDE.md's "ranged (grep first) on
@@ -29,6 +31,8 @@ import sys
 import tempfile
 
 BIG_FILE_LINES = 400
+# Under this, a whole re-read is cheaper than the turn spent routing around a block.
+SMALL_FILE_LINES = 100
 
 # The guarded-extension list is shared with context-guard.py (guarded_ext.py):
 # text formats where a whole-file pull is the thing being rationed. Markdown
@@ -52,11 +56,16 @@ def in_project(path):
     return target == root or target.startswith(root + os.sep)
 
 
-def line_count(path):
-    """Lines in *path*, or None when it cannot be counted (missing, binary, …)."""
+def has_more_lines_than(path, limit):
+    """Whether *path* runs past *limit* lines - reading no further than line
+    limit+1, since the two rules ask only "under 100?" and "over 400?" - or None
+    when it cannot be read (missing, binary, …)."""
     try:
         with open(path, encoding="utf-8", errors="replace") as f:
-            return sum(1 for _ in f)
+            for n, _ in enumerate(f, start=1):
+                if n > limit:
+                    return True
+        return False
     except OSError:
         return None
 
@@ -95,6 +104,9 @@ if event == "PreToolUse" and tool == "Read":
             except OSError:
                 edited = set()
         if path in edited:
+            # An unreadable file (missing, binary) is not small: the rule stands.
+            if has_more_lines_than(path, SMALL_FILE_LINES - 1) is False:
+                sys.exit(0)  # nothing under 100 lines can trip the 400-line rule below
             sys.stderr.write(
                 "Blocked (context discipline): this session already edited that file — its content is in your "
                 "context, and Edit/Write fail loudly on a miss, so a whole-file re-read buys nothing.\n"
@@ -113,13 +125,13 @@ if event == "PreToolUse" and tool == "Read":
         and os.path.basename(path).lower() not in SIZE_RULE_EXEMPT_NAMES
         and in_project(path)
     ):
-        lines = line_count(path)
-        if lines is not None and lines > BIG_FILE_LINES:
+        if has_more_lines_than(path, BIG_FILE_LINES):
             sys.stderr.write(
-                f"Blocked (context discipline): {os.path.basename(path)} is {lines} lines — "
-                f"over the {BIG_FILE_LINES}-line whole-file limit.\n"
+                f"Blocked (context discipline): {os.path.basename(path)} is over the "
+                f"{BIG_FILE_LINES}-line whole-file limit.\n"
                 f"Grep for the symbol you need first, then Read with offset/limit around the hit.\n"
-                f"If you truly need the whole file, say so with an explicit range: offset 1, limit {lines}.\n"
+                f"If you truly need the whole file, say so with an explicit range: offset 1, "
+                f"limit <its line count> (wc -l).\n"
             )
             sys.exit(2)
 

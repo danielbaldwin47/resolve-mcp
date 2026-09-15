@@ -127,3 +127,16 @@ unless `RESOLVE_MCP_SCENE_SCAN_CLIP` names a real one. That variable is
 **unset on the live box**: its pool was checked in #135 and holds no flattened
 render, only raw continuous angles — so the generated clip is the default there,
 and the variable is for a project that does have an edit to scan.
+
+## Running the live tier
+
+Open project `mcp-tests-zinc` (a copy of the client media — the suite deletes
+timelines, so never the client project). **One `pytest -m live` at a time
+across all sessions** — every run attaches to the single Resolve instance, so
+schedule the live *step*, not the whole ticket. Scratch projects the run
+creates cannot be deleted through the API (`DeleteProject` returns `False` on
+this box) — list them for hand deletion under the ticket's `## Needs from
+you`. `-m live -k real_separator` needs no Resolve (only `audio-separator` on
+PATH) and is the one seam that proves stem labels. A leftover timeline gets
+deleted in a later pass, after the switch away from it has settled —
+switch-then-delete in one pass crashed Resolve mid-autosave.

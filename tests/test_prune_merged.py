@@ -8,18 +8,16 @@ mutating commands are recorded, never run. Fixture shapes are the real ones —
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 import pytest
 
+from scripts._merged import parse_worktrees
 from scripts._run import CommandError
-from scripts.prune_merged import (
-    Plan,
-    apply_plan,
-    build_plan,
-    main,
-    parse_worktrees,
-)
+from scripts.prune_merged import Plan, apply_plan, build_plan, main
 
 ROOT = "C:/Users/x/repos/resolve-mcp"
 WT = f"{ROOT}/.claude/worktrees"
@@ -31,6 +29,10 @@ UNMERGED = "d" * 40
 OPEN_TIP = "e" * 40
 FRESH = "f" * 40  # a branch that is on main by ancestry (merge-commit PR, or no commits yet)
 STACKED = "1" * 40  # head of a PR squash-merged into another branch, never into main
+AGENT_TIP = "2" * 40  # where a worktree-agent-* branch was cut from issue-6; nothing since
+# worktree-agent-fresh sits at FRESH: cut from main, nothing since - the one agent shape
+# that is residue. worktree-agent-empty sits at issue-6's unmerged tip: another branch
+# holds it, main lacks it, so it stays (review 2026-09-15, finding 1).
 
 MERGED_PRS = json.dumps(
     [
@@ -83,6 +85,14 @@ worktree {WT}/issue-8
 HEAD {STACKED}
 branch refs/heads/issue-8
 
+worktree {WT}/worktree-agent-empty
+HEAD {AGENT_TIP}
+branch refs/heads/worktree-agent-empty
+
+worktree {WT}/worktree-agent-fresh
+HEAD {FRESH}
+branch refs/heads/worktree-agent-fresh
+
 worktree {WT}/detached
 HEAD {FRESH}
 detached
@@ -103,6 +113,8 @@ LOCAL_REFS = "\n".join(
         f"issue-6 {UNMERGED}",
         f"issue-7 {FRESH}",
         f"issue-8 {STACKED}",
+        f"worktree-agent-empty {AGENT_TIP}",
+        f"worktree-agent-fresh {FRESH}",
         f"elsewhere {FRESH}",
         f"orphan-on-main {FRESH}",  # no worktree, no PR, but nothing main lacks
         f"orphan-ahead {UNMERGED}",
@@ -123,7 +135,10 @@ REMOTE_REFS = "\n".join(
 )
 # ``git branch --merged origin/main``: names whose tip is an ancestor of origin/main.
 LOCAL_ON_MAIN = "\n".join(
-    ["main", "issue-2", "issue-5", "issue-7", "elsewhere", "orphan-on-main"]
+    [
+        "main", "issue-2", "issue-5", "issue-7", "elsewhere", "orphan-on-main",
+        "worktree-agent-fresh",
+    ]
 )
 REMOTE_ON_MAIN = "\n".join(["origin/HEAD", "origin/main", "origin/issue-2", "origin/issue-5"])
 
@@ -196,8 +211,13 @@ def test_parse_worktrees_normalises_backslashes() -> None:
 
 def test_plan_removes_only_merged_and_unheld() -> None:
     plan = build_plan(FakeRunner())
-    assert plan.worktrees == [f"{WT}/issue-1", f"{WT}/issue-2", f"{WT}/issue-7"]
-    assert plan.local_branches == ["issue-1", "issue-2", "issue-7", "orphan-on-main"]
+    assert plan.worktrees == [
+        f"{WT}/issue-1", f"{WT}/issue-2", f"{WT}/issue-7", f"{WT}/worktree-agent-fresh"
+    ]
+    assert plan.reasons[f"worktree {WT}/worktree-agent-fresh"] == "worktree-agent-* with no commits"
+    assert plan.local_branches == [
+        "issue-1", "issue-2", "issue-7", "orphan-on-main", "worktree-agent-fresh"
+    ]
     assert plan.remote_branches == ["issue-1", "issue-2"]
     assert plan.reasons[f"worktree {WT}/issue-1"] == "PR merged (squash) at this tip"
     assert plan.reasons["remote origin/issue-2"] == "tip is on origin/main"
@@ -227,6 +247,21 @@ def test_plan_refuses_worktree_with_commits_not_on_main() -> None:
         assert f"{WT}/{name}" not in plan.worktrees
         assert name not in plan.local_branches
         assert name not in plan.remote_branches
+
+
+def test_an_agent_worktree_cut_from_unmerged_work_is_kept() -> None:
+    """Review 2026-09-15, finding 1: ``worktree-agent-empty`` sits at issue-6's tip, which
+    issue-6 holds and main lacks. The old ``git branch --contains`` rule called that "no
+    commits" and ``--apply`` deleted a running session's worktree; only a tip on
+    ``origin/main`` is residue, and the decision asks git nothing per branch."""
+    run = FakeRunner()
+    plan = build_plan(run)
+    kept = dict(plan.skipped)
+    assert kept[f"worktree {WT}/worktree-agent-empty"] == "commits not on origin/main"
+    assert kept["local worktree-agent-empty"] == f"checked out in {WT}/worktree-agent-empty"
+    assert f"{WT}/worktree-agent-empty" not in plan.worktrees
+    assert "worktree-agent-empty" not in plan.local_branches
+    assert not any(c[:3] == ["git", "branch", "--contains"] for c in run.calls)
 
 
 def test_plan_ignores_prs_merged_into_a_branch_other_than_main() -> None:
@@ -275,7 +310,7 @@ def test_dry_run_issues_no_mutations(capsys: pytest.CaptureFixture[str]) -> None
     assert main(["--no-fetch"], run=run) == 0
     assert run.mutations() == []
     out = capsys.readouterr().out
-    assert "3 worktree(s), 4 local branch(es), 2 remote branch(es) to remove" in out
+    assert "4 worktree(s), 5 local branch(es), 2 remote branch(es) to remove" in out
     assert "dry run" in out
     assert not any(c[:2] == ["git", "fetch"] for c in run.calls)
 
@@ -288,10 +323,12 @@ def test_apply_removes_worktrees_then_locals_then_remotes() -> None:
         ["git", "worktree", "remove", f"{WT}/issue-1"],
         ["git", "worktree", "remove", f"{WT}/issue-2"],
         ["git", "worktree", "remove", f"{WT}/issue-7"],
+        ["git", "worktree", "remove", f"{WT}/worktree-agent-fresh"],
         ["git", "branch", "-D", "issue-1"],
         ["git", "branch", "-D", "issue-2"],
         ["git", "branch", "-D", "issue-7"],
         ["git", "branch", "-D", "orphan-on-main"],
+        ["git", "branch", "-D", "worktree-agent-fresh"],
         ["git", "push", "origin", "--delete", "issue-1", "issue-2"],
     ]
 
@@ -299,7 +336,7 @@ def test_apply_removes_worktrees_then_locals_then_remotes() -> None:
 def test_apply_reports_a_refusal_and_keeps_going(capsys: pytest.CaptureFixture[str]) -> None:
     run = FakeRunner(failing={f"{WT}/issue-2", "issue-7"})
     assert main(["--apply", "--no-fetch"], run=run) == 1
-    assert len(run.mutations()) == 8  # every removal was still attempted
+    assert len(run.mutations()) == 10  # every removal was still attempted
     err = capsys.readouterr().err
     assert f"FAILED  git worktree remove {WT}/issue-2 failed (1): refused" in err
     assert "FAILED  git branch -D issue-7 failed (1): refused" in err
@@ -316,3 +353,19 @@ def test_apply_batches_remote_deletes() -> None:
     apply_plan(run, Plan(remote_branches=[f"b{i}" for i in range(120)]))
     pushes = [c for c in run.calls if c[:2] == ["git", "push"]]
     assert [len(c) - 4 for c in pushes] == [50, 50, 20]
+
+
+def test_the_script_runs_by_path_from_the_repo_root() -> None:
+    """CLAUDE.md step 6 and the SessionStart hook advertise
+    ``uv run python scripts/prune_merged.py``; run by path, only ``scripts/`` lands on
+    ``sys.path``, so without the bootstrap at the top of the script ``scripts._merged``
+    does not import. The ``-m`` form is proved by this module's own import."""
+    root = Path(__file__).resolve().parents[1]
+    r = subprocess.run(
+        [sys.executable, str(root / "scripts" / "prune_merged.py"), "--help"],
+        capture_output=True,
+        text=True,
+        cwd=root,
+    )
+    assert r.returncode == 0, r.stderr
+    assert "usage" in r.stdout

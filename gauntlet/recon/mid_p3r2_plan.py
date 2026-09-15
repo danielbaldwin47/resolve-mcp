@@ -16,9 +16,9 @@ import json
 import statistics
 from pathlib import Path
 
-# The bins this histogram is compared against are correlate's own, imported so that
+# The bins this histogram is compared against are `rhythm`'s own, imported so that
 # this plan and the shot_rhythm reading it is checked with cannot drift apart.
-from resolve_mcp.analysis.correlate import RHYTHM_BINS
+from resolve_mcp.analysis.rhythm import RHYTHM_BINS
 
 HERE = Path(__file__).resolve().parent
 RECON = json.loads((HERE / "mid_p3_recon.json").read_text(encoding="utf-8"))
