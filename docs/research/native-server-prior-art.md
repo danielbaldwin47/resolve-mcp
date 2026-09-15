@@ -422,13 +422,20 @@ signature cannot express a lie.* That is the shape of the gap the native server 
 | Iamkewl/Davinci-MCP | 5 | 09-13 | 12 commits | no |
 | 2sem/davinci-resolve-lite-mcp | 4 | 08-24 | none | no |
 | DigitalWorkflowCompany/resolve-mcp | 2 | **06-06** | none | no |
+| sandraschi/davinci-resolve-mcp | 2 | 09-14 | none on the default branch; README is two lines, no code | no |
+| Airta-Admin/Davinc-Resolve-Local-Bridge-MCP | 1 | 08-25 | none | no |
+| CiprianSpiridon/davinci-resolve-mcp | 1 | 08-14 | none | no |
 | sakethramanujam/video-harness | 0 | 09-12 | created 09-09 | no |
 | OSideMedia/oside-resolve-mcp | 0 | 09-13 | 22 commits | **yes — full section** |
 | RajanthaR/resolve-mcp-burn-bench | 0 | 09-14 | created 09-14 | **yes — is about it** |
+| MDizzleZA/davinci-resolve-mcp-free | 0 | 08-16 | none | no |
 
 **No repository has been archived or deprecated since 2026-09-08**, and only three new ones were
-created. Neither a stampede nor a collapse: mostly silence. Every project surveyed uses the same
-direct `fusionscript` attach this one does — the native server changed nobody's architecture.
+created. Neither a stampede nor a collapse: mostly silence. The native server changed nobody's
+architecture: seven projects attach in-process through `fusionscript` as this one does (samuelgursky
+in 31 source files, DigitalWorkflowCompany, hoyt-harness, mhadifilms, Iamkewl, CiprianSpiridon,
+OSideMedia), and the five free-edition bridges below run a script inside Resolve over a local socket,
+as they did before.
 
 ### What 21.1 broke, and nobody has fixed [primary]
 
@@ -457,6 +464,29 @@ He closed #203 as *"there was nothing left for this project to do."* **The free-
 this ecosystem has no path forward and mostly does not know it yet.** Irrelevant to this project
 (Studio throughout) but it explains why the field looks quiet: a third of it is dead and
 un-updated rather than deliberately silent.
+
+### One builder chose "instead", on the record [press]
+
+The only found statement from a third-party author *abandoning* a bridge for the native server is
+second-hand. `ismael-joffroy-chandoutis/comfyui-cinema-pipeline`,
+`docs/12-davinci-resolve-native-mcp.md` (2026-09-09), quotes Brent Schooley — OpenAI developer videos,
+and author of "his own 164-action Resolve bridge with Codex before 21.1":
+
+> "It's built in and maps everything in Resolve and will be updated with each release of Resolve. I'll
+> take that over an external dependency every day of the week."
+
+The original post was not located; treat as a lead. The same document's working rule is the closest
+thing to a consensus split: "use the native server for exploration, short scripts, DCTL and LUT work,
+and for reading the documentation of the version you actually run. Use the community server when you
+want a typed tool with argument checks, media analysis, batch jobs or `.drx` files."
+
+### Could not find [not-found]
+
+- A third-party server rebuilt *on top of* the native one (option 2 below): no repository calls
+  `ResolveMCP` from its own code (`search/code`, 2026-09-15).
+- A user issue on any third-party server asking why it exists now that Resolve ships its own:
+  samuelgursky's eight issues since 2026-09-08 are all bugs and installs.
+- A GitHub Discussion on the topic, anywhere in the field.
 
 ### No official listing exists, for anyone [not-found]
 
