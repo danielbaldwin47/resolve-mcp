@@ -98,9 +98,11 @@ if event == "PreToolUse" and tool == "Read":
                     edited = set(f.read().splitlines())
             except OSError:
                 edited = set()
-        # An uncountable file (missing, unreadable) is not small: the rule stands.
-        reread_lines = line_count(path) if path in edited else None
-        if path in edited and (reread_lines is None or reread_lines >= SMALL_FILE_LINES):
+        if path in edited:
+            # An uncountable file (missing, unreadable) is not small: the rule stands.
+            lines = line_count(path)
+            if lines is not None and lines < SMALL_FILE_LINES:
+                sys.exit(0)  # nothing under 100 lines can trip the 400-line rule below
             sys.stderr.write(
                 "Blocked (context discipline): this session already edited that file — its content is in your "
                 "context, and Edit/Write fail loudly on a miss, so a whole-file re-read buys nothing.\n"

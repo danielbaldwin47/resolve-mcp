@@ -25,7 +25,11 @@ Blocks (exit 2, message to the model):
      absolute path, because the blocked agent's next move was a Read of
      `/tmp/<name>`, which is not a directory on this box.
   5. A `for`/`foreach` loop over guarded files whose body dumps them.
-  6. `tail -f`/`-F`: a follow streams forever, so Monitor owns it.
+  6. `tail -f`/`-F` on any file: a follow streams forever, so the call never
+     returns and the session stalls — Monitor owns that wait. The one escape is
+     `run_in_background`, where not returning is the point. This is the only
+     rule not scoped to the guarded extensions: a stall does not care what the
+     file is called.
 
 Heredoc / here-string bodies and quoted `--body`/`--message`/`--title`
 arguments are data, not commands, and are blanked before any rule looks (the
@@ -67,6 +71,9 @@ if data.get("tool_name") not in SHELL_TOOLS:
     sys.exit(0)
 
 cmd = data.get("tool_input", {}).get("command", "") or ""
+# A backgrounded call is detached: a follow that never returns is the point there,
+# not a stall, so rule 6 steps aside for it.
+background = bool(data.get("tool_input", {}).get("run_in_background"))
 
 
 def block(message: str) -> None:
@@ -255,9 +262,10 @@ SCRATCH_MSG = (
 
 
 def scratch_path(name: str) -> str:
-    """*name* as an absolute path, resolved against the cwd that wrote the log —
-    never CLAUDE_PROJECT_DIR, which points at the main checkout while a worktree
-    session writes its logs beside itself."""
+    """*name* as an absolute path, resolved against this process's cwd — the same
+    cwd the blocked command would have written the log into. Deliberately not
+    CLAUDE_PROJECT_DIR, which names the main checkout while a worktree session
+    writes its logs beside itself."""
     return name if os.path.isabs(name) else os.path.abspath(name)
 
 
@@ -274,7 +282,8 @@ def dump_block(names: list, seg: str) -> None:
     scratch = next((n for n in names if n.lower().endswith(".scratch.log")), "")
     if scratch:
         block(SCRATCH_MSG.format(name=scratch, path=scratch_path(scratch)))
-    block(DUMP_MSG.format(name=names[0]))
+    else:
+        block(DUMP_MSG.format(name=names[0]))
 
 
 # A loop over guarded files whose body dumps them: `for f in src/*.py; do cat
@@ -363,29 +372,43 @@ for m in re.finditer(SED, blanked):
         dump_block(guarded_names(m.group("args")), statement(blanked, m.end("args")))
 
 # head / tail: a count bounds the read, in lines (`-50`, `-n 50`) or in bytes
-# (`-c 400`); a countless `-c` or `--bytes=<huge>` is a dump by another name.
+# (`-c 400`); a countless `-c` is a dump by another name. No rule here reads the
+# number — `head -n 999999` has always passed — so `--bytes` stays a dump by
+# spelling alone: the long form is what a scripted whole-file pull reaches for,
+# and the short `-c <n>` is the interactive peek #274 unblocked.
 HEADTAIL = (
     CMD_POS
     + r"(?P<cmd>head|tail)\b(?P<flags>(?:\s+(?:-n\s*\d+|-\d+|--lines(?:=|\s+)\d+|-c\s*\d*|"
     + r"--bytes(?:=|\s+)\S+|-[a-zA-Z]+))*)"
     + r"(?P<args>(?:\s+(?:<\s*)?" + ARG + r")+)"
 )
-# `-f`/`-F`/`--follow`, alone or bundled (`-fn 20`): the flag that never returns.
-FOLLOW = r"(?<![\w-])-(?:[a-zA-Z]*[fF](?![a-zA-Z])|-follow\b)"
+# `-f`/`-F`/`--follow`, alone or bundled (`-qf`, `-fn 20`): the flag that never
+# returns. No other short flag of head/tail carries an f, so any letter bundle
+# holding one is a follow.
+FOLLOW = r"(?<![\w-])-(?:[a-zA-Z]*[fF][a-zA-Z]*|-follow\b)"
 for m in re.finditer(HEADTAIL, scan_cat):
     flags = m.group("flags")
     names = guarded_names(m.group("args"))
     # `--follow` is no alternative in the flags group, so it lands among the args:
     # every dash-led token counts as a flag for this one check, never a file name.
-    dashed = flags + " " + " ".join(a for a in m.group("args").split() if a.startswith("-"))
-    # A follow blocks whatever it is piped or redirected into, so it is judged
-    # before the dump rules and takes no landing escape.
-    if names and m.group("cmd").lower() == "tail" and re.search(FOLLOW, dashed):
+    words = m.group("args").split()
+    dashed = flags + " " + " ".join(a for a in words if a.startswith("-"))
+    # A count that the flags group left behind (`-n 20`, `-c +10`) is no file name.
+    targets = [a for a in words if not a.startswith("-") and not re.fullmatch(r"\+?\d+", a)]
+    # A follow streams into whatever it is piped or redirected into, so it is
+    # judged before the dump rules and takes no landing or filter escape — and
+    # it is judged on any file, guarded extension or not, because what stalls
+    # the session is the flag, not the file.
+    follows = m.group("cmd").lower() == "tail" and re.search(FOLLOW, dashed)
+    if follows and targets and background:
+        continue  # a detached follow is a stream nobody waits on, not a dump
+    if follows and targets:
         block(
-            f"Blocked: tail -f on {names[0]} streams forever; the call never returns and the "
+            f"Blocked: tail -f on {targets[0]} streams forever; the call never returns and the "
             "session stalls.\n"
             "Use Monitor on the file to wait for a condition, or read what is there now with the "
-            "Grep tool."
+            "Grep tool.\n"
+            "A follow you mean to leave running belongs in a run_in_background call."
         )
     bounded = re.search(r"-n\s*\d|-\d|--lines|-c\s*\d", flags)
     bytes_dump = re.search(r"-c(?!\s*\d)|--bytes", flags)

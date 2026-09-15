@@ -26,15 +26,23 @@ HOOK = HOOKS / "context-guard.py"
 SETTINGS = Path(__file__).resolve().parents[1] / ".claude" / "settings.json"
 
 
-def run_hook(command: str, tool: str = "Bash") -> subprocess.CompletedProcess[str]:
+def run_hook(
+    command: str,
+    tool: str = "Bash",
+    flags: list[str] | None = None,
+    **tool_input: object,
+) -> subprocess.CompletedProcess[str]:
+    """Invoke the hook as the harness does. *flags* go to the interpreter, not the
+    hook: `-W error::DeprecationWarning` is how the warning test fails loudly.
+    Extra keywords join the tool payload (`run_in_background=True`)."""
     payload = {
         "session_id": "s1",
         "hook_event_name": "PreToolUse",
         "tool_name": tool,
-        "tool_input": {"command": command},
+        "tool_input": {"command": command, **tool_input},
     }
     return subprocess.run(
-        [sys.executable, str(HOOK)],
+        [sys.executable, *(flags or []), str(HOOK)],
         input=json.dumps(payload),
         capture_output=True,
         text=True,
@@ -485,19 +493,43 @@ def test_a_non_scratch_dump_keeps_the_general_message() -> None:
     assert "whole-file dump" in msg and "Grep tool" not in msg, msg
 
 
-@pytest.mark.parametrize("cmd", ["tail -f app.log", "tail -F pytest.scratch.log"])
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        "tail -f app.log",
+        "tail -F pytest.scratch.log",
+        "tail --follow app.log",
+        "tail -fn 20 app.log",  # bundled with a count: still a follow
+        "tail -f server.out",  # the only rule that is not scoped to guarded extensions
+        "tail -f /var/log/syslog",
+    ],
+)
 def test_tail_follow_gets_the_streams_forever_message(cmd: str) -> None:
     msg = blocked(cmd)
     assert "streams forever" in msg and "Monitor" in msg, msg
 
 
 def test_tail_follow_is_not_excused_by_a_filter_or_a_landing() -> None:
+    """A follow streams into its sink just as forever; only backgrounding it helps."""
     assert "streams forever" in blocked("tail -f app.log | grep ERROR")
     assert "streams forever" in blocked("tail -f app.log > watch.txt")
 
 
-def test_a_counted_tail_is_not_a_follow() -> None:
-    assert blocked("tail -n 20 my-file.log") == ""
+def test_a_backgrounded_follow_passes() -> None:
+    r = run_hook("tail -f app.log", run_in_background=True)
+    assert r.returncode == 0, r.stderr
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        "tail -n 20 my-file.log",
+        "tail -20 src/notes-final.md",  # a dash inside a name is not a flag
+        "head -50 src/config.py",
+    ],
+)
+def test_a_counted_read_is_not_a_follow(cmd: str) -> None:
+    assert blocked(cmd) == "", cmd
 
 
 # ------------------------------------------------------------ false positives
@@ -561,19 +593,7 @@ def test_the_hook_emits_no_deprecation_warning(cmd: str) -> None:
     """#274: `re.split(..., 1)` printed a DeprecationWarning on every hook run —
     hook stderr is the model's block message, so a warning there is noise in
     context. `-W error` turns any survivor into a traceback the assert catches."""
-    payload = {
-        "session_id": "s1",
-        "hook_event_name": "PreToolUse",
-        "tool_name": "Bash",
-        "tool_input": {"command": cmd},
-    }
-    r = subprocess.run(
-        [sys.executable, "-W", "error::DeprecationWarning", str(HOOK)],
-        input=json.dumps(payload),
-        capture_output=True,
-        text=True,
-        env=hook_env(HOOKS),
-    )
+    r = run_hook(cmd, flags=["-W", "error::DeprecationWarning"])
     assert r.returncode == 0, r.stderr
     assert "DeprecationWarning" not in r.stderr, r.stderr
 
