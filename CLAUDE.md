@@ -127,9 +127,12 @@ produced no work; relaunch rather than assume.)
    record, any unrun live ACs. The live record's home is the **ticket**; the
    PR body may repeat it, and a record that lives only on the PR is lost to
    anyone reading the ticket (#219's live pass survives only on PR #243).
-   Never a bare close: a ticket the PR auto-closed still gets the comment
-   (#167–#178 were bulk-closed silent and a reader has no outcome), and
-   `context-guard.py` blocks a `gh issue close` that carries no
+   Never a bare close: the PR body links its ticket as `Refs #<n>` — the
+   review gate refuses a closing keyword (`Closes #<n>`, `Fixes`,
+   `Resolves`), because the merge would close the ticket with no outcome
+   (#229 went that way; #167–#178 were bulk-closed silent and a reader has
+   no outcome) — and the ticket closes by `gh issue close <n> --comment`
+   after the merge; `context-guard.py` blocks a close that carries no
    `--comment`.
 
 When resolving merge conflicts, grep every conflicted file for `<<<<<<<`
@@ -168,12 +171,14 @@ worktree — to a gitignored repo-local log:
     uv run pytest -m 'not live' > pytest.scratch.log 2>&1
     uv run mypy src tests > mypy.scratch.log 2>&1
     uv run ruff check src tests > ruff.scratch.log 2>&1
-    gh issue view <n> --json body -q .body > issue.scratch.log
-    gh pr diff <n> > pr.scratch.log
+    gh issue view <n> --json body -q .body > issue-<n>.scratch.log
+    gh pr diff <n> > pr-<n>.scratch.log
     git merge origin/main --no-edit > merge.scratch.log 2>&1
 
 then Grep `FAILED|passed|error` (or the section you need) in the log
-(`*.scratch.log` is gitignored; never commit a log). Every one of these is
+(`*.scratch.log` is gitignored; never commit a log). The `gh` logs carry
+the ticket number: two sessions in one checkout sharing one unnumbered
+log built the wrong ticket. Every one of these is
 the whole command: no `;`, no `&&`, no `$(mktemp)`, no `for`/`while`, no
 `sleep N;` prefix (the harness blocks it — 154 guard rejections and 25
 sleep blocks were the largest wasted-turn class in the transcripts). Never

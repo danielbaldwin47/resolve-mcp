@@ -5,11 +5,12 @@ Issues and PRDs for this repo live as GitHub issues. Use the `gh` CLI for all op
 ## Conventions
 
 - **Create an issue**: `gh issue create --title "..." --body "..."`. Use a heredoc for multi-line bodies.
-- **Read an issue**: `gh issue view <number> --json body,labels,comments > issue.scratch.log`, then Grep the section you need — the context guard blocks an unredirected `--comments` pull.
+- **Read an issue**: `gh issue view <number> --json body,labels,comments > issue-<number>.scratch.log`, then Grep the section you need — the context guard blocks an unredirected `--comments` pull. The number in the log name keeps two sessions in one checkout on their own tickets.
 - **List issues**: `gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'` with appropriate `--label` and `--state` filters.
 - **Comment on an issue**: `gh issue comment <number> --body "..."`
 - **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
 - **Close**: `gh issue close <number> --comment "..."`
+- **Link a PR to its ticket**: `Refs #<number>` in the PR body. The review gate (`scripts/review_gate.py`) refuses GitHub's auto-close keywords (`Closes`/`Fixes`/`Resolves #<number>`): a merge that closes the ticket leaves it with no outcome comment — CLAUDE.md, Session workflow step 8.
 
 Infer the repo from `git remote -v` — `gh` does this automatically when run inside a clone.
 
@@ -19,7 +20,7 @@ Infer the repo from `git remote -v` — `gh` does this automatically when run in
 
 When set to `yes`, PRs run through the same labels and states as issues, using the `gh pr` equivalents:
 
-- **Read a PR**: `gh pr view <number> --json body,comments > pr.scratch.log` and `gh pr diff <number> > pr.scratch.log`, then Grep.
+- **Read a PR**: `gh pr view <number> --json body,comments > pr-<number>.scratch.log` and `gh pr diff <number> > pr-<number>.scratch.log`, then Grep.
 - **List external PRs for triage**: `gh pr list --state open --json number,title,body,labels,author,authorAssociation,comments` then keep only `authorAssociation` of `CONTRIBUTOR`, `FIRST_TIME_CONTRIBUTOR`, or `NONE` (drop `OWNER`/`MEMBER`/`COLLABORATOR`).
 - **Comment / label / close**: `gh pr comment`, `gh pr edit --add-label`/`--remove-label`, `gh pr close`.
 
@@ -31,7 +32,7 @@ Create a GitHub issue.
 
 ## When a skill says "fetch the relevant ticket"
 
-Run `gh issue view <number> --json body,comments > issue.scratch.log` and Grep it.
+Run `gh issue view <number> --json body,comments > issue-<number>.scratch.log` and Grep it.
 
 ## Wayfinding operations
 

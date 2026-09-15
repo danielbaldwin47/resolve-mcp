@@ -199,13 +199,15 @@ for m in re.finditer(GH_VIEW, blanked):
     if "--comments" in args:
         block(
             "Blocked (context discipline): a comment pull lands in a file, never straight in context.\n"
-            "Use one bare command: gh issue view <n> --comments > comments.scratch.log. "
+            "Use one bare command: gh issue view <n> --comments > comments-<n>.scratch.log. "
             "Then Grep the log - or --json comments with a jq filter to a file."
         )
     block(
         "Blocked (context discipline): gh issue/pr view and pr diff land in a file, never straight in context.\n"
-        "Use one bare command: gh issue view <n> --json body -q .body > issue.scratch.log "
-        "(gh pr diff <n> > pr.scratch.log). Then Grep the log for the section you need; "
+        "Use one bare command: gh issue view <n> --json body -q .body > issue-<n>.scratch.log "
+        "(gh pr diff <n> > pr-<n>.scratch.log) - the ticket number in the name keeps two "
+        "sessions in one checkout from reading each other's log. Then Grep the log for the "
+        "section you need; "
         "a --json field filter (-q .title, .state) is fine."
     )
 
