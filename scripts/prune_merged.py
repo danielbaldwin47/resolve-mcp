@@ -27,8 +27,12 @@ import argparse
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
 
-from scripts._merged import (
+if __package__ in (None, ""):  # run by path, not as ``-m scripts.prune_merged``
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts._merged import (  # noqa: E402
     branch_decision,
     gather_facts,
     merge_decision,
@@ -37,7 +41,7 @@ from scripts._merged import (
     refs,
     worktree_decision,
 )
-from scripts._run import CommandError, Runner, subprocess_runner
+from scripts._run import CommandError, Runner, subprocess_runner  # noqa: E402
 
 
 @dataclass(frozen=True)

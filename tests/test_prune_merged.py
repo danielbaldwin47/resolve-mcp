@@ -8,7 +8,10 @@ mutating commands are recorded, never run. Fixture shapes are the real ones —
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 import pytest
 
@@ -326,3 +329,19 @@ def test_apply_batches_remote_deletes() -> None:
     apply_plan(run, Plan(remote_branches=[f"b{i}" for i in range(120)]))
     pushes = [c for c in run.calls if c[:2] == ["git", "push"]]
     assert [len(c) - 4 for c in pushes] == [50, 50, 20]
+
+
+def test_the_script_runs_by_path_from_the_repo_root() -> None:
+    """CLAUDE.md step 6 and the SessionStart hook advertise
+    ``uv run python scripts/prune_merged.py``; run by path, only ``scripts/`` lands on
+    ``sys.path``, so without the bootstrap at the top of the script ``scripts._merged``
+    does not import. The ``-m`` form is proved by this module's own import."""
+    root = Path(__file__).resolve().parents[1]
+    r = subprocess.run(
+        [sys.executable, str(root / "scripts" / "prune_merged.py"), "--help"],
+        capture_output=True,
+        text=True,
+        cwd=root,
+    )
+    assert r.returncode == 0, r.stderr
+    assert "usage" in r.stdout
