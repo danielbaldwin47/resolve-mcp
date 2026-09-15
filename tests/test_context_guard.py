@@ -32,17 +32,21 @@ def run_hook(
     command: str,
     tool: str = "Bash",
     flags: list[str] | None = None,
+    cwd: str | None = None,
     **tool_input: object,
 ) -> subprocess.CompletedProcess[str]:
     """Invoke the hook as the harness does. *flags* go to the interpreter, not the
     hook: `-W error::DeprecationWarning` is how the warning test fails loudly.
+    *cwd* is the payload's top-level `cwd` (the directory the command runs in).
     Extra keywords join the tool payload (`run_in_background=True`)."""
-    payload = {
+    payload: dict[str, object] = {
         "session_id": "s1",
         "hook_event_name": "PreToolUse",
         "tool_name": tool,
         "tool_input": {"command": command, **tool_input},
     }
+    if cwd is not None:
+        payload["cwd"] = cwd
     return subprocess.run(
         [sys.executable, *(flags or []), str(HOOK)],
         input=json.dumps(payload),
@@ -149,6 +153,44 @@ def test_noisy_run_piped_to_a_filter_passes(cmd: str) -> None:
 @pytest.mark.parametrize("cmd", ["uv run pytest -q | tail -3", "uv run mypy | head -20"])
 def test_a_filter_does_not_excuse_a_pager(cmd: str) -> None:
     assert "never pipe to tail/head" in blocked(cmd), cmd
+
+
+# Review 2026-09-15, finding 3: "not a re-emitter" let these pass a whole run into
+# context. The escape is a fixed FILTERS set, every stage.
+NOT_FILTERS = [
+    "uv run pytest | sort",
+    "uv run pytest 2>&1 | awk '{print $1}'",
+    "uv run mypy | sed -n p",
+    "uv run pytest | xargs echo",
+    "uv run ruff check | sort | uniq -c",
+    "uv run pytest | grep FAILED | sort",  # one filter does not excuse a later stage
+    "uv run pytest | tr a-z A-Z",
+    "uv run pytest 2>&1 | ForEach-Object { $_ }",
+]
+
+
+@pytest.mark.parametrize("cmd", NOT_FILTERS)
+def test_noisy_run_piped_to_a_non_filter_is_blocked(cmd: str) -> None:
+    msg = blocked(cmd)
+    assert msg, cmd
+    assert "piped only to filters" in msg, msg
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        "uv run pytest | grep -E 'passed|failed'",
+        "uv run pytest | rg -c FAILED",
+        "uv run mypy | wc -l",
+        "uv run pytest 2>&1 | Select-String -Pattern FAILED",
+        "uv run pytest | findstr FAILED",
+        "uv run mypy | Measure-Object -Line",
+        "uv run pytest | grep FAILED | wc -l",  # filters all the way down
+        "uv run pytest | egrep passed",
+    ],
+)
+def test_every_stage_a_filter_passes(cmd: str) -> None:
+    assert blocked(cmd) == "", cmd
 
 
 @pytest.mark.parametrize(
@@ -298,6 +340,12 @@ WHOLE_FILE_DUMPS = [
     "tail src/config.py",
     "head -c src/config.py",  # a countless -c is a dump by another name
     "head --bytes=4000 src/config.py",
+    "sed -n '$!p' src/x.py",  # every line but the last is the file (finding 4)
+    'sed -n "\\$!p" src/x.py',
+    "head -c 4097 src/config.py",  # over BYTES_CAP: a whole-file pull by the byte (finding 5)
+    "head -c 900000 src/config.py",
+    "head -c900000 src/config.py",
+    "tail -c 900000 src/config.py",
     "Get-Content src/config.py",
     "Get-Content -Path .claude/settings.json",
     "gc src/config.py -Raw",
@@ -342,11 +390,14 @@ RANGED_READS = [
     "sed -n 5p src/config.py",
     "sed -n '/def main/,/^$/p' src/config.py",
     "sed -i 's/a/b/' src/config.py",  # an edit, not a read
-    "sed -n '$!p' src/x.py",  # #274: skip-the-last-line is an address, not a dump
+    "sed -n '$p' src/x.py",  # the last line alone
+    "sed -n '5,20p' src/x.py",
     "head -50 src/config.py",
     "head -c 200 notes.md",  # #274: a byte count bounds the read
     "head -c 400 src/config.py",
     "head -c400 src/config.py",
+    "head -c 4096 src/config.py",  # BYTES_CAP itself is in
+    "tail -c 4096 src/config.py",
     "tail -c 200 pytest.scratch.log",
     "head -n 50 src/config.py",
     "head -n50 src/config.py",
@@ -493,6 +544,15 @@ def test_scratch_log_dump_names_the_grep_tool_and_the_absolute_path(cmd: str) ->
     assert "/tmp is not a directory" in msg, msg
 
 
+def test_scratch_log_path_resolves_against_the_payload_cwd(tmp_path: Path) -> None:
+    """Review 2026-09-15, finding 9: the hook process runs wherever the harness started
+    it; the log lives where the *command* runs, which the payload's `cwd` names."""
+    r = run_hook("cat pytest.scratch.log", cwd=str(tmp_path))
+    assert r.returncode == 2
+    assert str(tmp_path / "pytest.scratch.log") in r.stderr, r.stderr
+    assert os.path.abspath("pytest.scratch.log") not in r.stderr, r.stderr
+
+
 def test_a_non_scratch_dump_keeps_the_general_message() -> None:
     msg = blocked("cat src/config.py")
     assert "whole-file dump" in msg and "Grep tool" not in msg, msg
@@ -520,8 +580,31 @@ def test_tail_follow_is_not_excused_by_a_filter_or_a_landing() -> None:
     assert "streams forever" in blocked("tail -f app.log > watch.txt")
 
 
+def test_a_follow_of_stdin_names_the_redirected_file() -> None:
+    msg = blocked("tail -f < app.log")
+    assert "tail -f on app.log" in msg, msg
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        "Get-Content app.log -Wait",
+        "Get-Content -Path app.log -Wait",
+        "gc pytest.scratch.log -Wait -Tail 20",  # a count does not end the wait
+        "Get-Content server.out -W",  # PowerShell accepts any unambiguous prefix
+        "Get-Content app.log -Wai | Select-String ERROR",
+    ],
+)
+def test_get_content_wait_is_a_follow(cmd: str) -> None:
+    """Cleanup 2026-09-15: `-Wait` is tail -f by another name, on any extension."""
+    msg = blocked(cmd, "PowerShell")
+    assert "Get-Content -Wait on" in msg and "streams forever" in msg and "Monitor" in msg, msg
+
+
 def test_a_backgrounded_follow_passes() -> None:
     r = run_hook("tail -f app.log", run_in_background=True)
+    assert r.returncode == 0, r.stderr
+    r = run_hook("Get-Content app.log -Wait", "PowerShell", run_in_background=True)
     assert r.returncode == 0, r.stderr
 
 

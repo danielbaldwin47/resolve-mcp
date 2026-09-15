@@ -4,10 +4,11 @@ tools (Bash and PowerShell — settings.json matches both).
 
 Blocks (exit 2, message to the model):
   1. Noisy runs (NOISY_TOOLS below) that neither land in a file nor pipe to a
-     filter: bare, or piped to tail/head/cat/Select-Object — the scratch-log+grep
-     rule. A filtering pipe (`| grep -c FAILED`, `| wc -l`) passes the way a
-     dump piped to grep does. `--version`, `--help` and `--collect-only` are
-     not runs.
+     filter: bare, piped to tail/head/cat/Select-Object, or piped to anything
+     outside FILTERS (`| sort`, `| awk`, `| sed -n p`, `| xargs` re-emit the
+     whole run) — the scratch-log+grep rule. A pipe whose every stage is a
+     filter (`| grep -c FAILED`, `| wc -l`, `| Select-String x`) passes.
+     `--version`, `--help` and `--collect-only` are not runs.
   2. `gh issue view` / `gh pr view` / `gh pr diff` that do not land in a file.
      A `--json … -q`/`--template` field filter passes unless it pulls the body
      or the comment thread; `gh pr diff --name-only|--stat` passes.
@@ -16,20 +17,23 @@ Blocks (exit 2, message to the model):
      comment <n>` on the same number in the same command counts as the record.
   4. A whole-file dump of a guarded file (guarded_ext.py) by any reader —
      `cat`, `more`, `less`, `type`, `Get-Content`/`gc`, `sed -n` with no range
-     or `1,$p`, `head`/`tail` with no count, bare `head -c` — that is neither
-     piped to a filter nor redirected. Ranged reads (`sed -n 10,40p`,
-     `head -50`, `head -c 400`, `sed -n '$!p'`, `Get-Content -TotalCount 50`)
-     pass. Backslash and drive-letter paths count, and so do readers fed by
-     `xargs`, `find -exec`, or a `Get-ChildItem` pipe. A dumped
-     `*.scratch.log` gets its own message: the Grep tool plus the log's
-     absolute path, because the blocked agent's next move was a Read of
-     `/tmp/<name>`, which is not a directory on this box.
+     (`p`, `1,$p`, `$!p` — every line but the last is still the file),
+     `head`/`tail` with no count, `head -c` with no count or one over
+     BYTES_CAP — that is neither piped to a filter nor redirected. Ranged reads
+     (`sed -n 10,40p`, `sed -n '$p'`, `head -50`, `head -c 400`,
+     `Get-Content -TotalCount 50`) pass. Backslash and drive-letter paths
+     count, and so do readers fed by `xargs`, `find -exec`, or a
+     `Get-ChildItem` pipe. A dumped `*.scratch.log` gets its own message: the
+     Grep tool plus the log's absolute path (resolved against the payload's
+     `cwd`, the directory the command would run in), because the blocked
+     agent's next move was a Read of `/tmp/<name>`, which is not a directory
+     on this box.
   5. A `for`/`foreach` loop over guarded files whose body dumps them.
-  6. `tail -f`/`-F` on any file: a follow streams forever, so the call never
-     returns and the session stalls — Monitor owns that wait. The one escape is
-     `run_in_background`, where not returning is the point. This is the only
-     rule not scoped to the guarded extensions: a stall does not care what the
-     file is called.
+  6. `tail -f`/`-F` and `Get-Content -Wait` on any file: a follow streams
+     forever, so the call never returns and the session stalls — Monitor owns
+     that wait. The one escape is `run_in_background`, where not returning is
+     the point. This is the only rule not scoped to the guarded extensions: a
+     stall does not care what the file is called.
 
 Heredoc / here-string bodies and quoted `--body`/`--message`/`--title`
 arguments are data, not commands, and are blanked before any rule looks (the
@@ -74,6 +78,9 @@ cmd = data.get("tool_input", {}).get("command", "") or ""
 # A backgrounded call is detached: a follow that never returns is the point there,
 # not a stall, so rule 6 steps aside for it.
 background = bool(data.get("tool_input", {}).get("run_in_background"))
+# The directory the command runs in. The hook process is started elsewhere (the
+# harness's own cwd), so a relative log name resolves against this, not os.getcwd().
+command_cwd = data.get("cwd") or os.getcwd()
 
 
 def block(message: str) -> None:
@@ -136,12 +143,32 @@ REEMITTERS = r"less|more|cat|nl|tee|Tee-Object|Out-Host|Out-String|Out-Default|W
 # For a noisy run, a capping pipe (tail/head/Select-Object) is no better: it caps
 # one run, and runs repeat.
 PAGERS = REEMITTERS + r"|tail|head|Select-Object|select(?![\w-])"
+# The stages that bound a noisy run the way the log-plus-Grep loop does: a match
+# count or a few matching lines. A fixed list, because "not a re-emitter" let
+# `| sort`, `| awk`, `| sed -n p` and `| xargs` pass a whole pytest run into
+# context (review 2026-09-15, finding 3).
+FILTERS = r"grep|egrep|fgrep|rg|wc|Select-String|findstr|Measure-Object"
+
+
+def stages_after(seg: str) -> list:
+    """The pipeline stages after the statement's first command."""
+    return seg.split("|")[1:]
 
 
 def piped_to_filter(seg: str) -> bool:
-    """True when the statement pipes onward to something that bounds or filters
-    it (grep, head -50, Select-Object -First 30, wc …) rather than re-emits it."""
-    stages = seg.split("|")[1:]
+    """True when every stage after the command is one of FILTERS: what a noisy run
+    may pipe to instead of landing in a scratch log."""
+    stages = stages_after(seg)
+    return bool(stages) and all(
+        re.match(r"\s*(?:" + FILTERS + r")(?![\w-])", st, re.I) for st in stages
+    )
+
+
+def piped_onward(seg: str) -> bool:
+    """True when the statement pipes to anything that is not a plain re-emitter -
+    the dump rules' escape, wider than the noisy rule's because `| head -50` or
+    `| Select-Object -First 30` bounds a file dump (it caps a run, which repeats)."""
+    stages = stages_after(seg)
     return bool(stages) and not all(
         re.match(r"\s*(?:" + REEMITTERS + r")(?![\w-])", st, re.I) for st in stages
     )
@@ -166,12 +193,15 @@ for m in re.finditer(NOISY, scan):
             "Then Grep the log for the decisive line (FAILED|passed|error).\n"
             "On failure, Grep the log for the failing case by name; never cat the log."
         )
-    # A filtering pipe (`| grep -c FAILED`, `| wc -l`) already bounds the run the
-    # way the log-plus-Grep loop does; only the bare run floods context.
+    # A pipe of filters only (`| grep -c FAILED`, `| wc -l`) already bounds the run
+    # the way the log-plus-Grep loop does; bare, or piped to anything else, the
+    # run floods context.
     if lands_in_file(seg) or piped_to_filter(seg):
         continue
     block(
-        f"Blocked (context discipline): a bare {tool} run puts its whole output in context.\n"
+        f"Blocked (context discipline): a {tool} run that is neither redirected nor piped only to "
+        "filters (grep, rg, wc, Select-String, findstr, Measure-Object) puts its whole output in "
+        "context.\n"
         f"Use one bare command: uv run {tool}{' check' if tool == 'ruff' else ''} > {tool}.scratch.log 2>&1 "
         "(a redirect the worktree guard accepts - no cd, no ;-chain). "
         "Then Grep the log for the decisive line (FAILED|passed|error)."
@@ -264,11 +294,12 @@ SCRATCH_MSG = (
 
 
 def scratch_path(name: str) -> str:
-    """*name* as an absolute path, resolved against this process's cwd — the same
-    cwd the blocked command would have written the log into. Deliberately not
-    CLAUDE_PROJECT_DIR, which names the main checkout while a worktree session
-    writes its logs beside itself."""
-    return name if os.path.isabs(name) else os.path.abspath(name)
+    """*name* as an absolute path, resolved against the payload's `cwd` — the
+    directory the blocked command would have written the log into. Deliberately
+    not CLAUDE_PROJECT_DIR, which names the main checkout while a worktree
+    session writes its logs beside itself; and not the hook process's own cwd,
+    which is wherever the harness started it (finding 9)."""
+    return name if os.path.isabs(name) else os.path.normpath(os.path.join(command_cwd, name))
 
 
 def guarded_names(args: str) -> list:
@@ -279,7 +310,7 @@ def guarded_names(args: str) -> list:
 def dump_block(names: list, seg: str) -> None:
     """Block when *names* is non-empty and the statement neither pipes to a
     filter nor lands in a file."""
-    if not names or lands_in_file(seg) or piped_to_filter(seg):
+    if not names or lands_in_file(seg) or piped_onward(seg):
         return
     scratch = next((n for n in names if n.lower().endswith(".scratch.log")), "")
     if scratch:
@@ -303,12 +334,12 @@ for m in re.finditer(LOOP, scan_cat):
     if not guarded_names(header):
         continue
     after = statement(scan_cat, m.end())
-    if lands_in_file(after) or piped_to_filter(after):
+    if lands_in_file(after) or piped_onward(after):
         continue  # `for …; done > all.txt` / `… done | grep x`: the loop's output is bounded
     body = m.group("do") if m.group("do") is not None else m.group("brace")
     body = body.replace("||", ";")  # `cat $f || true` is not a pipe
     for r in re.finditer(BODY_POS + READERS + r"\b(?P<rest>[^;}\n]*)", body, re.I):
-        if not lands_in_file(r.group("rest")) and not piped_to_filter(r.group("rest")):
+        if not lands_in_file(r.group("rest")) and not piped_onward(r.group("rest")):
             block(
                 "Blocked (context discipline): a cat loop over source files is a mass whole-file Read.\n"
                 "Use the Read tool per file you will edit, or grep for the lines you actually need."
@@ -340,10 +371,34 @@ FED_BY = (
     r"(?:\bxargs\s+(?:-\S+\s+)*|-(?:exec|x|X)\s+|(?:^|[;&(|])\s*" + LISTERS + r"\b[^|]*\|\s*)"
     + READERS + r"$"
 )
+# `Get-Content -Wait` (any unambiguous prefix: `-W`, `-Wa`, `-Wai`) is tail -f by
+# another name: the read never returns. Same rule, same message, same escape.
+WAIT_PARAM = r"(?<![\w-])-W(?:a(?:i(?:t)?)?)?(?![\w-])"
+
+
+def follow_block(what: str, target: str) -> None:
+    """Rule 6's block for a follow of *target* by *what* (`tail -f`, `Get-Content -Wait`)."""
+    block(
+        f"Blocked: {what} on {target} streams forever; the call never returns and the "
+        "session stalls.\n"
+        "Use Monitor on the file to wait for a condition, or read what is there now with the "
+        "Grep tool.\n"
+        "A follow you mean to leave running belongs in a run_in_background call."
+    )
+
+
 for stmt in re.split(STATEMENT_SEP, scan_cat):
-    for m in re.finditer(READER_POS + READERS + r"\b(?P<rest>[^|;&\n]*)", stmt, re.I):
+    for m in re.finditer(
+        READER_POS + r"(?P<reader>" + READERS + r")\b(?P<rest>[^|;&\n]*)", stmt, re.I
+    ):
         rest = m.group("rest")
         seg = stmt[m.start("rest"):]
+        if m.group("reader").lower() in ("get-content", "gc") and re.search(WAIT_PARAM, rest, re.I):
+            # Judged on any file, like tail -f: the stall is the parameter, not the file.
+            targets = [a for a in re.findall(ARG, rest) if not a.startswith("-")]
+            if targets and not background:
+                follow_block("Get-Content -Wait", targets[0])
+            continue
         if re.search(BOUNDING_PARAM, rest, re.I):
             continue
         if re.search(r"\)\s*(?:\.\w+|\[)", rest):
@@ -357,11 +412,12 @@ for stmt in re.split(STATEMENT_SEP, scan_cat):
                 names = guarded_names(fed)
         dump_block(names, seg)
 
-# sed: only an unbounded script (`p`, `1,$p`, `1,$ p`, or empty) is a dump; any range,
-# address or substitution is a targeted read or an edit — `$!p` (every line but the
-# last) is an address, so it left the dump set with the other false positives the
-# 2026-09-15 audit found. Quotes intact here so the script token is one group; a
-# `\$` is a `$`.
+# sed: an unbounded script (`p`, `1,$p`, `1,$ p`, `$!p`, or empty) is a dump; any
+# range, address or substitution is a targeted read or an edit. `$!p` is an
+# address in form only: every line but the last is the whole file, so the #274
+# retro was wrong to unblock it (review 2026-09-15, finding 4); `$p` — the last
+# line alone — is the bounded read. Quotes intact here so the script token is one
+# group; a `\$` is a `$`.
 SED = (
     CMD_POS
     + r"sed\b(?P<flags>(?:\s+--?[a-zA-Z-]+)*)\s+"
@@ -370,14 +426,15 @@ SED = (
 )
 for m in re.finditer(SED, blanked):
     script = next(s for s in (m.group("sq"), m.group("dq"), m.group("bare")) if s is not None)
-    if re.sub(r"[\\\s]", "", script) in ("", "p", "1,$p"):
+    if re.sub(r"[\\\s]", "", script) in ("", "p", "1,$p", "$!p"):
         dump_block(guarded_names(m.group("args")), statement(blanked, m.end("args")))
 
 # head / tail: a count bounds the read, in lines (`-50`, `-n 50`) or in bytes
-# (`-c 400`); a countless `-c` is a dump by another name. No rule here reads the
-# number — `head -n 999999` has always passed — so `--bytes` stays a dump by
-# spelling alone: the long form is what a scripted whole-file pull reaches for,
-# and the short `-c <n>` is the interactive peek #274 unblocked.
+# (`-c 400`, up to BYTES_CAP — `head -c 900000` is the file; finding 5); a
+# countless `-c` is a dump by another name. `--bytes` stays a dump by spelling
+# alone: the long form is what a scripted whole-file pull reaches for, and the
+# short `-c <n>` is the interactive peek #274 unblocked.
+BYTES_CAP = 4096
 HEADTAIL = (
     CMD_POS
     + r"(?P<cmd>head|tail)\b(?P<flags>(?:\s+(?:-n\s*\d+|-\d+|--lines(?:=|\s+)\d+|-c\s*\d*|"
@@ -395,8 +452,11 @@ for m in re.finditer(HEADTAIL, scan_cat):
     # every dash-led token counts as a flag for this one check, never a file name.
     words = m.group("args").split()
     dashed = flags + " " + " ".join(a for a in words if a.startswith("-"))
-    # A count that the flags group left behind (`-n 20`, `-c +10`) is no file name.
-    targets = [a for a in words if not a.startswith("-") and not re.fullmatch(r"\+?\d+", a)]
+    # A count that the flags group left behind (`-n 20`, `-c +10`) is no file name,
+    # and neither is the `<` of a stdin redirect (`tail -f < app.log`).
+    targets = [
+        a for a in words if a != "<" and not a.startswith("-") and not re.fullmatch(r"\+?\d+", a)
+    ]
     # A follow streams into whatever it is piped or redirected into, so it is
     # judged before the dump rules and takes no landing or filter escape — and
     # it is judged on any file, guarded extension or not, because what stalls
@@ -405,15 +465,11 @@ for m in re.finditer(HEADTAIL, scan_cat):
     if follows and targets and background:
         continue  # a detached follow is a stream nobody waits on, not a dump
     if follows and targets:
-        block(
-            f"Blocked: tail -f on {targets[0]} streams forever; the call never returns and the "
-            "session stalls.\n"
-            "Use Monitor on the file to wait for a condition, or read what is there now with the "
-            "Grep tool.\n"
-            "A follow you mean to leave running belongs in a run_in_background call."
-        )
-    bounded = re.search(r"-n\s*\d|-\d|--lines|-c\s*\d", flags)
-    bytes_dump = re.search(r"-c(?!\s*\d)|--bytes", flags)
+        follow_block("tail -f", targets[0])
+    byte_count = re.search(r"-c\s*(\d+)", flags)
+    bytes_bounded = byte_count is not None and int(byte_count.group(1)) <= BYTES_CAP
+    bounded = bytes_bounded or re.search(r"-n\s*\d|-\d|--lines", flags)
+    bytes_dump = re.search(r"-c(?!\s*\d)|--bytes", flags) or (byte_count and not bytes_bounded)
     if bytes_dump or not bounded:
         dump_block(names, statement(scan_cat, m.end("args")))
 

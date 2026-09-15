@@ -30,6 +30,9 @@ OPEN_TIP = "e" * 40
 FRESH = "f" * 40  # a branch that is on main by ancestry (merge-commit PR, or no commits yet)
 STACKED = "1" * 40  # head of a PR squash-merged into another branch, never into main
 AGENT_TIP = "2" * 40  # where a worktree-agent-* branch was cut from issue-6; nothing since
+# worktree-agent-fresh sits at FRESH: cut from main, nothing since - the one agent shape
+# that is residue. worktree-agent-empty sits at issue-6's unmerged tip: another branch
+# holds it, main lacks it, so it stays (review 2026-09-15, finding 1).
 
 MERGED_PRS = json.dumps(
     [
@@ -86,6 +89,10 @@ worktree {WT}/worktree-agent-empty
 HEAD {AGENT_TIP}
 branch refs/heads/worktree-agent-empty
 
+worktree {WT}/worktree-agent-fresh
+HEAD {FRESH}
+branch refs/heads/worktree-agent-fresh
+
 worktree {WT}/detached
 HEAD {FRESH}
 detached
@@ -107,6 +114,7 @@ LOCAL_REFS = "\n".join(
         f"issue-7 {FRESH}",
         f"issue-8 {STACKED}",
         f"worktree-agent-empty {AGENT_TIP}",
+        f"worktree-agent-fresh {FRESH}",
         f"elsewhere {FRESH}",
         f"orphan-on-main {FRESH}",  # no worktree, no PR, but nothing main lacks
         f"orphan-ahead {UNMERGED}",
@@ -127,7 +135,10 @@ REMOTE_REFS = "\n".join(
 )
 # ``git branch --merged origin/main``: names whose tip is an ancestor of origin/main.
 LOCAL_ON_MAIN = "\n".join(
-    ["main", "issue-2", "issue-5", "issue-7", "elsewhere", "orphan-on-main"]
+    [
+        "main", "issue-2", "issue-5", "issue-7", "elsewhere", "orphan-on-main",
+        "worktree-agent-fresh",
+    ]
 )
 REMOTE_ON_MAIN = "\n".join(["origin/HEAD", "origin/main", "origin/issue-2", "origin/issue-5"])
 
@@ -162,8 +173,6 @@ class FakeRunner:
                 return LOCAL_ON_MAIN
             case ["git", "branch", "-r", "--merged", "origin/main", *_]:
                 return REMOTE_ON_MAIN
-            case ["git", "branch", "--contains", sha, "--format=%(refname:short)"]:
-                return "issue-6\nworktree-agent-empty\n" if sha == AGENT_TIP else ""
             case ["git", "-C", path, "status", "--porcelain"]:
                 return "?? scratch.txt\n" if path in self.dirty else ""
             case ["git", "fetch", *_] | ["git", "worktree", "prune"]:
@@ -203,11 +212,11 @@ def test_parse_worktrees_normalises_backslashes() -> None:
 def test_plan_removes_only_merged_and_unheld() -> None:
     plan = build_plan(FakeRunner())
     assert plan.worktrees == [
-        f"{WT}/issue-1", f"{WT}/issue-2", f"{WT}/issue-7", f"{WT}/worktree-agent-empty"
+        f"{WT}/issue-1", f"{WT}/issue-2", f"{WT}/issue-7", f"{WT}/worktree-agent-fresh"
     ]
-    assert plan.reasons[f"worktree {WT}/worktree-agent-empty"] == "worktree-agent-* with no commits"
+    assert plan.reasons[f"worktree {WT}/worktree-agent-fresh"] == "worktree-agent-* with no commits"
     assert plan.local_branches == [
-        "issue-1", "issue-2", "issue-7", "orphan-on-main", "worktree-agent-empty"
+        "issue-1", "issue-2", "issue-7", "orphan-on-main", "worktree-agent-fresh"
     ]
     assert plan.remote_branches == ["issue-1", "issue-2"]
     assert plan.reasons[f"worktree {WT}/issue-1"] == "PR merged (squash) at this tip"
@@ -238,6 +247,21 @@ def test_plan_refuses_worktree_with_commits_not_on_main() -> None:
         assert f"{WT}/{name}" not in plan.worktrees
         assert name not in plan.local_branches
         assert name not in plan.remote_branches
+
+
+def test_an_agent_worktree_cut_from_unmerged_work_is_kept() -> None:
+    """Review 2026-09-15, finding 1: ``worktree-agent-empty`` sits at issue-6's tip, which
+    issue-6 holds and main lacks. The old ``git branch --contains`` rule called that "no
+    commits" and ``--apply`` deleted a running session's worktree; only a tip on
+    ``origin/main`` is residue, and the decision asks git nothing per branch."""
+    run = FakeRunner()
+    plan = build_plan(run)
+    kept = dict(plan.skipped)
+    assert kept[f"worktree {WT}/worktree-agent-empty"] == "commits not on origin/main"
+    assert kept["local worktree-agent-empty"] == f"checked out in {WT}/worktree-agent-empty"
+    assert f"{WT}/worktree-agent-empty" not in plan.worktrees
+    assert "worktree-agent-empty" not in plan.local_branches
+    assert not any(c[:3] == ["git", "branch", "--contains"] for c in run.calls)
 
 
 def test_plan_ignores_prs_merged_into_a_branch_other_than_main() -> None:
@@ -299,12 +323,12 @@ def test_apply_removes_worktrees_then_locals_then_remotes() -> None:
         ["git", "worktree", "remove", f"{WT}/issue-1"],
         ["git", "worktree", "remove", f"{WT}/issue-2"],
         ["git", "worktree", "remove", f"{WT}/issue-7"],
-        ["git", "worktree", "remove", f"{WT}/worktree-agent-empty"],
+        ["git", "worktree", "remove", f"{WT}/worktree-agent-fresh"],
         ["git", "branch", "-D", "issue-1"],
         ["git", "branch", "-D", "issue-2"],
         ["git", "branch", "-D", "issue-7"],
         ["git", "branch", "-D", "orphan-on-main"],
-        ["git", "branch", "-D", "worktree-agent-empty"],
+        ["git", "branch", "-D", "worktree-agent-fresh"],
         ["git", "push", "origin", "--delete", "issue-1", "issue-2"],
     ]
 

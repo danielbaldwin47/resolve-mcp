@@ -56,11 +56,16 @@ def in_project(path):
     return target == root or target.startswith(root + os.sep)
 
 
-def line_count(path):
-    """Lines in *path*, or None when it cannot be counted (missing, binary, …)."""
+def has_more_lines_than(path, limit):
+    """Whether *path* runs past *limit* lines - reading no further than line
+    limit+1, since the two rules ask only "under 100?" and "over 400?" - or None
+    when it cannot be read (missing, binary, …)."""
     try:
         with open(path, encoding="utf-8", errors="replace") as f:
-            return sum(1 for _ in f)
+            for n, _ in enumerate(f, start=1):
+                if n > limit:
+                    return True
+        return False
     except OSError:
         return None
 
@@ -99,9 +104,8 @@ if event == "PreToolUse" and tool == "Read":
             except OSError:
                 edited = set()
         if path in edited:
-            # An uncountable file (missing, unreadable) is not small: the rule stands.
-            lines = line_count(path)
-            if lines is not None and lines < SMALL_FILE_LINES:
+            # An unreadable file (missing, binary) is not small: the rule stands.
+            if has_more_lines_than(path, SMALL_FILE_LINES - 1) is False:
                 sys.exit(0)  # nothing under 100 lines can trip the 400-line rule below
             sys.stderr.write(
                 "Blocked (context discipline): this session already edited that file — its content is in your "
@@ -121,13 +125,13 @@ if event == "PreToolUse" and tool == "Read":
         and os.path.basename(path).lower() not in SIZE_RULE_EXEMPT_NAMES
         and in_project(path)
     ):
-        lines = line_count(path)
-        if lines is not None and lines > BIG_FILE_LINES:
+        if has_more_lines_than(path, BIG_FILE_LINES):
             sys.stderr.write(
-                f"Blocked (context discipline): {os.path.basename(path)} is {lines} lines — "
-                f"over the {BIG_FILE_LINES}-line whole-file limit.\n"
+                f"Blocked (context discipline): {os.path.basename(path)} is over the "
+                f"{BIG_FILE_LINES}-line whole-file limit.\n"
                 f"Grep for the symbol you need first, then Read with offset/limit around the hit.\n"
-                f"If you truly need the whole file, say so with an explicit range: offset 1, limit {lines}.\n"
+                f"If you truly need the whole file, say so with an explicit range: offset 1, "
+                f"limit <its line count> (wc -l).\n"
             )
             sys.exit(2)
 

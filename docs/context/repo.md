@@ -42,7 +42,9 @@ is merged. Merged means the tip is on `origin/main`, or a PR **into main** was
 squashed from exactly that tip — a PR merged into another branch does not count
 (the stacked-PR trap in CLAUDE.md step 6). Never a locked or dirty worktree, the
 branch a locked worktree holds, an open-PR branch, or a tip with commits
-`origin/main` lacks. Every `gh`/`git` call goes through one injectable
+`origin/main` lacks — a `worktree-agent-*` checkout counts as "no commits"
+only when its tip is on `origin/main`, never because another local branch
+holds it. Every `gh`/`git` call goes through one injectable
 `Runner`, which is the seam `tests/test_prune_merged.py` drives on fixtures.
 The merged / no-commits decision itself is `_merged.py`, shared with
 `.claude/hooks/session-start.py`: the SessionStart hook that fetches origin

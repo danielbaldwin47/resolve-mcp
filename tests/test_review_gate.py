@@ -179,6 +179,13 @@ CLOSING = [
     f"Review: clean @{SHA}\n\nResolves #7",  # after the line, still the body
     f"- **Closed #12** by this PR\n\nReview: clean @{SHA}",
     f"This fixes #3.\n\nReview: clean @{SHA}",
+    # Review 2026-09-15, finding 10: the colon and full-URL forms GitHub also honours.
+    f"Closes: #12\n\nReview: clean @{SHA}",
+    f"Resolves:  #12\n\nReview: clean @{SHA}",
+    f"Fixes https://github.com/danielbaldwin47/resolve-mcp/issues/12\n\nReview: clean @{SHA}",
+    f"closes: http://github.com/o/r.git/issues/3\n\nReview: clean @{SHA}",
+    # Finding 7: prose that GitHub would act on is refused the same way.
+    f"Fixed #2 of the three findings.\n\nReview: clean @{SHA}",
 ]
 
 
@@ -201,12 +208,25 @@ REFERENCING = [
     f"Fixes the loader; closes the handle on exit.\n\nReview: clean @{SHA}",  # no '#n'
     f"Refs #12\n\n```\nCloses #12\n```\n\nReview: clean @{SHA}",  # fenced example
     f"~~~\nFixes #3\n~~~\nRefs #3\n\nReview: clean @{SHA}",
+    # Finding 7: an inline code span quotes the phrase rather than saying it.
+    f"The gate refuses `Closes #12` now.\n\nReview: clean @{SHA}",
+    f"Finding 7: `Fixed #2 of three findings` matched.\n\nReview: clean @{SHA}",
+    f"Both `` Fixes #3 `` and `Resolves: #4` are quoted.\n\nReview: clean @{SHA}",
+    f"Closes https://example.com/issues/12\n\nReview: clean @{SHA}",  # not a GitHub issue URL
 ]
 
 
 @pytest.mark.parametrize("body", REFERENCING)
 def test_refs_and_fenced_examples_pass(body: str) -> None:
     assert verdict(body) == "", body
+
+
+def test_a_code_span_does_not_hide_a_bare_phrase_on_the_same_line() -> None:
+    assert "'Fixes #3'" in verdict(f"`Closes #12` and Fixes #3\n\nReview: clean @{SHA}")
+
+
+def test_the_closing_message_says_to_quote_in_backticks() -> None:
+    assert "backticks" in verdict(f"Fixed #2 of three findings\n\nReview: clean @{SHA}")
 
 
 def test_the_closing_check_runs_before_the_review_line() -> None:

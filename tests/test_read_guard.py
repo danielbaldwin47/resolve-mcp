@@ -84,9 +84,20 @@ def test_blocks_whole_file_read_of_big_source_file(tmp_path: Path) -> None:
     result = run_hook(read_event(big), tmp_path)
 
     assert result.returncode == 2
-    assert "656" in result.stderr
+    assert "over the 400-line" in result.stderr
     assert "grep" in result.stderr.lower()
     assert "offset" in result.stderr
+
+
+def test_the_size_message_names_the_limit_not_a_count(tmp_path: Path) -> None:
+    """Cleanup 2026-09-15: the hook reads to line 401 and stops - it only needs "over
+    400?" - so the message names the limit and points at wc -l for the count."""
+    big = write_lines(tmp_path / "src" / "timeline.py", 656)
+
+    result = run_hook(read_event(big), tmp_path)
+
+    assert "656" not in result.stderr, result.stderr
+    assert "wc -l" in result.stderr
 
 
 def test_ranged_read_of_big_file_passes(tmp_path: Path) -> None:
@@ -130,7 +141,7 @@ def test_big_markdown_blocks_like_code(tmp_path: Path) -> None:
     result = run_hook(read_event(doc), tmp_path)
 
     assert result.returncode == 2
-    assert "523 lines" in result.stderr
+    assert "over the 400-line" in result.stderr
 
 
 def test_markdown_at_the_limit_passes(tmp_path: Path) -> None:

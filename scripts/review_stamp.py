@@ -8,9 +8,12 @@ Why a script (2026-09-15 retro, point 8): across eight PRs the review gate was
 the only CI failure, three times, every one of them a body re-stamped by hand
 after a focused re-check. The hand edit gets the sha wrong, or lands under an
 earlier ``Review:`` line, or never happens. This does the same edit from the
-facts: the PR head comes from ``gh``, the line goes last, and the written body
-is read back and run through ``scripts.review_gate.check`` — the gate's own
-verdict, not a second copy of its rules.
+facts: the PR head comes from ``gh``, the line goes last, and the candidate
+body is run through ``scripts.review_gate.check`` — the gate's own verdict,
+not a second copy of its rules — **before** anything is written; a body the
+gate would refuse (a ``Closes #n``, say) is left untouched, so a retry never
+stacks a second stamp on a refused first. After the write the stored body is
+read back and checked again, which is the one place a swallowed edit shows.
 
 It refuses when the working tree's HEAD is not the PR head: the re-check must
 have looked at what it stamps, and a stamp naming a commit you did not review
@@ -24,6 +27,7 @@ output (``tests/test_review_stamp.py``) and no test touches a real PR.
 from __future__ import annotations
 
 import argparse
+import json
 import shutil
 import sys
 import tempfile
@@ -53,14 +57,10 @@ def append_stamp(body: str, line: str) -> str:
     return f"{text}\n\n{line}\n" if text else f"{line}\n"
 
 
-def pr_head(pr: str, run: Runner) -> str:
-    """The commit the PR would merge, as ``gh`` reports it."""
-    return run(["gh", "pr", "view", pr, "--json", "headRefOid", "-q", ".headRefOid"]).strip()
-
-
-def pr_body(pr: str, run: Runner) -> str:
-    """The PR body as ``gh`` stores it."""
-    return run(["gh", "pr", "view", pr, "--json", "body", "-q", ".body"])
+def pr_facts(pr: str, run: Runner) -> tuple[str, str]:
+    """(head sha, body) as ``gh`` reports them - one call, one JSON answer."""
+    facts = json.loads(run(["gh", "pr", "view", pr, "--json", "headRefOid,body"]) or "{}")
+    return str(facts.get("headRefOid") or "").strip(), str(facts.get("body") or "")
 
 
 def head_failure(head: str, run: Runner) -> str | None:
@@ -88,18 +88,21 @@ def write_body(pr: str, body: str, run: Runner) -> None:
 
 def stamp(pr: str, summary: str | None, run: Runner, *, dry_run: bool = False) -> tuple[int, str]:
     """Stamp PR *pr*; the exit code and the line to print."""
-    head = pr_head(pr, run)
+    head, current = pr_facts(pr, run)
     if not head:
         return 1, f"gh gave no head sha for PR {pr} - is {pr} a pull request on this repository?"
     failure = head_failure(head, run)
     if failure is not None:
         return 1, failure
     line = stamp_line(head, summary)
-    body = append_stamp(pr_body(pr, run), line)
+    body = append_stamp(current, line)
+    gate = check(body, head, run)  # the gate's verdict on what would be written
+    if gate is not None:
+        return 1, f"not stamping PR {pr} - the gate would still fail, body left as it is: {gate}"
     if dry_run:
         return 0, f"would stamp PR {pr}: {line}"
     write_body(pr, body, run)
-    written = pr_body(pr, run)  # what GitHub now has, which is what the gate will read
+    _, written = pr_facts(pr, run)  # what GitHub now has, which is what the gate will read
     gate = check(written, head, run)
     if gate is not None:
         return 1, f"stamped PR {pr}, but the gate still fails: {gate}"

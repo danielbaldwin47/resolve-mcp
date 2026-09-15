@@ -19,10 +19,15 @@ before the search), and ``**Review: clean**`` / ``- Review: clean`` blocked
 (leading list, quote and bold markup is now tolerated).
 
 The body is also refused when it carries one of GitHub's auto-close phrases
-(``Closes #n``, ``Fixes #n``, ``Resolves #n``) outside a fence (#277): the merge
-would close the ticket with no outcome comment, walking past the
-``gh issue close`` guard. The PR says ``Refs #n``; the ticket closes with a
-comment (CLAUDE.md step 8).
+(``Closes #n``, ``Fixes: #n``, ``Resolves https://github.com/<o>/<r>/issues/n``)
+outside a fence or an inline code span (#277): the merge would close the ticket
+with no outcome comment, walking past the ``gh issue close`` guard. The PR says
+``Refs #n``; the ticket closes with a comment (CLAUDE.md step 8). The match is
+as wide as GitHub's — ordinary prose such as "fixed #2 of the findings" closes
+#2 on GitHub too, so it is refused here; quote the phrase in backticks to
+mention it. Not covered: commit messages. A squash-merge subject or body with a
+closing keyword auto-closes the ticket the same way, and this gate reads only
+the PR body.
 
 Everything the check learns about the repository comes through one ``Runner``
 (a callable from argv to stdout), so the fake tier drives every verdict on
@@ -50,8 +55,14 @@ REVIEW = re.compile(r"^Review:")
 CLEAN = re.compile(r"^Review:\s+clean\s+@(?P<sha>[0-9a-fA-F]{7,40})\b.*$")  # a summary may follow
 CLEAN_NO_SHA = re.compile(r"^Review:\s+clean\b")
 HELD = re.compile(r"^Review:\s+findings\s+held\b", re.I)
-# GitHub's auto-close keywords ahead of an issue number, any case.
-CLOSING = re.compile(r"(?i)\b(close[sd]?|fix(e[sd])?|resolve[sd]?)\s+#\d+")
+# GitHub's auto-close keywords ahead of an issue reference, any case: ``Closes #n``,
+# ``Closes: #n``, ``Fixes https://github.com/<owner>/<repo>/issues/n``.
+CLOSING = re.compile(
+    r"(?i)\b(close[sd]?|fix(e[sd])?|resolve[sd]?)\s*:?\s+"
+    r"(#\d+|https?://github\.com/[\w.-]+/[\w.-]+/issues/\d+)"
+)
+# An inline code span, single or double backticks: quoted, not said.
+CODE_SPAN = re.compile(r"``.*?``|`[^`]*`")
 
 
 def normalise(line: str) -> str:
@@ -86,12 +97,13 @@ def review_lines(body: str) -> list[str]:
 def closing_failure(body: str) -> str | None:
     """Why the body would auto-close its ticket on merge, or None when it would not."""
     for raw in prose_lines(body):
-        match = CLOSING.search(raw)
+        match = CLOSING.search(CODE_SPAN.sub("", raw))
         if match:
             return (
                 f"PR body says '{match.group(0)}', which auto-closes the ticket on merge with "
                 "no outcome comment — use Refs #n; the ticket closes with a comment "
-                "(gh issue close <n> --comment)."
+                "(gh issue close <n> --comment). Quote the phrase in backticks if you must "
+                "mention it."
             )
     return None
 

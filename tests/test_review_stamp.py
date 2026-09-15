@@ -12,6 +12,7 @@ verbatim on GitHub's side. That is observed once, on this ticket's own PR.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -37,6 +38,7 @@ class FakePR:
     local: str = HEAD
     stubborn: bool = False  # the edit is accepted and dropped, as a bad token does
     edits: list[str] = field(default_factory=list)  # each body-file path, in order
+    views: int = 0  # `gh pr view` calls so far
 
     def runner(self) -> Runner:
         git = fake_git()
@@ -45,10 +47,9 @@ class FakePR:
             if argv[0] == "git":
                 return self.local + "\n" if list(argv[1:]) == ["rev-parse", "HEAD"] else git(argv)
             if list(argv[:3]) == ["gh", "pr", "view"]:
-                if "headRefOid" in argv:
-                    return self.head + "\n"
-                if "body" in argv:
-                    return self.body
+                self.views += 1
+                assert list(argv[4:]) == ["--json", "headRefOid,body"], argv
+                return json.dumps({"headRefOid": self.head, "body": self.body})
             if list(argv[:3]) == ["gh", "pr", "edit"]:
                 path = argv[argv.index("--body-file") + 1]
                 self.edits.append(path)
@@ -108,6 +109,17 @@ def test_the_body_is_written_through_a_temp_file_that_does_not_survive() -> None
     assert stamped(pr, "7") == 0
     assert len(pr.edits) == 1
     assert not Path(pr.edits[0]).exists()
+
+
+def test_the_pr_is_read_in_one_call_before_the_edit_and_one_after() -> None:
+    """Head and body come from one ``gh pr view --json headRefOid,body``; the second
+    view is the read-back the post-write check runs on."""
+    pr = FakePR()
+    assert stamped(pr, "7") == 0
+    assert pr.views == 2
+    refused = FakePR(local=OLD)
+    assert stamped(refused, "7") == 1
+    assert refused.views == 1  # a refusal reads once and never edits
 
 
 def test_the_written_body_passes_the_gate() -> None:
@@ -181,6 +193,27 @@ def test_a_body_the_gate_still_rejects_is_reported(capsys: pytest.CaptureFixture
     assert stamped(pr, "7") == 1
     assert pr.edits  # it did try
     assert "the gate still fails" in capsys.readouterr().err
+
+
+CLOSING_BODY = "Findings: none.\n\nCloses #12\n"
+
+
+def test_a_body_the_gate_would_refuse_is_never_written(capsys: pytest.CaptureFixture[str]) -> None:
+    """Review 2026-09-15, finding 6: the old order wrote first and checked after, so a
+    refused body was mutated and every retry stacked another Review line on it."""
+    pr = FakePR(body=CLOSING_BODY)
+    assert stamped(pr, "7") == 1
+    assert stamped(pr, "7") == 1  # a retry changes nothing either
+    assert pr.edits == []
+    assert pr.body == CLOSING_BODY
+    err = capsys.readouterr().err
+    assert "body left as it is" in err and "auto-closes" in err, err
+
+
+def test_check_reports_the_refusal_too(capsys: pytest.CaptureFixture[str]) -> None:
+    pr = FakePR(body=CLOSING_BODY)
+    assert stamped(pr, "7", "--check") == 1
+    assert "would still fail" in capsys.readouterr().err
 
 
 # ---------------------------------------------------------------------- dry run

@@ -8,9 +8,12 @@ For a branch ``N`` whose tip is ``T``, merged means:
   any other base does not count: a stacked PR reads MERGED while its commits may never reach
   main (CLAUDE.md step 6).
 
-A ``worktree-agent-*`` branch "with no commits" is one whose tip some other branch already
-contains (``git branch --contains``): cut from main or from a feature branch, it added
-nothing of its own, so the checkout is residue whatever its base was.
+A ``worktree-agent-*`` branch "with no commits" is one whose tip is already on
+``origin/main``: cut from main, it added nothing of its own, so the checkout is residue.
+It is the same ancestry test as merged, kept apart only for the reason it reports. A tip
+another local branch holds but main lacks is **not** residue: that is a running session's
+worktree, or agent work merged into a feature branch that has not reached main (the rule
+that once deleted those is the 2026-09-15 review's finding 1).
 
 Extracted from ``prune_merged.py`` so the hook that *reports* residue and the script that
 *removes* it cannot disagree. Everything here learns what it knows through a ``Runner``
@@ -175,37 +178,30 @@ def merge_decision(name: str, tip: str, on_main: set[str], facts: MergeFacts) ->
 NO_COMMITS = "worktree-agent-* with no commits"
 
 
-def agent_without_commits(run: Runner, name: str, tip: str) -> bool:
-    """A ``worktree-agent-*`` branch that never got a commit of its own.
-
-    True when some other branch contains ``tip`` - the base it was cut from, or a branch
-    its work was merged into. One ``git branch --contains`` per agent branch, so the
-    check is asked only for names that carry the prefix.
-    """
-    if not name.startswith(AGENT_PREFIX):
-        return False
-    holders = parse_names(run(["git", "branch", "--contains", tip, "--format=%(refname:short)"]))
-    return bool(holders - {name})
+def agent_without_commits(name: str, on_main: set[str]) -> bool:
+    """A ``worktree-agent-*`` branch that never got a commit of its own: its tip is an
+    ancestor of ``origin/main`` (``on_main`` is ``git branch --merged origin/main``)."""
+    return name.startswith(AGENT_PREFIX) and name in on_main
 
 
 def branch_decision(
-    run: Runner, name: str, tip: str, on_main: set[str], facts: MergeFacts
+    name: str, tip: str, on_main: set[str], facts: MergeFacts
 ) -> tuple[bool, str]:
-    """``merge_decision`` plus the agent-branch rule; for local branches only."""
+    """``merge_decision`` plus the agent-branch reason; for local branches only."""
     if name in PROTECTED or name in facts.held or name in facts.open_prs:
         return merge_decision(name, tip, on_main, facts)
-    if agent_without_commits(run, name, tip):
+    if agent_without_commits(name, on_main):
         return True, NO_COMMITS
     return merge_decision(name, tip, on_main, facts)
 
 
 def worktree_decision(
-    run: Runner, wt: Worktree, root: str, on_main: set[str], facts: MergeFacts
+    wt: Worktree, root: str, on_main: set[str], facts: MergeFacts
 ) -> tuple[bool, str]:
     """(residue?, reason) for one worktree of the checkout at ``root``.
 
-    Dirtiness is the caller's question - it costs a ``git status`` per worktree, and only
-    the remover needs the answer.
+    Dirtiness is the caller's question - it costs a ``git status`` per worktree
+    (``dirty``), so the callers ask it only of the worktrees this says yes to.
     """
     if not wt.path.startswith(root + "/" + WORKTREE_DIR):
         return False, "outside " + WORKTREE_DIR
@@ -213,4 +209,13 @@ def worktree_decision(
         return False, "locked (a session holds it)"
     if wt.branch is None:
         return False, "detached HEAD"
-    return branch_decision(run, wt.branch, wt.head, on_main, facts)
+    return branch_decision(wt.branch, wt.head, on_main, facts)
+
+
+DIRTY = "dirty (uncommitted or untracked files)"
+
+
+def dirty(run: Runner, wt: Worktree) -> bool:
+    """Whether the worktree has uncommitted or untracked files - the one gate both the
+    remover and the reporter apply after ``worktree_decision`` says residue."""
+    return bool(run(["git", "-C", wt.path, "status", "--porcelain"]).strip())

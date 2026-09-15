@@ -65,7 +65,7 @@ class FakeRepo:
     merged_prs: list[dict[str, str]] = field(default_factory=list)
     worktrees: str = porcelain()
     hooks_drift: str = ""
-    contains: dict[str, str] = field(default_factory=dict)  # sha -> `git branch --contains`
+    dirty: set[str] = field(default_factory=set)  # worktree paths with uncommitted files
     fetch_fails: bool = False
     gh_fails: bool = False
     git_dir: str = ROOT + "/.git"
@@ -99,13 +99,16 @@ class FakeRepo:
                 return f"{self.behind}\n"
             case ["git", "diff", "--name-only", "origin/main", "--", ":(top).claude/hooks"]:
                 return self.hooks_drift
-            case ["git", "branch", "--contains", sha, "--format=%(refname:short)"]:
-                return self.contains.get(sha, "")
+            case ["git", "-C", path, "status", "--porcelain"]:
+                return "?? scratch.txt\n" if path in self.dirty else ""
         raise AssertionError(f"unexpected command: {argv}")
 
+    def gh_calls(self) -> list[list[str]]:
+        return [c for c in self.calls if c[0] == "gh"]
 
-def lines(repo: FakeRepo) -> list[str]:
-    out = load_hook().report(repo, now=NOW)
+
+def lines(repo: FakeRepo, cwd: str = ROOT) -> list[str]:
+    out = load_hook().report(repo, now=NOW, cwd=cwd)
     assert isinstance(out, list)
     return out
 
@@ -121,7 +124,31 @@ def test_merged_by_ancestry_is_stale() -> None:
     out = lines(FakeRepo(branch="issue-219", head=MAIN, behind=50, on_main={"main", "issue-219"}))
     assert out == [
         "STALE: branch issue-219 is merged into origin/main (50 commits behind). "
-        "git switch main && git pull."
+        "Run git switch main, then git pull (two commands)."
+    ]
+
+
+def test_the_main_checkout_remedy_is_two_commands_not_a_chain() -> None:
+    """The worktree guard refuses ``a && b``, so the remedy must never be one."""
+    out = lines(FakeRepo(branch="issue-219", head=MAIN, behind=50, on_main={"main", "issue-219"}))
+    assert "&&" not in out[0] and ";" not in out[0]
+
+
+def test_a_linked_worktree_gets_the_leave_and_prune_remedy() -> None:
+    """``git switch main`` is refused inside a linked worktree (main is checked out in the
+    main checkout), so the remedy there is to leave it and prune from the main checkout."""
+    repo = FakeRepo(
+        branch="issue-219",
+        head=MAIN,
+        behind=50,
+        on_main={"main", "issue-219"},
+        worktrees=porcelain(("issue-219", MAIN, "issue-219")),
+    )
+    out = lines(repo, cwd=f"{WT}/issue-219")
+    assert out == [
+        "STALE: branch issue-219 is merged into origin/main (50 commits behind). "
+        "This worktree's branch is merged: leave it (ExitWorktree) and run "
+        "uv run python scripts/prune_merged.py --apply from the main checkout."
     ]
 
 
@@ -197,6 +224,40 @@ def test_gh_unavailable_still_decides_by_ancestry() -> None:
     assert [first_word(ln) for ln in lines(repo)] == ["STALE"]
 
 
+# --- gh is asked only when it could change a verdict -----------------------------------------
+
+
+def test_main_with_no_worktrees_never_calls_gh() -> None:
+    """Two ``gh pr list --limit 1000`` calls cost ~70 s on this box; on a bare ``main``
+    checkout there is no branch a squash-merge fact could apply to."""
+    repo = FakeRepo(branch="main", head=MAIN, worktrees=porcelain())
+    assert lines(repo) == []
+    assert repo.gh_calls() == []
+
+
+def test_a_locked_or_foreign_worktree_alone_does_not_call_gh() -> None:
+    locked = f"worktree {WT}/issue-5\nHEAD {MAIN}\nbranch refs/heads/issue-5\nlocked\n"
+    outside = f"worktree C:/Users/x/elsewhere\nHEAD {MAIN}\nbranch refs/heads/elsewhere\n"
+    repo = FakeRepo(branch="main", head=MAIN, worktrees=f"{porcelain()}\n{locked}\n{outside}")
+    assert lines(repo) == []
+    assert repo.gh_calls() == []
+
+
+@pytest.mark.parametrize(
+    "repo",
+    [
+        FakeRepo(branch="issue-9"),  # the session's own branch
+        FakeRepo(branch="main", worktrees=porcelain(("issue-1", UNMERGED, "issue-1"))),
+    ],
+)
+def test_a_branch_that_could_be_squash_merged_asks_gh(repo: FakeRepo) -> None:
+    lines(repo)
+    assert [c[:5] for c in repo.gh_calls()] == [
+        ["gh", "pr", "list", "--state", "merged"],
+        ["gh", "pr", "list", "--state", "open"],
+    ]
+
+
 # --- RESIDUE --------------------------------------------------------------------------------
 
 
@@ -208,30 +269,75 @@ def test_no_residue_prints_nothing() -> None:
     assert lines(repo) == []
 
 
-def test_residue_counts_merged_worktrees_and_empty_agent_worktrees() -> None:
+def residue_repo(on_main: set[str] | None = None, dirty: set[str] | None = None) -> FakeRepo:
     prs = [{"headRefName": "issue-1", "headRefOid": SQUASHED_TIP, "baseRefName": "main"}]
     agent_work = "3" * 40  # a commit only that agent's branch has
-    repo = FakeRepo(
-        on_main={"main", "issue-2", "worktree-agent-abc"},
+    return FakeRepo(
+        on_main={"main", "issue-2", "worktree-agent-abc"} if on_main is None else on_main,
+        dirty=dirty or set(),
         merged_prs=prs,
         worktrees=porcelain(
             ("issue-1", SQUASHED_TIP, "issue-1"),  # squash-merged at this tip
             ("issue-2", MAIN, "issue-2"),  # tip on origin/main
             ("issue-6", UNMERGED, "issue-6"),  # real work, kept
             ("worktree-agent-abc", MAIN, "worktree-agent-abc"),  # cut from main, no commits
-            ("worktree-agent-def", UNMERGED, "worktree-agent-def"),  # cut from issue-6, none
+            ("worktree-agent-def", UNMERGED, "worktree-agent-def"),  # cut from issue-6: kept
             ("worktree-agent-ghi", agent_work, "worktree-agent-ghi"),  # an agent that committed
         ),
-        contains={
-            MAIN: "main\nissue-2\nworktree-agent-abc",
-            UNMERGED: "issue-6\nworktree-agent-def",
-            agent_work: "worktree-agent-ghi",
-        },
     )
-    assert lines(repo) == [
-        "RESIDUE: 2 worktrees on merged branches, 2 worktree-agent-* with no commits. "
+
+
+RESIDUE = (
+    "RESIDUE: 2 worktrees on merged branches, 1 worktree-agent-* with no commits. "
+    "uv run python scripts/prune_merged.py --apply"
+)
+
+
+def test_residue_counts_merged_worktrees_and_empty_agent_worktrees() -> None:
+    assert lines(residue_repo()) == [RESIDUE]
+
+
+def test_an_agent_worktree_cut_from_unmerged_work_is_not_residue() -> None:
+    """Review 2026-09-15, finding 1: worktree-agent-def's tip is issue-6's, which main
+    lacks - another session's work, not an empty checkout. It is never counted, and the
+    hook asks git nothing per branch to know that."""
+    repo = residue_repo()
+    assert lines(repo) == [RESIDUE]
+    assert not any(c[:3] == ["git", "branch", "--contains"] for c in repo.calls)
+    assert lines(residue_repo(on_main={"main", "issue-2"})) == [
+        "RESIDUE: 2 worktrees on merged branches, 0 worktree-agent-* with no commits. "
         "uv run python scripts/prune_merged.py --apply"
     ]
+
+
+def test_the_sessions_own_worktree_is_never_residue() -> None:
+    """Review 2026-09-15, finding 2: the worktree the session runs in is where the sweep
+    would be run from, not something it removes."""
+    assert lines(residue_repo(), cwd=f"{WT}/issue-1") == [
+        "RESIDUE: 1 worktrees on merged branches, 1 worktree-agent-* with no commits. "
+        "uv run python scripts/prune_merged.py --apply"
+    ]
+    assert lines(residue_repo(), cwd=f"{WT}/worktree-agent-abc/") == [
+        "RESIDUE: 2 worktrees on merged branches, 0 worktree-agent-* with no commits. "
+        "uv run python scripts/prune_merged.py --apply"
+    ]
+
+
+def test_a_dirty_candidate_is_skipped_and_counted() -> None:
+    """The count matches what ``--apply`` removes: the sweep refuses a dirty worktree."""
+    repo = residue_repo(dirty={f"{WT}/issue-2", f"{WT}/worktree-agent-abc"})
+    assert lines(repo) == [
+        "RESIDUE: 1 worktrees on merged branches, 0 worktree-agent-* with no commits, "
+        "2 dirty skipped. uv run python scripts/prune_merged.py --apply"
+    ]
+    # Only the candidates were asked; issue-6 (kept) and the session's cwd cost no status.
+    asked = {c[2] for c in repo.calls if c[:2] == ["git", "-C"]}
+    assert asked == {f"{WT}/issue-1", f"{WT}/issue-2", f"{WT}/worktree-agent-abc"}
+
+
+def test_all_candidates_dirty_prints_nothing() -> None:
+    dirty = {f"{WT}/issue-1", f"{WT}/issue-2", f"{WT}/worktree-agent-abc"}
+    assert lines(residue_repo(dirty=dirty)) == []
 
 
 def test_residue_skips_locked_worktrees_and_ones_outside_the_worktree_dir() -> None:
@@ -276,6 +382,14 @@ def test_hook_is_stdlib_only() -> None:
     allowed = {"dataclasses", "json", "os", "subprocess", "sys", "time", "pathlib"}
     third_party = {m for m in imports if not m.startswith("scripts.") and m not in allowed}
     assert not third_party, third_party
+
+
+def test_the_dirtiness_gate_is_the_sweeps_own() -> None:
+    """One ``dirty`` in ``scripts/_merged.py``; neither caller spells the status call."""
+    for path in (HOOK, REPO / "scripts" / "prune_merged.py"):
+        src = path.read_text(encoding="utf-8")
+        assert '"status"' not in src, path.name
+        assert re.search(r"^\s+dirty,$", src, re.M), path.name
 
 
 # --- plumbing -------------------------------------------------------------------------------

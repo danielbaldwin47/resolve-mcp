@@ -11,10 +11,11 @@ hook that reports the same residue (``.claude/hooks/session-start.py``): a tip t
 other base does not count (the stacked-PR trap, CLAUDE.md step 6).
 
 Never touched: ``main`` / ``HEAD``; any branch that has an open PR; a branch whose tip
-carries commits ``origin/main`` does not (a merged PR followed by new commits included); a
-worktree that is locked (a running session holds it), dirty, or on a detached HEAD; the
-branch a locked worktree holds, local and remote; and a local branch still checked out in
-any worktree that survives.
+carries commits ``origin/main`` does not (a merged PR followed by new commits included, and
+a ``worktree-agent-*`` branch cut from unmerged work included - "no commits" means none
+relative to main); a worktree that is locked (a running session holds it), dirty, or on a
+detached HEAD; the branch a locked worktree holds, local and remote; and a local branch
+still checked out in any worktree that survives.
 
 Everything the script learns comes through one ``Runner`` (a callable from argv to stdout),
 so the fake tier drives it on fixtures of the ``gh`` and ``git`` output
@@ -33,7 +34,9 @@ if __package__ in (None, ""):  # run by path, not as ``-m scripts.prune_merged``
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scripts._merged import (  # noqa: E402
+    DIRTY,
     branch_decision,
+    dirty,
     gather_facts,
     merge_decision,
     on_main,
@@ -88,9 +91,9 @@ def build_plan(run: Runner) -> Plan:
 
     for wt in worktrees[1:]:
         label = f"worktree {wt.path}"
-        ok, why = worktree_decision(run, wt, root, local_on_main, facts)
-        if ok and run(["git", "-C", wt.path, "status", "--porcelain"]).strip():
-            ok, why = False, "dirty (uncommitted or untracked files)"
+        ok, why = worktree_decision(wt, root, local_on_main, facts)
+        if ok and dirty(run, wt):
+            ok, why = False, DIRTY
         _record(plan, plan.worktrees, wt.path, label, ok, why)
         if not ok and wt.branch:
             surviving_checkouts[wt.branch] = wt.path
@@ -100,7 +103,7 @@ def build_plan(run: Runner) -> Plan:
         if name in surviving_checkouts:
             ok, why = False, f"checked out in {surviving_checkouts[name]}"
         else:
-            ok, why = branch_decision(run, name, sha, local_on_main, facts)
+            ok, why = branch_decision(name, sha, local_on_main, facts)
         _record(plan, plan.local_branches, name, label, ok, why)
 
     for name, sha in sorted(remote_refs.items()):

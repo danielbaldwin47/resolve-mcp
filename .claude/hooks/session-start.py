@@ -5,11 +5,22 @@ Reports, never blocks - exit 0 always; any failure collapses to one stderr line.
 remote), reports from the last fetch and says how old that is. Then up to three lines,
 each only when true, in this order:
 
-    STALE: branch <b> is merged into origin/main (<n> commits behind). git switch main && git pull.
-    RESIDUE: <k> worktrees on merged branches, <j> worktree-agent-* with no commits. uv run python scripts/prune_merged.py --apply
+    STALE: branch <b> is merged into origin/main (<n> commits behind). <remedy>
+    RESIDUE: <k> worktrees on merged branches, <j> worktree-agent-* with no commits[, <d> dirty skipped]. uv run python scripts/prune_merged.py --apply
     HOOKS: .claude/hooks differs from origin/main - this checkout enforces old rules.
 
 plus a trailing ``FETCH:`` line when the fetch fell back. Silent when everything is fresh.
+
+The STALE remedy follows where the session sits: in the main checkout it is ``git switch
+main`` then ``git pull`` (two commands - the worktree guard refuses a ``&&`` chain); in a
+linked worktree under ``.claude/worktrees/`` a switch is refused, so the remedy is to leave
+the worktree and prune it from the main checkout.
+
+RESIDUE counts what ``prune_merged.py --apply`` would remove: the session's own worktree
+(the payload ``cwd``) is never residue, and a candidate with uncommitted or untracked
+files is skipped and counted as dirty, the same gate the sweep applies. The two ``gh pr
+list`` calls (~35 s each on this box) run only when some branch could be merged by squash;
+on ``main`` with no worktrees, ancestry alone decides and the start is not delayed.
 
 "Merged" and "worktree with no commits" are ``scripts/_merged.py``'s decisions - the same
 ones ``scripts/prune_merged.py`` removes on - so the report and the sweep cannot disagree.
@@ -31,7 +42,10 @@ sys.path.insert(0, str(ROOT))
 from scripts._merged import (  # noqa: E402
     BASE,
     NO_COMMITS,
+    PROTECTED,
+    WORKTREE_DIR,
     MergeFacts,
+    dirty,
     gather_facts,
     merge_decision,
     on_main,
@@ -87,7 +101,27 @@ def fetch(run, now):
         return f"FETCH: git fetch origin failed or timed out; {when}."
 
 
-def stale_line(run, branch, local_on_main, facts):
+def same_path(a, b):
+    return os.path.normcase(os.path.realpath(a)) == os.path.normcase(os.path.realpath(b))
+
+
+def in_linked_worktree(cwd, root):
+    """Whether *cwd* sits under the checkout's ``.claude/worktrees/``."""
+    prefix = os.path.normcase(os.path.realpath(root)) + os.sep
+    prefix += os.path.normcase(WORKTREE_DIR.rstrip("/").replace("/", os.sep)) + os.sep
+    return os.path.normcase(os.path.realpath(cwd)).startswith(prefix)
+
+
+def stale_remedy(cwd, root):
+    if in_linked_worktree(cwd, root):
+        return (
+            "This worktree's branch is merged: leave it (ExitWorktree) and run "
+            "uv run python scripts/prune_merged.py --apply from the main checkout."
+        )
+    return f"Run git switch {BASE}, then git pull (two commands)."
+
+
+def stale_line(run, branch, local_on_main, facts, cwd, root):
     if not branch:  # detached HEAD
         return None
     # The session's own worktree may be locked; that must not hide its branch being merged.
@@ -100,27 +134,46 @@ def stale_line(run, branch, local_on_main, facts):
         return None
     return (
         f"STALE: branch {branch} is merged into origin/{BASE} ({behind} commits behind). "
-        f"git switch {BASE} && git pull."
+        + stale_remedy(cwd, root)
     )
 
 
-def residue_line(run, worktrees, local_on_main, facts):
+def residue_line(run, worktrees, local_on_main, facts, cwd):
+    """What ``prune_merged.py --apply`` would remove, counted the way it decides: never
+    the worktree this session runs in, and a dirty candidate skipped (and counted)."""
     root = worktrees[0].path.rstrip("/")
-    merged = empty = 0
+    merged = empty = skipped = 0
     for wt in worktrees[1:]:
-        ok, why = worktree_decision(run, wt, root, local_on_main, facts)
+        if same_path(wt.path, cwd):
+            continue
+        ok, why = worktree_decision(wt, root, local_on_main, facts)
         if not ok:
             continue
-        if why == NO_COMMITS:
+        if dirty(run, wt):
+            skipped += 1
+        elif why == NO_COMMITS:
             empty += 1
         else:
             merged += 1
     if not (merged or empty):
         return None
+    dirty_note = f", {skipped} dirty skipped" if skipped else ""
     return (
         f"RESIDUE: {merged} worktrees on merged branches, {empty} worktree-agent-* with no "
-        f"commits. uv run python scripts/prune_merged.py --apply"
+        f"commits{dirty_note}. uv run python scripts/prune_merged.py --apply"
     )
+
+
+def squash_candidates(branch, worktrees):
+    """The branches a ``gh pr list`` answer could change a verdict on: the session's own
+    and every unlocked worktree's inside ``.claude/worktrees/``. Empty on a bare
+    ``main`` checkout, where the forge has nothing to add to ancestry."""
+    root = worktrees[0].path.rstrip("/")
+    names = {branch} if branch and branch not in PROTECTED else set()
+    for wt in worktrees[1:]:
+        if wt.branch and not wt.locked and wt.path.startswith(root + "/" + WORKTREE_DIR):
+            names.add(wt.branch)
+    return names
 
 
 def hooks_line(run):
@@ -130,22 +183,27 @@ def hooks_line(run):
     return f"HOOKS: .claude/hooks differs from origin/{BASE} - this checkout enforces old rules."
 
 
-def report(run, now=None):
-    """The lines to print for the checkout ``run`` answers about; empty when fresh."""
+def report(run, now=None, cwd=None):
+    """The lines to print for the checkout ``run`` answers about, as seen from the
+    session's *cwd* (the process cwd when None); empty when fresh."""
     now = time.time() if now is None else now
+    cwd = os.getcwd() if cwd is None else cwd
     fetch_note = fetch(run, now)
     worktrees = parse_worktrees(run(["git", "worktree", "list", "--porcelain"]))
     if not worktrees:
         raise CommandError("git worktree list returned nothing - not inside a repo?")
+    root = worktrees[0].path.rstrip("/")
     local_on_main = on_main(run)
-    try:
-        facts = gather_facts(run, worktrees)
-    except (CommandError, OSError):  # gh missing or offline: ancestry still decides
-        facts = MergeFacts.ancestry_only(worktrees)
     branch = run(["git", "branch", "--show-current"]).strip()
+    facts = MergeFacts.ancestry_only(worktrees)
+    if squash_candidates(branch, worktrees):
+        try:
+            facts = gather_facts(run, worktrees)
+        except (CommandError, OSError):  # gh missing or offline: ancestry still decides
+            pass
     candidates = [
-        stale_line(run, branch, local_on_main, facts),
-        residue_line(run, worktrees, local_on_main, facts),
+        stale_line(run, branch, local_on_main, facts, cwd, root),
+        residue_line(run, worktrees, local_on_main, facts, cwd),
         hooks_line(run),
         fetch_note,
     ]
@@ -159,7 +217,7 @@ def main():
         cwd = payload.get("cwd") if isinstance(payload, dict) else None
         if cwd:
             os.chdir(cwd)
-        for line in report(timed_runner):
+        for line in report(timed_runner, cwd=cwd):
             print(line)
     except Exception as e:  # noqa: BLE001 - a session start is never the hook's to fail
         print(f"session-start: skipped ({type(e).__name__}: {e})", file=sys.stderr)
