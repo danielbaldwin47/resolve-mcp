@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import ast
 import json
+import os
 import re
 import subprocess
 import sys
@@ -59,7 +60,6 @@ BARE_NOISY = [
     "CI=1 uv run pytest",
     "uv run pytest tests 2>&1",  # stderr dup is not a landing
     "uv run pytest tests 2> err.log",  # stderr only
-    "uv run pytest tests | grep -E 'passed|FAILED'",  # a filter still floods the log
     "py -m pytest tests",
     "python.exe -m pytest",
     "uv.exe run pytest",
@@ -67,7 +67,6 @@ BARE_NOISY = [
     "uv run --directory C:\\repo pytest",
     "uvx ruff check src",
     "$x = uv run pytest",
-    "uv run pytest 2>&1 | Select-String passed",  # a filter, not a pager: still bare
 ]
 
 
@@ -119,6 +118,27 @@ LANDED_NOISY = [
 @pytest.mark.parametrize("cmd", LANDED_NOISY)
 def test_noisy_run_landing_in_a_file_passes(cmd: str) -> None:
     assert blocked(cmd) == "", cmd
+
+
+# #274: a filtering pipe bounds a run the way the log-plus-Grep loop does. The
+# pager branch above is unaffected — `| tail` still caps one run, and runs repeat.
+FILTERED_NOISY = [
+    "uv run pytest -q | grep -c FAILED",
+    "uv run pytest tests | grep -E 'passed|FAILED'",
+    "uv run mypy | wc -l",
+    "uv run ruff check src | grep -c error",
+    "uv run pytest 2>&1 | Select-String passed",
+]
+
+
+@pytest.mark.parametrize("cmd", FILTERED_NOISY)
+def test_noisy_run_piped_to_a_filter_passes(cmd: str) -> None:
+    assert blocked(cmd) == "", cmd
+
+
+@pytest.mark.parametrize("cmd", ["uv run pytest -q | tail -3", "uv run mypy | head -20"])
+def test_a_filter_does_not_excuse_a_pager(cmd: str) -> None:
+    assert "never pipe to tail/head" in blocked(cmd), cmd
 
 
 @pytest.mark.parametrize(
@@ -249,7 +269,6 @@ WHOLE_FILE_DUMPS = [
     "cat src/resolve_mcp/config.py",
     "cat -n tests/conftest.py",
     "cat notes.md",
-    "cat pytest.scratch.log",
     "cat 'src/my file.py'",
     "cat < src/config.py",
     "ls; cat pyproject.toml",
@@ -264,8 +283,7 @@ WHOLE_FILE_DUMPS = [
     "sed '' src/config.py",
     "head src/config.py",
     "tail src/config.py",
-    "tail -f pytest.scratch.log",
-    "head -c 4000 src/config.py",
+    "head -c src/config.py",  # a countless -c is a dump by another name
     "head --bytes=4000 src/config.py",
     "Get-Content src/config.py",
     "Get-Content -Path .claude/settings.json",
@@ -282,7 +300,6 @@ WHOLE_FILE_DUMPS = [
     r"cat SRC\CONFIG.JSON",
     r"Get-Content SRC\X.PY",
     "sed -n '1,$ p' src/x.py",
-    "sed -n '$!p' src/x.py",
     "Get-Content src/x.py | Write-Output",  # pass-through, not a filter
     "Get-Content src/x.py | Format-Table",
     "gc src/x.py -tal 5",  # not a prefix of any bounding parameter
@@ -312,7 +329,12 @@ RANGED_READS = [
     "sed -n 5p src/config.py",
     "sed -n '/def main/,/^$/p' src/config.py",
     "sed -i 's/a/b/' src/config.py",  # an edit, not a read
+    "sed -n '$!p' src/x.py",  # #274: skip-the-last-line is an address, not a dump
     "head -50 src/config.py",
+    "head -c 200 notes.md",  # #274: a byte count bounds the read
+    "head -c 400 src/config.py",
+    "head -c400 src/config.py",
+    "tail -c 200 pytest.scratch.log",
     "head -n 50 src/config.py",
     "head -n50 src/config.py",
     "head --lines=50 src/config.py",
@@ -438,6 +460,46 @@ def test_reader_fed_by_pipe_but_filtered_or_landing_passes(cmd: str) -> None:
     assert blocked(cmd) == "", cmd
 
 
+# ----------------------------------------------- 4a. scratch logs and follows
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        "cat pytest.scratch.log",
+        "Get-Content pytest.scratch.log",
+        "sed -n p pytest.scratch.log",
+        "head pytest.scratch.log",
+    ],
+)
+def test_scratch_log_dump_names_the_grep_tool_and_the_absolute_path(cmd: str) -> None:
+    """#274: the generic message sent 13 blocked calls to a nonexistent /tmp path."""
+    msg = blocked(cmd)
+    assert "Grep tool" in msg, msg
+    assert os.path.abspath("pytest.scratch.log") in msg, msg
+    assert "/tmp is not a directory" in msg, msg
+
+
+def test_a_non_scratch_dump_keeps_the_general_message() -> None:
+    msg = blocked("cat src/config.py")
+    assert "whole-file dump" in msg and "Grep tool" not in msg, msg
+
+
+@pytest.mark.parametrize("cmd", ["tail -f app.log", "tail -F pytest.scratch.log"])
+def test_tail_follow_gets_the_streams_forever_message(cmd: str) -> None:
+    msg = blocked(cmd)
+    assert "streams forever" in msg and "Monitor" in msg, msg
+
+
+def test_tail_follow_is_not_excused_by_a_filter_or_a_landing() -> None:
+    assert "streams forever" in blocked("tail -f app.log | grep ERROR")
+    assert "streams forever" in blocked("tail -f app.log > watch.txt")
+
+
+def test_a_counted_tail_is_not_a_follow() -> None:
+    assert blocked("tail -n 20 my-file.log") == ""
+
+
 # ------------------------------------------------------------ false positives
 
 FALSE_POSITIVES = [
@@ -485,6 +547,35 @@ def test_command_after_a_heredoc_is_still_checked() -> None:
 def test_other_tools_pass() -> None:
     assert blocked("cat src/config.py", tool="Read") == ""
     assert blocked("uv run pytest", tool="Edit") == ""
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        "uv run pytest > pytest.scratch.log 2>&1",  # exercises statement() via the noisy rule
+        "gh issue view 274 --json body -q .body > issue.scratch.log",
+        "sed -n 10,40p src/config.py",
+    ],
+)
+def test_the_hook_emits_no_deprecation_warning(cmd: str) -> None:
+    """#274: `re.split(..., 1)` printed a DeprecationWarning on every hook run —
+    hook stderr is the model's block message, so a warning there is noise in
+    context. `-W error` turns any survivor into a traceback the assert catches."""
+    payload = {
+        "session_id": "s1",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": cmd},
+    }
+    r = subprocess.run(
+        [sys.executable, "-W", "error::DeprecationWarning", str(HOOK)],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        env=hook_env(HOOKS),
+    )
+    assert r.returncode == 0, r.stderr
+    assert "DeprecationWarning" not in r.stderr, r.stderr
 
 
 def test_malformed_stdin_passes() -> None:
