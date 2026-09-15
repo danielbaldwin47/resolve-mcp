@@ -102,7 +102,10 @@ produced no work; relaunch rather than assume.)
    green from its first gate run. Any commit pushed after the line — human
    feedback, a CI fix, a merge from `origin/main` — reddens the gate until
    you re-review the new diff and append a fresh `Review: clean @<newsha>`;
-   the earlier lines stay above it as the record.
+   the earlier lines stay above it as the record. Append that fresh line with
+   `uv run python scripts/review_stamp.py <pr> --summary "..."` rather than by
+   hand — it takes the sha from the PR itself, refuses unless your `HEAD` is
+   that commit, and re-checks the written body against the gate.
 5. **Merge through the PR** — everything reaches `main` through a PR, never
    a direct commit.
 6. **After a stacked PR merges, verify its commits reached main by

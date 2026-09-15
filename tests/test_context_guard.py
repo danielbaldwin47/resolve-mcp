@@ -455,6 +455,19 @@ def test_body_and_message_arguments_are_never_inspected(cmd: str) -> None:
     assert blocked(cmd) == "", cmd
 
 
+REVIEW_STAMP = [
+    # The one command CLAUDE.md step 4 names; it must run as written (#278).
+    'uv run python scripts/review_stamp.py 278 --summary "fix diff re-checked"',
+    "uv run python scripts/review_stamp.py 278",
+    "uv run python scripts/review_stamp.py 278 --check",
+]
+
+
+@pytest.mark.parametrize("cmd", REVIEW_STAMP)
+def test_the_review_stamp_command_passes_unmodified(cmd: str) -> None:
+    assert blocked(cmd) == "", cmd
+
+
 HEREDOC_FORMS = [
     "gh pr create --body-file - <<'EOF'\ncat src/a.py | tail -3\nuv run pytest\nEOF",
     "gh issue comment 249 -F - <<EOF\ngh issue view 5\nEOF",
