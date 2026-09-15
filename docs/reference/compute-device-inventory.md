@@ -187,9 +187,26 @@ has it — is an install action on the box. Still `+cpu` on the morning of
 2026-08-15 (a live run was on the CPU as this was written); **fixed that
 day**: `torch 2.13.0+cu130` in the system Python 3.12, `--env_info` now
 reports `+cu130` and `CUDAExecutionProvider available`. The exact command
-is in CLAUDE.md, "Compute device". A `+cpu` build now refuses the job
+is below. A `+cpu` build now refuses the job
 (`RESOLVE_MCP_SEPARATOR_ALLOW_CPU`, README) and the live separator test
 fails on a CPU device, so the state cannot go unnoticed again.
+
+### Checking and restoring the live box's build
+
+Check before a live run:
+
+    audio-separator --env_info 2>&1 | grep -E "PyTorch|ONNX"
+
+The separator's own torch decides its device — the server's config cannot
+move a `+cpu` build onto the card, only refuse it. On the live box
+`audio-separator` resolves to the system Python 3.12
+(`%LOCALAPPDATA%\Programs\Python\Python312`), separate from the repo venv;
+its torch must be a `+cu` build. Restore one (driver is CUDA 13.x) with:
+
+    py -3.12 -m pip install "torch==2.13.0+cu130" "torchvision==0.28.0+cu130" --index-url https://download.pytorch.org/whl/cu130 --extra-index-url https://pypi.org/simple
+
+`pip index versions torch --index-url .../cu130` lists the versions when the
+pin moves. Live-tier separation tests are only a pass on a `+cu` build.
 
 The build says what the install *can* do; it does not say what a run
 *did*. Each pass announces its own device in its opening banner, and that

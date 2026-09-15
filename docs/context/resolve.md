@@ -34,3 +34,7 @@ outlives the import until the caller has read the shots back on it, #221),
 `takes`
 (take selectors + in-place swap), `timeline` (timeline read wrappers),
 `titles` (titles file against a project + dry run).
+
+21.1 API changes: `docs/reference/resolve-21.1-changes.md` (the cached
+`get_whats_new(since="21.0")` result, scripting-API lines first); call
+`get_whats_new` only for a later version.

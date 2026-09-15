@@ -68,7 +68,10 @@ session's branch is merged, `RESIDUE:` when worktrees are, `HOOKS:` when
   (`rough-cut.md`: the brief and b-roll catalog the agent owns, the
   assembly loop, the `virtual_transcript` self-review and the cut report;
   also home of the `projects/<project>/` convention and the songs file's
-  ownership, #132).
+  ownership, #132), the session budget (`session-budget.md`: when a ticket
+  splits, when a module's implementation is delegated, #276).
+- `CODING_STANDARDS.md` (repo root) — the eight rules the `/code-review`
+  Standards axis reads, each naming the review finding it retires (#276).
 - Landing places for artifacts that today live only in issue and PR
   threads: research reports → `docs/research/`, spike reports and design
   bibles → `docs/reference/`, adversarial and other standalone reviews →
