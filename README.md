@@ -1,4 +1,4 @@
-# resolve-mcp
+# resolve-mcp (in beta)
 
 An MCP server that gives Claude Code hands inside **DaVinci Resolve Studio** — so the
 musical and editorial reasoning happens in Claude and the mechanical work happens in Resolve.
